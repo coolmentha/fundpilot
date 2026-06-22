@@ -1,0 +1,1 @@
+-- Initial schema placeholder. Add the first domain tables here.

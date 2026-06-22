@@ -1,0 +1,48 @@
+package com.fundpilot.backend.fund.entity;
+
+import com.fundpilot.backend.common.AbstractEntity;
+import com.fundpilot.backend.fund.enums.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+
+@Entity
+@Getter
+@Setter
+public class FundEntity extends AbstractEntity {
+    private String fundCode;
+
+    private String fundName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private InvestmentTarget investmentTarget;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private OperationMode operationMode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private InvestmentPhilosophy investmentPhilosophy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private FundCategory fundCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private FundStatus status = FundStatus.PENDING_HOLDING;
+
+    private BigDecimal plannedTotalAmount;
+
+    private BigDecimal peakNav;
+
+    private BigDecimal holdingPeriodPeakNav;
+
+}
