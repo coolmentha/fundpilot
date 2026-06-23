@@ -1,8 +1,8 @@
 package com.fundpilot.backend.fund.entity;
 
 import com.fundpilot.backend.common.AbstractEntity;
-import com.fundpilot.backend.fund.enums.FundFlowSource;
-import com.fundpilot.backend.fund.enums.FundFlowStatus;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import jakarta.persistence.*;
 
@@ -23,11 +23,11 @@ public class FundTransactionEntity extends AbstractEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
-    private FundFlowStatus status;
+    private FundTransactionStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
-    private FundFlowSource source;
+    private FundTransactionSource source;
 
     private BigDecimal shares;
 

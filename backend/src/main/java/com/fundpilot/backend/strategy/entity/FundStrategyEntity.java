@@ -1,6 +1,7 @@
-package com.fundpilot.backend.fund.entity;
+package com.fundpilot.backend.strategy.entity;
 
 import com.fundpilot.backend.common.AbstractEntity;
+import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import jakarta.persistence.*;
 
@@ -8,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
-public class UserFundStrategyEntity extends AbstractEntity {
+public class FundStrategyEntity extends AbstractEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fund_id")
     private FundEntity fundEntity;

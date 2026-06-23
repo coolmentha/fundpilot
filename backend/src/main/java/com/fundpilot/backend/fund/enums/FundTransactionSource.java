@@ -2,7 +2,7 @@ package com.fundpilot.backend.fund.enums;
 
 import com.fundpilot.backend.common.EnumValue;
 
-public enum FundFlowSource implements EnumValue {
+public enum FundTransactionSource implements EnumValue {
     INCREASE("加仓"),
     DECREASE("减仓"),
     TRANSFER_IN("转入"),
@@ -11,7 +11,7 @@ public enum FundFlowSource implements EnumValue {
 
     private final String label;
 
-    FundFlowSource(String label) {
+    FundTransactionSource(String label) {
         this.label = label;
     }
 

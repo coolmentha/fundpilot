@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Getter
@@ -44,5 +45,7 @@ public class FundEntity extends AbstractEntity {
     private BigDecimal peakNav;
 
     private BigDecimal holdingPeriodPeakNav;
+
+    private Instant openedAt;
 
 }

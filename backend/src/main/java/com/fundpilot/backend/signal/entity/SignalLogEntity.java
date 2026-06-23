@@ -2,9 +2,9 @@ package com.fundpilot.backend.signal.entity;
 
 import com.fundpilot.backend.common.AbstractEntity;
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.UserFundStrategyEntity;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.valueobject.Measure;
+import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -17,8 +17,8 @@ public class SignalLogEntity extends AbstractEntity {
     private FundEntity fundEntity;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_fund_strategy_id")
-    private UserFundStrategyEntity userFundStrategyEntity;
+    @JoinColumn(name = "fund_strategy_id")
+    private FundStrategyEntity fundStrategyEntity;
 
     private Instant signalDate;
 
@@ -28,6 +28,8 @@ public class SignalLogEntity extends AbstractEntity {
 
     private BigDecimal coefficient;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
     private SignalType signalType;
 
     @Embedded
