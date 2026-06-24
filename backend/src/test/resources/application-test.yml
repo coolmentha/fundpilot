@@ -1,0 +1,11 @@
+# Test profile:本地开发集成测试配置。
+# 连本地 Docker 容器 pgsql;凭证从环境变量解析,本地开发可用默认值兜底。
+# 禁止把真实密码硬编码进此文件——避免泄进 git 历史。
+# Flyway 真实跑迁移,Hibernate ddl-auto=validate 真实校验 schema。
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
+  flyway:
+    clean-disabled: false   # 允许测试间清理(开发期方便)

@@ -49,9 +49,11 @@ CREATE TABLE fund_nav_history
 );
 
 CREATE INDEX idx_fund_nav_history_fund_date ON fund_nav_history (fund_id, nav_date) WHERE deleted_date IS NULL;
--- (fund_id, nav_date::date) 部分唯一索引:每只基金每个交易日最多一行净值
+-- (fund_id, nav_date 按日去重) 部分唯一索引:每只基金每个交易日最多一行净值
+-- nav_date 是 timestamptz,直接 ::date 转换依赖会话时区,PG 视为非 IMMUTABLE 不能建表达式索引。
+-- 先 AT TIME ZONE 'UTC' 固定到 UTC 时区再转 date,转换变为 IMMUTABLE。
 CREATE UNIQUE INDEX uq_fund_nav_history_daily
-    ON fund_nav_history (fund_id, ( nav_date : : date)) WHERE deleted_date IS NULL;
+    ON fund_nav_history (fund_id, ((nav_date AT TIME ZONE 'UTC')::date)) WHERE deleted_date IS NULL;
 
 -- -----------------------------------------------------------------------------
 -- 3. fund_strategy —— 策略参数 + 该版本运行时状态(原 user_fund_strategy)
@@ -143,9 +145,10 @@ CREATE TABLE signal_log
 
 CREATE INDEX idx_signal_log_signal_date ON signal_log (signal_date) WHERE deleted_date IS NULL;
 CREATE INDEX idx_signal_log_fund_signal_type ON signal_log (fund_id, signal_type) WHERE deleted_date IS NULL;
--- (fund_id, signal_date::date) 部分唯一索引:每只基金每个交易日最多一行
+-- (fund_id, signal_date 按日去重) 部分唯一索引:每只基金每个交易日最多一行
+-- 同 uq_fund_nav_history_daily,用 AT TIME ZONE 'UTC' 让转换 IMMUTABLE。
 CREATE UNIQUE INDEX uq_signal_log_daily
-    ON signal_log (fund_id, ( signal_date : : date)) WHERE deleted_date IS NULL;
+    ON signal_log (fund_id, ((signal_date AT TIME ZONE 'UTC')::date)) WHERE deleted_date IS NULL;
 
 -- -----------------------------------------------------------------------------
 -- 6. fund_transaction —— 基金交易事件(原 fund_flow)

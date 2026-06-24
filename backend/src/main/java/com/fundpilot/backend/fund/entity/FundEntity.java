@@ -6,6 +6,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
+@Table(name = "fund")
 @Getter
 @Setter
 public class FundEntity extends AbstractEntity {
@@ -42,9 +44,12 @@ public class FundEntity extends AbstractEntity {
 
     private BigDecimal plannedTotalAmount;
 
-    private BigDecimal peakNav;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private FundSubType fundSubType;
 
-    private BigDecimal holdingPeriodPeakNav;
+    @Column(length = 64)
+    private String benchmarkIndexCode;
 
     private Instant openedAt;
 
