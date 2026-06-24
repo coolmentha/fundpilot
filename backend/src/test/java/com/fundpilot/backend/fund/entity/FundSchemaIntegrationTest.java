@@ -1,9 +1,12 @@
 package com.fundpilot.backend.fund.entity;
 
+import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
@@ -24,6 +27,9 @@ class FundSchemaIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     EntityManager entityManager;
 
+    @Autowired
+    FundRepository fundRepository;
+
     @Test
     void applicationLoadsWithRealPostgresAndFlywayMigrations() {
         // 上下文加载成功即通过——失败时 Spring 会抛异常使测试红。
@@ -42,6 +48,41 @@ class FundSchemaIntegrationTest extends AbstractIntegrationTest {
         // ADR-0001:删除派生字段,改为实时派生
         Set<String> attributeNames = attributeNamesOf(FundEntity.class);
         assertThat(attributeNames).doesNotContain("peakNav", "holdingPeriodPeakNav");
+    }
+
+    @Test
+    @Transactional
+    void fundSubTypeIsNullableWhenNotSet() {
+        // 循环 5:fundSubType 可空——主动基金识别前留空,存入读回应为 null
+        FundEntity fund = new FundEntity();
+        fund.setFundCode("510300");
+        fund.setFundName("沪深300ETF");
+        // 故意不设 fundSubType / benchmarkIndexCode
+
+        FundEntity saved = fundRepository.save(fund);
+        entityManager.flush();
+        entityManager.clear();
+
+        FundEntity reloaded = fundRepository.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.getFundSubType()).isNull();
+        assertThat(reloaded.getBenchmarkIndexCode()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void statusDefaultsToPendingHoldingWhenNotSet() {
+        // 循环 6:新建基金未设 status,读回应为 FundStatus.PENDING_HOLDING(字段默认值)
+        FundEntity fund = new FundEntity();
+        fund.setFundCode("161725");
+        fund.setFundName("招商中证白酒指数");
+        // 故意不设 status
+
+        FundEntity saved = fundRepository.save(fund);
+        entityManager.flush();
+        entityManager.clear();
+
+        FundEntity reloaded = fundRepository.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(FundStatus.PENDING_HOLDING);
     }
 
     @SuppressWarnings("unchecked")
