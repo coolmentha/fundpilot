@@ -5,12 +5,16 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "fund_transaction")
+@Getter
+@Setter
 public class FundTransactionEntity extends AbstractEntity {
     @ManyToOne(fetch = FetchType.LAZY)  // 必须用 LAZY，绝不用 EAGER
     @JoinColumn(name = "fund_id", nullable = false) // 数据库外键列名
