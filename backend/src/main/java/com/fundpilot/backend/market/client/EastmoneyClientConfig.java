@@ -1,0 +1,38 @@
+package com.fundpilot.backend.market.client;
+
+import feign.RequestInterceptor;
+import feign.Retryer;
+
+import java.util.concurrent.Semaphore;
+
+/**
+ * EastmoneyClient 的 Feign 配置:限流 Semaphore + Referer/UA 请求头拦截器。
+ * <p>ADR-0002:东方财富对 IP 有限速(约每秒 2-3 次),用 {@link Semaphore}(2) 做节流;
+ * 加 {@code Referer: https://fund.eastmoney.com/} 避免被反爬。
+ * <p>配置类本身只提供静态工厂方法,不依赖 Spring(可独立测试)。
+ */
+public final class EastmoneyClientConfig {
+
+    /** 共享限流信号量,全客户端最多 2 个并发请求。单例,所有 Feign 实例共享。 */
+    private static final Semaphore SEMAPHORE = new Semaphore(2);
+
+    public static Semaphore semaphore() {
+        return SEMAPHORE;
+    }
+
+    /** 请求头拦截器:加 Referer + 合理 User-Agent。 */
+    public static RequestInterceptor requestInterceptor() {
+        return requestTemplate -> {
+            requestTemplate.header("Referer", "https://fund.eastmoney.com/");
+            requestTemplate.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        };
+    }
+
+    /** 默认不重试(让调用方控制降级策略)。 */
+    public static Retryer retryer() {
+        return new Retryer.Default(100, 1000, 0);
+    }
+
+    private EastmoneyClientConfig() {
+    }
+}
