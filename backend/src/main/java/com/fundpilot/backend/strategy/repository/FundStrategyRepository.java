@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface FundStrategyRepository extends JpaRepository<FundStrategyEntity, Long> {
 
@@ -23,4 +24,14 @@ public interface FundStrategyRepository extends JpaRepository<FundStrategyEntity
     default List<Long> findEffectiveFundIds() {
         return findFundIdsByStatus(StrategyParamStatus.EFFECTIVE);
     }
+
+    /**
+     * 查某基金所有策略版本(issue #10 listByFund)。
+     */
+    List<FundStrategyEntity> findByFundEntity_Id(Long fundId);
+
+    /**
+     * 查某基金某状态的策略(issue #10 findActive)。
+     */
+    Optional<FundStrategyEntity> findByFundEntity_IdAndStatus(Long fundId, StrategyParamStatus status);
 }
