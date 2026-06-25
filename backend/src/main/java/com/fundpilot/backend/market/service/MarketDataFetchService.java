@@ -8,6 +8,7 @@ import com.fundpilot.backend.market.client.IndexKline;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
+import com.fundpilot.backend.market.service.support.SecidFormat;
 import com.fundpilot.backend.market.service.support.SixtyDayHighCalculator;
 import com.fundpilot.backend.market.service.support.VolumeStateCalculator;
 import com.fundpilot.backend.market.service.support.WeeklyMacdCalculator;
@@ -126,7 +127,10 @@ public class MarketDataFetchService {
 
         if (fund.getBenchmarkIndexCode() != null && !fund.getBenchmarkIndexCode().isBlank()) {
             try {
-                IndexKline kline = eastmoneyClient.fetchIndexKline(fund.getBenchmarkIndexCode(), INDEX_KLINE_RANGE);
+                // benchmarkIndexCode 是 "000300.SH" 人类可读格式,转 secid "1.000300" 调东方财富接口
+                String secid = SecidFormat.fromIndexCode(fund.getBenchmarkIndexCode())
+                        .orElse(fund.getBenchmarkIndexCode());
+                IndexKline kline = eastmoneyClient.fetchIndexKline(secid, INDEX_KLINE_RANGE);
                 VolumeStateCalculator.calculate(kline).ifPresent(template::setVolumeState);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());
