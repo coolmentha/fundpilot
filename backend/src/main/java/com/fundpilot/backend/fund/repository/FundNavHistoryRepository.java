@@ -41,4 +41,10 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      * 供 {@code WeeklyDropCalculator} 算 [T-5, T-1] 两点跌幅。
      */
     List<FundNavHistoryEntity> findTop5ByFundEntity_IdOrderByNavDateDesc(Long fundId);
+
+    /**
+     * 查某基金某日(UTC 0点起 24 小时区间)的净值行(issue #15 NavConfirmJob 回填 PENDING 交易用)。
+     * 取区间内第一行(净值公布当日只应有一行)。
+     */
+    List<FundNavHistoryEntity> findByFundEntity_IdAndNavDateBetween(Long fundId, Instant start, Instant end);
 }

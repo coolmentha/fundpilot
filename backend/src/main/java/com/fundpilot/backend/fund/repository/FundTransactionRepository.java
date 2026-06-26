@@ -10,6 +10,11 @@ import java.util.List;
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
 
     /**
+     * 查所有指定状态的交易(issue #15 NavConfirmJob 遍历 PENDING 用)。
+     */
+    List<FundTransactionEntity> findByStatus(FundTransactionStatus status);
+
+    /**
      * 按 fund_id + status 查交易行,供 {@code FundPositionService} 聚合持仓/在途份额。
      * 软删行由 {@code @SQLRestriction} 自动过滤。
      */
