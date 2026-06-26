@@ -1,0 +1,164 @@
+import {useQuery, useMutation, useQueryClient} from '@tanstack/react-query';
+import {get, post, put, del} from './client.js';
+
+const invalidateFunds = (qc) => qc.invalidateQueries({queryKey: ['funds']});
+
+// ===== 基金 =====
+export function useFunds() {
+    return useQuery({queryKey: ['funds'], queryFn: () => get('/api/funds')});
+}
+
+export function useFund(id) {
+    return useQuery({queryKey: ['funds', id], queryFn: () => get(`/api/funds/${id}`), enabled: !!id});
+}
+
+export function useSaveFund() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({id, body}) => id ? put(`/api/funds/${id}`, body) : post('/api/funds', body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+    });
+}
+
+export function useArchiveFund() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => del(`/api/funds/${id}`),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+    });
+}
+export function useCreateFund() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body) => post('/api/funds', body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+    });
+}
+export function useUpdateFund() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({id, body}) => put(`/api/funds/${id}`, body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+    });
+}
+
+// ===== 策略 =====
+export function useStrategies(fundId) {
+    return useQuery({
+        queryKey: ['strategies', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/strategies`),
+        enabled: !!fundId,
+    });
+}
+export function useActiveStrategy(fundId) {
+    return useQuery({
+        queryKey: ['strategy-active', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/strategies/active`),
+        enabled: !!fundId,
+    });
+}
+export function useBacktests(strategyId) {
+    return useQuery({
+        queryKey: ['backtests', strategyId],
+        queryFn: () => get(`/api/strategies/${strategyId}/backtests`),
+        enabled: !!strategyId,
+    });
+}
+const invalidateStrategies = (fundId) => {
+    const qc = useQueryClient();
+    return () => {
+        qc.invalidateQueries({queryKey: ['strategies', fundId]});
+        qc.invalidateQueries({queryKey: ['strategy-active', fundId]});
+    };
+};
+export function useCreateStrategy(fundId) {
+    const onSuccess = invalidateStrategies(fundId);
+    return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/strategies`, body), onSuccess});
+}
+export function useUpdateStrategy(fundId) {
+    const onSuccess = invalidateStrategies(fundId);
+    return useMutation({
+        mutationFn: ({id, body}) => put(`/api/strategies/${id}`, body),
+        onSuccess,
+    });
+}
+export function useStrategyAction(fundId) {
+    const onSuccess = invalidateStrategies(fundId);
+    return useMutation({
+        mutationFn: ({id, action}) => post(`/api/strategies/${id}/${action}`),
+        onSuccess,
+    });
+}
+
+// ===== 信号 =====
+export function useSignalsToday(fundId) {
+    return useQuery({
+        queryKey: ['signals-today', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/signals/today`),
+        enabled: !!fundId,
+    });
+}
+export function useSignalsRange(fundId, from, to) {
+    return useQuery({
+        queryKey: ['signals-range', fundId, from, to],
+        queryFn: () => get(`/api/funds/${fundId}/signals?from=${from}&to=${to}`),
+        enabled: !!fundId && !!from && !!to,
+    });
+}
+export function usePendingSignals() {
+    return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending')});
+}
+export function useConfirmOperation(fundId) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body) => post(`/api/funds/${fundId}/operations`, body),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['signals-pending']});
+            qc.invalidateQueries({queryKey: ['signals-today']});
+        },
+    });
+}
+
+// ===== 交易 =====
+export function useCancelTransaction() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => post(`/api/transactions/${id}/cancel`),
+        onSuccess: () => qc.invalidateQueries(),
+    });
+}
+
+// ===== 用户配置 =====
+export function useUserConfig() {
+    return useQuery({queryKey: ['user-config'], queryFn: () => get('/api/user-config')});
+}
+export function useUpdateUserConfig() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body) => put('/api/user-config', body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['user-config']}),
+    });
+}
+
+// ===== 行情 =====
+export function useMarketIndicatorsToday(fundId) {
+    return useQuery({
+        queryKey: ['market-today', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/market-indicators/today`),
+        enabled: !!fundId,
+    });
+}
+
+// ===== 管理 =====
+export function useAdminAction() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (action) => {
+            const path = action === 'generate' ? '/api/admin/signals/generate'
+                : action === 'confirm-nav' ? '/api/admin/transactions/confirm-nav'
+                : '/api/admin/market-data/refresh';
+            return post(path);
+        },
+        onSuccess: () => qc.invalidateQueries(),
+    });
+}
