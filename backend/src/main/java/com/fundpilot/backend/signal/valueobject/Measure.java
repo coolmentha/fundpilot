@@ -29,4 +29,12 @@ public class Measure implements Serializable {
         this.value = null;
         this.measureUnit = null;
     }
+
+    public BigDecimal getValue() {
+        return value;
+    }
+
+    public MeasureUnit getMeasureUnit() {
+        return measureUnit;
+    }
 }

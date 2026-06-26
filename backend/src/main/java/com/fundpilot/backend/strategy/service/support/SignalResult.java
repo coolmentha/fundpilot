@@ -1,0 +1,34 @@
+package com.fundpilot.backend.strategy.service.support;
+
+import com.fundpilot.backend.fund.service.support.Breach;
+import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.signal.valueobject.Measure;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * 信号引擎输出(issue #12):evaluateSignal 的返回值,后续由 #13 SignalGenerationJob 落入 {@code SignalLogEntity}。
+ *
+ * @param signalType             信号类型(NONE/BUILD/ADD/SELL)
+ * @param triggerTier            触发档位(1~4),BUILD/SELL-移动止盈 填,其他可 null
+ * @param coefficient            调节系数(ADD 时填,BUILD 固定 1.0,其他可 null)
+ * @param suggestedMeasure       建议量值(BUILD/ADD 存金额,SELL 存份额),NONE 可 null
+ * @param reason                 触发原因(LOGIC_BROKEN/TRAILING_STOP/REBALANCE/MIN_HOLD_DAYS_NOT_MET/HARD_CONSTRAINT_BREACH/NO_STRATEGY/NO_TIER_TO_SELL 等)
+ * @param warnings               强提示列表(WEEKLY_COOLDOWN/BREAKDOWN_WATCH/TIER_CLEARED/INSUFFICIENT_DATA_FOR_COOLDOWN/MIN_HOLD_DAYS_OVERRIDDEN)
+ * @param hardConstraintBreaches 硬约束违反记录(空=通过)
+ */
+public record SignalResult(
+        SignalType signalType,
+        Integer triggerTier,
+        BigDecimal coefficient,
+        Measure suggestedMeasure,
+        String reason,
+        List<String> warnings,
+        List<Breach> hardConstraintBreaches) {
+
+    /** 快速构造 NONE 结果。 */
+    public static SignalResult none(String reason) {
+        return new SignalResult(SignalType.NONE, null, null, null, reason, List.of(), List.of());
+    }
+}
