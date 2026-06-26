@@ -33,4 +33,9 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      */
     List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
             Long fundId, SignalType signalType, FundTransactionStatus status);
+
+    /**
+     * 查某基金全部交易(归档级联逐个软删用,软删行由 @SQLRestriction 自动过滤)。
+     */
+    List<FundTransactionEntity> findByFundEntity_Id(Long fundId);
 }

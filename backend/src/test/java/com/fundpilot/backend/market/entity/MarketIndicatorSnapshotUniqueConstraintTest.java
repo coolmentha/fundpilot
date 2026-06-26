@@ -10,7 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -35,7 +35,7 @@ class MarketIndicatorSnapshotUniqueConstraintTest extends AbstractIntegrationTes
         fund.setFundName("招商中证白酒指数");
         fundRepository.save(fund);
 
-        LocalDate date = LocalDate.of(2026, 6, 24);
+        Instant date = Instant.parse("2026-06-24T00:00:00Z");
 
         MarketIndicatorSnapshotEntity first = new MarketIndicatorSnapshotEntity();
         first.setFundEntity(fund);

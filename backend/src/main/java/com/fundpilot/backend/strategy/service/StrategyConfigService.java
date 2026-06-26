@@ -1,16 +1,20 @@
 package com.fundpilot.backend.strategy.service;
 
 import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundStrategyActivationEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundStrategyActivationRepository;
+import com.fundpilot.backend.strategy.controller.FundStrategyView;
+import com.fundpilot.backend.strategy.controller.StrategyBacktestView;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.entity.StrategyBacktestEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.repository.StrategyBacktestRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +37,7 @@ import java.util.Optional;
  * activate 新版本时旧 EFFECTIVE 自动回退 CALIBRATED;CLEARED→PENDING_HOLDING 时全员回退 PENDING_CALIBRATION。
  */
 @Service
+@RequiredArgsConstructor
 public class StrategyConfigService {
 
     private final FundStrategyRepository fundStrategyRepository;
@@ -41,25 +46,13 @@ public class StrategyConfigService {
     private final StrategyBacktestRepository strategyBacktestRepository;
     private final FundStrategyActivationRepository fundStrategyActivationRepository;
 
-    public StrategyConfigService(FundStrategyRepository fundStrategyRepository,
-                                 FundRepository fundRepository,
-                                 StrategyBacktestService strategyBacktestService,
-                                 StrategyBacktestRepository strategyBacktestRepository,
-                                 FundStrategyActivationRepository fundStrategyActivationRepository) {
-        this.fundStrategyRepository = fundStrategyRepository;
-        this.fundRepository = fundRepository;
-        this.strategyBacktestService = strategyBacktestService;
-        this.strategyBacktestRepository = strategyBacktestRepository;
-        this.fundStrategyActivationRepository = fundStrategyActivationRepository;
-    }
-
     /**
      * 新建策略草稿,状态 PENDING_CALIBRATION。
      */
     @Transactional
     public Long createDraft(Long fundId, StrategyConfigRequest request) {
         FundEntity fund = fundRepository.findById(fundId)
-                .orElseThrow(() -> new IllegalArgumentException("fund_id=" + fundId + " 不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         FundStrategyEntity strategy = new FundStrategyEntity();
         strategy.setFundEntity(fund);
         strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
@@ -89,12 +82,31 @@ public class StrategyConfigService {
         return fundStrategyRepository.findByFundEntity_Id(fundId);
     }
 
+    /** listByFund 的 DTO 包装(供 Controller 用)。 */
+    @Transactional(readOnly = true)
+    public List<FundStrategyView> listByFundView(Long fundId) {
+        return listByFund(fundId).stream().map(FundStrategyView::from).toList();
+    }
+
     /**
      * 查某基金当前 EFFECTIVE 策略(最多一份)。
      */
     @Transactional(readOnly = true)
     public Optional<FundStrategyEntity> findActive(Long fundId) {
         return fundStrategyRepository.findByFundEntity_IdAndStatus(fundId, StrategyParamStatus.EFFECTIVE);
+    }
+
+    /** findActive 的 DTO 包装(供 Controller 用)。 */
+    @Transactional(readOnly = true)
+    public Optional<FundStrategyView> findActiveView(Long fundId) {
+        return findActive(fundId).map(FundStrategyView::from);
+    }
+
+    /** 查某策略的历史回测列表(倒序)。 */
+    @Transactional(readOnly = true)
+    public List<StrategyBacktestView> listBacktests(Long strategyId) {
+        return strategyBacktestRepository.findByFundStrategyEntity_IdOrderByCreatedDateDesc(strategyId)
+                .stream().map(StrategyBacktestView::from).toList();
     }
 
     /**
@@ -109,7 +121,7 @@ public class StrategyConfigService {
         }
         // 固定窗口「过去一年」,#11 实现内部对基金成立不满一年自动降级起始日期
         Instant end = Instant.now();
-        Instant start = end.minus(365, ChronoUnit.DAYS);
+        Instant start = end.minus(BacktestWindow.BACKTEST_WINDOW_DAYS, ChronoUnit.DAYS);
         strategyBacktestService.run(strategyId, new BacktestWindow(start, end));
         strategy.setStatus(StrategyParamStatus.CALIBRATED);
         fundStrategyRepository.save(strategy);
@@ -135,7 +147,7 @@ public class StrategyConfigService {
             throw new IllegalStateTransitionException(strategy.getStatus().name(), "EFFECTIVE");
         }
         if (!strategyBacktestRepository.existsByFundStrategyEntity_IdAndPassedTrue(strategyId)) {
-            throw new BusinessException("NO_VALID_BACKTEST", "策略 " + strategyId + " 无 passed=true 的回测,不可激活");
+            throw new BusinessException(ErrorCode.NO_VALID_BACKTEST, "策略 " + strategyId + " 无 passed=true 的回测,不可激活");
         }
         // 回退同基金旧 EFFECTIVE
         Long fundId = strategy.getFundEntity().getId();
@@ -204,7 +216,7 @@ public class StrategyConfigService {
 
     private FundStrategyEntity requireStrategy(Long strategyId) {
         return fundStrategyRepository.findById(strategyId)
-                .orElseThrow(() -> new IllegalArgumentException("strategy_id=" + strategyId + " 不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "FundStrategy #" + strategyId + " 不存在"));
     }
 
     private void applyRequest(FundStrategyEntity strategy, StrategyConfigRequest request) {

@@ -52,6 +52,18 @@ public class EastmoneyClientConfig {
                 .target(EastmoneyClient.class, baseUrl);
     }
 
+    /**
+     * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
+     * <p>降级顺序:东方财富(主) → 同花顺(兜底);全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
+     *
+     * @param eastmoneyClient 东方财富数据源(主)
+     * @param thsClient       同花顺数据源(兜底)
+     */
+    @Bean
+    public MarketDataSource marketDataSource(EastmoneyClient eastmoneyClient, ThsClient thsClient) {
+        return new MarketDataSourceChain(java.util.List.of(eastmoneyClient, thsClient));
+    }
+
     private EastmoneyClientConfig() {
     }
 }

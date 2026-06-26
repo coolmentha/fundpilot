@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,15 +33,15 @@ class TradingCalendarServiceTest extends AbstractIntegrationTest {
         saveCalendar(LocalDate.of(2026, 6, 22), true);
         saveCalendar(LocalDate.of(2026, 6, 27), false);
 
-        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2026, 6, 22))).isTrue();
-        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2026, 6, 27))).isFalse();
+        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2026, 6, 22).atStartOfDay(ZoneOffset.UTC).toInstant())).isTrue();
+        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2026, 6, 27).atStartOfDay(ZoneOffset.UTC).toInstant())).isFalse();
     }
 
     @Test
     @Transactional
     void isTradingDayReturnsFalseForMissingDate() {
         // 表里没有的日期,保守返 false
-        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2099, 1, 1))).isFalse();
+        assertThat(tradingCalendarService.isTradingDay(LocalDate.of(2099, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant())).isFalse();
     }
 
     @Test
@@ -55,7 +56,8 @@ class TradingCalendarServiceTest extends AbstractIntegrationTest {
 
         // (06-22, 06-26] = 06-23/24/25/26 = 4 个交易日
         assertThat(tradingCalendarService.daysBetweenTradingDays(
-                LocalDate.of(2026, 6, 22), LocalDate.of(2026, 6, 26))).isEqualTo(4);
+                LocalDate.of(2026, 6, 22).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                LocalDate.of(2026, 6, 26).atStartOfDay(ZoneOffset.UTC).toInstant())).isEqualTo(4);
     }
 
     @Test
@@ -70,12 +72,13 @@ class TradingCalendarServiceTest extends AbstractIntegrationTest {
 
         // (06-25, 06-29] = 06-26/29 = 2 个交易日(跳过周末)
         assertThat(tradingCalendarService.daysBetweenTradingDays(
-                LocalDate.of(2026, 6, 25), LocalDate.of(2026, 6, 29))).isEqualTo(2);
+                LocalDate.of(2026, 6, 25).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                LocalDate.of(2026, 6, 29).atStartOfDay(ZoneOffset.UTC).toInstant())).isEqualTo(2);
     }
 
     private void saveCalendar(LocalDate date, boolean tradingDay) {
         TradingCalendarEntity entity = new TradingCalendarEntity();
-        entity.setCalendarDate(date);
+        entity.setCalendarDate(date.atStartOfDay(ZoneOffset.UTC).toInstant());
         entity.setTradingDay(tradingDay);
         tradingCalendarRepository.save(entity);
     }

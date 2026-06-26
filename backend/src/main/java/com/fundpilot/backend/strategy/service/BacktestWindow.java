@@ -10,4 +10,7 @@ import java.time.Instant;
  * @param endDate   回测结束日期(含)
  */
 public record BacktestWindow(Instant startDate, Instant endDate) {
+
+    /** 回测窗口天数(issue #11:过去一年)。 */
+    public static final int BACKTEST_WINDOW_DAYS = 365;
 }

@@ -1,6 +1,6 @@
 package com.fundpilot.backend.market.client;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -10,7 +10,7 @@ import java.util.List;
  */
 public record IndexKline(List<Bar> bars) {
 
-    public record Bar(LocalDate date, java.math.BigDecimal open, java.math.BigDecimal close,
+    public record Bar(Instant date, java.math.BigDecimal open, java.math.BigDecimal close,
                       java.math.BigDecimal high, java.math.BigDecimal low, long volume) {
     }
 }

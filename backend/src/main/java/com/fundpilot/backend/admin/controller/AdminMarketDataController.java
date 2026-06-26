@@ -2,6 +2,7 @@ package com.fundpilot.backend.admin.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,13 +15,10 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/admin/market-data")
+@RequiredArgsConstructor
 public class AdminMarketDataController {
 
     private final MarketDataFetchService marketDataFetchService;
-
-    public AdminMarketDataController(MarketDataFetchService marketDataFetchService) {
-        this.marketDataFetchService = marketDataFetchService;
-    }
 
     @PostMapping("/refresh")
     public ApiResponse<Map<String, String>> refresh() {

@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -14,8 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -33,6 +33,7 @@ import java.util.List;
  * 累计净值已含分红再投资,份额/金额计算应基于累计净值(ADR-0001:峰值用 accumulatedNav,口径一致)。
  */
 @Service
+@RequiredArgsConstructor
 public class NavConfirmService {
 
     private static final Logger log = LoggerFactory.getLogger(NavConfirmService.class);
@@ -41,21 +42,14 @@ public class NavConfirmService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
 
-    public NavConfirmService(FundTransactionRepository fundTransactionRepository,
-                             FundNavHistoryRepository fundNavHistoryRepository) {
-        this.fundTransactionRepository = fundTransactionRepository;
-        this.fundNavHistoryRepository = fundNavHistoryRepository;
-    }
-
     /**
      * 回填指定日期的 PENDING 交易。null 时用今天 UTC。
      * @return 本次确认的交易条数
      */
     @Transactional
-    public int confirmPendingTransactions(LocalDate date) {
-        LocalDate target = date != null ? date : LocalDate.now(ZoneOffset.UTC);
-        Instant dayStart = target.atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant dayEnd = target.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    public int confirmPendingTransactions(Instant date) {
+        Instant dayStart = date != null ? date : Instant.now();
+        Instant dayEnd = dayStart.plus(1, ChronoUnit.DAYS);
         List<FundTransactionEntity> pendings = fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING);
         int confirmed = 0;
         for (FundTransactionEntity tx : pendings) {
@@ -63,7 +57,7 @@ public class NavConfirmService {
                 confirmed++;
             }
         }
-        log.info("净值确认完成 date={} pending={} confirmed={}", target, pendings.size(), confirmed);
+        log.info("净值确认完成 date={} pending={} confirmed={}", dayStart, pendings.size(), confirmed);
         return confirmed;
     }
 

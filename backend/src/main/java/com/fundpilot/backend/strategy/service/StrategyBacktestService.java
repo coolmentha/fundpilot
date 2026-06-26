@@ -1,5 +1,6 @@
 package com.fundpilot.backend.strategy.service;
 
+import com.fundpilot.backend.strategy.controller.StrategyBacktestView;
 import com.fundpilot.backend.strategy.entity.StrategyBacktestEntity;
 
 /**
@@ -16,4 +17,12 @@ public interface StrategyBacktestService {
      * @return 回测结果实体(含三条基准收益/回撤 + passed),已落库
      */
     StrategyBacktestEntity run(Long strategyId, BacktestWindow window);
+
+    /**
+     * run 的 DTO 包装(供 Controller 用,返回 {@link StrategyBacktestView})。
+     * 默认实现委托 {@link #run} 后映射;测试 Mock 可直接返回 View。
+     */
+    default StrategyBacktestView runView(Long strategyId, BacktestWindow window) {
+        return StrategyBacktestView.from(run(strategyId, window));
+    }
 }

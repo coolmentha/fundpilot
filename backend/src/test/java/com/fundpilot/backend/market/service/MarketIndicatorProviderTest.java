@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +36,7 @@ class MarketIndicatorProviderTest extends AbstractIntegrationTest {
     @Transactional
     void getIndicators_当日有快照_返回快照字段() {
         FundEntity fund = fundRepository.save(newFund("161725"));
-        LocalDate date = LocalDate.of(2026, 6, 24);
+        Instant date = Instant.parse("2026-06-24T00:00:00Z");
         snapshotRepository.save(snapshot(fund, date, "1.2345"));
 
         Optional<MarketIndicatorSnapshotEntity> result = marketIndicatorProvider.getIndicators(fund.getId(), date);
@@ -53,7 +53,7 @@ class MarketIndicatorProviderTest extends AbstractIntegrationTest {
         FundEntity fund = fundRepository.save(newFund("161726"));
 
         Optional<MarketIndicatorSnapshotEntity> result =
-                marketIndicatorProvider.getIndicators(fund.getId(), LocalDate.of(2026, 6, 24));
+                marketIndicatorProvider.getIndicators(fund.getId(), Instant.parse("2026-06-24T00:00:00Z"));
 
         assertThat(result).isEmpty();
     }
@@ -65,7 +65,7 @@ class MarketIndicatorProviderTest extends AbstractIntegrationTest {
         return fund;
     }
 
-    private static MarketIndicatorSnapshotEntity snapshot(FundEntity fund, LocalDate date, String nav) {
+    private static MarketIndicatorSnapshotEntity snapshot(FundEntity fund, Instant date, String nav) {
         MarketIndicatorSnapshotEntity entity = new MarketIndicatorSnapshotEntity();
         entity.setFundEntity(fund);
         entity.setSnapshotDate(date);

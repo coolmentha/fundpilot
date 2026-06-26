@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,9 +15,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 
 /**
  * 每日 14:50 行情指标快照(表级缓存)。每只基金每日一行,
@@ -26,6 +28,7 @@ import java.time.LocalDate;
  */
 @Entity
 @Table(name = "market_indicator_snapshot")
+@SQLDelete(sql = "UPDATE market_indicator_snapshot SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class MarketIndicatorSnapshotEntity extends AbstractEntity {
@@ -35,7 +38,8 @@ public class MarketIndicatorSnapshotEntity extends AbstractEntity {
     private FundEntity fundEntity;
 
     @Column(nullable = false)
-    private LocalDate snapshotDate;
+    @Convert(converter = com.fundpilot.backend.common.InstantDateConverter.class)
+    private Instant snapshotDate;
 
     private BigDecimal currentNav;
 

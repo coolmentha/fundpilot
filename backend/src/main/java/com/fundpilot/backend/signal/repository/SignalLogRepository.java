@@ -16,6 +16,11 @@ public interface SignalLogRepository extends JpaRepository<SignalLogEntity, Long
     List<SignalLogEntity> findByFundEntity_IdAndSignalDateBetween(Long fundId, Instant dayStart, Instant dayEnd);
 
     /**
+     * 查某基金全部信号日志(归档级联软删用,无日期范围以避免区间端点溢出)。
+     */
+    List<SignalLogEntity> findByFundEntity_Id(Long fundId);
+
+    /**
      * 查某基金最新一条信号(issue #16 GET /api/funds/{fundId}/signals/today 用,取当日最新)。
      */
     Optional<SignalLogEntity> findTopByFundEntity_IdOrderBySignalDateDesc(Long fundId);

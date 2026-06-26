@@ -51,7 +51,7 @@ public final class EastmoneyJsParser {
                 LocalDate date = LocalDate.parse(String.valueOf(nw.getMember("x").asLong()), fmt);
                 BigDecimal nav = BigDecimal.valueOf(nw.getMember("y").asDouble());
                 BigDecimal accumulatedNav = BigDecimal.valueOf(aw.getMember("y").asDouble());
-                result.add(new FundNavSnapshot(date, nav, accumulatedNav));
+                result.add(new FundNavSnapshot(date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(), nav, accumulatedNav));
             }
             return List.copyOf(result);
         }
@@ -106,7 +106,7 @@ public final class EastmoneyJsParser {
                 String csv = klines.getArrayElement(i).asString();
                 String[] parts = csv.split(",");
                 bars.add(new IndexKline.Bar(
-                        java.time.LocalDate.parse(parts[0]),
+                        java.time.LocalDate.parse(parts[0]).atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
                         new BigDecimal(parts[1]),
                         new BigDecimal(parts[2]),
                         new BigDecimal(parts[3]),

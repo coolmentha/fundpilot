@@ -2,7 +2,7 @@ package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -12,5 +12,5 @@ import java.util.Optional;
  */
 public interface MarketIndicatorProvider {
 
-    Optional<MarketIndicatorSnapshotEntity> getIndicators(Long fundId, LocalDate date);
+    Optional<MarketIndicatorSnapshotEntity> getIndicators(Long fundId, Instant date);
 }

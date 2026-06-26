@@ -5,7 +5,10 @@ import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
 import com.fundpilot.backend.signal.enums.MeasureUnit;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.signal.enums.SignalWarning;
+import com.fundpilot.backend.signal.enums.SignalWarningValue;
 import com.fundpilot.backend.signal.valueobject.Measure;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.service.support.CapitalContext;
@@ -60,14 +63,14 @@ public class DisciplineStrategyService {
         // 步骤 1:状态门控
         FundStatus status = fund.getStatus();
         if (status == FundStatus.CLEARED) {
-            return SignalResult.none("FUND_CLEARED");
+            return SignalResult.none(SignalReason.FUND_CLEARED);
         }
         // 步骤 2:策略生效
         if (strategy == null || strategy.getStatus() != StrategyParamStatus.EFFECTIVE) {
-            return SignalResult.none("NO_STRATEGY");
+            return SignalResult.none(SignalReason.NO_STRATEGY);
         }
 
-        List<String> warnings = new ArrayList<>();
+        List<SignalWarningValue> warnings = new ArrayList<>();
 
         // 步骤 3:回撤派生(HOLDING 才算;PENDING_HOLDING 无前高)
         BigDecimal drawdown = deriveDrawdown(status, market, capital);
@@ -118,11 +121,11 @@ public class DisciplineStrategyService {
      * 逐档检查更深档:若 drawdown > tierNDrawdown - 0.005 则该档被"真正"脱离,清空它及更深的档。
      * 只动字段(tierNAddedAt 置 null)不动交易;warnings 记 TIER_CLEARED。
      */
-    private void clearTiersOnRebound(FundStrategyEntity strategy, BigDecimal drawdown, List<String> warnings) {
+    private void clearTiersOnRebound(FundStrategyEntity strategy, BigDecimal drawdown, List<SignalWarningValue> warnings) {
         BigDecimal buffer = HardConstraintConfig.TIER_CLEAR_BUFFER;
         List<Integer> cleared = new ArrayList<>();
         // 从深档往浅档检查:drawdown > tierNDrawdown - buffer 表示已脱离该档(回升变浅)
-        for (int tier = 4; tier >= 1; tier--) {
+        for (int tier = HardConstraintConfig.TIER_COUNT; tier >= 1; tier--) {
             Instant addedAt = tierAddedAt(strategy, tier);
             if (addedAt == null) {
                 continue;
@@ -135,14 +138,15 @@ public class DisciplineStrategyService {
             }
         }
         if (!cleared.isEmpty()) {
-            warnings.add("TIER_CLEARED:" + cleared.stream().sorted().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse(""));
+            warnings.add(SignalWarningValue.of(com.fundpilot.backend.signal.enums.SignalWarning.TIER_CLEARED,
+                    cleared.stream().sorted().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("")));
         }
     }
 
     /** 步骤 5:决策动作。SELL 优先级 > ADD > BUILD;PENDING_HOLDING 只能 BUILD。 */
     private SignalResult decideAction(FundEntity fund, FundStrategyEntity strategy,
                                       MarketIndicators market, CapitalContext capital,
-                                      FundStatus status, BigDecimal drawdown, List<String> warnings) {
+                                      FundStatus status, BigDecimal drawdown, List<SignalWarningValue> warnings) {
         if (status == FundStatus.PENDING_HOLDING) {
             return decideBuild(fund, strategy, market, capital, warnings);
         }
@@ -156,14 +160,14 @@ public class DisciplineStrategyService {
 
     /** BUILD:三条件全满足(年线上方 + 年线向上 + 60 日新高)。建议金额 = plannedTotalAmount × 0.10。 */
     private SignalResult decideBuild(FundEntity fund, FundStrategyEntity strategy,
-                                     MarketIndicators market, CapitalContext capital, List<String> warnings) {
+                                     MarketIndicators market, CapitalContext capital, List<SignalWarningValue> warnings) {
         if (!market.priceAboveYearLine() || !market.yearLineRising() || !market.sixtyDayHigh()) {
-            return new SignalResult(SignalType.NONE, null, null, null, "BUILD_CONDITION_NOT_MET", warnings, List.of());
+            return new SignalResult(SignalType.NONE, null, null, null, SignalReason.BUILD_CONDITION_NOT_MET, warnings, List.of());
         }
         BigDecimal amount = capital.plannedTotalAmount().multiply(HardConstraintConfig.BUILD_RATIO, MATH);
         Measure measure = new Measure(amount, MeasureUnit.AMOUNT);
         // 循环 D 补 warnings/硬约束
-        return new SignalResult(SignalType.BUILD, null, BigDecimal.ONE, measure, "BUILD", warnings, List.of());
+        return new SignalResult(SignalType.BUILD, null, BigDecimal.ONE, measure, SignalReason.BUILD, warnings, List.of());
     }
 
     /**
@@ -172,8 +176,8 @@ public class DisciplineStrategyService {
      */
     private SignalResult decideAdd(FundEntity fund, FundStrategyEntity strategy,
                                    MarketIndicators market, CapitalContext capital,
-                                   BigDecimal drawdown, List<String> warnings) {
-        for (int tier = 1; tier <= 4; tier++) {
+                                   BigDecimal drawdown, List<SignalWarningValue> warnings) {
+        for (int tier = 1; tier <= HardConstraintConfig.TIER_COUNT; tier++) {
             if (tierAddedAt(strategy, tier) != null) {
                 continue; // 该档已触发
             }
@@ -186,10 +190,10 @@ public class DisciplineStrategyService {
                 BigDecimal coefficient = computeCoefficient(market);
                 BigDecimal amount = baseAmount.multiply(coefficient, MATH);
                 Measure measure = new Measure(amount, MeasureUnit.AMOUNT);
-                return new SignalResult(SignalType.ADD, tier, coefficient, measure, "ADD", warnings, List.of());
+                return new SignalResult(SignalType.ADD, tier, coefficient, measure, SignalReason.ADD, warnings, List.of());
             }
         }
-        return new SignalResult(SignalType.NONE, null, null, null, "NO_ADD_TIER", warnings, List.of());
+        return new SignalResult(SignalType.NONE, null, null, null, SignalReason.NO_ADD_TIER, warnings, List.of());
     }
 
     /**
@@ -198,7 +202,7 @@ public class DisciplineStrategyService {
      */
     private SignalResult decideSell(FundEntity fund, FundStrategyEntity strategy,
                                     MarketIndicators market, CapitalContext capital,
-                                    BigDecimal drawdown, List<String> warnings) {
+                                    BigDecimal drawdown, List<SignalWarningValue> warnings) {
         // 1. 逻辑止损(优先级最高,豁免 MIN_HOLD_DAYS)
         SignalResult logicBroken = checkLogicBrokenStopLoss(fund, strategy, market, capital, warnings);
         if (logicBroken != null) {
@@ -227,7 +231,7 @@ public class DisciplineStrategyService {
      */
     private SignalResult checkLogicBrokenStopLoss(FundEntity fund, FundStrategyEntity strategy,
                                                   MarketIndicators market,
-                                                  CapitalContext capital, List<String> warnings) {
+                                                  CapitalContext capital, List<SignalWarningValue> warnings) {
         // 条件①:净值跌破年线(!priceAboveYearLine)
         if (market.priceAboveYearLine()) {
             return null;
@@ -256,7 +260,7 @@ public class DisciplineStrategyService {
         BigDecimal shares = capital.holdingShares() != null ? capital.holdingShares() : BigDecimal.ZERO;
         Measure measure = new Measure(shares, MeasureUnit.SHARE);
         // 注:tier 字段清空由调用方(#13 Job 在 confirmOperation 时处理),此处仅出信号
-        return new SignalResult(SignalType.SELL, null, null, measure, "LOGIC_BROKEN", warnings, List.of());
+        return new SignalResult(SignalType.SELL, null, null, measure, SignalReason.LOGIC_BROKEN, warnings, List.of());
     }
 
     /**
@@ -266,7 +270,7 @@ public class DisciplineStrategyService {
      */
     private SignalResult checkTrailingStop(FundEntity fund, FundStrategyEntity strategy,
                                            MarketIndicators market, CapitalContext capital,
-                                           List<String> warnings) {
+                                           List<SignalWarningValue> warnings) {
         BigDecimal peak = capital.holdingPeriodPeakNav();
         BigDecimal currentNav = market.currentNav();
         if (peak == null || peak.signum() <= 0 || currentNav == null) {
@@ -299,7 +303,7 @@ public class DisciplineStrategyService {
         }
         if (sellTier == 0) {
             // 无可卖档位,不产生 SELL(warnings 可提示,但 spec 说 NO_TIER_TO_SELL 是 NONE)
-            return new SignalResult(SignalType.NONE, null, null, null, "NO_TIER_TO_SELL", warnings, List.of());
+            return new SignalResult(SignalType.NONE, null, null, null, SignalReason.NO_TIER_TO_SELL, warnings, List.of());
         }
         // 份额:第 sellTier 档加仓份额;第四档连卖 buildShares
         BigDecimal shares = capital.tierAddShares() != null
@@ -309,7 +313,7 @@ public class DisciplineStrategyService {
             shares = shares.add(capital.buildShares());
         }
         Measure measure = new Measure(shares, MeasureUnit.SHARE);
-        return new SignalResult(SignalType.SELL, sellTier, null, measure, "TRAILING_STOP", warnings, List.of());
+        return new SignalResult(SignalType.SELL, sellTier, null, measure, SignalReason.TRAILING_STOP, warnings, List.of());
     }
 
     /**
@@ -318,7 +322,7 @@ public class DisciplineStrategyService {
      * 遵守 MIN_HOLD_DAYS(循环 D 处理降级);不清档位。
      */
     private SignalResult checkRebalance(FundEntity fund, MarketIndicators market,
-                                        CapitalContext capital, List<String> warnings) {
+                                        CapitalContext capital, List<SignalWarningValue> warnings) {
         BigDecimal singlePct = capital.singlePositionPct();
         if (singlePct == null) {
             return null;
@@ -336,7 +340,7 @@ public class DisciplineStrategyService {
         BigDecimal sellAmount = singlePct.subtract(limit).multiply(totalEquityAmount, MATH);
         BigDecimal shares = sellAmount.divide(currentNav, MATH);
         Measure measure = new Measure(shares, MeasureUnit.SHARE);
-        return new SignalResult(SignalType.SELL, null, null, measure, "REBALANCE", warnings, List.of());
+        return new SignalResult(SignalType.SELL, null, null, measure, SignalReason.REBALANCE, warnings, List.of());
     }
 
     // ---- 步骤 6-8: warnings / 硬约束 / MIN_HOLD_DAYS ----
@@ -369,17 +373,17 @@ public class DisciplineStrategyService {
      * </ul>
      */
     private static void addWarnings(FundStrategyEntity strategy, MarketIndicators market,
-                                    CapitalContext capital, List<String> warnings) {
+                                    CapitalContext capital, List<SignalWarningValue> warnings) {
         BigDecimal drop = market.weeklyDropPercent();
         BigDecimal threshold = strategy.getWeeklyCoolDownThreshold();
         if (drop == null) {
-            warnings.add("INSUFFICIENT_DATA_FOR_COOLDOWN");
+            warnings.add(SignalWarningValue.of(SignalWarning.INSUFFICIENT_DATA_FOR_COOLDOWN));
         } else if (threshold != null && drop.compareTo(threshold) > 0) {
-            warnings.add("WEEKLY_COOLDOWN");
+            warnings.add(SignalWarningValue.of(SignalWarning.WEEKLY_COOLDOWN));
         }
         if (!market.priceAboveYearLine() && !market.yearLineRising()
                 && market.volumeState() == com.fundpilot.backend.market.enums.VolumeState.HIGH_DROP) {
-            warnings.add("BREAKDOWN_WATCH");
+            warnings.add(SignalWarningValue.of(SignalWarning.BREAKDOWN_WATCH));
         }
     }
 
@@ -389,7 +393,7 @@ public class DisciplineStrategyService {
      */
     private static SignalResult applyHardConstraints(FundEntity fund, FundStrategyEntity strategy,
                                                      CapitalContext capital, SignalResult result,
-                                                     List<String> warnings) {
+                                                     List<SignalWarningValue> warnings) {
         // buildRatio 只在建仓信号时为 BUILD_RATIO,加仓信号时为 0(已建仓不再判建仓比例)
         BigDecimal buildRatio = result.signalType() == SignalType.BUILD
                 ? HardConstraintConfig.BUILD_RATIO : BigDecimal.ZERO;
@@ -404,7 +408,7 @@ public class DisciplineStrategyService {
         if (breaches.isEmpty()) {
             return result;
         }
-        return new SignalResult(SignalType.NONE, null, null, null, "HARD_CONSTRAINT_BREACH",
+        return new SignalResult(SignalType.NONE, null, null, null, SignalReason.HARD_CONSTRAINT_BREACH,
                 warnings, breaches);
     }
 
@@ -413,14 +417,14 @@ public class DisciplineStrategyService {
      * 逻辑止损豁免但记 MIN_HOLD_DAYS_OVERRIDDEN。
      */
     private static SignalResult applyMinHoldDays(SignalResult result, long tradingDaysSinceLastBuy,
-                                                 List<String> warnings) {
-        boolean logicBroken = "LOGIC_BROKEN".equals(result.reason());
+                                                 List<SignalWarningValue> warnings) {
+        boolean logicBroken = result.reason() == SignalReason.LOGIC_BROKEN;
         if (tradingDaysSinceLastBuy < HardConstraintConfig.MIN_HOLD_DAYS) {
             if (logicBroken) {
-                warnings.add("MIN_HOLD_DAYS_OVERRIDDEN");
+                warnings.add(SignalWarningValue.of(SignalWarning.MIN_HOLD_DAYS_OVERRIDDEN));
                 return result; // 逻辑止损豁免
             }
-            return new SignalResult(SignalType.NONE, null, null, null, "MIN_HOLD_DAYS_NOT_MET",
+            return new SignalResult(SignalType.NONE, null, null, null, SignalReason.MIN_HOLD_DAYS_NOT_MET,
                     warnings, List.of());
         }
         return result;

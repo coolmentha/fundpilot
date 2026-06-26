@@ -2,6 +2,7 @@ package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.repository.MarketIndicatorSnapshotRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,13 +14,10 @@ import java.util.Optional;
  * 同一 (fund_id, snapshot_date) 已存在则覆盖字段(重跑幂等),不存在则新建。
  */
 @Service
+@RequiredArgsConstructor
 public class MarketIndicatorSnapshotService {
 
     private final MarketIndicatorSnapshotRepository snapshotRepository;
-
-    public MarketIndicatorSnapshotService(MarketIndicatorSnapshotRepository snapshotRepository) {
-        this.snapshotRepository = snapshotRepository;
-    }
 
     @Transactional
     public MarketIndicatorSnapshotEntity upsert(MarketIndicatorSnapshotEntity template) {

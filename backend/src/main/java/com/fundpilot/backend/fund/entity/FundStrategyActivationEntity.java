@@ -9,11 +9,13 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.time.Instant;
 
 @Entity
 @Table(name = "fund_strategy_activation")
+@SQLDelete(sql = "UPDATE fund_strategy_activation SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class FundStrategyActivationEntity extends AbstractEntity {

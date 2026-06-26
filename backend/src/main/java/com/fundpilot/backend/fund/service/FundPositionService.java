@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ import java.util.Optional;
  * 因为一腿对本基金是转入(+),另一腿对本基金是转出(-),direction 已天然抵消。
  */
 @Service
+@RequiredArgsConstructor
 public class FundPositionService {
 
     private static final MathContext MATH = MathContext.DECIMAL64;
@@ -38,14 +40,6 @@ public class FundPositionService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
-
-    public FundPositionService(FundTransactionRepository fundTransactionRepository,
-                               FundNavHistoryRepository fundNavHistoryRepository,
-                               FundRepository fundRepository) {
-        this.fundTransactionRepository = fundTransactionRepository;
-        this.fundNavHistoryRepository = fundNavHistoryRepository;
-        this.fundRepository = fundRepository;
-    }
 
     /** CONFIRMED 状态净持仓份额(正=多头,负=超卖)。 */
     public BigDecimal getHoldingShares(Long fundId) {

@@ -47,4 +47,9 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      * 取区间内第一行(净值公布当日只应有一行)。
      */
     List<FundNavHistoryEntity> findByFundEntity_IdAndNavDateBetween(Long fundId, Instant start, Instant end);
+
+    /**
+     * 查某基金全部净值历史(归档级联逐个软删用)。
+     */
+    List<FundNavHistoryEntity> findByFundEntity_Id(Long fundId);
 }

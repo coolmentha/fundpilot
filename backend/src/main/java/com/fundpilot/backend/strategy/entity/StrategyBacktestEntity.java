@@ -8,12 +8,14 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "strategy_backtest")
+@SQLDelete(sql = "UPDATE strategy_backtest SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class StrategyBacktestEntity extends AbstractEntity {

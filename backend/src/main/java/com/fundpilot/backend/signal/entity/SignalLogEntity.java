@@ -2,18 +2,21 @@ package com.fundpilot.backend.signal.entity;
 
 import com.fundpilot.backend.common.AbstractEntity;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.valueobject.Measure;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "signal_log")
+@SQLDelete(sql = "UPDATE signal_log SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class SignalLogEntity extends AbstractEntity {
@@ -40,7 +43,9 @@ public class SignalLogEntity extends AbstractEntity {
     @Embedded
     private Measure suggestedMeasure;
 
-    private String reason;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private SignalReason reason;
 
     private String warnings;
 

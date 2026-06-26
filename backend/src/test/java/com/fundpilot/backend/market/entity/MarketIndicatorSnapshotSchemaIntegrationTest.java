@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,7 +44,7 @@ class MarketIndicatorSnapshotSchemaIntegrationTest extends AbstractIntegrationTe
 
         MarketIndicatorSnapshotEntity snapshot = new MarketIndicatorSnapshotEntity();
         snapshot.setFundEntity(fund);
-        snapshot.setSnapshotDate(LocalDate.of(2026, 6, 24));
+        snapshot.setSnapshotDate(Instant.parse("2026-06-24T00:00:00Z"));
         snapshot.setCurrentNav(new BigDecimal("4.12345678"));
         snapshot.setPriceAboveYearLine(true);
         snapshot.setYearLineRising(true);
@@ -60,7 +60,7 @@ class MarketIndicatorSnapshotSchemaIntegrationTest extends AbstractIntegrationTe
         MarketIndicatorSnapshotEntity reloaded =
                 marketIndicatorSnapshotRepository.findById(saved.getId()).orElseThrow();
         assertThat(reloaded.getFundEntity().getId()).isEqualTo(fund.getId());
-        assertThat(reloaded.getSnapshotDate()).isEqualTo(LocalDate.of(2026, 6, 24));
+        assertThat(reloaded.getSnapshotDate()).isEqualTo(Instant.parse("2026-06-24T00:00:00Z"));
         assertThat(reloaded.getCurrentNav()).isEqualByComparingTo(new BigDecimal("4.12345678"));
         assertThat(reloaded.isPriceAboveYearLine()).isTrue();
         assertThat(reloaded.isYearLineRising()).isTrue();

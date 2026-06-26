@@ -5,7 +5,8 @@ import com.fundpilot.backend.market.enums.VolumeState;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -73,15 +74,15 @@ class VolumeStateCalculatorTest {
     /** n-1 根常规量 + 末根自定义量与涨跌方向。 */
     private static IndexKline kline(int n, long baseVolume, boolean baseDrop, long lastVolume, boolean lastDrop) {
         List<IndexKline.Bar> bars = new ArrayList<>();
-        LocalDate start = LocalDate.of(2025, 1, 1);
+        Instant start = Instant.parse("2025-01-01T00:00:00Z");
         for (int i = 0; i < n - 1; i++) {
-            bars.add(bar(start.plusDays(i), baseVolume, baseDrop));
+            bars.add(bar(start.plus(i, ChronoUnit.DAYS), baseVolume, baseDrop));
         }
-        bars.add(bar(start.plusDays(n - 1), lastVolume, lastDrop));
+        bars.add(bar(start.plus(n - 1, ChronoUnit.DAYS), lastVolume, lastDrop));
         return new IndexKline(bars);
     }
 
-    private static IndexKline.Bar bar(LocalDate date, long volume, boolean isDrop) {
+    private static IndexKline.Bar bar(Instant date, long volume, boolean isDrop) {
         BigDecimal open = new BigDecimal("100.00");
         BigDecimal close = isDrop ? new BigDecimal("99.00") : new BigDecimal("101.00");
         BigDecimal high = open.max(close);

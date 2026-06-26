@@ -2,7 +2,7 @@ package com.fundpilot.backend.market.client;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,7 +27,7 @@ class EastmoneyJsParserIndexKlineTest {
         assertThat(kline.bars()).hasSize(2);
 
         IndexKline.Bar first = kline.bars().get(0);
-        assertThat(first.date()).isEqualTo(LocalDate.of(2024, 6, 24));
+        assertThat(first.date()).isEqualTo(Instant.parse("2024-06-24T00:00:00Z"));
         assertThat(first.open()).isEqualByComparingTo("3500.00");
         assertThat(first.close()).isEqualByComparingTo("3550.00");
         assertThat(first.high()).isEqualByComparingTo("3560.00");

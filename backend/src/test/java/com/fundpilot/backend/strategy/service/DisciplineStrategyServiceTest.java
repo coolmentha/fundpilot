@@ -8,7 +8,10 @@ import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
 import com.fundpilot.backend.signal.enums.MeasureUnit;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.signal.enums.SignalWarning;
+import com.fundpilot.backend.signal.enums.SignalWarningValue;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.service.support.CapitalContext;
 import com.fundpilot.backend.strategy.service.support.MarketIndicators;
@@ -36,7 +39,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market(), capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("FUND_CLEARED");
+        assertThat(result.reason()).isEqualTo(SignalReason.FUND_CLEARED);
     }
 
     @Test
@@ -46,7 +49,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, null, market(), capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("NO_STRATEGY");
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_STRATEGY);
     }
 
     @Test
@@ -58,7 +61,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market(), capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("NO_STRATEGY");
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_STRATEGY);
     }
 
     @Test
@@ -70,7 +73,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market(), capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("NO_STRATEGY");
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_STRATEGY);
     }
 
     @Test
@@ -81,7 +84,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.BUILD);
-        assertThat(result.reason()).isEqualTo("BUILD");
+        assertThat(result.reason()).isEqualTo(SignalReason.BUILD);
         // 建仓额 = plannedTotalAmount(1000) × 0.10 = 100
         assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("100"));
         assertThat(result.suggestedMeasure().getMeasureUnit()).isEqualTo(MeasureUnit.AMOUNT);
@@ -95,7 +98,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("BUILD_CONDITION_NOT_MET");
+        assertThat(result.reason()).isEqualTo(SignalReason.BUILD_CONDITION_NOT_MET);
     }
 
     @Test
@@ -109,7 +112,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital(), Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("BUILD_CONDITION_NOT_MET");
+        assertThat(result.reason()).isEqualTo(SignalReason.BUILD_CONDITION_NOT_MET);
     }
 
     @Test
@@ -139,7 +142,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("NO_ADD_TIER");
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_ADD_TIER);
     }
 
     @Test
@@ -192,7 +195,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         // 清空后无档位可加 → ADD 不触发;warnings 含 TIER_CLEARED
-        assertThat(result.warnings()).anyMatch(w -> w.startsWith("TIER_CLEARED"));
+        assertThat(result.warnings()).anyMatch(w -> w.warning() == SignalWarning.TIER_CLEARED);
         assertThat(strategy.getTier1AddedAt()).isNull();
         assertThat(strategy.getTier2AddedAt()).isNull();
     }
@@ -211,7 +214,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(strategy.getTier1AddedAt()).isEqualTo(t1);
-        assertThat(result.warnings()).noneMatch(w -> w.startsWith("TIER_CLEARED"));
+        assertThat(result.warnings()).noneMatch(w -> w.warning() == SignalWarning.TIER_CLEARED);
     }
 
     // ---- 循环 C:SELL 三分支 ----
@@ -229,7 +232,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.reason()).isEqualTo("LOGIC_BROKEN");
+        assertThat(result.reason()).isEqualTo(SignalReason.LOGIC_BROKEN);
         assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("100"));
         assertThat(result.suggestedMeasure().getMeasureUnit()).isEqualTo(MeasureUnit.SHARE);
     }
@@ -262,7 +265,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.reason()).isEqualTo("LOGIC_BROKEN");
+        assertThat(result.reason()).isEqualTo(SignalReason.LOGIC_BROKEN);
     }
 
     @Test
@@ -281,7 +284,7 @@ class DisciplineStrategyServiceTest {
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
         assertThat(result.triggerTier()).isEqualTo(4);
-        assertThat(result.reason()).isEqualTo("TRAILING_STOP");
+        assertThat(result.reason()).isEqualTo(SignalReason.TRAILING_STOP);
         // 第四档连卖:tier4 加仓份额 30 + buildShares 50 = 80
         assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("80"));
     }
@@ -335,7 +338,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("NO_TIER_TO_SELL");
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_TIER_TO_SELL);
     }
 
     @Test
@@ -364,7 +367,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.reason()).isEqualTo("REBALANCE");
+        assertThat(result.reason()).isEqualTo(SignalReason.REBALANCE);
         assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("500"));
     }
 
@@ -396,7 +399,7 @@ class DisciplineStrategyServiceTest {
 
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
-        assertThat(result.reason()).isEqualTo("LOGIC_BROKEN");
+        assertThat(result.reason()).isEqualTo(SignalReason.LOGIC_BROKEN);
     }
 
     // ---- 循环 D: warnings + hardConstraints + minHoldDays ----
@@ -416,7 +419,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.ADD);
-        assertThat(result.warnings()).contains("WEEKLY_COOLDOWN");
+        assertThat(result.warnings()).contains(SignalWarningValue.of(SignalWarning.WEEKLY_COOLDOWN));
     }
 
     @Test
@@ -432,7 +435,7 @@ class DisciplineStrategyServiceTest {
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
-        assertThat(result.warnings()).contains("BREAKDOWN_WATCH");
+        assertThat(result.warnings()).contains(SignalWarningValue.of(SignalWarning.BREAKDOWN_WATCH));
     }
 
     @Test
@@ -452,7 +455,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("HARD_CONSTRAINT_BREACH");
+        assertThat(result.reason()).isEqualTo(SignalReason.HARD_CONSTRAINT_BREACH);
         assertThat(result.hardConstraintBreaches()).anyMatch(b -> "SINGLE_POSITION_LIMIT".equals(b.name()));
     }
 
@@ -488,7 +491,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 2);
 
         assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo("MIN_HOLD_DAYS_NOT_MET");
+        assertThat(result.reason()).isEqualTo(SignalReason.MIN_HOLD_DAYS_NOT_MET);
     }
 
     @Test
@@ -504,8 +507,8 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 2);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.reason()).isEqualTo("LOGIC_BROKEN");
-        assertThat(result.warnings()).contains("MIN_HOLD_DAYS_OVERRIDDEN");
+        assertThat(result.reason()).isEqualTo(SignalReason.LOGIC_BROKEN);
+        assertThat(result.warnings()).contains(SignalWarningValue.of(SignalWarning.MIN_HOLD_DAYS_OVERRIDDEN));
     }
 
     // ---- fixtures ----

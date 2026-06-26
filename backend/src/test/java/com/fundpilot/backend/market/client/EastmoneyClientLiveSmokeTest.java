@@ -4,7 +4,8 @@ import feign.Feign;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,8 +28,8 @@ class EastmoneyClientLiveSmokeTest {
         var snapshots = client.fetchNavHistory("510300");
 
         assertThat(snapshots).isNotEmpty();
-        LocalDate lastDate = snapshots.getLast().navDate();
-        assertThat(lastDate).isAfter(LocalDate.now().minusDays(7));
+        Instant lastDate = snapshots.getLast().navDate();
+        assertThat(lastDate).isAfter(Instant.now().minus(7, ChronoUnit.DAYS));
     }
 
     @Test

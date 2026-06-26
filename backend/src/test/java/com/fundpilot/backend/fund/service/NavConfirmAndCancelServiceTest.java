@@ -1,7 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.EntityNotFoundException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
@@ -18,8 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,11 +34,11 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     @Autowired EntityManager entityManager;
 
     private FundEntity fund;
-    private LocalDate today;
+    private Instant today;
 
     @BeforeEach
     void setUp() {
-        today = LocalDate.now(ZoneOffset.UTC);
+        today = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS);
         fund = new FundEntity();
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
@@ -65,7 +62,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     private void persistNavToday(BigDecimal accumulatedNav) {
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
         nav.setFundEntity(fund);
-        nav.setNavDate(today.atStartOfDay(ZoneOffset.UTC).toInstant());
+        nav.setNavDate(today);
         nav.setNav(accumulatedNav);
         nav.setAccumulatedNav(accumulatedNav);
         entityManager.persist(nav);
@@ -173,8 +170,8 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void cancel_交易不存在抛EntityNotFoundException() {
+    void cancel_交易不存在抛BusinessException() {
         assertThatThrownBy(() -> transactionCancelService.cancel(999999L))
-                .isInstanceOf(EntityNotFoundException.class);
+                .isInstanceOf(BusinessException.class);
     }
 }

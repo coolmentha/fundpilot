@@ -1,6 +1,6 @@
 # 软删除机制从 @SoftDelete 改用 @SQLRestriction + @SQLDelete
 
-`AbstractEntity` 的软删除实现从 Hibernate 7 的 `@SoftDelete` 注解,改为 `@SQLRestriction("deleted_date IS NULL")` + `@SQLDelete(sql = "UPDATE ... SET deleted_date = now() WHERE id = ?")`。
+`AbstractEntity` 的软删除实现从 Hibernate 7 的 `@SoftDelete` 注解,改为 `@SQLRestriction("deleted_date IS NULL")`(放父类 `@MappedSuperclass`,自动继承到所有子实体)+ `@SQLDelete`(每个具体 `@Entity` 各自声明,因不从 `@MappedSuperclass` 继承,详见下文「落地实测」)。
 
 ## 背景
 
@@ -21,6 +21,20 @@
 3. 无未来计划: GitHub issue tracker 搜 "SoftDelete lazy" 零结果,`@SoftDelete` Javadoc 不提此限制,团队视为有意识的设计选择。
 
 `@SQLRestriction` 是普通 SQL 过滤,不依赖 Hibernate 软删特技,长期稳定,不会被 Hibernate 升级打破。
+
+## 落地实测:@SQLDelete 三条教训(issue #1 归档端点)
+
+初版 `AbstractEntity` 把 `@SQLDelete` 放在 `@MappedSuperclass` 上,SQL 用 `{h-entity}` 占位符、只带 `id` 参数。issue #1 落地归档端点时实测发现这三处全部静默失效或报错,`em.remove()` 一直发的是硬 DELETE 而非软删 UPDATE:
+
+1. **`@SQLDelete` 不从 `@MappedSuperclass` 继承**:Hibernate 的 `EntityBinder` 直接从具体 `@Entity` 类读 `@SQLDelete`,不沿 mapped-superclass 链向上找。放父类会被静默忽略——不报错,但删除照发硬 DELETE。`@SQLRestriction` 则会继承(查询过滤是好的),所以二者表现不一致,极具迷惑性。**结论:`@SQLDelete` 必须每个具体 `@Entity` 各自声明。**
+2. **`{h-entity}` 占位符在 `@SQLDelete` 里非法**:放子类后 Hibernate 7 解析时抛 `QueryException: Unknown placeholder [h-entity]`。查 Hibernate 7 Javadoc,`@SQLDelete.sql` 只接受字面 SQL + JDBC `?` 参数,无任何占位符。**结论:用字面表名,如 `UPDATE fund SET ...`。**
+3. **versioned 实体须带 `version` 参数**:Javadoc 明确"primary key columns come before the version column if the entity is versioned"。只写 `WHERE id = ?` 时,Hibernate 仍要绑第 2 个参数(version),报 `栏位索引超过许可范围:2,栏位数:1`。**结论:`WHERE id = ? AND version = ?`。**
+
+修复后,10 个具体实体各加一行:
+```java
+@SQLDelete(sql = "UPDATE <表名> SET deleted_date = now() WHERE id = ? AND version = ?")
+```
+父类只保留 `@SQLRestriction("deleted_date IS NULL")`(正确继承)+ `deletedDate` 字段。SQL 日志实锤发出 `UPDATE ... SET deleted_date = now() WHERE id=? AND version=?`。
 
 偏离《推荐架构方案.md §0》的具体表述「`AbstractEntity` 现有的 `@SoftDelete` + `deletedDate`」——本 ADR 取代该表述,§0 文档应同步修订为 `@SQLRestriction + @SQLDelete`。
 

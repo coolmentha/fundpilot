@@ -3,7 +3,7 @@ package com.fundpilot.backend.fund.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.market.client.EastmoneyClient;
+import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.client.FundDictEntry;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 class FundDictBackfillServiceTest extends AbstractIntegrationTest {
 
     @MockitoBean
-    EastmoneyClient eastmoneyClient;
+    MarketDataSource marketDataSource;
 
     @Autowired
     FundDictBackfillService fundDictBackfillService;
@@ -37,7 +37,7 @@ class FundDictBackfillServiceTest extends AbstractIntegrationTest {
         FundEntity etf = persistNullSubTypeFund("510310", "易方达沪深300ETF");
         FundEntity active = persistNullSubTypeFund("163406", "兴全合宜混合A");
 
-        when(eastmoneyClient.fetchFundDict()).thenReturn(List.of(
+        when(marketDataSource.fetchFundDict()).thenReturn(List.of(
                 new FundDictEntry("510310", "易方达沪深300ETF", "ETF"),
                 new FundDictEntry("163406", "兴全合宜混合A", "混合型")
         ));
@@ -61,7 +61,7 @@ class FundDictBackfillServiceTest extends AbstractIntegrationTest {
         alreadyClassified.setBenchmarkIndexCode("000300.SH");
         fundRepository.save(alreadyClassified);
 
-        when(eastmoneyClient.fetchFundDict()).thenReturn(List.of(
+        when(marketDataSource.fetchFundDict()).thenReturn(List.of(
                 new FundDictEntry("161725", "招商中证白酒指数LOF", "指数型")
         ));
 
@@ -75,7 +75,7 @@ class FundDictBackfillServiceTest extends AbstractIntegrationTest {
     void backfillAll_字典无匹配_fundCode_跳过不报错() {
         persistNullSubTypeFund("999999", "未知基金");
 
-        when(eastmoneyClient.fetchFundDict()).thenReturn(List.of());
+        when(marketDataSource.fetchFundDict()).thenReturn(List.of());
 
         int updated = fundDictBackfillService.backfillAll();
 

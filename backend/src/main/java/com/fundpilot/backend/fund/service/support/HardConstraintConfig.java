@@ -27,6 +27,9 @@ public final class HardConstraintConfig {
     /** 单次加仓比例上限 50%(防止单次加仓过猛)。 */
     public static final BigDecimal SINGLE_ADD_RATIO_LIMIT = new BigDecimal("0.50");
 
+    /** 加仓档位数(金字塔四档,CONTEXT.md「四档加仓比例」)。 */
+    public static final int TIER_COUNT = 4;
+
     /** 持有期最少交易日数(非自然日,贴近市场节奏)。 */
     public static final int MIN_HOLD_DAYS = 5;
 

@@ -15,6 +15,7 @@ import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
 import com.fundpilot.backend.market.service.MarketIndicatorProvider;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
@@ -33,7 +34,6 @@ import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -58,7 +58,7 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class SignalGenerationServiceTest {
 
-    private static final LocalDate DATE = LocalDate.of(2026, 6, 25);
+    private static final Instant DATE = Instant.parse("2026-06-25T00:00:00Z");
 
     @Mock FundStrategyRepository fundStrategyRepository;
     @Mock FundRepository fundRepository;
@@ -128,9 +128,9 @@ class SignalGenerationServiceTest {
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(marketIndicatorProvider.getIndicators(eq(2L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
-                .thenReturn(new SignalResult(SignalType.BUILD, null, BigDecimal.ONE, null, "BUILD_TRIGGERED", List.of(), List.of()));
+                .thenReturn(new SignalResult(SignalType.BUILD, null, BigDecimal.ONE, null, SignalReason.BUILD, List.of(), List.of()));
         when(disciplineStrategyService.evaluateSignal(eq(s2.getFundEntity()), eq(s2), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none("NO_TIER"));
+                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
 
         service.generateDailySignals(DATE);
 
@@ -156,7 +156,7 @@ class SignalGenerationServiceTest {
         verify(signalLogRepository).save(captor.capture());
         SignalLogEntity saved = captor.getValue();
         assertThat(saved.getSignalType()).isEqualTo(SignalType.NONE);
-        assertThat(saved.getReason()).isEqualTo("INSUFFICIENT_MARKET_DATA");
+        assertThat(saved.getReason()).isEqualTo(SignalReason.INSUFFICIENT_MARKET_DATA);
     }
 
     @Test
@@ -166,7 +166,7 @@ class SignalGenerationServiceTest {
         when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none("NO_TIER"));
+                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
         SignalLogEntity stale = new SignalLogEntity();
         when(signalLogRepository.findByFundEntity_IdAndSignalDateBetween(eq(1L), any(), any()))
                 .thenReturn(List.of(stale));
@@ -188,7 +188,7 @@ class SignalGenerationServiceTest {
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
                 .thenAnswer(inv -> {
                     s1.setTier1AddedAt(null);
-                    return SignalResult.none("TIER_CLEARED");
+                    return SignalResult.none(SignalReason.NO_TIER_TO_SELL);
                 });
 
         service.generateDailySignals(DATE);
@@ -209,7 +209,7 @@ class SignalGenerationServiceTest {
         // fund2: 正常
         when(marketIndicatorProvider.getIndicators(eq(2L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s2.getFundEntity()), eq(s2), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none("NO_TIER"));
+                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
 
         service.generateDailySignals(DATE);
 

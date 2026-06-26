@@ -5,7 +5,8 @@ import com.fundpilot.backend.market.enums.WeeklyMacdState;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -83,9 +84,11 @@ public final class WeeklyMacdCalculator {
 
     /** 日序列按 ISO 周分组,每周取该周最后一个有数据的交易日的累计净值,按周末日期升序输出。 */
     private static List<BigDecimal> toWeeklyClose(List<FundNavSnapshot> daily) {
-        Map<LocalDate, BigDecimal> byWeekEnd = new LinkedHashMap<>();
+        Map<Instant, BigDecimal> byWeekEnd = new LinkedHashMap<>();
         for (FundNavSnapshot s : daily) {
-            LocalDate weekEnd = s.navDate().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+            Instant weekEnd = s.navDate().atZone(ZoneOffset.UTC).toLocalDate()
+                    .with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
+                    .atStartOfDay(ZoneOffset.UTC).toInstant();
             // 覆盖式累加——后到的同一周数据点会刷掉前者,保留最后一个交易日的累计净值
             byWeekEnd.put(weekEnd, s.accumulatedNav());
         }

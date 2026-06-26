@@ -33,9 +33,9 @@ class GlobalExceptionHandlerTest {
     MockMvc mockMvc;
 
     @Test
-    void entityNotFoundReturns404WithEntityNotFoundCode() throws Exception {
+    void entityNotFoundReturns400WithEntityNotFoundCode() throws Exception {
         mockMvc.perform(get("/test/errors/not-found"))
-                .andExpect(status().isNotFound())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data").isEmpty())
                 .andExpect(jsonPath("$.code").value("ENTITY_NOT_FOUND"))
@@ -43,9 +43,9 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void illegalStateTransitionReturns409WithIllegalStateTransitionCode() throws Exception {
+    void illegalStateTransitionReturns400WithIllegalStateTransitionCode() throws Exception {
         mockMvc.perform(get("/test/errors/illegal-transition"))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data").isEmpty())
                 .andExpect(jsonPath("$.code").value("ILLEGAL_STATE_TRANSITION"))

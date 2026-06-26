@@ -1,7 +1,7 @@
 package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.EntityNotFoundException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
@@ -10,12 +10,15 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
+import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,7 @@ import java.time.Instant;
  * 故单独抽 {@code SignalOperationService},与 {@link SignalGenerationService} 同层(编排层)。
  */
 @Service
+@RequiredArgsConstructor
 public class SignalOperationService {
 
     private static final Logger log = LoggerFactory.getLogger(SignalOperationService.class);
@@ -56,43 +60,31 @@ public class SignalOperationService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundPositionService fundPositionService;
 
-    public SignalOperationService(SignalLogRepository signalLogRepository,
-                                  FundRepository fundRepository,
-                                  FundStrategyRepository fundStrategyRepository,
-                                  FundTransactionRepository fundTransactionRepository,
-                                  FundPositionService fundPositionService) {
-        this.signalLogRepository = signalLogRepository;
-        this.fundRepository = fundRepository;
-        this.fundStrategyRepository = fundStrategyRepository;
-        this.fundTransactionRepository = fundTransactionRepository;
-        this.fundPositionService = fundPositionService;
-    }
-
     /**
      * 确认信号操作:根据 SignalLog 分派推进动作并写 FundTransaction。
      *
      * @param signalLogId SignalLog 主键
      * @param request     用户实际下单值(actualAmount/actualShares)
      * @return 写入的 FundTransactionEntity
-     * @throws EntityNotFoundException signalLogId 找不到
+     * @throws BusinessException signalLogId 找不到
      * @throws BusinessException       actualAmount/actualShares 缺失
      */
     @Transactional
     public FundTransactionEntity confirmOperation(Long signalLogId, ConfirmOperationRequest request) {
         SignalLogEntity signalLog = signalLogRepository.findById(signalLogId)
-                .orElseThrow(() -> new EntityNotFoundException("SignalLog", signalLogId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNAL_LOG_NOT_FOUND, "SignalLog #" + signalLogId + " 不存在"));
         FundEntity fund = signalLog.getFundEntity();
         FundStrategyEntity strategy = signalLog.getFundStrategyEntity();
         SignalType type = signalLog.getSignalType();
         Integer tier = signalLog.getTriggerTier();
-        String reason = signalLog.getReason();
+        SignalReason reason = signalLog.getReason();
         Instant now = Instant.now();
 
         FundTransactionEntity tx = switch (type) {
             case BUILD -> handleBuild(signalLog, fund, request, now);
             case ADD -> handleAdd(signalLog, fund, strategy, tier, request, now);
             case SELL -> handleSell(signalLog, fund, strategy, tier, reason, request, now);
-            case NONE -> throw new BusinessException("INVALID_SIGNAL_TYPE",
+            case NONE -> throw new BusinessException(ErrorCode.INVALID_SIGNAL_TYPE,
                     "NONE 信号无需确认操作");
         };
         return fundTransactionRepository.save(tx);
@@ -113,7 +105,7 @@ public class SignalOperationService {
                                            FundStrategyEntity strategy, Integer tier,
                                            ConfirmOperationRequest request, Instant now) {
         if (tier == null) {
-            throw new BusinessException("MISSING_TRIGGER_TIER", "ADD 信号缺少 triggerTier");
+            throw new BusinessException(ErrorCode.MISSING_TRIGGER_TIER, "ADD 信号缺少 triggerTier");
         }
         BigDecimal amount = requireAmount(request);
         setTierAddedAt(strategy, tier, now);
@@ -130,31 +122,31 @@ public class SignalOperationService {
      * </ul>
      */
     private FundTransactionEntity handleSell(SignalLogEntity signalLog, FundEntity fund,
-                                             FundStrategyEntity strategy, Integer tier, String reason,
+                                             FundStrategyEntity strategy, Integer tier, SignalReason reason,
                                              ConfirmOperationRequest request, Instant now) {
         BigDecimal shares = requireShares(request);
         FundTransactionEntity tx = newTransaction(fund, signalLog, FundTransactionSource.DECREASE, null, shares, now);
 
-        if ("TRAILING_STOP".equals(reason)) {
+        if (reason == SignalReason.TRAILING_STOP) {
             if (tier == null) {
-                throw new BusinessException("MISSING_TRIGGER_TIER", "TRAILING_STOP 信号缺少 triggerTier");
+                throw new BusinessException(ErrorCode.MISSING_TRIGGER_TIER, "TRAILING_STOP 信号缺少 triggerTier");
             }
             setTierAddedAt(strategy, tier, null);
-            if (tier == 4) {
+            if (tier == HardConstraintConfig.TIER_COUNT) {
                 clearAllTiers(strategy);
                 clearIfHoldingExhausted(fund, strategy, now);
             }
             fundStrategyRepository.save(strategy);
-        } else if ("LOGIC_BROKEN".equals(reason)) {
+        } else if (reason == SignalReason.LOGIC_BROKEN) {
             clearAllTiers(strategy);
             fund.setStatus(FundStatus.CLEARED);
             fundRepository.save(fund);
             fundStrategyRepository.save(strategy);
-        } else if ("REBALANCE".equals(reason)) {
+        } else if (reason == SignalReason.REBALANCE) {
             // 不清档位(持仓还在)、不改 FundStatus
             log.debug("REBALANCE 卖出 fund_id={} shares={}", fund.getId(), shares);
         } else {
-            throw new BusinessException("UNSUPPORTED_SELL_REASON", "不支持的 SELL reason: " + reason);
+            throw new BusinessException(ErrorCode.UNSUPPORTED_SELL_REASON, "不支持的 SELL reason: " + reason);
         }
         return tx;
     }
@@ -175,7 +167,7 @@ public class SignalOperationService {
             case 2 -> strategy.setTier2AddedAt(value);
             case 3 -> strategy.setTier3AddedAt(value);
             case 4 -> strategy.setTier4AddedAt(value);
-            default -> throw new BusinessException("INVALID_TRIGGER_TIER", "triggerTier 超出 1~4: " + tier);
+            default -> throw new BusinessException(ErrorCode.INVALID_TRIGGER_TIER, "triggerTier 超出 1~4: " + tier);
         }
     }
 
@@ -188,14 +180,14 @@ public class SignalOperationService {
 
     private static BigDecimal requireAmount(ConfirmOperationRequest request) {
         if (request.actualAmount() == null) {
-            throw new BusinessException("MISSING_ACTUAL_AMOUNT", "BUILD/ADD 需提供 actualAmount");
+            throw new BusinessException(ErrorCode.MISSING_ACTUAL_AMOUNT, "BUILD/ADD 需提供 actualAmount");
         }
         return request.actualAmount();
     }
 
     private static BigDecimal requireShares(ConfirmOperationRequest request) {
         if (request.actualShares() == null) {
-            throw new BusinessException("MISSING_ACTUAL_SHARES", "SELL 需提供 actualShares");
+            throw new BusinessException(ErrorCode.MISSING_ACTUAL_SHARES, "SELL 需提供 actualShares");
         }
         return request.actualShares();
     }

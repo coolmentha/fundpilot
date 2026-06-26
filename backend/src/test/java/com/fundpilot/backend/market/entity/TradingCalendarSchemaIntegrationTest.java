@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,7 +30,7 @@ class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
     @Transactional
     void tradingCalendarPersistsIsTradingDay() {
         TradingCalendarEntity day = new TradingCalendarEntity();
-        day.setCalendarDate(LocalDate.of(2026, 6, 24));
+        day.setCalendarDate(Instant.parse("2026-06-24T00:00:00Z"));
         day.setTradingDay(true);
 
         TradingCalendarEntity saved = tradingCalendarRepository.save(day);
@@ -38,14 +38,14 @@ class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
         entityManager.clear();
 
         TradingCalendarEntity reloaded = tradingCalendarRepository.findById(saved.getId()).orElseThrow();
-        assertThat(reloaded.getCalendarDate()).isEqualTo(LocalDate.of(2026, 6, 24));
+        assertThat(reloaded.getCalendarDate()).isEqualTo(Instant.parse("2026-06-24T00:00:00Z"));
         assertThat(reloaded.isTradingDay()).isTrue();
     }
 
     @Test
     @Transactional
     void duplicateCalendarDateIsRejected() {
-        LocalDate date = LocalDate.of(2026, 6, 25);
+        Instant date = Instant.parse("2026-06-25T00:00:00Z");
 
         TradingCalendarEntity first = new TradingCalendarEntity();
         first.setCalendarDate(date);

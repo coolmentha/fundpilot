@@ -15,3 +15,7 @@ Issues 与 PRD 通过 `gh` CLI 写入 GitHub 仓库 `coolmentha/fundpilot` 的 I
 ### Domain docs
 
 单一上下文：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+
+### Coding standards
+
+backend Java 代码硬性规范（Controller 不写逻辑、@RequiredArgsConstructor、ErrorCode 枚举、Actuator、数据源降级链、全局 Instant、View DTO、魔法值枚举化）。详见 `docs/agents/coding-standards.md`。

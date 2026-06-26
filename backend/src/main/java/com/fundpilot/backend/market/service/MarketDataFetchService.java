@@ -1,10 +1,12 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.market.client.EastmoneyClient;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
+import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
@@ -15,13 +17,14 @@ import com.fundpilot.backend.market.service.support.WeeklyMacdCalculator;
 import com.fundpilot.backend.market.service.support.YearLineCalculator;
 import com.fundpilot.backend.market.service.support.YearLineMetrics;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,11 +33,12 @@ import java.util.Optional;
  * 的当日市场指标,落 {@code market_indicator_snapshot}。
  * <p>分批策略:{@code Math.abs(fundId.hashCode()) % 3 == batchNumber} 切片,
  * 14:30 跑 batch 0、14:40 跑 batch 1、14:50 跑 batch 2。
- * <p>失败降级:单只基金 {@link EastmoneyClient} 抛异常时记日志继续,不影响其他基金;
+ * <p>失败降级:单只基金 {@link MarketDataSource} 抛异常时记日志继续,不影响其他基金;
  * 该基金当天不写 snapshot,后续 {@code SignalGenerationJob} 读不到时出
  * {@code signalType=NONE, reason=INSUFFICIENT_MARKET_DATA}。
  */
 @Service
+@RequiredArgsConstructor
 public class MarketDataFetchService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketDataFetchService.class);
@@ -43,18 +47,8 @@ public class MarketDataFetchService {
 
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
-    private final EastmoneyClient eastmoneyClient;
+    private final MarketDataSource marketDataSource;
     private final MarketIndicatorSnapshotService snapshotService;
-
-    public MarketDataFetchService(FundStrategyRepository fundStrategyRepository,
-                                  FundRepository fundRepository,
-                                  EastmoneyClient eastmoneyClient,
-                                  MarketIndicatorSnapshotService snapshotService) {
-        this.fundStrategyRepository = fundStrategyRepository;
-        this.fundRepository = fundRepository;
-        this.eastmoneyClient = eastmoneyClient;
-        this.snapshotService = snapshotService;
-    }
 
     /**
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
@@ -91,12 +85,12 @@ public class MarketDataFetchService {
 
     private void fetchOne(Long fundId) {
         FundEntity fund = fundRepository.findById(fundId)
-                .orElseThrow(() -> new IllegalStateException("fund_id=" + fundId + " 不存在"));
-        LocalDate today = LocalDate.now();
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+        Instant today = Instant.now();
 
-        List<FundNavSnapshot> navHistory = eastmoneyClient.fetchNavHistory(fund.getFundCode());
+        List<FundNavSnapshot> navHistory = marketDataSource.fetchNavHistory(fund.getFundCode());
         if (navHistory == null || navHistory.isEmpty()) {
-            throw new IllegalStateException("fund_code=" + fund.getFundCode() + " 净值历史为空");
+            throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY, "fund_code=" + fund.getFundCode() + " 净值历史为空");
         }
         List<BigDecimal> accumulatedNav = navHistory.stream()
                 .map(FundNavSnapshot::accumulatedNav)
@@ -130,7 +124,7 @@ public class MarketDataFetchService {
                 // benchmarkIndexCode 是 "000300.SH" 人类可读格式,转 secid "1.000300" 调东方财富接口
                 String secid = SecidFormat.fromIndexCode(fund.getBenchmarkIndexCode())
                         .orElse(fund.getBenchmarkIndexCode());
-                IndexKline kline = eastmoneyClient.fetchIndexKline(secid, INDEX_KLINE_RANGE);
+                IndexKline kline = marketDataSource.fetchIndexKline(secid, INDEX_KLINE_RANGE);
                 VolumeStateCalculator.calculate(kline).ifPresent(template::setVolumeState);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());

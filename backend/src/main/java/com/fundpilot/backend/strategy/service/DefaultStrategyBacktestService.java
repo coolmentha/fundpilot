@@ -1,5 +1,7 @@
 package com.fundpilot.backend.strategy.service;
 
+import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
@@ -13,6 +15,7 @@ import com.fundpilot.backend.strategy.service.support.BacktestSimulator;
 import com.fundpilot.backend.strategy.service.support.BenchmarkCalculator;
 import com.fundpilot.backend.strategy.service.support.BenchmarkMetrics;
 import com.fundpilot.backend.strategy.service.support.MaxDrawdownCalculator;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +42,7 @@ import java.util.Optional;
  * <p>#12 完成后,步骤 4 的 {@link BacktestSimulator} 应重构为调用 {@code DisciplineStrategyService.evaluateSignal}。
  */
 @Service
+@RequiredArgsConstructor
 public class DefaultStrategyBacktestService implements StrategyBacktestService {
 
     private final FundStrategyRepository fundStrategyRepository;
@@ -46,21 +50,11 @@ public class DefaultStrategyBacktestService implements StrategyBacktestService {
     private final StrategyBacktestRepository strategyBacktestRepository;
     private final Hs300BenchmarkProvider hs300BenchmarkProvider;
 
-    public DefaultStrategyBacktestService(FundStrategyRepository fundStrategyRepository,
-                                          FundNavHistoryRepository fundNavHistoryRepository,
-                                          StrategyBacktestRepository strategyBacktestRepository,
-                                          Hs300BenchmarkProvider hs300BenchmarkProvider) {
-        this.fundStrategyRepository = fundStrategyRepository;
-        this.fundNavHistoryRepository = fundNavHistoryRepository;
-        this.strategyBacktestRepository = strategyBacktestRepository;
-        this.hs300BenchmarkProvider = hs300BenchmarkProvider;
-    }
-
     @Override
     @Transactional
     public StrategyBacktestEntity run(Long strategyId, BacktestWindow window) {
         FundStrategyEntity strategy = fundStrategyRepository.findById(strategyId)
-                .orElseThrow(() -> new IllegalArgumentException("strategy_id=" + strategyId + " 不存在"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "FundStrategy #" + strategyId + " 不存在"));
         FundEntity fund = strategy.getFundEntity();
         BigDecimal plannedTotalAmount = Optional.ofNullable(fund.getPlannedTotalAmount())
                 .orElse(BigDecimal.ZERO);
@@ -113,8 +107,7 @@ public class DefaultStrategyBacktestService implements StrategyBacktestService {
 
     private StrategyBacktestEntity saveZero(StrategyBacktestEntity entity) {
         entity.setStrategyReturn(BigDecimal.ZERO);
-        entity.setStrategyMaxDrawdown(BigDecimal.ZERO);
-        entity.setBenchmarkAllInReturn(BigDecimal.ZERO);
+        entity.setStrategyMaxDrawdown(BigDecimal.ZERO);        entity.setBenchmarkAllInReturn(BigDecimal.ZERO);
         entity.setBenchmarkAllInMaxDrawdown(BigDecimal.ZERO);
         entity.setBenchmarkDcaReturn(BigDecimal.ZERO);
         entity.setBenchmarkDcaMaxDrawdown(BigDecimal.ZERO);

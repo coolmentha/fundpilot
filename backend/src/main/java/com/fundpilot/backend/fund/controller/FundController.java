@@ -1,9 +1,9 @@
 package com.fundpilot.backend.fund.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.fund.service.FundDictBackfillService;
+import com.fundpilot.backend.fund.service.FundService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,59 +15,39 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 基金 Controller(issue #16):基金 CRUD。FundEntity 无独立 Service 层,Controller 直连 FundRepository。
- * 新建基金时调 {@link FundDictBackfillService} 回填 fundSubType/benchmarkIndexCode(issue #8 字典识别)。
+ * 基金 Controller(issue #16):基金 CRUD,只做 HTTP 路由,业务逻辑下沉 {@link FundService}。
+ * 返回 {@link FundView} DTO,不直接暴露 Entity。
  */
 @RestController
 @RequestMapping("/api/funds")
+@RequiredArgsConstructor
 public class FundController {
 
-    private final FundRepository fundRepository;
-    private final FundDictBackfillService fundDictBackfillService;
-
-    public FundController(FundRepository fundRepository, FundDictBackfillService fundDictBackfillService) {
-        this.fundRepository = fundRepository;
-        this.fundDictBackfillService = fundDictBackfillService;
-    }
+    private final FundService fundService;
 
     @GetMapping
-    public ApiResponse<List<FundEntity>> list() {
-        return ApiResponse.ok(fundRepository.findAll());
+    public ApiResponse<List<FundView>> list() {
+        return ApiResponse.ok(fundService.list());
     }
 
     @PostMapping
-    public ApiResponse<FundEntity> create(@RequestBody FundCreateRequest request) {
-        FundEntity fund = new FundEntity();
-        fund.setFundCode(request.fundCode());
-        fund.setFundName(request.fundName());
-        fund.setFundCategory(request.fundCategory());
-        fund.setPlannedTotalAmount(request.plannedTotalAmount());
-        fund = fundRepository.save(fund);
-        // 新建后自动调字典回填(识别 fundSubType/benchmarkIndexCode,#8);幂等,已识别的会跳过
-        fundDictBackfillService.backfillAll();
-        return ApiResponse.ok(fundRepository.findById(fund.getId()).orElse(fund));
+    public ApiResponse<FundView> create(@RequestBody FundCreateRequest request) {
+        return ApiResponse.ok(fundService.create(request));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<FundEntity> get(@PathVariable Long id) {
-        return ApiResponse.ok(fundRepository.findById(id).orElse(null));
+    public ApiResponse<FundView> get(@PathVariable Long id) {
+        return ApiResponse.ok(fundService.get(id));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<FundEntity> update(@PathVariable Long id, @RequestBody FundCreateRequest request) {
-        FundEntity fund = fundRepository.findById(id).orElse(null);
-        if (fund == null) {
-            return ApiResponse.ok(null);
-        }
-        if (request.fundName() != null) {
-            fund.setFundName(request.fundName());
-        }
-        if (request.fundCategory() != null) {
-            fund.setFundCategory(request.fundCategory());
-        }
-        if (request.plannedTotalAmount() != null) {
-            fund.setPlannedTotalAmount(request.plannedTotalAmount());
-        }
-        return ApiResponse.ok(fundRepository.save(fund));
+    public ApiResponse<FundView> update(@PathVariable Long id, @RequestBody FundCreateRequest request) {
+        return ApiResponse.ok(fundService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> archive(@PathVariable Long id) {
+        fundService.archive(id);
+        return ApiResponse.ok(null);
     }
 }

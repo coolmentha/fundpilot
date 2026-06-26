@@ -3,7 +3,7 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.market.client.EastmoneyClient;
+import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
 import com.fundpilot.backend.market.repository.MarketIndicatorSnapshotRepository;
@@ -19,7 +19,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +36,7 @@ import static org.mockito.Mockito.when;
 class MarketDataFetchServiceTest extends AbstractIntegrationTest {
 
     @MockitoBean
-    EastmoneyClient eastmoneyClient;
+    MarketDataSource marketDataSource;
 
     @Autowired
     MarketDataFetchService marketDataFetchService;
@@ -65,7 +66,7 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
 
         long count = snapshotRepository.count();
         assertThat(count).isEqualTo(3L);
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), LocalDate.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), Instant.now())).isPresent();
     }
 
     @Test
@@ -75,18 +76,18 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         FundEntity bad = persistEffectiveFund("161729", "1.000300");
         FundEntity ok2 = persistEffectiveFund("161730", "1.000300");
         // bad 基金拉净值时抛异常
-        when(eastmoneyClient.fetchNavHistory("161729"))
+        when(marketDataSource.fetchNavHistory("161729"))
                 .thenThrow(new RuntimeException("东方财富接口超时"));
-        when(eastmoneyClient.fetchNavHistory("161728")).thenReturn(sampleNavHistory());
-        when(eastmoneyClient.fetchNavHistory("161730")).thenReturn(sampleNavHistory());
+        when(marketDataSource.fetchNavHistory("161728")).thenReturn(sampleNavHistory());
+        when(marketDataSource.fetchNavHistory("161730")).thenReturn(sampleNavHistory());
         mockIndexKline();
 
         marketDataFetchService.refreshAll();
 
         // bad 基金不落库,其余两只正常
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(bad.getId(), LocalDate.now())).isEmpty();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok1.getId(), LocalDate.now())).isPresent();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok2.getId(), LocalDate.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(bad.getId(), Instant.now())).isEmpty();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok1.getId(), Instant.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok2.getId(), Instant.now())).isPresent();
     }
 
     @Test
@@ -106,18 +107,18 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     private void mockNavHistory() {
-        when(eastmoneyClient.fetchNavHistory(anyString())).thenReturn(sampleNavHistory());
+        when(marketDataSource.fetchNavHistory(anyString())).thenReturn(sampleNavHistory());
     }
 
     private void mockIndexKline() {
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString())).thenReturn(sampleIndexKline());
+        when(marketDataSource.fetchIndexKline(anyString(), anyString())).thenReturn(sampleIndexKline());
     }
 
     private static List<FundNavSnapshot> sampleNavHistory() {
-        LocalDate start = LocalDate.of(2024, 1, 1);
+        Instant start = Instant.parse("2024-01-01T00:00:00Z");
         return java.util.stream.IntStream.rangeClosed(0, 260)
                 .mapToObj(i -> {
-                    LocalDate d = start.plusDays(i);
+                    Instant d = start.plus(i, ChronoUnit.DAYS);
                     BigDecimal nav = new BigDecimal("1.00").add(new BigDecimal(i * 0.01 + ""));
                     return new FundNavSnapshot(d, nav, nav);
                 })
@@ -125,10 +126,10 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     private static IndexKline sampleIndexKline() {
-        LocalDate start = LocalDate.of(2025, 1, 1);
+        Instant start = Instant.parse("2025-01-01T00:00:00Z");
         List<IndexKline.Bar> bars = java.util.stream.IntStream.rangeClosed(0, 30)
                 .mapToObj(i -> new IndexKline.Bar(
-                        start.plusDays(i),
+                        start.plus(i, ChronoUnit.DAYS),
                         new BigDecimal("100"),
                         new BigDecimal("101"),
                         new BigDecimal("102"),

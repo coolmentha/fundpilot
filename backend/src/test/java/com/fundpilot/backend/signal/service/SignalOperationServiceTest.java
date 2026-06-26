@@ -1,7 +1,6 @@
 package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.EntityNotFoundException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
@@ -13,6 +12,7 @@ import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
+import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
@@ -70,7 +70,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         entityManager.persist(strategy);
     }
 
-    private SignalLogEntity persistSignal(SignalType type, Integer tier, String reason) {
+    private SignalLogEntity persistSignal(SignalType type, Integer tier, SignalReason reason) {
         SignalLogEntity log = new SignalLogEntity();
         log.setFundEntity(fund);
         log.setFundStrategyEntity(strategy);
@@ -84,7 +84,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
     @Test
     void confirmOperation_BUILD推进HOLDING并写openedAt和INCREASE交易() {
-        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, "BUILD_TRIGGERED");
+        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, SignalReason.BUILD);
         entityManager.flush();
 
         FundTransactionEntity tx = service.confirmOperation(signal.getId(),
@@ -108,7 +108,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     void confirmOperation_ADD推进对应档位tierNAddedAt() {
         fund.setStatus(FundStatus.HOLDING);
         strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
-        SignalLogEntity signal = persistSignal(SignalType.ADD, 2, "TIER2_TRIGGERED");
+        SignalLogEntity signal = persistSignal(SignalType.ADD, 2, SignalReason.ADD);
         entityManager.flush();
 
         service.confirmOperation(signal.getId(),
@@ -126,7 +126,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         fund.setStatus(FundStatus.HOLDING);
         strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
         strategy.setTier2AddedAt(Instant.parse("2026-06-10T00:00:00Z"));
-        SignalLogEntity signal = persistSignal(SignalType.SELL, 2, "TRAILING_STOP");
+        SignalLogEntity signal = persistSignal(SignalType.SELL, 2, SignalReason.TRAILING_STOP);
         entityManager.flush();
 
         FundTransactionEntity tx = service.confirmOperation(signal.getId(),
@@ -152,7 +152,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
         strategy.setTier2AddedAt(Instant.parse("2026-06-10T00:00:00Z"));
         strategy.setTier3AddedAt(Instant.parse("2026-06-15T00:00:00Z"));
-        SignalLogEntity signal = persistSignal(SignalType.SELL, null, "LOGIC_BROKEN");
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
         entityManager.flush();
 
         service.confirmOperation(signal.getId(),
@@ -172,7 +172,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     void confirmOperation_REBALANCE不清档位不改FundStatus() {
         fund.setStatus(FundStatus.HOLDING);
         strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
-        SignalLogEntity signal = persistSignal(SignalType.SELL, null, "REBALANCE");
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.REBALANCE);
         entityManager.flush();
 
         service.confirmOperation(signal.getId(),
@@ -188,7 +188,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
     @Test
     void confirmOperation_BUILD缺少actualAmount抛MISSING_ACTUAL_AMOUNT() {
-        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, "BUILD_TRIGGERED");
+        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, SignalReason.BUILD);
         entityManager.flush();
 
         assertThatThrownBy(() -> service.confirmOperation(signal.getId(),
@@ -199,7 +199,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
     @Test
     void confirmOperation_SELL缺少actualShares抛MISSING_ACTUAL_SHARES() {
-        SignalLogEntity signal = persistSignal(SignalType.SELL, 1, "TRAILING_STOP");
+        SignalLogEntity signal = persistSignal(SignalType.SELL, 1, SignalReason.TRAILING_STOP);
         entityManager.flush();
 
         assertThatThrownBy(() -> service.confirmOperation(signal.getId(),
@@ -209,15 +209,15 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void confirmOperation_signalLogId不存在抛EntityNotFoundException() {
+    void confirmOperation_signalLogId不存在抛BusinessException() {
         assertThatThrownBy(() -> service.confirmOperation(999999L,
                 new ConfirmOperationRequest(999999L, new BigDecimal("100"), null)))
-                .isInstanceOf(EntityNotFoundException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
     void confirmOperation_override实际值与建议不同时只存实际值() {
-        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, "BUILD_TRIGGERED");
+        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, SignalReason.BUILD);
         // suggestedMeasure 建议金额 10000,用户实际下单 8000(override)
         signal.setSuggestedMeasure(null); // suggestedMeasure 本期非核心,override 校验看 amount
         entityManager.flush();

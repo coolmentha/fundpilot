@@ -5,7 +5,9 @@ import com.fundpilot.backend.market.enums.WeeklyMacdState;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -78,23 +80,23 @@ class WeeklyMacdCalculatorTest {
 
     /** 工作日序列(跳过周末),起价 startPrice,每个工作日累加 delta。 */
     private static List<FundNavSnapshot> linearSeries(int workingDays, double startPrice, double delta) {
-        return linearSeriesFrom(LocalDate.of(2025, 1, 1), workingDays, startPrice, delta);
+        return linearSeriesFrom(Instant.parse("2025-01-01T00:00:00Z"), workingDays, startPrice, delta);
     }
 
     private static List<FundNavSnapshot> linearSeriesFrom(
-            LocalDate start, int workingDays, double startPrice, double delta) {
+            Instant start, int workingDays, double startPrice, double delta) {
         List<FundNavSnapshot> result = new ArrayList<>();
-        LocalDate cursor = start;
+        Instant cursor = start;
         double price = startPrice;
         int count = 0;
         while (count < workingDays) {
-            if (cursor.getDayOfWeek().getValue() <= 5) {
+            if (cursor.atZone(ZoneOffset.UTC).getDayOfWeek().getValue() <= 5) {
                 BigDecimal nav = BigDecimal.valueOf(price);
                 result.add(new FundNavSnapshot(cursor, nav, nav));
                 price += delta;
                 count++;
             }
-            cursor = cursor.plusDays(1);
+            cursor = cursor.plus(1, ChronoUnit.DAYS);
         }
         return result;
     }

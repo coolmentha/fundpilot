@@ -3,8 +3,9 @@ package com.fundpilot.backend.fund.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.support.FundSubTypeResult;
-import com.fundpilot.backend.market.client.EastmoneyClient;
 import com.fundpilot.backend.market.client.FundDictEntry;
+import com.fundpilot.backend.market.client.MarketDataSource;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,17 +23,13 @@ import java.util.stream.Collectors;
  * 字典无匹配 fundCode 的行跳过,不报错(可能基金已下架)。
  */
 @Service
+@RequiredArgsConstructor
 public class FundDictBackfillService {
 
     private static final Logger log = LoggerFactory.getLogger(FundDictBackfillService.class);
 
-    private final EastmoneyClient eastmoneyClient;
+    private final MarketDataSource marketDataSource;
     private final FundRepository fundRepository;
-
-    public FundDictBackfillService(EastmoneyClient eastmoneyClient, FundRepository fundRepository) {
-        this.eastmoneyClient = eastmoneyClient;
-        this.fundRepository = fundRepository;
-    }
 
     /**
      * 拉取全量字典,对 {@code fund_sub_type IS NULL} 的 fund 行按字典名识别并填回。
@@ -41,7 +38,7 @@ public class FundDictBackfillService {
      */
     @Transactional
     public int backfillAll() {
-        List<FundDictEntry> dict = eastmoneyClient.fetchFundDict();
+        List<FundDictEntry> dict = marketDataSource.fetchFundDict();
         if (dict == null || dict.isEmpty()) {
             log.warn("字典为空,跳过 backfill");
             return 0;

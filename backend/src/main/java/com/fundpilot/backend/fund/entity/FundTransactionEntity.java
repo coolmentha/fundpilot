@@ -7,12 +7,14 @@ import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "fund_transaction")
+@SQLDelete(sql = "UPDATE fund_transaction SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class FundTransactionEntity extends AbstractEntity {

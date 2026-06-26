@@ -18,8 +18,9 @@ import java.util.List;
  * 测试时通过 {@code feign.Feign.builder()} 编程指向 MockWebServer 地址。
  *
  * @see EastmoneyClientConfig
+ * @see MarketDataSource
  */
-public interface EastmoneyClient {
+public interface EastmoneyClient extends MarketDataSource {
 
     /**
      * 最原始 GET 请求,返回 Raw String(JS 字面量),由解析器处理。

@@ -8,7 +8,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 
@@ -49,7 +49,7 @@ class EastmoneyClientIntegrationTest {
         List<FundNavSnapshot> result = client.fetchNavHistory("000001");
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).navDate()).isEqualTo(LocalDate.of(2024, 6, 24));
+        assertThat(result.get(0).navDate()).isEqualTo(Instant.parse("2024-06-24T00:00:00Z"));
 
         RecordedRequest req = mockWebServer.takeRequest();
         assertThat(req.getPath()).contains("000001");

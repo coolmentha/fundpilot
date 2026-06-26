@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
+import java.time.Instant;
 
 /**
  * 信号生成定时任务(issue #13):每日 14:50(周一到周五)遍历所有 EFFECTIVE 策略基金,
@@ -27,9 +27,9 @@ public class SignalGenerationJob {
 
     @Scheduled(cron = "0 50 14 * * MON-FRI")
     public void generateDaily() {
-        LocalDate today = LocalDate.now();
-        log.info("信号生成任务启动 date={}", today);
-        signalGenerationService.generateDailySignals(today);
-        log.info("信号生成任务完成 date={}", today);
+        Instant now = Instant.now();
+        log.info("信号生成任务启动 date={}", now);
+        signalGenerationService.generateDailySignals(now);
+        log.info("信号生成任务完成 date={}", now);
     }
 }

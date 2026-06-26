@@ -2,11 +2,12 @@ package com.fundpilot.backend.admin.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.signal.service.SignalGenerationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -15,17 +16,14 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/admin/signals")
+@RequiredArgsConstructor
 public class AdminSignalController {
 
     private final SignalGenerationService signalGenerationService;
 
-    public AdminSignalController(SignalGenerationService signalGenerationService) {
-        this.signalGenerationService = signalGenerationService;
-    }
-
     @PostMapping("/generate")
     public ApiResponse<Map<String, String>> generate() {
-        signalGenerationService.generateDailySignals(LocalDate.now());
+        signalGenerationService.generateDailySignals(Instant.now());
         return ApiResponse.ok(Map.of("status", "generated"));
     }
 }

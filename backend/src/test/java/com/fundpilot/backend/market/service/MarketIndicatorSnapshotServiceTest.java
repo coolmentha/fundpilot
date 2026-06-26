@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +37,7 @@ class MarketIndicatorSnapshotServiceTest extends AbstractIntegrationTest {
     @Transactional
     void upsert_首次写入_落库一行字段正确() {
         FundEntity fund = persistFund("161725");
-        LocalDate date = LocalDate.of(2026, 6, 24);
+        Instant date = Instant.parse("2026-06-24T00:00:00Z");
         MarketIndicatorSnapshotEntity template = template(fund, date, "1.2345", true);
 
         MarketIndicatorSnapshotEntity saved = marketIndicatorSnapshotService.upsert(template);
@@ -53,7 +53,7 @@ class MarketIndicatorSnapshotServiceTest extends AbstractIntegrationTest {
     @Transactional
     void upsert_同日重跑_覆盖字段不新增行() {
         FundEntity fund = persistFund("161726");
-        LocalDate date = LocalDate.of(2026, 6, 24);
+        Instant date = Instant.parse("2026-06-24T00:00:00Z");
         marketIndicatorSnapshotService.upsert(template(fund, date, "1.0000", false));
 
         // 同日重跑,字段全部变化
@@ -70,7 +70,7 @@ class MarketIndicatorSnapshotServiceTest extends AbstractIntegrationTest {
         FundEntity fund = persistFund("161727");
 
         Optional<MarketIndicatorSnapshotEntity> found =
-                marketIndicatorSnapshotRepository.findByFundEntity_IdAndSnapshotDate(fund.getId(), LocalDate.of(2026, 6, 24));
+                marketIndicatorSnapshotRepository.findByFundEntity_IdAndSnapshotDate(fund.getId(), Instant.parse("2026-06-24T00:00:00Z"));
 
         assertThat(found).isEmpty();
     }
@@ -82,7 +82,7 @@ class MarketIndicatorSnapshotServiceTest extends AbstractIntegrationTest {
         return fundRepository.save(fund);
     }
 
-    private static MarketIndicatorSnapshotEntity template(FundEntity fund, LocalDate date, String nav, boolean aboveYearLine) {
+    private static MarketIndicatorSnapshotEntity template(FundEntity fund, Instant date, String nav, boolean aboveYearLine) {
         MarketIndicatorSnapshotEntity entity = new MarketIndicatorSnapshotEntity();
         entity.setFundEntity(fund);
         entity.setSnapshotDate(date);

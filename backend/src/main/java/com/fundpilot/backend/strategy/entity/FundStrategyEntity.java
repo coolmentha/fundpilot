@@ -6,12 +6,14 @@ import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "fund_strategy")
+@SQLDelete(sql = "UPDATE fund_strategy SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class FundStrategyEntity extends AbstractEntity {

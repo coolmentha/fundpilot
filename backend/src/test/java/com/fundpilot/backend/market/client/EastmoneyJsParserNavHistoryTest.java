@@ -2,7 +2,7 @@ package com.fundpilot.backend.market.client;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,12 +26,12 @@ class EastmoneyJsParserNavHistoryTest {
         assertThat(snapshots).hasSize(2);
 
         FundNavSnapshot first = snapshots.get(0);
-        assertThat(first.navDate()).isEqualTo(LocalDate.of(2024, 6, 24));
+        assertThat(first.navDate()).isEqualTo(Instant.parse("2024-06-24T00:00:00Z"));
         assertThat(first.nav()).isEqualByComparingTo("1.0000");
         assertThat(first.accumulatedNav()).isEqualByComparingTo("2.0000");
 
         FundNavSnapshot second = snapshots.get(1);
-        assertThat(second.navDate()).isEqualTo(LocalDate.of(2024, 6, 25));
+        assertThat(second.navDate()).isEqualTo(Instant.parse("2024-06-25T00:00:00Z"));
         assertThat(second.nav()).isEqualByComparingTo("1.0100");
         assertThat(second.accumulatedNav()).isEqualByComparingTo("2.0200");
     }

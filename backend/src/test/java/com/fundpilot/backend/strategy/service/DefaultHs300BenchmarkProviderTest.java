@@ -1,7 +1,8 @@
 package com.fundpilot.backend.strategy.service;
 
-import com.fundpilot.backend.market.client.EastmoneyClient;
+import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.market.client.IndexKline;
+import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.strategy.service.support.BenchmarkMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,10 +12,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.when;
 class DefaultHs300BenchmarkProviderTest {
 
     @Mock
-    EastmoneyClient eastmoneyClient;
+    MarketDataSource marketDataSource;
 
     @InjectMocks
     DefaultHs300BenchmarkProvider provider;
@@ -37,11 +38,11 @@ class DefaultHs300BenchmarkProviderTest {
         // 沪深300 日K:2025-01 收盘 4000 → 2025-06 收盘 4400(收益 0.1),中间无回撤
         Instant start = Instant.parse("2025-01-01T00:00:00Z");
         Instant end = Instant.parse("2025-06-30T00:00:00Z");
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString()))
+        when(marketDataSource.fetchIndexKline(anyString(), anyString()))
                 .thenReturn(new IndexKline(List.of(
-                        new IndexKline.Bar(LocalDate.of(2025, 1, 5), new BigDecimal("4000"), new BigDecimal("4000"),
+                        new IndexKline.Bar(Instant.parse("2025-01-05T00:00:00Z"), new BigDecimal("4000"), new BigDecimal("4000"),
                                 new BigDecimal("4010"), new BigDecimal("3990"), 1000),
-                        new IndexKline.Bar(LocalDate.of(2025, 6, 28), new BigDecimal("4380"), new BigDecimal("4400"),
+                        new IndexKline.Bar(Instant.parse("2025-06-28T00:00:00Z"), new BigDecimal("4380"), new BigDecimal("4400"),
                                 new BigDecimal("4410"), new BigDecimal("4370"), 1000))));
 
         BenchmarkMetrics metrics = provider.fetch(start, end);
@@ -55,13 +56,13 @@ class DefaultHs300BenchmarkProviderTest {
         // 窗口 2025-03 ~ 2025-06;K 线含窗口外的 2024-12 数据,应被过滤
         Instant start = Instant.parse("2025-03-01T00:00:00Z");
         Instant end = Instant.parse("2025-06-30T00:00:00Z");
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString()))
+        when(marketDataSource.fetchIndexKline(anyString(), anyString()))
                 .thenReturn(new IndexKline(List.of(
-                        new IndexKline.Bar(LocalDate.of(2024, 12, 1), new BigDecimal("3000"), new BigDecimal("3000"),
+                        new IndexKline.Bar(Instant.parse("2024-12-01T00:00:00Z"), new BigDecimal("3000"), new BigDecimal("3000"),
                                 new BigDecimal("3010"), new BigDecimal("2990"), 1000),
-                        new IndexKline.Bar(LocalDate.of(2025, 3, 5), new BigDecimal("4000"), new BigDecimal("4000"),
+                        new IndexKline.Bar(Instant.parse("2025-03-05T00:00:00Z"), new BigDecimal("4000"), new BigDecimal("4000"),
                                 new BigDecimal("4010"), new BigDecimal("3990"), 1000),
-                        new IndexKline.Bar(LocalDate.of(2025, 6, 28), new BigDecimal("4380"), new BigDecimal("4400"),
+                        new IndexKline.Bar(Instant.parse("2025-06-28T00:00:00Z"), new BigDecimal("4380"), new BigDecimal("4400"),
                                 new BigDecimal("4410"), new BigDecimal("4370"), 1000))));
 
         BenchmarkMetrics metrics = provider.fetch(start, end);
@@ -74,11 +75,11 @@ class DefaultHs300BenchmarkProviderTest {
     void fetch_相同窗口_命中缓存_不重复请求() {
         Instant start = Instant.parse("2025-01-01T00:00:00Z");
         Instant end = Instant.parse("2025-06-30T00:00:00Z");
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString()))
+        when(marketDataSource.fetchIndexKline(anyString(), anyString()))
                 .thenReturn(new IndexKline(List.of(
-                        new IndexKline.Bar(LocalDate.of(2025, 1, 5), new BigDecimal("4000"), new BigDecimal("4000"),
+                        new IndexKline.Bar(Instant.parse("2025-01-05T00:00:00Z"), new BigDecimal("4000"), new BigDecimal("4000"),
                                 new BigDecimal("4010"), new BigDecimal("3990"), 1000),
-                        new IndexKline.Bar(LocalDate.of(2025, 6, 28), new BigDecimal("4380"), new BigDecimal("4400"),
+                        new IndexKline.Bar(Instant.parse("2025-06-28T00:00:00Z"), new BigDecimal("4380"), new BigDecimal("4400"),
                                 new BigDecimal("4410"), new BigDecimal("4370"), 1000))));
 
         BenchmarkMetrics first = provider.fetch(start, end);
@@ -89,25 +90,25 @@ class DefaultHs300BenchmarkProviderTest {
     }
 
     @Test
-    void fetch_拉取异常_降级返回零指标() {
+    void fetch_拉取异常_抛业务异常() {
         Instant start = Instant.parse("2025-01-01T00:00:00Z");
         Instant end = Instant.parse("2025-06-30T00:00:00Z");
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString()))
+        when(marketDataSource.fetchIndexKline(anyString(), anyString()))
                 .thenThrow(new RuntimeException("网络异常"));
 
-        BenchmarkMetrics metrics = provider.fetch(start, end);
-
-        assertThat(metrics.returnRate()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(metrics.maxDrawdown()).isEqualByComparingTo(BigDecimal.ZERO);
+        // 数据源失败不再 fallback 零值,直接抛异常(生产环境由 MarketDataSourceChain 聚合后抛 MARKET_DATA_ALL_SOURCES_FAILED)
+        assertThatThrownBy(() -> provider.fetch(start, end))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("网络异常");
     }
 
     @Test
     void fetch_窗口内不足两点_降级返回零指标() {
         Instant start = Instant.parse("2025-01-01T00:00:00Z");
         Instant end = Instant.parse("2025-06-30T00:00:00Z");
-        when(eastmoneyClient.fetchIndexKline(anyString(), anyString()))
+        when(marketDataSource.fetchIndexKline(anyString(), anyString()))
                 .thenReturn(new IndexKline(List.of(
-                        new IndexKline.Bar(LocalDate.of(2025, 3, 5), new BigDecimal("4000"), new BigDecimal("4000"),
+                        new IndexKline.Bar(Instant.parse("2025-03-05T00:00:00Z"), new BigDecimal("4000"), new BigDecimal("4000"),
                                 new BigDecimal("4010"), new BigDecimal("3990"), 1000))));
 
         BenchmarkMetrics metrics = provider.fetch(start, end);
