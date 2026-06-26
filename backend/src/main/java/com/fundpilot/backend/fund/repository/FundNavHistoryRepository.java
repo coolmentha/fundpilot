@@ -35,4 +35,10 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      */
     @Query("select min(n.navDate) from FundNavHistoryEntity n where n.fundEntity.id = :fundId")
     Optional<Instant> findEarliestNavDate(@Param("fundId") Long fundId);
+
+    /**
+     * 查某基金最近 N 条净值(按日期降序取前 N,issue #13 单周跌幅用)。
+     * 供 {@code WeeklyDropCalculator} 算 [T-5, T-1] 两点跌幅。
+     */
+    List<FundNavHistoryEntity> findTop5ByFundEntity_IdOrderByNavDateDesc(Long fundId);
 }

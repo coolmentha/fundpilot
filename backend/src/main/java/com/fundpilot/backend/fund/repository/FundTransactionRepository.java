@@ -2,6 +2,7 @@ package com.fundpilot.backend.fund.repository;
 
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.signal.enums.SignalType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,4 +14,18 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      * 软删行由 {@code @SQLRestriction} 自动过滤。
      */
     List<FundTransactionEntity> findByFundEntity_IdAndStatus(Long fundId, FundTransactionStatus status);
+
+    /**
+     * 按基金 + 信号类型 + 档位 + 状态查交易(issue #13 移动止盈份额来源 A1 规则)。
+     * 找 {@code signalLog.signalType=ADD AND signalLog.triggerTier=:tier AND status=CONFIRMED} 的加仓交易,
+     * 取其 shares 作为该档移动止盈的卖出份额。建仓份额用 signalType=BUILD。
+     */
+    List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndSignalLogEntity_TriggerTierAndStatus(
+            Long fundId, SignalType signalType, Integer triggerTier, FundTransactionStatus status);
+
+    /**
+     * 按基金 + 信号类型 + 状态查交易(issue #13 建仓份额来源)。
+     */
+    List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
+            Long fundId, SignalType signalType, FundTransactionStatus status);
 }

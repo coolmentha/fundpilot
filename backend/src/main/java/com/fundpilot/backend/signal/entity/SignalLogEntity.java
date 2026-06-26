@@ -6,12 +6,16 @@ import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.valueobject.Measure;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
 @Table(name = "signal_log")
+@Getter
+@Setter
 public class SignalLogEntity extends AbstractEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fund_id")

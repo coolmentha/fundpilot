@@ -11,6 +11,7 @@ import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.service.support.CapitalContext;
 import com.fundpilot.backend.strategy.service.support.MarketIndicators;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
+import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -39,6 +40,7 @@ import java.util.List;
  * <p>回撤约定:{@code DefaultTierTable} 阈值为负数(如 -0.08 表跌 8%),drawdown 同为负数。
  * "更跌"= drawdown 更小(更负),用 {@code compareTo <= 0} 判断跌破;"回升变浅"= drawdown 更大(接近 0)。
  */
+@Service
 public class DisciplineStrategyService {
 
     private static final MathContext MATH = MathContext.DECIMAL64;
