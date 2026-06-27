@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — FundPilot 后端"基金纪律策略"领域语言词典。
-- **`docs/adr/`** — 已存在 ADR-0001（前高/持有期高点实时派生）、0002（东方财富真实数据源）、0003（反弹清空 0.5% 缓冲带）、0004（软删除从 @SoftDelete 改用 @SQLRestriction+@SQLDelete）。读与你接触领域相关的那些。
+- **`docs/adr/`** — 已存在 ADR-0001（前高/持有期高点实时派生）、0002（东方财富真实数据源）、0003（反弹清空 0.5% 缓冲带）、0004（软删除从 @SoftDelete 改用 @SQLRestriction+@SQLDelete）、0005（基金字典落库缓存）、0006（fund_nav_history 在行情拉取时增量 upsert）。读与你接触领域相关的那些。
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
 
@@ -20,7 +20,9 @@ Single-context repo（FundPilot 当前布局）：
 │   ├── 0001-derive-peak-navs-instead-of-storing.md
 │   ├── 0002-real-eastmoney-data-source.md
 │   ├── 0003-tier-clear-buffer.md
-│   └── 0004-sql-restriction-instead-of-softdelete.md
+│   ├── 0004-sql-restriction-instead-of-softdelete.md
+│   ├── 0005-fund-dict-table-cache.md
+│   └── 0006-fund-nav-history-upsert-on-fetch.md
 ├── backend/
 │   └── docs/                            ← 设计文档（推荐架构方案 / 落地讨论 / 框架原文）
 └── frontend/
