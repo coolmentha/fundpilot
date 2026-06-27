@@ -64,6 +64,32 @@ export const money = (value) => Number(value || 0).toLocaleString('zh-CN', {
 });
 export const percent = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`;
 
+// 盈亏/涨跌配色(A 股惯例:正=红、负=绿、零/空=灰)。null 视为无数据。
+export const pnlColor = (value) => {
+    if (value === null || value === undefined) return undefined;
+    const n = Number(value);
+    if (n > 0) return '#cf1322';   // 涨/盈 红
+    if (n < 0) return '#3f8600';   // 跌/亏 绿
+    return undefined;              // 0 默认
+};
+
+// 带正负号的金额(null → '-',正数带 + 号,负数自带 - 号)。
+export const signedMoney = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    const formatted = Math.abs(n).toLocaleString('zh-CN', {
+        style: 'currency', currency: 'CNY', maximumFractionDigits: 2,
+    });
+    return n > 0 ? `+${formatted}` : formatted;
+};
+
+// 涨跌幅展示(null → '-',正数带 + 号)。
+export const signedPercent = (value) => {
+    if (value === null || value === undefined) return '-';
+    const pct = (Number(value) * 100).toFixed(2);
+    return Number(value) > 0 ? `+${pct}%` : `${pct}%`;
+};
+
 // Instant 字段是 ISO-8601 UTC 字符串（如 2026-06-25T08:00:00Z），截取前 19 位作展示。
 export const datetime = (value) => {
     if (!value) return '-';

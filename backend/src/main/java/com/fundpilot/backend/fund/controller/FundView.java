@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.enums.InvestmentPhilosophy;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.enums.OperationMode;
+import com.fundpilot.backend.fund.service.FundPnlService;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,6 +27,11 @@ import java.time.Instant;
  * @param operationMode        运作方式
  * @param investmentPhilosophy 投资理念
  * @param openedAt             建仓时间
+ * @param dailyChangePct       今日涨跌幅(issue #18,可空——无净值历史时为 null)
+ * @param holdingShares        持仓份额(issue #18,可空——无持仓时为 null)
+ * @param holdingAmount        持仓市值(issue #18,可空——无持仓或无净值时为 null)
+ * @param dailyPnl             今日盈亏(issue #18,可空——无持仓或无净值时为 null)
+ * @param totalPnl             总盈亏(issue #18,可空——无持仓或无净值时为 null)
  * @param createdDate          创建时间
  */
 public record FundView(
@@ -41,9 +47,14 @@ public record FundView(
         OperationMode operationMode,
         InvestmentPhilosophy investmentPhilosophy,
         Instant openedAt,
+        BigDecimal dailyChangePct,
+        BigDecimal holdingShares,
+        BigDecimal holdingAmount,
+        BigDecimal dailyPnl,
+        BigDecimal totalPnl,
         Instant createdDate) {
 
-    /** 从 Entity 映射到视图 DTO。 */
+    /** 从 Entity 映射到视图 DTO(盈亏字段为 null,供新建/更新等不需盈亏的场景用)。 */
     public static FundView from(FundEntity fund) {
         return new FundView(
                 fund.getId(),
@@ -58,6 +69,30 @@ public record FundView(
                 fund.getOperationMode(),
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
+                null, null, null, null, null,
+                fund.getCreatedDate());
+    }
+
+    /** 从 Entity + 盈亏结果映射到视图 DTO(列表/详情等需展示盈亏的场景用)。 */
+    public static FundView from(FundEntity fund, FundPnlService.Pnl pnl) {
+        return new FundView(
+                fund.getId(),
+                fund.getFundCode(),
+                fund.getFundName(),
+                fund.getFundCategory(),
+                fund.getFundSubType(),
+                fund.getStatus(),
+                fund.getPlannedTotalAmount(),
+                fund.getBenchmarkIndexCode(),
+                fund.getInvestmentTarget(),
+                fund.getOperationMode(),
+                fund.getInvestmentPhilosophy(),
+                fund.getOpenedAt(),
+                pnl.dailyChangePct(),
+                pnl.holdingShares(),
+                pnl.holdingAmount(),
+                pnl.dailyPnl(),
+                pnl.totalPnl(),
                 fund.getCreatedDate());
     }
 }

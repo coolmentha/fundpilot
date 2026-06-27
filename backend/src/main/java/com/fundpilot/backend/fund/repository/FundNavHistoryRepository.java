@@ -43,6 +43,12 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
     List<FundNavHistoryEntity> findTop5ByFundEntity_IdOrderByNavDateDesc(Long fundId);
 
     /**
+     * 查某基金最近两期净值(按日期降序,issue #18 今日涨跌/今日盈亏用)。
+     * 取前 2:第 0 期为最近一期,第 1 期为上一期。
+     */
+    List<FundNavHistoryEntity> findTop2ByFundEntity_IdOrderByNavDateDesc(Long fundId);
+
+    /**
      * 查某基金某日(UTC 0点起 24 小时区间)的净值行(issue #15 NavConfirmJob 回填 PENDING 交易用)。
      * 取区间内第一行(净值公布当日只应有一行)。
      */

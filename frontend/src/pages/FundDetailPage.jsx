@@ -2,13 +2,13 @@ import {Card, Descriptions, Skeleton, Space, Tabs, Typography, Button} from 'ant
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined} from '@ant-design/icons';
 import {useFund} from '../api/hooks.js';
-import {money, text} from '../constants.js';
+import {money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
 import MarketTab from './FundMarketTab.jsx';
 
-const {Title} = Typography;
+const {Title, Text} = Typography;
 
 /**
  * 基金详情页：聚合策略 / 信号 / 行情三个 tab，替代独立 /funds/:id/strategies 路由。
@@ -42,6 +42,20 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="状态"><StatusTag value={fund.status}/></Descriptions.Item>
                 <Descriptions.Item label="计划仓位">
                     <span className="num-cell">{money(fund.plannedTotalAmount)}</span>
+                </Descriptions.Item>
+                <Descriptions.Item label="今日涨跌">
+                    <span style={{color: pnlColor(fund.dailyChangePct)}}>{signedPercent(fund.dailyChangePct)}</span>
+                </Descriptions.Item>
+                <Descriptions.Item label="持仓市值">
+                    <span className="num-cell">
+                        {fund.holdingAmount === null || fund.holdingAmount === undefined ? '-' : money(fund.holdingAmount)}
+                    </span>
+                </Descriptions.Item>
+                <Descriptions.Item label="今日盈亏">
+                    <span style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</span>
+                </Descriptions.Item>
+                <Descriptions.Item label="总盈亏">
+                    <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
             </Descriptions>

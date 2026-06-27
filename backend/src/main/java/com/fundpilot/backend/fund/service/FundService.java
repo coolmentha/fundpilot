@@ -32,10 +32,13 @@ public class FundService {
     private final FundRepository fundRepository;
     private final FundArchiveService fundArchiveService;
     private final UserConfigService userConfigService;
+    private final FundPnlService fundPnlService;
 
-    /** 查全部基金。 */
+    /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     public List<FundView> list() {
-        return fundRepository.findAll().stream().map(FundView::from).toList();
+        return fundRepository.findAll().stream()
+                .map(fund -> FundView.from(fund, fundPnlService.computeForFund(fund.getId())))
+                .toList();
     }
 
     /**
@@ -67,9 +70,10 @@ public class FundService {
         return FundView.from(fundRepository.save(fund));
     }
 
-    /** 查单个基金;不存在抛 400(业务问题,非路由不存在)。 */
+    /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */
     public FundView get(Long id) {
-        return FundView.from(requireFund(id));
+        FundEntity fund = requireFund(id);
+        return FundView.from(fund, fundPnlService.computeForFund(fund.getId()));
     }
 
     /** 更新基金;仅合并请求中非 null 的字段(含类型字段,用户可覆盖自动识别结果)。 */

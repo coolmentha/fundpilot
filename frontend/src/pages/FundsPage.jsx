@@ -4,7 +4,7 @@ import {DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import {Link} from 'react-router-dom';
 import {useArchiveFund, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
-import {fundCategoryOptions, labels, money, text} from '../constants.js';
+import {fundCategoryOptions, labels, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 
 const {Title} = Typography;
@@ -104,6 +104,22 @@ export default function FundsPage() {
         {title: '子类', dataIndex: 'fundSubType', width: 100, render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
         {title: '计划仓位', dataIndex: 'plannedTotalAmount', width: 140, align: 'right', render: money},
+        {
+            title: '今日涨跌', dataIndex: 'dailyChangePct', width: 100, align: 'right',
+            render: (v) => <span style={{color: pnlColor(v)}}>{signedPercent(v)}</span>,
+        },
+        {
+            title: '持仓市值', dataIndex: 'holdingAmount', width: 140, align: 'right',
+            render: (v) => v === null || v === undefined ? '-' : money(v),
+        },
+        {
+            title: '今日盈亏', dataIndex: 'dailyPnl', width: 130, align: 'right',
+            render: (v) => <span style={{color: pnlColor(v)}}>{signedMoney(v)}</span>,
+        },
+        {
+            title: '总盈亏', dataIndex: 'totalPnl', width: 130, align: 'right',
+            render: (v) => <span style={{color: pnlColor(v)}}>{signedMoney(v)}</span>,
+        },
         {title: '跟踪指数', dataIndex: 'benchmarkIndexCode', width: 110, render: (v) => text(v)},
         {
             title: '操作', width: 220, render: (_, row) => (
