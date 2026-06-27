@@ -1,8 +1,9 @@
 import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Empty} from 'antd';
 import {Link, useNavigate} from 'react-router-dom';
-import {ThunderboltOutlined, FundOutlined, WalletOutlined, PieChartOutlined} from '@ant-design/icons';
-import {useFunds, usePendingSignals, useUserConfig} from '../api/hooks.js';
-import {datetime, money, text} from '../constants.js';
+import {ThunderboltOutlined, FundOutlined, WalletOutlined, PieChartOutlined,
+    RiseOutlined, FallOutlined, SmileOutlined, FrownOutlined} from '@ant-design/icons';
+import {useFunds, usePendingSignals, useUserConfig, usePortfolioSummary} from '../api/hooks.js';
+import {datetime, money, text, signedMoney, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 
@@ -13,12 +14,14 @@ export default function DashboardPage() {
     const {data: funds} = useFunds();
     const {data: pending} = usePendingSignals();
     const {data: config} = useUserConfig();
+    const {data: summary} = usePortfolioSummary();
 
     const holdingFunds = (funds || []).filter((f) => f.status === 'HOLDING');
     const plannedTotal = holdingFunds.reduce((s, f) => s + Number(f.plannedTotalAmount || 0), 0);
     const capital = Number(config?.totalInvestableCapital || 0);
     const usageRatio = capital > 0 ? plannedTotal / capital : 0;
     const pendingCount = pending?.length ?? 0;
+    const dailyPnlTotal = summary?.dailyPnlTotal;
 
     const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
 
@@ -80,6 +83,37 @@ export default function DashboardPage() {
                         <Statistic title={<span className="kpi-label">计划仓位占比</span>}
                                    value={usageRatio * 100} precision={1} suffix="%"
                                    prefix={<PieChartOutlined/>}/>
+                    </Card>
+                </Col>
+            </Row>
+
+            {/* 盈亏视角 KPI(issue #18 概览页) */}
+            <Row gutter={[16, 16]}>
+                <Col xs={12} md={6}>
+                    <Card className="kpi-card">
+                        <Statistic title={<span className="kpi-label">今日盈亏合计</span>}
+                                   value={dailyPnlTotal ?? 0}
+                                   prefix={<WalletOutlined/>}
+                                   formatter={(v) => <span style={{color: pnlColor(dailyPnlTotal)}}>{signedMoney(v)}</span>}/>
+                    </Card>
+                </Col>
+                <Col xs={12} md={6}>
+                    <Card className="kpi-card kpi-red">
+                        <Statistic title={<span className="kpi-label">上涨基金</span>}
+                                   value={summary?.risingFundCount ?? 0} prefix={<RiseOutlined/>}/>
+                    </Card>
+                </Col>
+                <Col xs={12} md={6}>
+                    <Card className="kpi-card kpi-green">
+                        <Statistic title={<span className="kpi-label">下跌基金</span>}
+                                   value={summary?.fallingFundCount ?? 0} prefix={<FallOutlined/>}/>
+                    </Card>
+                </Col>
+                <Col xs={12} md={6}>
+                    <Card className="kpi-card">
+                        <Statistic title={<span className="kpi-label">盈利 / 亏损</span>}
+                                   value={`${summary?.profitableFundCount ?? 0} / ${summary?.losingFundCount ?? 0}`}
+                                   prefix={<SmileOutlined/>}/>
                     </Card>
                 </Col>
             </Row>

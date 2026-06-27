@@ -1,12 +1,17 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
+import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
+import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
+import com.fundpilot.backend.fund.service.support.PortfolioSummary;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,6 +31,7 @@ public class FundPnlService {
 
     private final FundPositionService fundPositionService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
+    private final FundRepository fundRepository;
 
     /**
      * 聚合单基金的涨跌与盈亏。
@@ -51,6 +57,27 @@ public class FundPnlService {
         BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, latestNav, cost);
 
         return new Pnl(dailyChangePct, holdingShares, holdingAmount, dailyPnl, totalPnl);
+    }
+
+    /**
+     * 聚合所有持仓基金的组合盈亏(issue #18 概览页盈亏 KPI)。
+     * <p>遍历 HOLDING 基金,对每只调 {@link #computeForFund},收集三指标列表后调
+     * {@link FundPnlCalculator#summarize}。上涨/下跌与盈利/亏损两维度独立(故事 24)。
+     *
+     * @return 五指标汇总(无持仓基金时全为 0)
+     */
+    public PortfolioSummary computePortfolioSummary() {
+        List<FundEntity> holdingFunds = fundRepository.findByStatus(FundStatus.HOLDING);
+        List<BigDecimal> changePcts = new ArrayList<>();
+        List<BigDecimal> dailyPnls = new ArrayList<>();
+        List<BigDecimal> totalPnls = new ArrayList<>();
+        for (FundEntity fund : holdingFunds) {
+            Pnl pnl = computeForFund(fund.getId());
+            changePcts.add(pnl.dailyChangePct());
+            dailyPnls.add(pnl.dailyPnl());
+            totalPnls.add(pnl.totalPnl());
+        }
+        return FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
     }
 
     /**

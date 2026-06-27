@@ -12,6 +12,15 @@ export function useFund(id) {
     return useQuery({queryKey: ['funds', id], queryFn: () => get(`/api/funds/${id}`), enabled: !!id});
 }
 
+/** 基金字典搜索(ADR-0005):搜索框自动补全候选列表。 */
+export function useFundSearch(query) {
+    return useQuery({
+        queryKey: ['fund-search', query],
+        queryFn: () => get(`/api/funds/search?q=${encodeURIComponent(query)}`),
+        enabled: !!query && query.trim().length > 0,
+    });
+}
+
 export function useSaveFund() {
     const qc = useQueryClient();
     return useMutation({
@@ -108,6 +117,9 @@ export function useSignalsRange(fundId, from, to) {
 export function usePendingSignals() {
     return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending')});
 }
+export function usePortfolioSummary() {
+    return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary')});
+}
 export function useConfirmOperation(fundId) {
     const qc = useQueryClient();
     return useMutation({
@@ -156,6 +168,7 @@ export function useAdminAction() {
         mutationFn: (action) => {
             const path = action === 'generate' ? '/api/admin/signals/generate'
                 : action === 'confirm-nav' ? '/api/admin/transactions/confirm-nav'
+                : action === 'sync-dict' ? '/api/admin/fund-dict/sync'
                 : '/api/admin/market-data/refresh';
             return post(path);
         },

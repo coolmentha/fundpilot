@@ -2,6 +2,7 @@ package com.fundpilot.backend.fund.service.support;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.util.List;
 
 /**
  * 盈亏与涨跌纯算术计算器(issue #18,CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
@@ -58,5 +59,40 @@ public final class FundPnlCalculator {
         BigDecimal marketValue = holdingShares.multiply(latestAccumulatedNav, MATH);
         BigDecimal effectiveCost = cost != null ? cost : BigDecimal.ZERO;
         return marketValue.subtract(effectiveCost);
+    }
+
+    /**
+     * 组合盈亏聚合(issue #18 概览页):汇总一组基金的今日盈亏合计与涨跌/盈亏基金计数。
+     * <p>三个列表按基金一一对应(同一下标为同一只基金的三项指标);null 元素跳过不计。
+     * 上涨/下跌按今日涨跌幅符号,盈利/亏损按总盈亏符号——两维度独立(故事 24)。
+     *
+     * @param dailyChangePcts 各基金今日涨跌幅(可含 null)
+     * @param dailyPnls        各基金今日盈亏(可含 null,合计时视为 0)
+     * @param totalPnls        各基金总盈亏(可含 null)
+     * @return 五指标汇总
+     */
+    public static PortfolioSummary summarize(
+            List<BigDecimal> dailyChangePcts, List<BigDecimal> dailyPnls, List<BigDecimal> totalPnls) {
+        BigDecimal dailyPnlTotal = BigDecimal.ZERO;
+        int rising = 0, falling = 0, profitable = 0, losing = 0;
+        for (int i = 0; i < dailyPnls.size(); i++) {
+            BigDecimal dailyPnl = dailyPnls.get(i);
+            if (dailyPnl != null) {
+                dailyPnlTotal = dailyPnlTotal.add(dailyPnl, MATH);
+            }
+            BigDecimal changePct = i < dailyChangePcts.size() ? dailyChangePcts.get(i) : null;
+            if (changePct != null) {
+                int sign = changePct.signum();
+                if (sign > 0) rising++;
+                else if (sign < 0) falling++;
+            }
+            BigDecimal totalPnl = i < totalPnls.size() ? totalPnls.get(i) : null;
+            if (totalPnl != null) {
+                int sign = totalPnl.signum();
+                if (sign > 0) profitable++;
+                else if (sign < 0) losing++;
+            }
+        }
+        return new PortfolioSummary(dailyPnlTotal, rising, falling, profitable, losing);
     }
 }

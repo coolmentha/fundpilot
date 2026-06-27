@@ -9,6 +9,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.fund.service.support.PortfolioSummary;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,10 +85,39 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         assertThat(pnl.totalPnl()).isNull();
     }
 
+    @Test
+    @Transactional
+    void 组合聚合_汇总所有持仓基金的今日盈亏合计与涨跌盈亏计数() {
+        // 基金A:今日上涨 +5%(1.20→1.26),持仓1000份成本1200 → 今日盈亏+60 总盈亏+60(盈)
+        FundEntity fundA = persistHoldingFundWithCode("510300", "沪深300ETF");
+        navHistory(fundA, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
+        navHistory(fundA, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
+        txWithAmount(fundA, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
+
+        // 基金B:今日下跌 -2%(1.00→0.98),持仓1000份成本1000 → 今日盈亏-20 总盈亏-20(亏)
+        FundEntity fundB = persistHoldingFundWithCode("159825", "半导体ETF");
+        navHistory(fundB, Instant.parse("2025-06-01T00:00:00Z"), "1.00");
+        navHistory(fundB, Instant.parse("2025-06-02T00:00:00Z"), "0.98");
+        txWithAmount(fundB, FundTransactionSource.INCREASE, "1000", "1000", FundTransactionStatus.CONFIRMED);
+
+        PortfolioSummary summary = fundPnlService.computePortfolioSummary();
+
+        // 今日盈亏合计 = 60 + (-20) = 40
+        assertThat(summary.dailyPnlTotal()).isCloseTo(new BigDecimal("40"), within(new BigDecimal("0.01")));
+        assertThat(summary.risingFundCount()).isEqualTo(1);   // 基金A 上涨
+        assertThat(summary.fallingFundCount()).isEqualTo(1);  // 基金B 下跌
+        assertThat(summary.profitableFundCount()).isEqualTo(1); // 基金A 盈利
+        assertThat(summary.losingFundCount()).isEqualTo(1);    // 基金B 亏损
+    }
+
     private FundEntity persistHoldingFund() {
+        return persistHoldingFundWithCode("510300", "沪深300ETF");
+    }
+
+    private FundEntity persistHoldingFundWithCode(String code, String name) {
         FundEntity fund = new FundEntity();
-        fund.setFundCode("510300");
-        fund.setFundName("沪深300ETF");
+        fund.setFundCode(code);
+        fund.setFundName(name);
         fund.setStatus(FundStatus.HOLDING);
         return fundRepository.save(fund);
     }
