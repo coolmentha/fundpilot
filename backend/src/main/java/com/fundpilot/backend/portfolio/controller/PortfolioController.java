@@ -1,5 +1,6 @@
 package com.fundpilot.backend.portfolio.controller;
 
+import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.fund.service.FundPnlService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +20,7 @@ public class PortfolioController {
 
     /** 组合盈亏汇总(概览页 KPI 用)。 */
     @GetMapping("/summary")
-    public PortfolioSummaryView summary() {
-        return PortfolioSummaryView.from(fundPnlService.computePortfolioSummary());
+    public ApiResponse<PortfolioSummaryView> summary() {
+        return ApiResponse.ok(PortfolioSummaryView.from(fundPnlService.computePortfolioSummary()));
     }
 }
