@@ -132,11 +132,21 @@ export function useConfirmOperation(fundId) {
 }
 
 // ===== 交易 =====
+export function useFundTransactions(fundId) {
+    return useQuery({
+        queryKey: ['fund-transactions', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/transactions`),
+        enabled: !!fundId,
+    });
+}
 export function useCancelTransaction() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id) => post(`/api/transactions/${id}/cancel`),
-        onSuccess: () => qc.invalidateQueries(),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['funds']});
+        },
     });
 }
 

@@ -5,7 +5,6 @@ import {
     BarChartOutlined,
     ToolOutlined,
     ThunderboltOutlined,
-    TransactionOutlined,
     DashboardOutlined,
     EllipsisOutlined,
 } from '@ant-design/icons';
@@ -22,7 +21,6 @@ const PAGE_META = {
     '/funds': {title: '基金管理', subtitle: '维护基金档案与计划仓位'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
-    '/transactions': {title: '交易管理', subtitle: '输入交易 ID 执行撤单'},
     '/settings': {title: '用户配置', subtitle: '总可投资资金等账户参数'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
 };
@@ -38,7 +36,6 @@ const NAV_GROUPS = [
     {
         key: 'asset', label: '资产', children: [
             {key: '/funds', icon: <FundOutlined/>, label: '基金管理'},
-            {key: '/transactions', icon: <TransactionOutlined/>, label: '交易管理'},
         ],
     },
     {
@@ -57,7 +54,6 @@ const BOTTOM_NAV = [
     {key: '/confirm', icon: <ThunderboltOutlined/>, label: '确认', badge: true},
 ];
 const BOTTOM_MORE = [
-    {key: '/transactions', icon: <TransactionOutlined/>, label: '交易管理'},
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
 ];

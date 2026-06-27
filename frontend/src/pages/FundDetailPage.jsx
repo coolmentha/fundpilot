@@ -7,6 +7,7 @@ import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
 import MarketTab from './FundMarketTab.jsx';
+import FundTransactionTab from './FundTransactionTab.jsx';
 
 const {Title, Text} = Typography;
 
@@ -23,6 +24,7 @@ export default function FundDetailPage() {
     if (!fund) return <Card><Title level={4}>基金不存在</Title></Card>;
 
     const items = [
+        {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
         {key: 'signal', label: '交易信号', children: <SignalTab fundId={id}/>},
         {key: 'market', label: '行情指标', children: <MarketTab fundId={id}/>},
@@ -59,7 +61,7 @@ export default function FundDetailPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
             </Descriptions>
-            <Tabs defaultActiveKey="strategy" items={items}/>
+            <Tabs defaultActiveKey="transaction" items={items}/>
         </Card>
     );
 }

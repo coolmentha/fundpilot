@@ -38,4 +38,10 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      * 查某基金全部交易(归档级联逐个软删用,软删行由 @SQLRestriction 自动过滤)。
      */
     List<FundTransactionEntity> findByFundEntity_Id(Long fundId);
+
+    /**
+     * 查某基金全部交易按创建时间倒序(issue #18 交易流水 Tab 列表用)。
+     * 软删行由 @SQLRestriction 自动过滤。
+     */
+    List<FundTransactionEntity> findByFundEntity_IdOrderByCreatedDateDesc(Long fundId);
 }
