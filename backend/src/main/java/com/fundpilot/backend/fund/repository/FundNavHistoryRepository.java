@@ -58,4 +58,11 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      * 查某基金全部净值历史(归档级联逐个软删用)。
      */
     List<FundNavHistoryEntity> findByFundEntity_Id(Long fundId);
+
+    /**
+     * 查某基金已落库的 navDate 集合(issue #23 净值历史落库去重用,
+     * 避免违反 uq_fund_nav_history_daily 部分唯一索引)。
+     */
+    @Query("select n.navDate from FundNavHistoryEntity n where n.fundEntity.id = :fundId")
+    List<Instant> findNavDatesByFundEntity_Id(@Param("fundId") Long fundId);
 }

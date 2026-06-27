@@ -1,7 +1,9 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
+import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
@@ -51,6 +53,9 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     MarketIndicatorSnapshotRepository snapshotRepository;
 
     @Autowired
+    FundNavHistoryRepository fundNavHistoryRepository;
+
+    @Autowired
     ApplicationContext applicationContext;
 
     @Test
@@ -64,9 +69,11 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
 
         marketDataFetchService.refreshAll();
 
-        long count = snapshotRepository.count();
-        assertThat(count).isEqualTo(3L);
+        // 范围扩大到 findAll(issue #23)后,DB 残留基金也会被拉取,故不断言全局 count,
+        // 只断言 3 只测试基金都落了 snapshot
         assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), Instant.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f2.getId(), Instant.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f3.getId(), Instant.now())).isPresent();
     }
 
     @Test
@@ -104,6 +111,55 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         long secondRun = snapshotRepository.count();
 
         assertThat(secondRun).isEqualTo(firstRun);
+    }
+
+    @Test
+    @Transactional
+    void refreshAll_拉取后_净值历史落库fund_nav_history() {
+        FundEntity fund = persistEffectiveFund("161732", "1.000300");
+        mockNavHistory();
+        mockIndexKline();
+
+        marketDataFetchService.refreshAll();
+
+        List<FundNavHistoryEntity> rows = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
+        assertThat(rows).hasSize(261); // sampleNavHistory 261 条全量落库(issue #23)
+        assertThat(rows).allMatch(r -> r.getAccumulatedNav() != null);
+    }
+
+    @Test
+    @Transactional
+    void refreshAll_同日重跑_净值历史不重复落库() {
+        FundEntity fund = persistEffectiveFund("161733", "1.000300");
+        mockNavHistory();
+        mockIndexKline();
+
+        marketDataFetchService.refreshAll();
+        long first = fundNavHistoryRepository.findByFundEntity_Id(fund.getId()).size();
+
+        marketDataFetchService.refreshAll();
+        long second = fundNavHistoryRepository.findByFundEntity_Id(fund.getId()).size();
+
+        // 已有 navDate 跳过,不违反 fund_id+nav_date 唯一索引
+        assertThat(second).isEqualTo(first);
+    }
+
+    @Test
+    @Transactional
+    void refreshAll_未建仓基金无策略_也拉取落库净值历史() {
+        // issue #23:范围扩大到所有未软删基金,无 EFFECTIVE 策略的观察池基金也要落净值历史
+        FundEntity fund = new FundEntity();
+        fund.setFundCode("161734");
+        fund.setFundName("未建仓观察基金");
+        fund.setBenchmarkIndexCode("1.000300");
+        fundRepository.save(fund); // 不建策略
+        mockNavHistory();
+        mockIndexKline();
+
+        marketDataFetchService.refreshAll();
+
+        List<FundNavHistoryEntity> rows = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
+        assertThat(rows).hasSize(261); // 无策略基金也落库,story 21 数据侧
     }
 
     private void mockNavHistory() {

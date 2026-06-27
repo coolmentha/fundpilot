@@ -3,6 +3,8 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
+import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
@@ -16,7 +18,6 @@ import com.fundpilot.backend.market.service.support.VolumeStateCalculator;
 import com.fundpilot.backend.market.service.support.WeeklyMacdCalculator;
 import com.fundpilot.backend.market.service.support.YearLineCalculator;
 import com.fundpilot.backend.market.service.support.YearLineMetrics;
-import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,11 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * 行情指标拉取编排服务(issue #7):每日 14:30/14:40/14:50 三批拉取所有 EFFECTIVE 策略基金
+ * 行情指标拉取编排服务(issue #7):每日 14:30/14:40/14:50 三批拉取所有未软删基金
  * 的当日市场指标,落 {@code market_indicator_snapshot}。
  * <p>分批策略:{@code Math.abs(fundId.hashCode()) % 3 == batchNumber} 切片,
  * 14:30 跑 batch 0、14:40 跑 batch 1、14:50 跑 batch 2。
@@ -45,8 +48,8 @@ public class MarketDataFetchService {
     private static final int TOTAL_BATCHES = 3;
     private static final String INDEX_KLINE_RANGE = "6"; // 6 = 近一年日 K
 
-    private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
+    private final FundNavHistoryRepository fundNavHistoryRepository;
     private final MarketDataSource marketDataSource;
     private final MarketIndicatorSnapshotService snapshotService;
 
@@ -55,10 +58,14 @@ public class MarketDataFetchService {
      */
     @Transactional
     public void fetchBatch(int batchNumber) {
-        List<Long> effectiveFundIds = fundStrategyRepository.findEffectiveFundIds();
+        // issue #23:范围从"有 EFFECTIVE 策略的基金"扩大到"所有未软删基金",
+        // 让未建仓(观察池)基金也落净值历史支撑今日涨跌(story 21)。软删由 @SQLRestriction 自动过滤。
+        List<Long> fundIds = fundRepository.findAll().stream()
+                .map(FundEntity::getId)
+                .toList();
         int success = 0;
         int failure = 0;
-        for (Long fundId : effectiveFundIds) {
+        for (Long fundId : fundIds) {
             if (Math.abs(fundId.hashCode()) % TOTAL_BATCHES != batchNumber) {
                 continue;
             }
@@ -96,6 +103,8 @@ public class MarketDataFetchService {
                 .map(FundNavSnapshot::accumulatedNav)
                 .toList();
 
+        upsertNavHistory(fund, navHistory);
+
         MarketIndicatorSnapshotEntity template = new MarketIndicatorSnapshotEntity();
         template.setFundEntity(fund);
         template.setSnapshotDate(today);
@@ -132,5 +141,28 @@ public class MarketDataFetchService {
         }
 
         snapshotService.upsert(template);
+    }
+
+    /**
+     * 净值历史落库(issue #23):把 pingzhongdata 拉到的净值序列增量写入 fund_nav_history。
+     * <p>按 fundId+navDate 去重——查已落库的 navDate 集合,只插不存在的,避免违反
+     * uq_fund_nav_history_daily 部分唯一索引。首次全量落库,后续每日增量补最新一期。
+     */
+    private void upsertNavHistory(FundEntity fund, List<FundNavSnapshot> navHistory) {
+        Set<Instant> existing = new HashSet<>(fundNavHistoryRepository.findNavDatesByFundEntity_Id(fund.getId()));
+        List<FundNavHistoryEntity> toInsert = navHistory.stream()
+                .filter(s -> !existing.contains(s.navDate()))
+                .map(s -> {
+                    FundNavHistoryEntity entity = new FundNavHistoryEntity();
+                    entity.setFundEntity(fund);
+                    entity.setNavDate(s.navDate());
+                    entity.setNav(s.nav());
+                    entity.setAccumulatedNav(s.accumulatedNav());
+                    return entity;
+                })
+                .toList();
+        if (!toInsert.isEmpty()) {
+            fundNavHistoryRepository.saveAll(toInsert);
+        }
     }
 }
