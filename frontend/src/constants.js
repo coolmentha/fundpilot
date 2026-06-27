@@ -107,3 +107,12 @@ export const fundCategoryOptions = [
     {value: 'ACTIVE', label: '主动'},
     {value: 'MIXED', label: '混合'},
 ];
+
+// FundTransactionSource 下拉选项(issue #18 手动录入)
+export const fundSourceOptions = [
+    {value: 'INCREASE', label: '加仓'},
+    {value: 'DECREASE', label: '减仓'},
+    {value: 'TRANSFER_IN', label: '转入'},
+    {value: 'TRANSFER_OUT', label: '转出'},
+    {value: 'INVEST', label: '定投'},
+];

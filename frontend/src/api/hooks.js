@@ -149,6 +149,13 @@ export function useCancelTransaction() {
         },
     });
 }
+export function useCreateManualTransaction(fundId) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body) => post(`/api/funds/${fundId}/transactions`, body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['fund-transactions', fundId]}),
+    });
+}
 
 // ===== 用户配置 =====
 export function useUserConfig() {
