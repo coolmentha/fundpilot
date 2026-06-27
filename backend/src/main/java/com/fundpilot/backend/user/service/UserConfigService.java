@@ -24,12 +24,22 @@ public class UserConfigService {
 
     /** 取唯一配置;未初始化抛 400。 */
     public UserConfigView get() {
+        return UserConfigView.from(requireConfig());
+    }
+
+    /** 取总可投资金;未初始化抛 400(供其它服务校验资金相关约束复用,单一事实源)。 */
+    public BigDecimal requireTotalInvestableCapital() {
+        return requireConfig().getTotalInvestableCapital();
+    }
+
+    /** 取唯一配置实体;未初始化抛 400(get/requireTotalInvestableCapital 共用的单一事实源)。 */
+    private UserConfigEntity requireConfig() {
         List<UserConfigEntity> all = userConfigRepository.findAll();
         if (all.isEmpty()) {
             throw new BusinessException(ErrorCode.USER_CONFIG_NOT_INITIALIZED,
                     "用户配置尚未初始化,请先调用 PUT /api/user-config 设置总可投资金");
         }
-        return UserConfigView.from(all.get(0));
+        return all.get(0);
     }
 
     /** 更新 totalInvestableCapital(无则新建)。 */
