@@ -317,27 +317,33 @@ public class DisciplineStrategyService {
     }
 
     /**
-     * 再平衡减仓:单只基金占比 > singlePositionLimit(30%,无关类型)。
-     * 卖出金额 = (当前占比 - 上限) × 总权益持仓金额,按当前净值反算为份额。
+     * 再平衡减仓:满仓(总权益≥80%)且单只基金持仓市值超出 plannedTotalAmount 的 1.1 倍时触发。
+     * 卖出金额 = 持仓市值 - 计划总仓位(超出的全部卖掉)。
      * 遵守 MIN_HOLD_DAYS(循环 D 处理降级);不清档位。
      */
     private SignalResult checkRebalance(FundEntity fund, MarketIndicators market,
                                         CapitalContext capital, List<SignalWarningValue> warnings) {
-        BigDecimal singlePct = capital.singlePositionPct();
-        if (singlePct == null) {
+        // 条件1:总权益仓位 ≥ 80%(满仓)
+        BigDecimal totalEquityPct = capital.totalEquityPct();
+        if (totalEquityPct == null || totalEquityPct.compareTo(HardConstraintConfig.TOTAL_EQUITY_POSITION_LIMIT) < 0) {
             return null;
         }
-        BigDecimal limit = HardConstraintConfig.singlePositionLimit();
-        if (singlePct.compareTo(limit) <= 0) {
-            return null; // 未超限
+        // 条件2:持仓市值 > plannedTotalAmount × 1.1(超过容忍线)
+        BigDecimal plannedTotalAmount = capital.plannedTotalAmount();
+        if (plannedTotalAmount == null || plannedTotalAmount.signum() <= 0) {
+            return null;
         }
-        BigDecimal totalEquityAmount = capital.totalEquityAmount();
         BigDecimal currentNav = market.currentNav();
-        if (totalEquityAmount == null || totalEquityAmount.signum() <= 0 || currentNav == null || currentNav.signum() <= 0) {
+        if (currentNav == null || currentNav.signum() <= 0) {
             return null;
         }
-        // 卖出金额 = (占比 - 上限) × 总权益持仓金额;份额 = 金额 / 当前净值
-        BigDecimal sellAmount = singlePct.subtract(limit).multiply(totalEquityAmount, MATH);
+        BigDecimal holdingAmount = capital.holdingShares().multiply(currentNav, MATH);
+        BigDecimal tolerance = plannedTotalAmount.multiply(HardConstraintConfig.REBALANCE_TOLERANCE, MATH);
+        if (holdingAmount.compareTo(tolerance) <= 0) {
+            return null; // 未超容忍线
+        }
+        // 卖出金额 = 持仓市值 - 计划总仓位;份额 = 金额 / 当前净值
+        BigDecimal sellAmount = holdingAmount.subtract(plannedTotalAmount);
         BigDecimal shares = sellAmount.divide(currentNav, MATH);
         Measure measure = new Measure(shares, MeasureUnit.SHARE);
         return new SignalResult(SignalType.SELL, null, null, measure, SignalReason.REBALANCE, warnings, List.of());

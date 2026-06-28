@@ -357,30 +357,48 @@ class DisciplineStrategyServiceTest {
     }
 
     @Test
-    void 再平衡_单只占比超限_返回SELL_REBALANCE() {
+    void 再平衡_满仓且持仓超plannedTotalAmount容忍线_返回SELL_REBALANCE() {
         FundEntity fund = fund(FundStatus.HOLDING);
         fund.setFundCategory(FundCategory.BROAD_BASE);
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        // singlePositionPct=0.35 > 0.30(单只上限无关类型);totalEquityAmount=10000;卖出金额=(0.35-0.30)×10000=500;份额=500/1.0=500
-        CapitalContext capital = capitalWithPosition(new BigDecimal("0.35"), new BigDecimal("10000"));
+        // 满仓:totalEquityPct=0.85(≥0.80);
+        // plannedTotalAmount=1000,holdingShares=1200→市值1200>1100(1000×1.1容忍线);
+        // 卖出金额=1200-1000=200;份额=200/1.0=200
+        CapitalContext capital = capitalForRebalance(new BigDecimal("0.85"), new BigDecimal("1000"),
+                new BigDecimal("1200"));
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
         assertThat(result.reason()).isEqualTo(SignalReason.REBALANCE);
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("500"));
+        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("200"));
     }
 
     @Test
-    void 再平衡_行业基金占比15percent未超限_不触发() {
+    void 再平衡_未满仓_不触发() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.SECTOR); // 单只上限 30%(无关类型)
+        fund.setFundCategory(FundCategory.SECTOR);
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        CapitalContext capital = capitalWithPosition(new BigDecimal("0.15"), new BigDecimal("10000"));
+        // 满仓条件不满足:totalEquityPct=0.70 < 0.80
+        CapitalContext capital = capitalForRebalance(new BigDecimal("0.70"), new BigDecimal("1000"),
+                new BigDecimal("2000"));
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
-        // 占比 0.15 < 上限 0.30,未超限不触发 SELL
+        assertThat(result.signalType()).as("reason=%s", result.reason()).isNotEqualTo(SignalType.SELL);
+    }
+
+    @Test
+    void 再平衡_满仓但未超容忍线_不触发() {
+        FundEntity fund = fund(FundStatus.HOLDING);
+        fund.setFundCategory(FundCategory.BROAD_BASE);
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
+        // 满仓但未超容忍线:totalEquityPct=0.85,holdingShares=1050→市值1050,≤1000×1.1=1100
+        CapitalContext capital = capitalForRebalance(new BigDecimal("0.85"), new BigDecimal("1000"),
+                new BigDecimal("1050"));
+
+        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
+
         assertThat(result.signalType()).as("reason=%s", result.reason()).isNotEqualTo(SignalType.SELL);
     }
 
@@ -601,5 +619,13 @@ class DisciplineStrategyServiceTest {
                 new BigDecimal("1.0"), new BigDecimal("1.0"),
                 singlePositionPct, BigDecimal.ZERO, BigDecimal.ZERO, totalEquityAmount,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), new BigDecimal("100"), Instant.now());
+    }
+
+    private CapitalContext capitalForRebalance(BigDecimal totalEquityPct, BigDecimal plannedTotalAmount,
+                                               BigDecimal holdingShares) {
+        return new CapitalContext(
+                new BigDecimal("1.0"), new BigDecimal("1.0"),
+                BigDecimal.ZERO, BigDecimal.ZERO, totalEquityPct, BigDecimal.ZERO,
+                plannedTotalAmount, BigDecimal.ZERO, Map.of(), holdingShares, Instant.now());
     }
 }

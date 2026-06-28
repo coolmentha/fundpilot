@@ -18,6 +18,9 @@ public final class HardConstraintConfig {
     /** 单只基金仓位上限 30%(无关类型,CONTEXT.md「再平衡减仓」「计划仓位校验」)。 */
     public static final BigDecimal SINGLE_POSITION_LIMIT = new BigDecimal("0.30");
 
+    /** 再平衡容忍缓冲:持仓市值超过 plannedTotalAmount 的 1.1 倍才触发再平衡。 */
+    public static final BigDecimal REBALANCE_TOLERANCE = new BigDecimal("1.1");
+
     /** 单类基金总仓位上限 30%。 */
     public static final BigDecimal CATEGORY_POSITION_LIMIT = new BigDecimal("0.30");
 
