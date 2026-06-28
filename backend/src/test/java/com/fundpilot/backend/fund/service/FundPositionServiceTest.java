@@ -150,18 +150,19 @@ class FundPositionServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void 持仓成本_等于_Σ_amount_乘_direction_仅CONFIRMED() {
+    void 多笔CONFIRMED交易_金额带方向聚合_验证方向逻辑() {
         FundEntity fund = persistFund();
-        // 买入金额 100 + 买入金额 60 - 卖出金额 30 = 130(名义投入)
+        // 买入金额 100 + 买入金额 60 - 卖出金额 30 = 130(名义投入汇总)
         txWithAmount(fund, FundTransactionSource.INCREASE, "100", "100", FundTransactionStatus.CONFIRMED);
         txWithAmount(fund, FundTransactionSource.INCREASE, "60", "60", FundTransactionStatus.CONFIRMED);
         txWithAmount(fund, FundTransactionSource.DECREASE, "30", "30", FundTransactionStatus.CONFIRMED);
-        // PENDING 不计成本
+        // PENDING 不计入
         txWithAmount(fund, FundTransactionSource.INCREASE, "50", "50", FundTransactionStatus.PENDING);
 
-        BigDecimal cost = fundPositionService.getCost(fund.getId());
+        // 份额 = 100 + 60 - 30 = 130 份(验证方向逻辑仍正确)
+        BigDecimal shares = fundPositionService.getHoldingShares(fund.getId());
 
-        assertThat(cost).isCloseTo(new BigDecimal("130"), within(new BigDecimal("0.01")));
+        assertThat(shares).isCloseTo(new BigDecimal("130"), within(new BigDecimal("0.01")));
     }
 
     private FundEntity persistFund() {

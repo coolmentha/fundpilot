@@ -55,4 +55,11 @@ public class FundEntity extends AbstractEntity {
 
     private Instant openedAt;
 
+    /**
+     * 持仓成本价(每份成本单价,ADR-0013)。建仓时用户可填(不填默认 T-1 净值);
+     * 后续 INCREASE/TRANSFER_IN/INVEST 交易 CONFIRMED 时加权更新。
+     * 卖出不改单价;清仓再入场时自然覆盖。
+     */
+    private BigDecimal costPerShare;
+
 }

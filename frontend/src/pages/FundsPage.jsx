@@ -10,9 +10,9 @@ import StatusTag from '../components/StatusTag.jsx';
 
 const {Title} = Typography;
 
-// 新建表单初始值:仅计划总仓位有默认值,基金身份由搜索框选中后带入。existingAmount/openedAt 默认空。
+// 新建表单初始值:仅计划总仓位有默认值,基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
-    benchmarkIndexCode: '', plannedTotalAmount: 100000, existingAmount: null, openedAt: null};
+    benchmarkIndexCode: '', plannedTotalAmount: 100000, initialMarketValue: null, costPerShare: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
@@ -23,8 +23,8 @@ export default function FundsPage() {
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
-    // 监听现有金额:有值时显示建仓提示(渐进式揭示,只在用户填了才出现)
-    const existingAmount = Form.useWatch('existingAmount', form);
+    // 监听入仓市值:有值时显示建仓提示和成本单价/建仓时间(渐进式揭示,只在用户填了才出现)
+    const initialMarketValue = Form.useWatch('initialMarketValue', form);
 
     // 字典搜索(仅新建时用;编辑时基金身份已固定)
     const {data: searchResults, isFetching: searching} = useFundSearch(searchQuery);
@@ -127,6 +127,10 @@ export default function FundsPage() {
             render: (v) => v === null || v === undefined ? '-' : money(v),
         },
         {
+            title: '成本单价', dataIndex: 'costPerShare', width: 110, align: 'right',
+            render: (v) => v === null || v === undefined ? '-' : money(v),
+        },
+        {
             title: '总盈亏', dataIndex: 'totalPnl', width: 130, align: 'right',
             render: (v) => <span style={{color: pnlColor(v)}}>{signedMoney(v)}</span>,
         },
@@ -156,7 +160,7 @@ export default function FundsPage() {
                 </Space>
             }>
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={funds} columns={columns}
-                       pagination={false} scroll={{x: 1470}}/>
+                       pagination={false} scroll={{x: 1580}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
                    onOk={submit} confirmLoading={saveFund.isPending} destroyOnHidden width={560}>
@@ -218,19 +222,32 @@ export default function FundsPage() {
                                      parser={(v) => v.replace(/,/g, '')}/>
                     </Form.Item>
                     {!editing && (
-                        <Form.Item label="现有金额（可选）" name="existingAmount"
-                                   help="把已有的持仓纳入管理。不填则建空仓基金,等信号建仓">
-                            <InputNumber min={0} precision={2} className="full-width" placeholder="已有持仓金额,不填则空仓"
+                        <Form.Item label="入仓市值（可选）" name="initialMarketValue"
+                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金,等信号建仓">
+                            <InputNumber min={0} precision={2} className="full-width" placeholder="已有持仓市值,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                          parser={(v) => v.replace(/,/g, '')}/>
                         </Form.Item>
                     )}
-                    {!editing && existingAmount > 0 && (
+                    {!editing && initialMarketValue > 0 && (
                         <Alert type="info" showIcon style={{marginTop: -8}}
-                               message={`将用最近净值反算份额,建仓后基金状态变为"持仓中"`}
-                               description={`当前金额 ${existingAmount.toLocaleString()} 元会作为首笔持仓录入,与计划总仓位(目标投入额)不同——前者是已有持仓,后者是纪律目标。`}/>
+                               message={`将用 T-1 净值反算份额,建仓后基金状态变为"持仓中"`}
+                               description={
+                                   <div>
+                                       <p>入仓市值 {initialMarketValue.toLocaleString()} 元会作为首笔持仓录入。与计划总仓位(目标投入额)不同——前者是已有持仓,后者是纪律目标。</p>
+                                       <p>交易确认后成本单价会自动加权更新,无需手动维护。</p>
+                                   </div>
+                               }/>
                     )}
-                    {!editing && existingAmount > 0 && (
+                    {!editing && initialMarketValue > 0 && (
+                        <Form.Item label="成本单价（可选）" name="costPerShare"
+                                   help="持仓成本价(每份)。不填默认用 T-1 净值作为初始成本价">
+                            <InputNumber min={0.0001} precision={4} className="full-width" placeholder="不填则用净值,填 0 无效"
+                                         formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                         parser={(v) => v.replace(/,/g, '')}/>
+                        </Form.Item>
+                    )}
+                    {!editing && initialMarketValue > 0 && (
                         <Form.Item label="建仓时间（可选）" name="openedAt"
                                    help="用户记得的大致建仓时点,影响移动止盈的高点起算;不填则用当前时间">
                             <DatePicker className="full-width" placeholder="选填,默认当前时间"

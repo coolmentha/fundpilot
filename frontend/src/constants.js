@@ -77,14 +77,15 @@ export const pnlColor = (value) => {
     return undefined;              // 0 默认
 };
 
-// 带正负号的金额(null → '-',正数带 + 号,负数自带 - 号)。
+// 带正负号的金额(null → '-',正数带 + 号,负数 toLocaleString 自带 - 号)。
 export const signedMoney = (value) => {
     if (value === null || value === undefined) return '-';
     const n = Number(value);
-    const formatted = Math.abs(n).toLocaleString('zh-CN', {
+    const formatted = n.toLocaleString('zh-CN', {
         style: 'currency', currency: 'CNY', maximumFractionDigits: 2,
     });
-    return n > 0 ? `+${formatted}` : formatted;
+    if (n > 0) return `+${formatted}`;
+    return formatted; // 0 或负——toLocaleString 对负数自然输出 -¥xxx
 };
 
 // 涨跌幅展示(null → '-',正数带 + 号)。

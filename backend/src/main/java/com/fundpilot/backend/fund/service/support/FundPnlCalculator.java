@@ -49,16 +49,14 @@ public final class FundPnlCalculator {
     }
 
     /**
-     * 总盈亏 = 持仓份额 × 最近累计净值 - 持仓成本(当前市值 - 成本)。
-     * 无持仓或无最近净值 → null;成本为 null 视为 0(纯转入未买入等边界)。
+     * 总盈亏 = 持仓份额 ×（最近累计净值 - 成本单价）。
+     * 无持仓或最近净值或成本单价为 null → null(成本未知则盈亏未知)。
      */
-    public static BigDecimal totalPnl(BigDecimal holdingShares, BigDecimal latestAccumulatedNav, BigDecimal cost) {
-        if (holdingShares == null || latestAccumulatedNav == null) {
+    public static BigDecimal totalPnl(BigDecimal holdingShares, BigDecimal latestAccumulatedNav, BigDecimal costPerShare) {
+        if (holdingShares == null || latestAccumulatedNav == null || costPerShare == null) {
             return null;
         }
-        BigDecimal marketValue = holdingShares.multiply(latestAccumulatedNav, MATH);
-        BigDecimal effectiveCost = cost != null ? cost : BigDecimal.ZERO;
-        return marketValue.subtract(effectiveCost);
+        return holdingShares.multiply(latestAccumulatedNav.subtract(costPerShare), MATH);
     }
 
     /**
@@ -79,18 +77,17 @@ public final class FundPnlCalculator {
 
     /**
      * 盘中估算总盈亏(issue #38)= 昨日总盈亏 × (1 + 今日涨跌幅)。
-     * <p>昨日总盈亏 = 持仓份额 × 上一期累计净值 - 成本(确定的基线);
+     * <p>昨日总盈亏 = 持仓份额 ×（上一期累计净值 - 成本单价）;
      * 乘 (1+今日涨跌幅) 推算盘中总盈亏。口径与今日盈亏同源(都用涨跌幅比例),不引入单位净值 gsz。
-     * 无持仓/无上一期净值/无涨跌幅 → null;成本为 null 视为 0。
+     * 无持仓/无上一期净值/无涨跌幅/无成本单价 → null。
      */
     public static BigDecimal estimatedTotalPnl(BigDecimal holdingShares, BigDecimal previousAccumulatedNav,
-                                               BigDecimal cost, BigDecimal todayChangePct) {
-        if (holdingShares == null || previousAccumulatedNav == null || todayChangePct == null) {
+                                               BigDecimal costPerShare, BigDecimal todayChangePct) {
+        if (holdingShares == null || previousAccumulatedNav == null || todayChangePct == null || costPerShare == null) {
             return null;
         }
-        BigDecimal yesterdayMarketValue = holdingShares.multiply(previousAccumulatedNav, MATH);
-        BigDecimal effectiveCost = cost != null ? cost : BigDecimal.ZERO;
-        BigDecimal yesterdayTotalPnl = yesterdayMarketValue.subtract(effectiveCost);
+        BigDecimal yesterdayTotalPnl = holdingShares.multiply(
+                previousAccumulatedNav.subtract(costPerShare), MATH);
         return yesterdayTotalPnl.multiply(BigDecimal.ONE.add(todayChangePct, MATH), MATH);
     }
 

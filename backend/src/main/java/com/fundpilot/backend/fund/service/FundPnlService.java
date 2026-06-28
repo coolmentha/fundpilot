@@ -69,16 +69,19 @@ public class FundPnlService {
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
-        BigDecimal cost = holdingShares != null ? fundPositionService.getCost(fundId) : null;
+        BigDecimal costPerShare = holdingShares != null
+                ? fundRepository.findById(fundId).map(FundEntity::getCostPerShare).orElse(null)
+                : null;
 
         // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
-        BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, previousNav, dailyChangePct);
-        // 持仓市值:盘后用 latestNav,盘中(估算态)用 previousNav × (1+涨跌幅) 推算
-        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, latestNav, previousNav, dailyChangePct, isEstimated);
-        // 总盈亏:盘后用落库净值算,盘中估算 = 昨日总盈亏 × (1+涨跌幅)
-        BigDecimal totalPnl = isEstimated
-                ? FundPnlCalculator.estimatedTotalPnl(holdingShares, previousNav, cost, dailyChangePct)
-                : FundPnlCalculator.totalPnl(holdingShares, latestNav, cost);
+        // 非估计态:dailyChangePct = (latest-previous)/previous,基准是 previousNav
+        // 估计态:dailyChangePct = fundgz.gszzl,基准是 latestNav(最新已公布净值)
+        BigDecimal dailyPnlBaseNav = isEstimated ? latestNav : previousNav;
+        BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
+        // 持仓市值 = 份额 × 最新净值(不做盘中估算修正)
+        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, latestNav);
+        // 总盈亏 = 份额 × (最新净值 - 成本单价),不乘涨跌幅(净值就是净值)
+        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, latestNav, costPerShare);
 
         return new Pnl(dailyChangePct, isEstimated, holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
@@ -101,17 +104,12 @@ public class FundPnlService {
         return !latestDate.isBefore(today);
     }
 
-    /** 持仓市值:估算态用 previousNav × (1+涨跌幅) 推算,非估算态用 latestNav。 */
-    private BigDecimal computeHoldingAmount(BigDecimal holdingShares, BigDecimal latestNav,
-                                           BigDecimal previousNav, BigDecimal todayChangePct, boolean isEstimated) {
-        if (holdingShares == null) {
+    /** 持仓市值 = 份额 × 最新净值。不乘涨跌幅——净值就是净值,份额锁死。 */
+    private BigDecimal computeHoldingAmount(BigDecimal holdingShares, BigDecimal latestNav) {
+        if (holdingShares == null || latestNav == null) {
             return null;
         }
-        if (isEstimated && previousNav != null && todayChangePct != null) {
-            return holdingShares.multiply(previousNav, MathContext.DECIMAL64)
-                    .multiply(BigDecimal.ONE.add(todayChangePct, MathContext.DECIMAL64), MathContext.DECIMAL64);
-        }
-        return latestNav != null ? holdingShares.multiply(latestNav, MathContext.DECIMAL64) : null;
+        return holdingShares.multiply(latestNav, MathContext.DECIMAL64);
     }
 
     /**

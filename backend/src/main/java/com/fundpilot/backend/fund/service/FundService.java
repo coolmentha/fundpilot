@@ -61,12 +61,12 @@ public class FundService {
     /**
      * 新建基金;类型字段优先用请求带入值,缺省时按 fundName 兜底识别。
      * <p>fundCode/fundName 二选一即可(CONTEXT.md「基金字典搜索」);两者都缺 → 业务异常。
-     * <p><b>初始持仓录入(ADR-0012)</b>:existingAmount 有值时走建仓路径——FundStatus→HOLDING、
+     * <p><b>初始持仓录入(ADR-0012)</b>:initialMarketValue 有值时走建仓路径——FundStatus→HOLDING、
      * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认(反算 shares、置 CONFIRMED),
      * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重"现有金额是历史持仓"
      * (用已公布净值,不等 NavConfirmJob)。无净值可反算则报错不让建(同步确认的硬前提)。
-     * <p>existingAmount 为 null/非正数 → 走原 PENDING_HOLDING 流程。
-     * <p>@Transactional:existingAmount 路径需写基金+交易原子;fetchOneFund 开 REQUIRES_NEW 独立事务
+     * <p>initialMarketValue 为 null/非正数 → 走原 PENDING_HOLDING 流程。
+     * <p>@Transactional:initialMarketValue 路径需写基金+交易原子;fetchOneFund 开 REQUIRES_NEW 独立事务
      * 拉取净值(可见已提交的基金)。代价:若 openWithExistingPosition 抛错(无净值),外层回滚基金 save,
      * 但 fetchOneFund 已提交的净值历史成孤儿——可接受(行情数据非业务数据,下次 refresh 复用)。
      */
@@ -101,26 +101,31 @@ public class FundService {
             log.warn("建基金 {} 后拉取历史净值失败,降级(可稍后手动 refresh 补): {}", saved.getId(), ex.getMessage());
         }
 
-        // existingAmount 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
-        if (request.existingAmount() != null && request.existingAmount().signum() > 0) {
-            openWithExistingPosition(saved, request.existingAmount(), request.openedAt());
+        // initialMarketValue 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
+        if (request.initialMarketValue() != null && request.initialMarketValue().signum() > 0) {
+            openWithExistingPosition(saved, request.initialMarketValue(), request.costPerShare(), request.openedAt());
         }
 
         return FundView.from(saved);
     }
 
     /**
-     * 初始持仓建仓(ADR-0012):用最近一期已公布净值同步确认一条 INCREASE 交易 + FundStatus→HOLDING。
+     * 初始持仓建仓(ADR-0012 + ADR-0013):用最近一期已公布净值同步确认一条 INCREASE 交易 + FundStatus→HOLDING。
      * 状态流转对齐 {@code SignalOperationService.handleBuild},但确认时机同步
      * (现有金额是当前市值口径,用已公布净值反算 shares,不等 NavConfirmJob)。
      *
+     * <p>costPerShare:用户填的成本单价(可 null,不填默认 T-1 净值;>0 校验);存入 FundEntity.costPerShare。
      * <p>openedAt:用户填的大致建仓时点(影响移动止盈持仓期高点起算),null 则用 now;须 ≤ 今天。
-     * 金额是当前市值口径,净值用最近一期——openedAt 只标时间不影响净值反算(用户填的是"现在有多少钱")。
      *
+     * @param initialMarketValue 入仓市值(当前市值口径)
+     * @param costPerShare       成本单价(可 null,默认 T-1 净值)
+     * @param openedAt           建仓时间(可 null)
      * @throws BusinessException 无净值历史可反算时抛 {@link ErrorCode#NAV_HISTORY_EMPTY};
-     *                           openedAt 晚于今天抛 {@link ErrorCode#OPENED_AT_IN_FUTURE}
+     *                           openedAt 晚于今天抛 {@link ErrorCode#OPENED_AT_IN_FUTURE};
+     *                           costPerShare ≤ 0 抛参数校验错
      */
-    private void openWithExistingPosition(FundEntity fund, BigDecimal existingAmount, Instant openedAt) {
+    private void openWithExistingPosition(FundEntity fund, BigDecimal initialMarketValue,
+                                          BigDecimal costPerShare, Instant openedAt) {
         Instant now = Instant.now();
         // openedAt 未来校验:不允许晚于今天(用户手滑填未来日期)
         if (openedAt != null && openedAt.isAfter(now)) {
@@ -138,12 +143,18 @@ public class FundService {
         BigDecimal navValue = recent.get(0).getAccumulatedNav();
         Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
 
+        // 成本单价:用户填则用,不填默认 T-1 净值;>0 校验
+        BigDecimal effectiveCostPerShare = costPerShare != null ? costPerShare : navValue;
+        if (effectiveCostPerShare.signum() <= 0) {
+            throw new IllegalArgumentException("成本单价必须大于 0");
+        }
+
         // 建仓交易:INCREASE(对齐 handleBuild),同步确认(反算 shares/nav/confirmTime)
         FundTransactionEntity tx = new FundTransactionEntity();
         tx.setFundEntity(fund);
         tx.setSource(FundTransactionSource.INCREASE);
-        tx.setAmount(existingAmount);
-        tx.setShares(existingAmount.divide(navValue, MATH));
+        tx.setAmount(initialMarketValue);
+        tx.setShares(initialMarketValue.divide(navValue, MATH));
         tx.setNav(navValue);
         tx.setConfirmTime(now);
         tx.setStatus(FundTransactionStatus.CONFIRMED);
@@ -153,9 +164,10 @@ public class FundService {
         // 状态流转:对齐 handleBuild。openedAt 用用户填值(移动止盈高点起算),confirmTime 仍用 now(交易当下确认)
         fund.setStatus(FundStatus.HOLDING);
         fund.setOpenedAt(effectiveOpenedAt);
+        fund.setCostPerShare(effectiveCostPerShare);
         fundRepository.save(fund);
-        log.info("初始持仓建仓 fund={} amount={} nav={} shares={} openedAt={} confirmTime={}",
-                fund.getId(), existingAmount, navValue, tx.getShares(), effectiveOpenedAt, now);
+        log.info("初始持仓建仓 fund={} initialMarketValue={} nav={} shares={} costPerShare={} openedAt={} confirmTime={}",
+                fund.getId(), initialMarketValue, navValue, tx.getShares(), effectiveCostPerShare, effectiveOpenedAt, now);
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */

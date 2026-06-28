@@ -45,16 +45,23 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         when(fundEstimateService.fetchEstimate(anyString())).thenReturn(Optional.empty());
+        // 清理可能残留的旧数据
+        fundTransactionRepository.deleteAll();
+        fundNavHistoryRepository.deleteAll();
+        fundRepository.deleteAll();
     }
 
     @Test
     @Transactional
     void 持仓基金_聚合今日涨跌今日盈亏总盈亏() {
         FundEntity fund = persistHoldingFund();
-        // 累计净值 1.20 → 1.26(涨 5%);持仓 1000 份;成本 1200;市值 1260;总盈亏 +60
+        // 累计净值 1.20 → 1.26(涨 5%);持仓 1000 份;成本单价 1.20;总盈亏 = 1000×(1.26-1.20) = 60
         navHistory(fund, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
         navHistory(fund, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
+        // 成本单价存在 FundEntity 上,不再从交易派生
+        fund.setCostPerShare(new BigDecimal("1.20"));
+        fundRepository.save(fund);
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
@@ -102,17 +109,21 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @Test
     @Transactional
     void 组合聚合_汇总所有持仓基金的今日盈亏合计与涨跌盈亏计数() {
-        // 基金A:今日上涨 +5%(1.20→1.26),持仓1000份成本1200 → 今日盈亏+60 总盈亏+60(盈)
+        // 基金A:今日上涨 +5%(1.20→1.26),持仓1000份 成本单价1.20 → 今日盈亏+60 总盈亏+60(盈)
         FundEntity fundA = persistHoldingFundWithCode("510300", "沪深300ETF");
         navHistory(fundA, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
         navHistory(fundA, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
         txWithAmount(fundA, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
+        fundA.setCostPerShare(new BigDecimal("1.20"));
+        fundRepository.save(fundA);
 
-        // 基金B:今日下跌 -2%(1.00→0.98),持仓1000份成本1000 → 今日盈亏-20 总盈亏-20(亏)
+        // 基金B:今日下跌 -2%(1.00→0.98),持仓1000份 成本单价1.00 → 今日盈亏-20 总盈亏-20(亏)
         FundEntity fundB = persistHoldingFundWithCode("159825", "半导体ETF");
         navHistory(fundB, Instant.parse("2025-06-01T00:00:00Z"), "1.00");
         navHistory(fundB, Instant.parse("2025-06-02T00:00:00Z"), "0.98");
         txWithAmount(fundB, FundTransactionSource.INCREASE, "1000", "1000", FundTransactionStatus.CONFIRMED);
+        fundB.setCostPerShare(new BigDecimal("1.00"));
+        fundRepository.save(fundB);
 
         PortfolioSummary summary = fundPnlService.computePortfolioSummary();
 

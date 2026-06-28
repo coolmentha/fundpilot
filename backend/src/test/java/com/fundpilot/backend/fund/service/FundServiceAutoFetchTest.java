@@ -40,7 +40,7 @@ import static org.mockito.Mockito.verify;
  * 落库行为由 {@code MarketDataFetchServiceTest} 覆盖,本测试验证编排:调用了拉取 + 降级不阻断。
  * 用 @MockitoBean 替换 MarketDataFetchService,verify 调用而非真实落库(避免 REQUIRES_NEW 事务可见性问题)。
  *
- * <p>ADR-0012 初始持仓录入:existingAmount 有值时同步确认建仓交易 + 状态流转,用 doAnswer 模拟
+ * <p>ADR-0012 初始持仓录入:initialMarketValue 有值时同步确认建仓交易 + 状态流转,用 doAnswer 模拟
  * fetchOneFund 落净值历史(真实拉取走网络,mock 替换)。
  */
 class FundServiceAutoFetchTest extends AbstractIntegrationTest {

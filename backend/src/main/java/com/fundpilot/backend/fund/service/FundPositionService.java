@@ -73,19 +73,6 @@ public class FundPositionService {
     }
 
     /**
-     * 持仓成本 = Σ amount × direction(CONFIRMED 状态)。名义投入,不算盈亏。
-     */
-    public BigDecimal getCost(Long fundId) {
-        List<FundTransactionEntity> confirmed =
-                fundTransactionRepository.findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.CONFIRMED);
-        BigDecimal sum = BigDecimal.ZERO;
-        for (FundTransactionEntity tx : confirmed) {
-            sum = sum.add(tx.getAmount().multiply(direction(tx.getSource())));
-        }
-        return sum;
-    }
-
-    /**
      * 全历史累计净值峰值(ADR-0001:不落字段,实时派生)。
      * 无净值历史时返回 {@link Optional#empty()}。
      */

@@ -68,26 +68,37 @@ class FundPnlCalculatorTest {
 
     @Test
     void 总盈亏_盈利() {
-        // 持仓 1000 份,最近净值 1.50,成本 1200;市值 1500 - 成本 1200 = 盈 300
+        // 持仓 1000 份,最近净值 1.50,成本单价 1.20;市值 1500,成本 1200;盈 300
+        // 公式:shares × (nav - costPerShare) = 1000 × (1.50 - 1.20) = 300
         BigDecimal pnl = FundPnlCalculator.totalPnl(
-                new BigDecimal("1000"), new BigDecimal("1.50"), new BigDecimal("1200"));
+                new BigDecimal("1000"), new BigDecimal("1.50"), new BigDecimal("1.20"));
 
         assertThat(pnl).isCloseTo(new BigDecimal("300"), within(new BigDecimal("0.01")));
     }
 
     @Test
     void 总盈亏_亏损() {
-        // 持仓 1000 份,最近净值 1.00,成本 1200;市值 1000 - 成本 1200 = 亏 -200
+        // 持仓 1000 份,最近净值 1.00,成本单价 1.20;市1000,成本1200;亏 -200
+        // 公式:1000 × (1.00 - 1.20) = -200
         BigDecimal pnl = FundPnlCalculator.totalPnl(
-                new BigDecimal("1000"), new BigDecimal("1.00"), new BigDecimal("1200"));
+                new BigDecimal("1000"), new BigDecimal("1.00"), new BigDecimal("1.20"));
 
         assertThat(pnl).isCloseTo(new BigDecimal("-200"), within(new BigDecimal("0.01")));
     }
 
     @Test
     void 总盈亏_无持仓或无净值返回null() {
-        assertThat(FundPnlCalculator.totalPnl(null, new BigDecimal("1.50"), new BigDecimal("1200"))).isNull();
-        assertThat(FundPnlCalculator.totalPnl(new BigDecimal("1000"), null, new BigDecimal("1200"))).isNull();
+        assertThat(FundPnlCalculator.totalPnl(null, new BigDecimal("1.50"), new BigDecimal("1.20"))).isNull();
+        assertThat(FundPnlCalculator.totalPnl(new BigDecimal("1000"), null, new BigDecimal("1.20"))).isNull();
+    }
+
+    @Test
+    void 总盈亏_成本单价为null返回null_因为成本未知() {
+        // costPerShare=null:无法确定成本基准,总盈亏不可知
+        BigDecimal pnl = FundPnlCalculator.totalPnl(
+                new BigDecimal("1000"), new BigDecimal("1.50"), null);
+
+        assertThat(pnl).isNull();
     }
 
     @Test

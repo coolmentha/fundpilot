@@ -42,6 +42,11 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="类型"><StatusTag value={fund.fundCategory}/></Descriptions.Item>
                 <Descriptions.Item label="子类">{text(fund.fundSubType)}</Descriptions.Item>
                 <Descriptions.Item label="状态"><StatusTag value={fund.status}/></Descriptions.Item>
+                <Descriptions.Item label="成本单价">
+                    <span className="num-cell">
+                        {fund.costPerShare === null || fund.costPerShare === undefined ? '-' : money(fund.costPerShare)}
+                    </span>
+                </Descriptions.Item>
                 <Descriptions.Item label="计划仓位">
                     <span className="num-cell">{money(fund.plannedTotalAmount)}</span>
                 </Descriptions.Item>

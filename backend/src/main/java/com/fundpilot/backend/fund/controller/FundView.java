@@ -27,6 +27,7 @@ import java.time.Instant;
  * @param operationMode        运作方式
  * @param investmentPhilosophy 投资理念
  * @param openedAt             建仓时间
+ * @param costPerShare         持仓成本单价(每份成本,ADR-0013;可空——无持仓时为 null)
  * @param dailyChangePct       今日涨跌幅(三态:盘前0/盘中估值/盘后实际,issue #38;可空——无净值历史时为 null)
  * @param isEstimated          是否估算态(true=盘中 fundgz 估算,issue #38)
  * @param holdingShares        持仓份额(可空——无持仓时为 null)
@@ -48,6 +49,7 @@ public record FundView(
         OperationMode operationMode,
         InvestmentPhilosophy investmentPhilosophy,
         Instant openedAt,
+        BigDecimal costPerShare,
         BigDecimal dailyChangePct,
         boolean isEstimated,
         BigDecimal holdingShares,
@@ -71,6 +73,7 @@ public record FundView(
                 fund.getOperationMode(),
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
+                fund.getCostPerShare(),
                 null, false, null, null, null, null,
                 fund.getCreatedDate());
     }
@@ -90,6 +93,7 @@ public record FundView(
                 fund.getOperationMode(),
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
+                fund.getCostPerShare(),
                 pnl.dailyChangePct(),
                 pnl.isEstimated(),
                 pnl.holdingShares(),

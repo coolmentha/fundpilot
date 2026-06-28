@@ -1,10 +1,12 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
+import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -31,6 +33,9 @@ import java.util.List;
  *
  * <h3>为什么用 accumulatedNav 而非 nav</h3>
  * 累计净值已含分红再投资,份额/金额计算应基于累计净值(ADR-0001:峰值用 accumulatedNav,口径一致)。
+ *
+ * <h3>costPerShare 加权更新(ADR-0013)</h3>
+ * INCREASE/TRANSFER_IN/INVEST 确认后同一事务内加权更新 FundEntity.costPerShare。
  */
 @Service
 @RequiredArgsConstructor
@@ -41,6 +46,8 @@ public class NavConfirmService {
 
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
+    private final FundRepository fundRepository;
+    private final FundPositionService fundPositionService;
 
     /**
      * 回填指定日期的 PENDING 交易。null 时用今天 UTC。
@@ -92,6 +99,40 @@ public class NavConfirmService {
         tx.setConfirmTime(Instant.now());
         tx.setStatus(FundTransactionStatus.CONFIRMED);
         fundTransactionRepository.save(tx);
+
+        // ADR-0013:买入类交易确认后加权更新 costPerShare
+        updateCostPerShare(tx, source);
         return true;
+    }
+
+    /**
+     * INCREASE/TRANSFER_IN/INVEST 确认后加权更新 FundEntity.costPerShare。
+     * 卖出类不触发。
+     */
+    private void updateCostPerShare(FundTransactionEntity tx, FundTransactionSource source) {
+        if (source != FundTransactionSource.INCREASE
+                && source != FundTransactionSource.TRANSFER_IN
+                && source != FundTransactionSource.INVEST) {
+            return;
+        }
+        Long fundId = tx.getFundEntity().getId();
+        BigDecimal totalAfter = fundPositionService.getHoldingShares(fundId);
+        BigDecimal oldShares = totalAfter.subtract(tx.getShares());
+        BigDecimal oldCostPerShare = tx.getFundEntity().getCostPerShare();
+
+        BigDecimal newCostPerShare;
+        if (oldCostPerShare == null || oldShares.signum() <= 0) {
+            newCostPerShare = tx.getAmount().divide(tx.getShares(), MATH);
+        } else {
+            BigDecimal numerator = oldCostPerShare.multiply(oldShares).add(tx.getAmount());
+            BigDecimal denominator = oldShares.add(tx.getShares());
+            newCostPerShare = numerator.divide(denominator, MATH);
+        }
+
+        FundEntity fund = tx.getFundEntity();
+        fund.setCostPerShare(newCostPerShare);
+        fundRepository.save(fund);
+        log.info("costPerShare 加权更新 fund={} oldShares={} oldCost={} newShares={} amount={} newCost={}",
+                fundId, oldShares, oldCostPerShare, tx.getShares(), tx.getAmount(), newCostPerShare);
     }
 }
