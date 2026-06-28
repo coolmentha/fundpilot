@@ -10,16 +10,13 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.fund.service.support.TradingCalendarService;
-import com.fundpilot.backend.fund.service.support.WeeklyDropCalculator;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.service.MarketIndicatorProvider;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
-import com.fundpilot.backend.signal.enums.MeasureUnit;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.enums.SignalWarningValue;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
-import com.fundpilot.backend.signal.valueobject.Measure;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
@@ -223,7 +220,11 @@ public class SignalGenerationService {
 
     /** 最近一次买入确认时间 = max(openedAt, tier1-4AddedAt)。 */
     private Instant computeLastBuyConfirmTime(FundEntity fund, FundStrategyEntity strategy) {
-        Instant latest = fund.getOpenedAt();
+        FundTransactionEntity topByFundEntityIdOrderByConfirmTimeDesc = fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(fund.getId());
+        if (topByFundEntityIdOrderByConfirmTimeDesc == null) {
+            throw new IllegalArgumentException("Fund " + fund.getId() + " has no confirm transaction.");
+        }
+        Instant latest = topByFundEntityIdOrderByConfirmTimeDesc.getConfirmTime();
         for (int tier = 1; tier <= HardConstraintConfigHolder.TIER_COUNT; tier++) {
             Instant t = switch (tier) {
                 case 1 -> strategy.getTier1AddedAt();

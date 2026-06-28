@@ -204,6 +204,7 @@ export function useAdminAction() {
             const path = action === 'generate' ? '/api/admin/signals/generate'
                 : action === 'confirm-nav' ? '/api/admin/transactions/confirm-nav'
                 : action === 'sync-dict' ? '/api/admin/fund-dict/sync'
+                : action === 'sync-calendar' ? '/api/admin/market-data/sync-trading-calendar'
                 : '/api/admin/market-data/refresh';
             return post(path);
         },

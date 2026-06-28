@@ -60,6 +60,15 @@ export default function AdminPage() {
                     }>
                         <Text type="secondary">每日 03:00 自动触发，拉东方财富全量字典 upsert 到 fund_dict 表，供新建基金搜索框自动补全。</Text>
                     </Card>
+                    <Card size="small" title="交易日历同步" extra={
+                        <Popconfirm title="从东方财富同步 A 股交易日历？" onConfirm={() =>
+                            run('sync-calendar', (r) => `交易日历同步完成，新增 ${r?.added ?? 0} 条`)}>
+                            <Button icon={<DatabaseOutlined/>}
+                                    loading={adminAction.isPending}>同步交易日历</Button>
+                        </Popconfirm>
+                    }>
+                        <Text type="secondary">从上证指数日K线提取交易日(周末节假日自动跳过)，写入 trading_calendar 表，供 MIN_HOLD_DAYS 判定。</Text>
+                    </Card>
                 </Space>
             </Card>
         </Space>
