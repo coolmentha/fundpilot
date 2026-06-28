@@ -49,6 +49,20 @@ export const labels = {
     // MeasureUnit
     AMOUNT: '金额',
     SHARE: '份额',
+    // SignalReason(issue #12)
+    BUILD: '建仓',
+    ADD: '加仓',
+    FUND_CLEARED: '基金已清仓',
+    NO_STRATEGY: '无生效策略',
+    BUILD_CONDITION_NOT_MET: '建仓条件未满足',
+    NO_ADD_TIER: '无加仓档位触发',
+    LOGIC_BROKEN: '逻辑止损',
+    NO_TIER_TO_SELL: '无可卖档位',
+    TRAILING_STOP: '移动止盈',
+    REBALANCE: '再平衡减仓',
+    HARD_CONSTRAINT_BREACH: '硬约束违反',
+    MIN_HOLD_DAYS_NOT_MET: '持有期不足',
+    INSUFFICIENT_MARKET_DATA: '行情数据不足',
 };
 
 // 标签颜色：成功态绿、进行中态金、终态默认、动作态蓝。
