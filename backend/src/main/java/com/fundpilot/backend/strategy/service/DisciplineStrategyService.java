@@ -317,7 +317,7 @@ public class DisciplineStrategyService {
     }
 
     /**
-     * 再平衡减仓:单只基金占比 > singlePositionLimit(宽基/主动/混合 20%,行业 15%)。
+     * 再平衡减仓:单只基金占比 > singlePositionLimit(30%,无关类型)。
      * 卖出金额 = (当前占比 - 上限) × 总权益持仓金额,按当前净值反算为份额。
      * 遵守 MIN_HOLD_DAYS(循环 D 处理降级);不清档位。
      */
@@ -327,7 +327,7 @@ public class DisciplineStrategyService {
         if (singlePct == null) {
             return null;
         }
-        BigDecimal limit = HardConstraintConfig.singlePositionLimit(fund.getFundCategory());
+        BigDecimal limit = HardConstraintConfig.singlePositionLimit();
         if (singlePct.compareTo(limit) <= 0) {
             return null; // 未超限
         }
@@ -402,7 +402,7 @@ public class DisciplineStrategyService {
         BigDecimal singleAddRatio = addRatio; // 本次加仓比例(建仓时 singleAddRatio=0)
         java.util.List<com.fundpilot.backend.fund.service.support.Breach> breaches =
                 com.fundpilot.backend.fund.service.support.HardConstraintChecker.check5(
-                        fund.getFundCategory(), buildRatio,
+                        buildRatio,
                         capital.singlePositionPct(), capital.categoryPositionPct(),
                         capital.totalEquityPct(), singleAddRatio);
         if (breaches.isEmpty()) {

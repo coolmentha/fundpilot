@@ -37,6 +37,9 @@ import static org.mockito.Mockito.when;
  *   <li>成功:test 集 passed=true → createDraft(最优参数)+ calibrate,落库新策略(状态 CALIBRATED 或 CALIBRATION_FAILED)</li>
  *   <li>失败:test 集 passed=false → 抛 OPTIMIZATION_NO_VALID_PARAMS,不创建任何草稿</li>
  * </ol>
+ *
+ * <p>诊断增强(issue #28):失败时 message 携带归因维度 + test 策略收益/回撤 vs 三基准收益,
+ * 供区分"真过拟合/门槛方差/regime 不匹配"三种失败模式。
  */
 class StrategyOptimizeServiceTest extends AbstractIntegrationTest {
 
@@ -98,6 +101,63 @@ class StrategyOptimizeServiceTest extends AbstractIntegrationTest {
                 .extracting("code").isEqualTo(ErrorCode.OPTIMIZATION_NO_VALID_PARAMS.name());
         // 未落任何草稿
         assertThat(fundStrategyRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @Transactional
+    void 寻优失败_message携带候选数与最优组诊断() {
+        FundEntity fund = persistBroadFund();
+        persistOscillatingUpNav(fund, 260);
+        // mock 沪深300 收益极高 → 全部候选必命中 TEST_RETURN_BELOW_HS300
+        when(hs300BenchmarkProvider.fetch(any(), any()))
+                .thenReturn(new BenchmarkMetrics(new BigDecimal("100"), new BigDecimal("0.01")));
+        when(marketDataSource.fetchIndexKline(anyString(), anyString())).thenReturn(null);
+
+        long before = fundStrategyRepository.count();
+
+        BusinessException ex = catchOptimizeException(fund.getId());
+
+        // code 不变(契约不变)
+        assertThat(ex.getCode()).isEqualTo(ErrorCode.OPTIMIZATION_NO_VALID_PARAMS.name());
+        // message 含候选数 + 最优组 train Calmar + test 指标对比
+        assertThat(ex.getMessage()).contains("组候选").contains("最优组").contains("train Calmar");
+        assertThat(ex.getMessage()).contains("test 策略收益").contains("原因");
+        // 原因含 HS300(hs300 收益 100 策略必输)
+        assertThat(ex.getMessage()).contains("TEST_RETURN_BELOW_HS300");
+        // 未落任何草稿
+        assertThat(fundStrategyRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @Transactional
+    void 寻优失败_topk全部未达标_message含候选总数() {
+        FundEntity fund = persistBroadFund();
+        persistOscillatingUpNav(fund, 260);
+        // hs300 收益极高 → top-5 全部未达标
+        when(hs300BenchmarkProvider.fetch(any(), any()))
+                .thenReturn(new BenchmarkMetrics(new BigDecimal("100"), new BigDecimal("0.01")));
+        when(marketDataSource.fetchIndexKline(anyString(), anyString())).thenReturn(null);
+
+        BusinessException ex = catchOptimizeException(fund.getId());
+
+        // message 含候选总数(应 ≤ top-k=5,取决于 train 集有多少候选有回撤)
+        assertThat(ex.getMessage()).contains("组候选 test 集全部未达标");
+        // 至少 1 组候选
+        String countPart = ex.getMessage().substring(
+                ex.getMessage().indexOf("寻优 ") + "寻优 ".length(),
+                ex.getMessage().indexOf(" 组候选"));
+        int count = Integer.parseInt(countPart.trim());
+        assertThat(count).isGreaterThanOrEqualTo(1);
+    }
+
+    /** 跑 optimize 捕获 BusinessException(避免每个测试重复 try/catch 模板)。 */
+    private BusinessException catchOptimizeException(Long fundId) {
+        try {
+            strategyOptimizeService.optimize(fundId);
+            throw new AssertionError("期望抛 BusinessException 但未抛");
+        } catch (BusinessException ex) {
+            return ex;
+        }
     }
 
     private FundEntity persistBroadFund() {

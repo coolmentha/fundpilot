@@ -10,14 +10,8 @@ import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
-import com.fundpilot.backend.market.enums.VolumeState;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
-import com.fundpilot.backend.market.service.support.SecidFormat;
-import com.fundpilot.backend.market.service.support.SixtyDayHighCalculator;
-import com.fundpilot.backend.market.service.support.VolumeStateCalculator;
-import com.fundpilot.backend.market.service.support.WeeklyMacdCalculator;
-import com.fundpilot.backend.market.service.support.YearLineCalculator;
-import com.fundpilot.backend.market.service.support.YearLineMetrics;
+import com.fundpilot.backend.market.service.support.*;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,7 +91,7 @@ public class MarketDataFetchService {
      *
      * @param fundId 基金 id
      */
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional
     public void fetchOneFund(Long fundId) {
         fetchOne(fundId);
     }

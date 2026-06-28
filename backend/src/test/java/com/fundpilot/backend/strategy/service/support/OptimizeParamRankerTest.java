@@ -93,6 +93,78 @@ class OptimizeParamRankerTest {
         assertThat(best.get()).isEqualTo(expected);
     }
 
+    @Test
+    void rankTopK_返回前k名_按Calmar降序_携带train指标() {
+        // 同一净值序列,用完整网格(64 组)排序
+        List<BigDecimal> nav = new ArrayList<>();
+        Instant start = Instant.parse("2024-01-01T00:00:00Z");
+        List<Instant> dates = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            nav.add(BigDecimal.valueOf(1.0 - i * 0.01));
+            dates.add(start.plus(i, ChronoUnit.DAYS));
+        }
+        for (int i = 0; i < 30; i++) {
+            nav.add(BigDecimal.valueOf(0.7 + i * 0.017));
+            dates.add(start.plus(30 + i, ChronoUnit.DAYS));
+        }
+        List<MarketIndicators> indicators = BacktestIndicatorCalculator.calculate(nav, dates, null);
+        List<OptimizeParams> candidates = OptimizeGridGenerator.generate(FundCategory.BROAD_BASE);
+
+        List<RankedParam> top3 = OptimizeParamRanker.rankTopK(
+                nav, dates, indicators, new BigDecimal("1000"), candidates, 3);
+
+        // 返回 3 组(候选充足)
+        assertThat(top3).hasSize(3);
+        // 按 train Calmar 严格降序
+        assertThat(top3.get(0).trainCalmar()).isNotNull();
+        assertThat(top3.get(0).trainCalmar().compareTo(top3.get(1).trainCalmar())).isGreaterThanOrEqualTo(0);
+        assertThat(top3.get(1).trainCalmar().compareTo(top3.get(2).trainCalmar())).isGreaterThanOrEqualTo(0);
+        // 携带 train 指标(非 null)
+        assertThat(top3.get(0).trainReturn()).isNotNull();
+        assertThat(top3.get(0).trainMaxDrawdown()).isNotNull();
+        // 与 rankBest 第一名一致(rankBest 内部调 rankTopK(1))
+        Optional<OptimizeParams> best = OptimizeParamRanker.rankBest(
+                nav, dates, indicators, new BigDecimal("1000"), candidates);
+        assertThat(best).isPresent();
+        assertThat(top3.get(0).params()).isEqualTo(best.get());
+    }
+
+    @Test
+    void rankTopK_k超过候选数_返回实际数量() {
+        // 候选回撤全 0 → 返空(k=5 也只能返 0)
+        List<BigDecimal> nav = List.of();
+        List<Instant> dates = List.of();
+        List<MarketIndicators> indicators = List.of();
+        List<OptimizeParams> candidates = List.of(params(new BigDecimal("0.05")));
+
+        List<RankedParam> result = OptimizeParamRanker.rankTopK(
+                nav, dates, indicators, new BigDecimal("1000"), candidates, 5);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void rankTopK_k为零_返回空列表() {
+        List<BigDecimal> nav = new ArrayList<>();
+        Instant start = Instant.parse("2024-01-01T00:00:00Z");
+        List<Instant> dates = new ArrayList<>();
+        for (int i = 0; i < 30; i++) {
+            nav.add(BigDecimal.valueOf(1.0 - i * 0.01));
+            dates.add(start.plus(i, ChronoUnit.DAYS));
+        }
+        for (int i = 0; i < 30; i++) {
+            nav.add(BigDecimal.valueOf(0.7 + i * 0.017));
+            dates.add(start.plus(30 + i, ChronoUnit.DAYS));
+        }
+        List<MarketIndicators> indicators = BacktestIndicatorCalculator.calculate(nav, dates, null);
+        List<OptimizeParams> candidates = OptimizeGridGenerator.generate(FundCategory.BROAD_BASE);
+
+        List<RankedParam> result = OptimizeParamRanker.rankTopK(
+                nav, dates, indicators, new BigDecimal("1000"), candidates, 0);
+
+        assertThat(result).isEmpty();
+    }
+
     /** 手动遍历候选算风险调整收益,返最高的一组(作为 oracle 验证 rankBest)。 */
     private static OptimizeParams manualBest(List<BigDecimal> nav, List<Instant> dates,
                                              List<MarketIndicators> indicators, BigDecimal planned,

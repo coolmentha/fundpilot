@@ -31,11 +31,11 @@ class FundServiceTest extends AbstractIntegrationTest {
     @Autowired EntityManager entityManager;
 
     @Test
-    void create_计划仓位超过单品种上限_抛异常且不落库() {
-        // 总可投资金 100000,宽基上限 20% = 20000;填 20000.01 超限
+    void create_计划仓位超过单只上限_抛异常且不落库() {
+        // 总可投资金 100000,单只上限 30% = 30000;填 30000.01 超限
         persistUserConfig(new BigDecimal("100000"));
         FundCreateRequest request = new FundCreateRequest(
-                "510300", "沪深300ETF", FundCategory.BROAD_BASE, null, null, new BigDecimal("20000.01"));
+                "510300", "沪深300ETF", FundCategory.BROAD_BASE, null, null, new BigDecimal("30000.01"));
 
         assertThatThrownBy(() -> fundService.create(request))
                 .isInstanceOf(BusinessException.class)
@@ -48,11 +48,11 @@ class FundServiceTest extends AbstractIntegrationTest {
     void create_计划仓位等于上限_边界通过() {
         persistUserConfig(new BigDecimal("100000"));
         FundCreateRequest request = new FundCreateRequest(
-                "510300", "沪深300ETF", FundCategory.BROAD_BASE, null, null, new BigDecimal("20000"));
+                "510300", "沪深300ETF", FundCategory.BROAD_BASE, null, null, new BigDecimal("30000"));
 
         FundView view = fundService.create(request);
 
-        assertThat(view.plannedTotalAmount()).isEqualByComparingTo("20000");
+        assertThat(view.plannedTotalAmount()).isEqualByComparingTo("30000");
     }
 
     @Test
@@ -102,11 +102,11 @@ class FundServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void create_行业基金按15百分比上限校验() {
+    void create_行业基金单只上限也是30百分比_无关类型() {
         persistUserConfig(new BigDecimal("100000"));
-        // 行业上限 15% = 15000;填 15000.01 超限
+        // 单只上限 30% 无关类型(曾按行业 15%,已统一);填 30000.01 超限
         FundCreateRequest request = new FundCreateRequest(
-                "159825", "半导体ETF", FundCategory.SECTOR, null, null, new BigDecimal("15000.01"));
+                "159825", "半导体ETF", FundCategory.SECTOR, null, null, new BigDecimal("30000.01"));
 
         assertThatThrownBy(() -> fundService.create(request))
                 .isInstanceOf(BusinessException.class)
@@ -116,10 +116,10 @@ class FundServiceTest extends AbstractIntegrationTest {
     @Test
     void update_计划仓位改到超限_抛异常且原值未改() {
         persistUserConfig(new BigDecimal("100000"));
-        FundEntity fund = persistFund(FundCategory.BROAD_BASE, new BigDecimal("10000")); // 上限 20000
+        FundEntity fund = persistFund(FundCategory.BROAD_BASE, new BigDecimal("10000")); // 上限 30000
         entityManager.flush();
         FundCreateRequest request = new FundCreateRequest(
-                null, null, null, null, null, new BigDecimal("20000.01"));
+                null, null, null, null, null, new BigDecimal("30000.01"));
 
         assertThatThrownBy(() -> fundService.update(fund.getId(), request))
                 .isInstanceOf(BusinessException.class)

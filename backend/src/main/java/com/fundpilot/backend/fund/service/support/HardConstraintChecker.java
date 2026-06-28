@@ -1,7 +1,5 @@
 package com.fundpilot.backend.fund.service.support;
 
-import com.fundpilot.backend.fund.enums.FundCategory;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +17,6 @@ public final class HardConstraintChecker {
     }
 
     /**
-     * @param category            基金类型(决定单只仓位上限:宽基/主动/混合 20%,行业 15%)
      * @param buildRatio          建仓比例(占 plannedTotalAmount)
      * @param singlePositionPct   单只基金当前占比
      * @param categoryPositionPct 该基金类型当前总占比
@@ -27,15 +24,14 @@ public final class HardConstraintChecker {
      * @param singleAddRatio      本次加仓比例
      * @return 违反的约束列表,空表示全部通过
      */
-    public static List<Breach> check5(FundCategory category,
-                                      BigDecimal buildRatio,
+    public static List<Breach> check5(BigDecimal buildRatio,
                                       BigDecimal singlePositionPct,
                                       BigDecimal categoryPositionPct,
                                       BigDecimal totalEquityPct,
                                       BigDecimal singleAddRatio) {
         List<Breach> breaches = new ArrayList<>();
         check(breaches, "BUILD_RATIO", buildRatio, HardConstraintConfig.BUILD_RATIO);
-        check(breaches, "SINGLE_POSITION_LIMIT", singlePositionPct, HardConstraintConfig.singlePositionLimit(category));
+        check(breaches, "SINGLE_POSITION_LIMIT", singlePositionPct, HardConstraintConfig.singlePositionLimit());
         check(breaches, "CATEGORY_POSITION_LIMIT", categoryPositionPct, HardConstraintConfig.CATEGORY_POSITION_LIMIT);
         check(breaches, "TOTAL_EQUITY_POSITION_LIMIT", totalEquityPct, HardConstraintConfig.TOTAL_EQUITY_POSITION_LIMIT);
         check(breaches, "SINGLE_ADD_RATIO_LIMIT", singleAddRatio, HardConstraintConfig.SINGLE_ADD_RATIO_LIMIT);

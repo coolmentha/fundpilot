@@ -66,10 +66,35 @@ class BenchmarkCalculatorTest {
     }
 
     @Test
-    void judgePassed_回撤等于allIn_通过_leq允许临界() {
-        // 策略回撤 0.10 == allIn 0.10 → 回撤条件满足(<=)
+    void judgePassed_策略Calmar等于dcaCalmar_通过_geq允许临界() {
+        // 策略 0.20/0.10=2.0 == dca 0.06/0.03=2.0 → Calmar 临界(>=)过
         boolean passed = BenchmarkCalculator.judgePassed(
                 new BigDecimal("0.20"), new BigDecimal("0.10"),
+                new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
+                new BenchmarkMetrics(new BigDecimal("0.08"), new BigDecimal("0.10")),
+                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.03")));
+
+        assertThat(passed).isTrue();
+    }
+
+    @Test
+    void judgePassed_策略Calmar低于dcaCalmar_不通过() {
+        // 策略 0.20/0.20=1.0 < dca 0.06/0.03=2.0 → Calmar 输 dca
+        boolean passed = BenchmarkCalculator.judgePassed(
+                new BigDecimal("0.20"), new BigDecimal("0.20"),
+                new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
+                new BenchmarkMetrics(new BigDecimal("0.08"), new BigDecimal("0.10")),
+                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.03")));
+
+        assertThat(passed).isFalse();
+    }
+
+    @Test
+    void judgePassed_回撤超dca但Calmar仍赢_通过_超额回撤配超额收益() {
+        // 策略收益 0.50 > hs300/dca;策略回撤 0.12 > dca 0.08(绝对回撤超),但 Calmar 0.50/0.12=4.17 > dca 0.06/0.08=0.75
+        // → 风险调整后更优,通过。绝对回撤约束已弃用,这正是"接受超额回撤但配得上超额收益"
+        boolean passed = BenchmarkCalculator.judgePassed(
+                new BigDecimal("0.50"), new BigDecimal("0.12"),
                 new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
                 new BenchmarkMetrics(new BigDecimal("0.08"), new BigDecimal("0.10")),
                 new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.08")));
@@ -78,24 +103,37 @@ class BenchmarkCalculatorTest {
     }
 
     @Test
-    void judgePassed_收益跑赢三条但回撤超allIn_不通过() {
-        // 策略收益 0.20 > 三条;但策略回撤 0.15 > allIn 0.10 → 回撤条件不满足
+    void judgePassed_收益输allIn但赢hs300dca_通过() {
+        // allIn 收益 0.30 > 策略 0.20,但 allIn 不作收益基准 → 收益条件满足;Calmar 0.20/0.07=2.86 > dca 0.06/0.08=0.75
         boolean passed = BenchmarkCalculator.judgePassed(
-                new BigDecimal("0.20"), new BigDecimal("0.15"),
+                new BigDecimal("0.20"), new BigDecimal("0.07"),
+                new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
+                new BenchmarkMetrics(new BigDecimal("0.30"), new BigDecimal("0.10")),
+                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.08")));
+
+        assertThat(passed).isTrue();
+    }
+
+    @Test
+    void judgePassed_dca零回撤策略有回撤_不通过_dca视作无穷Calmar() {
+        // dca 回撤 0(单调上涨)→ dcaCalmar 视为 +∞;策略有回撤 → 策略 Calmar 有限值,必输
+        boolean passed = BenchmarkCalculator.judgePassed(
+                new BigDecimal("0.50"), new BigDecimal("0.05"),
                 new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
                 new BenchmarkMetrics(new BigDecimal("0.08"), new BigDecimal("0.10")),
-                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.08")));
+                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.00")));
 
         assertThat(passed).isFalse();
     }
 
     @Test
-    void judgePassed_收益跑赢三条且回撤不超allIn_通过() {
+    void judgePassed_dca零回撤策略也零回撤_通过_都视作无穷() {
+        // dca 回撤 0 + 策略回撤 0 → 双方 Calmar 都 +∞,临界(>=)过(前提收益赢 hs300/dca)
         boolean passed = BenchmarkCalculator.judgePassed(
-                new BigDecimal("0.20"), new BigDecimal("0.09"),
+                new BigDecimal("0.50"), new BigDecimal("0.00"),
                 new BenchmarkMetrics(new BigDecimal("0.10"), new BigDecimal("0.20")),
                 new BenchmarkMetrics(new BigDecimal("0.08"), new BigDecimal("0.10")),
-                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.08")));
+                new BenchmarkMetrics(new BigDecimal("0.06"), new BigDecimal("0.00")));
 
         assertThat(passed).isTrue();
     }

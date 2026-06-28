@@ -1,15 +1,10 @@
 package com.fundpilot.backend.fund.service.support;
 
-import com.fundpilot.backend.fund.enums.FundCategory;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -35,6 +30,13 @@ class HardConstraintConfigTest {
     }
 
     @Test
+    void singlePositionLimitIsThirtyPercentRegardlessOfType() {
+        // 单只仓位上限 30%,无关类型(曾按 fundCategory 区分 20%/15%,已统一)
+        assertThat(HardConstraintConfig.SINGLE_POSITION_LIMIT).isEqualByComparingTo(new BigDecimal("0.30"));
+        assertThat(HardConstraintConfig.singlePositionLimit()).isEqualByComparingTo(new BigDecimal("0.30"));
+    }
+
+    @Test
     void categoryPositionLimitIsThirtyPercent() {
         assertThat(HardConstraintConfig.CATEGORY_POSITION_LIMIT).isEqualByComparingTo(new BigDecimal("0.30"));
     }
@@ -53,20 +55,5 @@ class HardConstraintConfigTest {
     void minHoldDaysIsFiveTradingDays() {
         assertThat(HardConstraintConfig.MIN_HOLD_DAYS).isEqualTo(5);
     }
-
-    static Stream<Arguments> singlePositionLimits() {
-        return Stream.of(
-                Arguments.of(FundCategory.BROAD_BASE, "0.20"),
-                Arguments.of(FundCategory.SECTOR, "0.15"),
-                Arguments.of(FundCategory.ACTIVE, "0.20"),
-                Arguments.of(FundCategory.MIXED, "0.20")
-        );
-    }
-
-    @ParameterizedTest
-    @MethodSource("singlePositionLimits")
-    void singlePositionLimitByCategory(FundCategory category, String expected) {
-        assertThat(HardConstraintConfig.singlePositionLimit(category))
-                .isEqualByComparingTo(new BigDecimal(expected));
-    }
 }
+

@@ -17,9 +17,18 @@ import java.util.Set;
  *
  * <h3>passed 判定(issue #11 两条同时满足)</h3>
  * <ol>
- *   <li>策略收益严格大于三条基准:{@code strategyReturn > hs300/allIn/dca}(严格 {@code >},临界不算过)</li>
- *   <li>策略最大回撤 ≤ all-in 最大回撤(用 {@code <=} 避免临界抖动)</li>
+ *   <li>策略收益严格大于两条基准:{@code strategyReturn > hs300/dca}(严格 {@code >},临界不算过)。
+ *       all-in 不作收益基准——单边涨短窗口不可战胜,且与「风险调整收益」规避激进参数相悖,
+ *       用它卡收益会惩罚纪律策略。</li>
+ *   <li>策略风险调整收益(Calmar)不劣于 DCA:{@code strategyCalmar >= dcaCalmar}(用 {@code >=} 允许临界)。
+ *       Calmar = 收益/最大回撤,语义"单位回撤换的收益"。dca 是分批建仓同语义对照,
+ *       策略 Calmar 低于定投说明超额回撤没换来对等的超额收益——择档加仓在制造风险而非补偿风险。
+ *       绝对回撤约束(策略回撤 ≤ dca 回撤)已弃用:它惩罚用合理风险换合理收益的策略
+ *       (策略收益 50%/回撤 12% vs dca 15%/8% 明显更优却判 false)。</li>
  * </ol>
+ *
+ * <p>除零兜底:dca 回撤为 0(单调上涨窗口)时 dcaCalmar 视为 +∞(null 表示),策略方有限值必输——
+ * 定投零回撤换正收益风险调整后无敌,策略有任何回撤就不如定投。
  */
 public final class BenchmarkCalculator {
 
@@ -91,13 +100,40 @@ public final class BenchmarkCalculator {
 
     /**
      * passed 判定(见类注释)。
+     *
+     * @param allInMetrics all-in 指标;判定已不使用(仅保留参数以维持调用方契约),
+     *                     调用方仍计算并落库展示基金自然回撤
      */
     public static boolean judgePassed(BigDecimal strategyReturn, BigDecimal strategyMaxDrawdown,
                                       BenchmarkMetrics hs300, BenchmarkMetrics allInMetrics, BenchmarkMetrics dca) {
-        boolean returnBeatsAll = strategyReturn.compareTo(hs300.returnRate()) > 0
-                && strategyReturn.compareTo(allInMetrics.returnRate()) > 0
+        boolean returnBeatsBenchmarks = strategyReturn.compareTo(hs300.returnRate()) > 0
                 && strategyReturn.compareTo(dca.returnRate()) > 0;
-        boolean drawdownOk = strategyMaxDrawdown.compareTo(allInMetrics.maxDrawdown()) <= 0;
-        return returnBeatsAll && drawdownOk;
+        // Calmar 比较:null 表示 +∞(零回撤)。dca +∞ 时策略须也 +∞(都零回撤)才临界过;
+        // 策略 +∞ 而 dca 有限值时策略赢;双方有限值按数值比(>= 允许临界)
+        BigDecimal strategyCalmar = calmarRatio(strategyReturn, strategyMaxDrawdown);
+        BigDecimal dcaCalmar = calmarRatio(dca.returnRate(), dca.maxDrawdown());
+        boolean calmarOk;
+        if (dcaCalmar == null) {
+            // dca +∞:策略须也零回撤(+∞)才不劣于,否则必输
+            calmarOk = strategyCalmar == null;
+        } else if (strategyCalmar == null) {
+            // 策略 +∞,dca 有限值:策略赢
+            calmarOk = true;
+        } else {
+            calmarOk = strategyCalmar.compareTo(dcaCalmar) >= 0;
+        }
+        return returnBeatsBenchmarks && calmarOk;
+    }
+
+    /**
+     * Calmar 比率 = 收益 / 最大回撤(类 Calmar,与 {@link OptimizeParamRanker} train 排序同源)。
+     * 回撤为 0 时返 {@code null} 表示 +∞——零回撤换正收益风险调整后无敌。
+     * 收益为 0 或负时仍按公式计算(负 Calmar 有意义:回撤换来的负收益,越接近 0 越好)。
+     */
+    public static BigDecimal calmarRatio(BigDecimal returnRate, BigDecimal maxDrawdown) {
+        if (maxDrawdown == null || maxDrawdown.signum() <= 0) {
+            return null;
+        }
+        return returnRate.divide(maxDrawdown, MATH);
     }
 }

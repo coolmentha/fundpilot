@@ -1,7 +1,8 @@
 import {useState} from 'react';
-import {AutoComplete, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography} from 'antd';
+import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography} from 'antd';
 import {DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
+import dayjs from 'dayjs';
 import {Link} from 'react-router-dom';
 import {useArchiveFund, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
 import {fundCategoryOptions, labels, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
@@ -9,9 +10,9 @@ import StatusTag from '../components/StatusTag.jsx';
 
 const {Title} = Typography;
 
-// 新建表单初始值:仅计划总仓位有默认值,基金身份由搜索框选中后带入。
+// 新建表单初始值:仅计划总仓位有默认值,基金身份由搜索框选中后带入。existingAmount/openedAt 默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
-    benchmarkIndexCode: '', plannedTotalAmount: 100000};
+    benchmarkIndexCode: '', plannedTotalAmount: 100000, existingAmount: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
@@ -22,6 +23,8 @@ export default function FundsPage() {
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
+    // 监听现有金额:有值时显示建仓提示(渐进式揭示,只在用户填了才出现)
+    const existingAmount = Form.useWatch('existingAmount', form);
 
     // 字典搜索(仅新建时用;编辑时基金身份已固定)
     const {data: searchResults, isFetching: searching} = useFundSearch(searchQuery);
@@ -81,7 +84,11 @@ export default function FundsPage() {
     const submit = async () => {
         try {
             const values = await form.validateFields();
-            await saveFund.mutateAsync({id: editing?.id, body: values});
+            // openedAt:DatePicker 返回 dayjs,提交前转 ISO 字符串(后端 Instant 解析);未选则不传(后端用 now)
+            const body = values.openedAt
+                ? {...values, openedAt: values.openedAt.startOf('day').toISOString()}
+                : {...values, openedAt: null};
+            await saveFund.mutateAsync({id: editing?.id, body});
             message.success(editing ? '基金已更新' : '基金已新建');
             setOpen(false);
         } catch (e) {
@@ -204,11 +211,32 @@ export default function FundsPage() {
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
                     </Form.Item>
                     <Form.Item label="计划总仓位" name="plannedTotalAmount"
+                               help="目标投入总额(金字塔加仓分母,纪律意图)"
                                rules={[{required: true, message: '请输入计划总仓位'}]}>
                         <InputNumber min={0} precision={2} className="full-width"
                                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                      parser={(v) => v.replace(/,/g, '')}/>
                     </Form.Item>
+                    {!editing && (
+                        <Form.Item label="现有金额（可选）" name="existingAmount"
+                                   help="把已有的持仓纳入管理。不填则建空仓基金,等信号建仓">
+                            <InputNumber min={0} precision={2} className="full-width" placeholder="已有持仓金额,不填则空仓"
+                                         formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                         parser={(v) => v.replace(/,/g, '')}/>
+                        </Form.Item>
+                    )}
+                    {!editing && existingAmount > 0 && (
+                        <Alert type="info" showIcon style={{marginTop: -8}}
+                               message={`将用最近净值反算份额,建仓后基金状态变为"持仓中"`}
+                               description={`当前金额 ${existingAmount.toLocaleString()} 元会作为首笔持仓录入,与计划总仓位(目标投入额)不同——前者是已有持仓,后者是纪律目标。`}/>
+                    )}
+                    {!editing && existingAmount > 0 && (
+                        <Form.Item label="建仓时间（可选）" name="openedAt"
+                                   help="用户记得的大致建仓时点,影响移动止盈的高点起算;不填则用当前时间">
+                            <DatePicker className="full-width" placeholder="选填,默认当前时间"
+                                        disabledDate={(d) => d && d.isAfter(dayjs().endOf('day'))}/>
+                        </Form.Item>
+                    )}
                 </Form>
             </Modal>
         </Space>

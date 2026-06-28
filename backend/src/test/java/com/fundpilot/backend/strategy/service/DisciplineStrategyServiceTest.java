@@ -359,10 +359,10 @@ class DisciplineStrategyServiceTest {
     @Test
     void 再平衡_单只占比超限_返回SELL_REBALANCE() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.BROAD_BASE); // 上限 20%
+        fund.setFundCategory(FundCategory.BROAD_BASE);
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        // singlePositionPct=0.25 > 0.20;totalEquityAmount=10000;卖出金额=(0.25-0.20)×10000=500;份额=500/1.0=500
-        CapitalContext capital = capitalWithPosition(new BigDecimal("0.25"), new BigDecimal("10000"));
+        // singlePositionPct=0.35 > 0.30(单只上限无关类型);totalEquityAmount=10000;卖出金额=(0.35-0.30)×10000=500;份额=500/1.0=500
+        CapitalContext capital = capitalWithPosition(new BigDecimal("0.35"), new BigDecimal("10000"));
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
@@ -374,13 +374,13 @@ class DisciplineStrategyServiceTest {
     @Test
     void 再平衡_行业基金占比15percent未超限_不触发() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.SECTOR); // 上限 15%
+        fund.setFundCategory(FundCategory.SECTOR); // 单只上限 30%(无关类型)
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
         CapitalContext capital = capitalWithPosition(new BigDecimal("0.15"), new BigDecimal("10000"));
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
-        // 行业基金上限 15%,占比 0.15 == 上限,未超限不触发 SELL
+        // 占比 0.15 < 上限 0.30,未超限不触发 SELL
         assertThat(result.signalType()).as("reason=%s", result.reason()).isNotEqualTo(SignalType.SELL);
     }
 
@@ -441,15 +441,15 @@ class DisciplineStrategyServiceTest {
     @Test
     void ADD信号_单只占比超硬约束上限_降级NONE_HARD_CONSTRAINT_BREACH() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.BROAD_BASE); // 单只上限 20%
-        // ADD tier1: ratio=0.15, singleAddRatio=0.15 <= 0.50 OK;但 singlePositionPct=0.25 > 0.20 违反
+        fund.setFundCategory(FundCategory.BROAD_BASE); // 单只上限 30%(无关类型)
+        // ADD tier1: ratio=0.15, singleAddRatio=0.15 <= 0.50 OK;但 singlePositionPct=0.35 > 0.30 违反
         MarketIndicators market = new MarketIndicators(
                 new BigDecimal("0.91"), true, true,
                 WeeklyMacdState.GREEN_SHRINKING, VolumeState.NORMAL,
                 BigDecimal.ZERO, false, VolumeState.NORMAL, false);
         CapitalContext capital = new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("0.91"),
-                new BigDecimal("0.25"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("0.35"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), new BigDecimal("100"), Instant.now());
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
