@@ -150,6 +150,14 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* 盈亏双行单元格(涨跌幅 + 盈亏额),紧凑等宽 */
+.pnl-cell {
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+}
+.pnl-cell > div { font-size: 13px; }
+
 /* ===== 移动端底部导航 ===== */
 .app-bottom-nav {
     display: none;
@@ -242,4 +250,14 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 /* ===== 操作区危险链接(归档等) ===== */
 .danger-link {
     color: var(--color-danger);
+}
+
+/* ===== 全局错误通知(ui-ux-pro-max:错误须清晰可读、数字便于看清) ===== */
+.app-error-notice .ant-notification-notice-message {
+    font-weight: 600;
+}
+/* 描述里的金额/数字用等宽字体,深色背景下对比清晰(便于看清如 5250.00) */
+.app-error-notice .ant-notification-notice-description {
+    font-family: var(--font-mono, 'Fira Code', ui-monospace, monospace);
+    color: var(--color-text);
 }

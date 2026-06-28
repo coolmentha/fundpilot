@@ -5,6 +5,7 @@ import com.fundpilot.backend.strategy.service.BacktestWindow;
 import com.fundpilot.backend.strategy.service.StrategyBacktestService;
 import com.fundpilot.backend.strategy.service.StrategyConfigRequest;
 import com.fundpilot.backend.strategy.service.StrategyConfigService;
+import com.fundpilot.backend.strategy.service.StrategyOptimizeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +29,7 @@ public class StrategyController {
 
     private final StrategyConfigService strategyConfigService;
     private final StrategyBacktestService strategyBacktestService;
+    private final StrategyOptimizeService strategyOptimizeService;
 
     @GetMapping("/api/funds/{fundId}/strategies")
     public ApiResponse<List<FundStrategyView>> listByFund(@PathVariable Long fundId) {
@@ -38,6 +40,17 @@ public class StrategyController {
     public ApiResponse<Map<String, Long>> create(@PathVariable Long fundId,
                                                  @RequestBody StrategyConfigRequest request) {
         Long id = strategyConfigService.createDraft(fundId, request);
+        return ApiResponse.ok(Map.of("id", id));
+    }
+
+    /**
+     * 自动寻优(issue #29):从默认基准出发网格搜索最优参数,样本外验证通过则落库草稿 + calibrate。
+     * 同步执行(网格约 64 组回测,秒级),与"新建策略"同层(集合级创建语义),返回新建 strategyId。
+     * 寻优未找到 test 集达标参数时抛 OPTIMIZATION_NO_VALID_PARAMS(400)。
+     */
+    @PostMapping("/api/funds/{fundId}/strategies/optimize")
+    public ApiResponse<Map<String, Long>> optimize(@PathVariable Long fundId) {
+        Long id = strategyOptimizeService.optimize(fundId);
         return ApiResponse.ok(Map.of("id", id));
     }
 

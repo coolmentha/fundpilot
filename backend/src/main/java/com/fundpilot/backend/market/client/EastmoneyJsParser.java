@@ -4,8 +4,7 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,23 +42,24 @@ public final class EastmoneyJsParser {
             }
 
             List<FundNavSnapshot> result = new ArrayList<>(size);
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
             for (int i = 0; i < size; i++) {
                 Value nw = netWorth.getArrayElement(i);
                 Value aw = acWorth.getArrayElement(i);
 
-                LocalDate date = LocalDate.parse(String.valueOf(nw.getMember("x").asLong()), fmt);
+                // netWorth 元素是对象 {x: 毫秒戳, y: 单位净值, ...};acWorth 元素是二元数组 [毫秒戳, 累计净值]
+                Instant date = Instant.ofEpochMilli(nw.getMember("x").asLong());
                 BigDecimal nav = BigDecimal.valueOf(nw.getMember("y").asDouble());
-                BigDecimal accumulatedNav = BigDecimal.valueOf(aw.getMember("y").asDouble());
-                result.add(new FundNavSnapshot(date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(), nav, accumulatedNav));
+                BigDecimal accumulatedNav = BigDecimal.valueOf(aw.getArrayElement(1).asDouble());
+                result.add(new FundNavSnapshot(date, nav, accumulatedNav));
             }
             return List.copyOf(result);
         }
     }
 
     /**
-     * 解析 fundcode_search.js 提取全量基金字典(数组的数组,内层 [fundCode, fundName, rawType, ...])。
-     * 取前三个字段为 {@link FundDictEntry},rawName 供 #8 启发式分类用。
+     * 解析 fundcode_search.js 提取全量基金字典。
+     * <p>真实响应是 5 元组数组:{@code [fundCode, 拼音缩写, fundName(中文), 类型描述, 拼音全称]}。
+     * 取 {@code [0]} 代码、{@code [2]} 中文名称、{@code [3]} 类型描述(如"混合型-灵活"/"指数型-股票")。
      *
      * @param rawJs fundcode_search.js 原始响应文本
      * @return 全量基金条目列表
@@ -77,8 +77,8 @@ public final class EastmoneyJsParser {
                 Value row = arr.getArrayElement(i);
                 result.add(new FundDictEntry(
                         row.getArrayElement(0).asString(),
-                        row.getArrayElement(1).asString(),
-                        row.getArrayElement(2).asString()
+                        row.getArrayElement(2).asString(),
+                        row.getArrayElement(3).asString()
                 ));
             }
             return List.copyOf(result);
@@ -88,23 +88,26 @@ public final class EastmoneyJsParser {
     /**
      * 解析 push2his.eastmoney.com 指数 K 线 JSON 响应,提取 {@code data.klines} 中的 OHLCV 字符串数组,
      * 每行 CSV 格式 {@code yyyy-MM-dd,open,close,high,low,volume,...}。
-     * 用 GraalVM JS 的 {@code JSON.parse}(JSON 是合法 JS 表达式),与其它 parseXxx 风格一致。
+     * <p>用 Jackson 解析 JSON(响应是标准 JSON,Jackson 比 GraalVM JS 的 JSON.parse 对大响应更可靠),
+     * 仅净值/字典两条线因是 JS 字面量才用 GraalVM。
      *
      * @param rawJson push2his 响应文本(JSON)
      * @return 按日期升序的 K 线柱线集合
      */
     public static IndexKline parseIndexKline(String rawJson) {
-        try (Context context = Context.create("js")) {
-            Value parsed = context.eval("js", "JSON.parse(" + jsStringLiteral(rawJson) + ")");
-            Value klines = parsed.getMember("data").getMember("klines");
-            if (!klines.hasArrayElements() || klines.getArraySize() == 0) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode klines = root.path("data").path("klines");
+            if (!klines.isArray() || klines.isEmpty()) {
                 return new IndexKline(List.of());
             }
-            int size = (int) klines.getArraySize();
-            List<IndexKline.Bar> bars = new ArrayList<>(size);
-            for (int i = 0; i < size; i++) {
-                String csv = klines.getArrayElement(i).asString();
+            List<IndexKline.Bar> bars = new ArrayList<>(klines.size());
+            for (com.fasterxml.jackson.databind.JsonNode csvNode : klines) {
+                String csv = csvNode.asText();
                 String[] parts = csv.split(",");
+                if (parts.length < 6) {
+                    continue; // 跳过空行/汇总行等非标准行
+                }
                 bars.add(new IndexKline.Bar(
                         java.time.LocalDate.parse(parts[0]).atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
                         new BigDecimal(parts[1]),
@@ -115,8 +118,12 @@ public final class EastmoneyJsParser {
                 ));
             }
             return new IndexKline(List.copyOf(bars));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("指数 K 线 JSON 解析失败", e);
         }
     }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
     /**
      * 把 Java 字符串转成 JS 字符串字面量(转义反斜杠和引号),供 {@code JSON.parse(...)} 调用。

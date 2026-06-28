@@ -1,10 +1,11 @@
 import {useState} from 'react';
-import {App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
-import {PlayCircleOutlined, PlusOutlined} from '@ant-design/icons';
+import {Alert, App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
+import {PlayCircleOutlined, PlusOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {
     useActiveStrategy,
     useBacktests,
     useCreateStrategy,
+    useOptimizeStrategy,
     useStrategies,
     useStrategyAction,
     useUpdateStrategy,
@@ -25,6 +26,7 @@ export default function StrategyTab({fundId}) {
     const createStrategy = useCreateStrategy(fundId);
     const updateStrategy = useUpdateStrategy(fundId);
     const strategyAction = useStrategyAction(fundId);
+    const optimizeStrategy = useOptimizeStrategy(fundId);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -45,6 +47,13 @@ export default function StrategyTab({fundId}) {
         await strategyAction.mutateAsync({id: strategyId, action});
         message.success(`操作完成：${action}`);
     };
+    const onOptimize = async () => {
+        const {id} = await optimizeStrategy.mutateAsync();
+        // 寻优完成(不承诺"已通过"——落库走全窗口 calibrate,可能 CALIBRATION_FAILED,见 ADR-0007)
+        message.success('寻优完成');
+        // 自动展开新策略回测历史,让用户立即看到全窗口回测结果
+        setBacktestStrategyId(id);
+    };
 
     const tierColumns = [
         {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
@@ -57,9 +66,9 @@ export default function StrategyTab({fundId}) {
         {
             title: '操作', width: 280, render: (_, r) => (
                 <Space wrap size="small">
-                    {r.status === 'PENDING_CALIBRATION' &&
+                    {(r.status === 'PENDING_CALIBRATION' || r.status === 'CALIBRATION_FAILED') &&
                         <Button size="small" onClick={() => { setEditing(r); setModalOpen(true); }}>编辑</Button>}
-                    {r.status === 'PENDING_CALIBRATION' &&
+                    {(r.status === 'PENDING_CALIBRATION' || r.status === 'CALIBRATION_FAILED') &&
                         <Popconfirm title="校准并自动回测？" onConfirm={() => doAction(r.id, 'calibrate')}>
                             <Button size="small" type="primary">校准</Button>
                         </Popconfirm>}
@@ -79,7 +88,7 @@ export default function StrategyTab({fundId}) {
     ];
 
     const backtestColumns = [
-        {title: '通过', dataIndex: 'passed', width: 80, render: (v) => <StatusTag value={v ? 'PASSED' : 'CANCELLED'}/>},
+        {title: '通过', dataIndex: 'passed', width: 80, render: (v) => <StatusTag value={v ? 'PASSED' : 'FAILED'}/>},
         {title: '策略收益', dataIndex: 'strategyReturn', width: 110, align: 'right', render: percent},
         {title: '策略回撤', dataIndex: 'strategyMaxDrawdown', width: 110, align: 'right', render: percent},
         {title: '沪深300收益', dataIndex: 'benchmarkHs300Return', width: 120, align: 'right', render: percent},
@@ -100,7 +109,11 @@ export default function StrategyTab({fundId}) {
                     </Space>
                 </Card>
             )}
-            <div style={{display: 'flex', justifyContent: 'flex-end'}}>
+            <div style={{display: 'flex', justifyContent: 'flex-end', gap: 8}}>
+                <Popconfirm title="自动网格搜索最优参数？可能耗时数秒"
+                            onConfirm={onOptimize}>
+                    <Button icon={<ThunderboltOutlined/>} loading={optimizeStrategy.isPending}>自动寻优</Button>
+                </Popconfirm>
                 <Button type="primary" icon={<PlusOutlined/>}
                         onClick={() => { setEditing(null); setModalOpen(true); }}>新建策略</Button>
             </div>
@@ -109,6 +122,8 @@ export default function StrategyTab({fundId}) {
             {backtestStrategyId && (
                 <Card title={`回测历史 #${backtestStrategyId}`} extra={
                     <Button size="small" onClick={() => setBacktestStrategyId(null)}>关闭</Button>}>
+                    <Alert type="info" showIcon style={{marginBottom: 12}}
+                           message="历史表现不代表未来收益,样本外验证降低但无法消除过拟合风险"/>
                     <Table rowKey="id" size="small" dataSource={backtests} columns={backtestColumns}
                            pagination={false} scroll={{x: 800}}/>
                 </Card>

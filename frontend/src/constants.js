@@ -16,7 +16,8 @@ export const labels = {
     INDEX_ENHANCED: '指数增强',
     // StrategyParamStatus
     PENDING_CALIBRATION: '待校准',
-    CALIBRATED: '已校准',
+    CALIBRATED: '已通过',
+    CALIBRATION_FAILED: '未通过',
     EFFECTIVE: '已生效',
     // SignalType
     NONE: '无建议',
@@ -27,6 +28,9 @@ export const labels = {
     PENDING: '待确认',
     CONFIRMED: '已确认',
     CANCELLED: '已取消',
+    // Backtest passed(非后端枚举,前端回测结果展示用)
+    PASSED: '通过',
+    FAILED: '未通过',
     // FundTransactionSource
     INCREASE: '加仓',
     DECREASE: '减仓',
@@ -51,7 +55,7 @@ export const labels = {
 export const tagColor = (value) => {
     const greens = ['HOLDING', 'CONFIRMED', 'CALIBRATED', 'EFFECTIVE', 'PASSED', 'BUILD', 'INCREASE'];
     const golds = ['PENDING_HOLDING', 'PENDING_CALIBRATION', 'PENDING', 'ADD', 'INVEST'];
-    const reds = ['CLEARED', 'CANCELLED', 'SELL', 'DECREASE'];
+    const reds = ['CLEARED', 'CANCELLED', 'SELL', 'DECREASE', 'FAILED', 'CALIBRATION_FAILED'];
     if (greens.includes(value)) return 'green';
     if (golds.includes(value)) return 'gold';
     if (reds.includes(value)) return 'red';
@@ -116,3 +120,43 @@ export const fundSourceOptions = [
     {value: 'TRANSFER_OUT', label: '转出'},
     {value: 'INVEST', label: '定投'},
 ];
+
+// 后端 ErrorCode → 友好标题映射(报错弹窗用)。枚举值需与后端 ErrorCode.name() 一致。
+// 设计原则(ui-ux-pro-max):错误需可被读屏 announced、提供 recovery 线索、信息清晰可看清。
+export const errorTitles = {
+    // 资源未找到
+    FUND_NOT_FOUND: '基金不存在',
+    STRATEGY_NOT_FOUND: '策略不存在',
+    TRANSACTION_NOT_FOUND: '交易不存在',
+    SIGNAL_LOG_NOT_FOUND: '信号不存在',
+    USER_CONFIG_NOT_INITIALIZED: '未配置总可投资金',
+    ENTITY_NOT_FOUND: '记录不存在',
+    MISSING_FUND_IDENTITY: '缺少基金身份信息',
+    // 输入校验
+    PLANNED_AMOUNT_EXCEEDS_LIMIT: '计划仓位超限',
+    FUND_CATEGORY_REQUIRED: '缺少基金类型',
+    MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
+    // 交易/信号状态非法
+    TRANSACTION_ALREADY_CONFIRMED: '交易已确认',
+    TRANSACTION_ALREADY_CANCELLED: '交易已撤销',
+    INVALID_SIGNAL_TYPE: '信号类型非法',
+    MISSING_TRIGGER_TIER: '缺少触发档位',
+    INVALID_TRIGGER_TIER: '触发档位非法',
+    MISSING_ACTUAL_AMOUNT: '缺少实际金额',
+    MISSING_ACTUAL_SHARES: '缺少实际份额',
+    UNSUPPORTED_SELL_REASON: '卖出原因不支持',
+    NO_VALID_BACKTEST: '无有效回测',
+    ILLEGAL_STATE_TRANSITION: '状态切换非法',
+    // 寻优
+    OPTIMIZATION_NO_VALID_PARAMS: '寻优未达标',
+    // 数据源
+    NAV_HISTORY_EMPTY: '净值历史为空',
+    MARKET_DATA_ALL_SOURCES_FAILED: '行情数据源全部失败',
+    // 兜底
+    INTERNAL_ERROR: '服务异常',
+    NETWORK_ERROR: '网络异常',
+    BAD_RESPONSE: '响应异常',
+};
+
+// 报错标题:未命中映射时回退到 code 本身或通用文案。
+export const errorTitle = (code) => errorTitles[code] || (code ? code : '操作失败');

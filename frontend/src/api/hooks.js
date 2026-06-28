@@ -98,6 +98,14 @@ export function useStrategyAction(fundId) {
         onSuccess,
     });
 }
+/** 自动寻优(issue #30):从默认基准网格搜索最优参数,样本外验证通过则落库草稿+calibrate。 */
+export function useOptimizeStrategy(fundId) {
+    const onSuccess = invalidateStrategies(fundId);
+    return useMutation({
+        mutationFn: () => post(`/api/funds/${fundId}/strategies/optimize`),
+        onSuccess,
+    });
+}
 
 // ===== 信号 =====
 export function useSignalsToday(fundId) {
@@ -143,6 +151,16 @@ export function useCancelTransaction() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id) => post(`/api/transactions/${id}/cancel`),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['funds']});
+        },
+    });
+}
+export function useConfirmTransaction() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id) => post(`/api/transactions/${id}/confirm`),
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
             qc.invalidateQueries({queryKey: ['funds']});

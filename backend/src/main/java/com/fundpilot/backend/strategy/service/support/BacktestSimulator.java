@@ -1,106 +1,208 @@
 package com.fundpilot.backend.strategy.service.support;
 
+import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.StrategyParamStatus;
+import com.fundpilot.backend.signal.enums.MeasureUnit;
+import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
+import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 回测策略模拟器(issue #11):在历史净值序列上模拟执行某版策略参数。
+ * 回测策略模拟器(issue #11 重构):逐日调用 {@link DisciplineStrategyService#evaluateSignal}
+ * 在历史净值序列上模拟执行策略,与生产信号引擎口径一致(BUILD/ADD/SELL 三路 + 反弹清空 + 硬约束 + MIN_HOLD_DAYS)。
  *
- * <h3>简化版规则(#12 信号引擎完成前的临时内联子集)</h3>
+ * <h3>核心机制</h3>
  * <ul>
- *   <li>建仓/加仓:从持仓期峰值(peak)回撤达 tier1/2/3/4 阈值时,按对应比例加仓</li>
- *   <li>每档阈值整轮回测只触发一次(避免反复加仓);#12 完成后若需多轮刷新再扩展</li>
- *   <li>移动止盈:持仓市值从持仓期峰值回落 ≥ stopLossPullbackPercent 时全部卖出</li>
- *   <li>加仓金额 = plannedTotalAmount × tierRatio(单档预算)</li>
+ *   <li>内存构造 {@code FundEntity}(status 从 PENDING_HOLDING 推进)+ {@code FundStrategyEntity}(tierNAddedAt 随引擎 mutate)</li>
+ *   <li>逐日构造 {@link MarketIndicators}(由 {@link BacktestIndicatorCalculator} 预算)+ {@link CapitalContext} 调 evaluateSignal</li>
+ *   <li>信号即执行(回测假设当日净值确认):BUILD→建仓+HOLDING;ADD→加仓+置档;SELL→减仓+清档/清仓</li>
+ *   <li>反弹清空副作用由 evaluateSignal 直接改内存 strategy.tierNAddedAt,无需额外处理</li>
  * </ul>
  *
- * <p>#12 完成后,本模拟器应重构为调用 {@code DisciplineStrategyService.evaluateSignal} 的核心逻辑。
+ * <h3>组合占比简化</h3>
+ * 单基金孤立回测,组合风控(硬约束单只/单类/总权益上限)无意义,故 CapitalContext 的占比字段
+ * 填不超限小值(0.1)骗过 check5,避免 BUILD/ADD 被组合硬约束误降级;再平衡因此不触发(回测不关心组合再平衡)。
+ * 真实持仓金额/份额/峰值仍如实维护,保证移动止盈/逻辑止损判定正确。
  */
 public final class BacktestSimulator {
 
     private static final MathContext MATH = MathContext.DECIMAL64;
+    /** 占比骗过硬约束的小值(单只/单类/总权益上限均 ≥ 15%,0.1 永不超限)。 */
+    private static final BigDecimal MOCK_POSITION_PCT = new BigDecimal("0.1");
+    private static final int MIN_HOLD_DAYS = 5;
 
     private BacktestSimulator() {
     }
 
     /**
-     * @param navSequence 累计净值序列(按日期升序)
+     * @param navSequence 累计净值序列(升序)
+     * @param navDates    对应日期(升序,等长)
+     * @param indicators  逐日行情指标(由 BacktestIndicatorCalculator 预算,等长)
      * @param params      策略参数
      * @return 策略收益率 + 逐日市值序列
      */
-    public static BacktestResult simulate(List<BigDecimal> navSequence, BacktestParams params) {
+    public static BacktestResult simulate(
+            List<BigDecimal> navSequence, List<Instant> navDates,
+            List<MarketIndicators> indicators, BacktestParams params) {
         if (navSequence == null || navSequence.isEmpty()) {
             return new BacktestResult(BigDecimal.ZERO, List.of());
         }
-        BigDecimal shares = BigDecimal.ZERO;
+        DisciplineStrategyService engine = new DisciplineStrategyService();
+        FundEntity fund = newMemFund(params);
+        FundStrategyEntity strategy = newMemStrategy(params);
+
+        BigDecimal holdingShares = BigDecimal.ZERO;
+        BigDecimal buildShares = BigDecimal.ZERO;
+        Map<Integer, BigDecimal> tierAddShares = new HashMap<>();
+        tierAddShares.put(1, BigDecimal.ZERO);
+        tierAddShares.put(2, BigDecimal.ZERO);
+        tierAddShares.put(3, BigDecimal.ZERO);
+        tierAddShares.put(4, BigDecimal.ZERO);
         BigDecimal invested = BigDecimal.ZERO;
         BigDecimal peakNav = BigDecimal.ZERO;
-        BigDecimal peakMarketValue = BigDecimal.ZERO;
-        BigDecimal cashAfterExit = null; // 止盈后持有的现金(份额清零,不再随净值变)
-        boolean[] tierFired = new boolean[4];
-        List<BigDecimal> dailyValues = new ArrayList<>(navSequence.size());
+        BigDecimal holdingPeriodPeakNav = BigDecimal.ZERO;
+        BigDecimal cashAfterExit = null;
+        Instant lastBuy = null;
 
-        for (BigDecimal nav : navSequence) {
+        List<BigDecimal> dailyValues = new ArrayList<>(navSequence.size());
+        for (int i = 0; i < navSequence.size(); i++) {
+            BigDecimal nav = navSequence.get(i);
+            Instant date = i < navDates.size() ? navDates.get(i) : Instant.EPOCH;
+            MarketIndicators market = i < indicators.size() ? indicators.get(i) : null;
+
             if (cashAfterExit != null) {
-                // 已止盈清仓,市值固定为现金
                 dailyValues.add(cashAfterExit);
                 continue;
             }
+            if (market == null) {
+                dailyValues.add(holdingShares.multiply(nav, MATH));
+                continue;
+            }
+
             if (nav.compareTo(peakNav) > 0) {
                 peakNav = nav;
             }
-            BigDecimal drawdown = peakNav.subtract(nav).divide(peakNav, MATH);
-            // 加仓判定:四档回撤阈值
-            if (!tierFired[0] && drawdown.compareTo(params.tier1Drawdown()) >= 0) {
-                BigDecimal amount = params.plannedTotalAmount().multiply(params.tier1Ratio(), MATH);
-                shares = shares.add(amount.divide(nav, MATH));
-                invested = invested.add(amount);
-                tierFired[0] = true;
+            if (fund.getStatus() == FundStatus.HOLDING && nav.compareTo(holdingPeriodPeakNav) > 0) {
+                holdingPeriodPeakNav = nav;
             }
-            if (!tierFired[1] && drawdown.compareTo(params.tier2Drawdown()) >= 0) {
-                BigDecimal amount = params.plannedTotalAmount().multiply(params.tier2Ratio(), MATH);
-                shares = shares.add(amount.divide(nav, MATH));
-                invested = invested.add(amount);
-                tierFired[1] = true;
-            }
-            if (!tierFired[2] && drawdown.compareTo(params.tier3Drawdown()) >= 0) {
-                BigDecimal amount = params.plannedTotalAmount().multiply(params.tier3Ratio(), MATH);
-                shares = shares.add(amount.divide(nav, MATH));
-                invested = invested.add(amount);
-                tierFired[2] = true;
-            }
-            if (!tierFired[3] && drawdown.compareTo(params.tier4Drawdown()) >= 0) {
-                BigDecimal amount = params.plannedTotalAmount().multiply(params.tier4Ratio(), MATH);
-                shares = shares.add(amount.divide(nav, MATH));
-                invested = invested.add(amount);
-                tierFired[3] = true;
-            }
-            // 移动止盈:持仓市值从峰值回落 >= 阈值 → 全部卖出,锁定现金
-            BigDecimal marketValue = shares.multiply(nav, MATH);
-            if (marketValue.compareTo(peakMarketValue) > 0) {
-                peakMarketValue = marketValue;
-            }
-            if (peakMarketValue.signum() > 0 && invested.signum() > 0) {
-                BigDecimal pullback = peakMarketValue.subtract(marketValue).divide(peakMarketValue, MATH);
-                if (pullback.compareTo(params.stopLossPullbackPercent()) >= 0) {
-                    cashAfterExit = marketValue;
-                    shares = BigDecimal.ZERO;
-                    peakMarketValue = BigDecimal.ZERO;
-                    marketValue = cashAfterExit;
+
+            BigDecimal totalEquityAmount = holdingShares.multiply(nav, MATH);
+            CapitalContext capital = new CapitalContext(
+                    peakNav, holdingPeriodPeakNav,
+                    MOCK_POSITION_PCT, MOCK_POSITION_PCT, MOCK_POSITION_PCT,
+                    totalEquityAmount, params.plannedTotalAmount(),
+                    buildShares, tierAddShares, holdingShares, lastBuy);
+            long tradingDaysSinceLastBuy = lastBuy == null
+                    ? MIN_HOLD_DAYS + 1
+                    : Math.max(0, i - indexOf(navDates, lastBuy));
+
+            SignalResult signal = engine.evaluateSignal(fund, strategy, market, capital, date, tradingDaysSinceLastBuy);
+
+            // 信号即执行(当日净值确认)
+            if (signal.signalType() == SignalType.BUILD) {
+                BigDecimal amount = signal.suggestedMeasure().getValue();
+                BigDecimal shares = amount.divide(nav, MATH);
+                holdingShares = holdingShares.add(shares, MATH);
+                buildShares = buildShares.add(shares, MATH);
+                invested = invested.add(amount, MATH);
+                fund.setStatus(FundStatus.HOLDING);
+                fund.setOpenedAt(date);
+                lastBuy = date;
+            } else if (signal.signalType() == SignalType.ADD && signal.triggerTier() != null) {
+                int tier = signal.triggerTier();
+                BigDecimal amount = signal.suggestedMeasure().getValue();
+                BigDecimal shares = amount.divide(nav, MATH);
+                holdingShares = holdingShares.add(shares, MATH);
+                tierAddShares.put(tier, tierAddShares.get(tier).add(shares, MATH));
+                invested = invested.add(amount, MATH);
+                setTierAddedAt(strategy, tier, date);
+                lastBuy = date;
+            } else if (signal.signalType() == SignalType.SELL) {
+                BigDecimal sharesToSell = signal.suggestedMeasure().getValue();
+                holdingShares = holdingShares.subtract(sharesToSell, MATH);
+                if (signal.triggerTier() != null) {
+                    setTierAddedAt(strategy, signal.triggerTier(), null);
+                }
+                if (holdingShares.signum() <= 0) {
+                    holdingShares = BigDecimal.ZERO;
+                    clearAllTiers(strategy);
+                    fund.setStatus(FundStatus.CLEARED);
+                    cashAfterExit = totalEquityAmount;
                 }
             }
+
+            BigDecimal marketValue = holdingShares.multiply(nav, MATH);
             dailyValues.add(marketValue);
         }
+
         BigDecimal finalValue = cashAfterExit != null
                 ? cashAfterExit
-                : (shares.signum() > 0
-                        ? shares.multiply(navSequence.get(navSequence.size() - 1), MATH)
+                : (holdingShares.signum() > 0
+                        ? holdingShares.multiply(navSequence.get(navSequence.size() - 1), MATH)
                         : BigDecimal.ZERO);
         BigDecimal strategyReturn = invested.signum() > 0
                 ? finalValue.subtract(invested).divide(invested, MATH)
                 : BigDecimal.ZERO;
-        return new BacktestResult(strategyReturn, dailyValues);
+        return new BacktestResult(strategyReturn, List.copyOf(dailyValues));
+    }
+
+    private static FundEntity newMemFund(BacktestParams params) {
+        FundEntity fund = new FundEntity();
+        fund.setStatus(FundStatus.PENDING_HOLDING);
+        fund.setFundCategory(params.fundCategory());
+        fund.setFundSubType(params.fundSubType());
+        fund.setPlannedTotalAmount(params.plannedTotalAmount());
+        return fund;
+    }
+
+    private static FundStrategyEntity newMemStrategy(BacktestParams params) {
+        FundStrategyEntity strategy = new FundStrategyEntity();
+        strategy.setStatus(StrategyParamStatus.EFFECTIVE);
+        strategy.setTier1Drawdown(params.tier1Drawdown());
+        strategy.setTier2Drawdown(params.tier2Drawdown());
+        strategy.setTier3Drawdown(params.tier3Drawdown());
+        strategy.setTier4Drawdown(params.tier4Drawdown());
+        strategy.setTier1Ratio(params.tier1Ratio());
+        strategy.setTier2Ratio(params.tier2Ratio());
+        strategy.setTier3Ratio(params.tier3Ratio());
+        strategy.setTier4Ratio(params.tier4Ratio());
+        strategy.setWeeklyCoolDownThreshold(params.weeklyCoolDownThreshold());
+        strategy.setStopLossPullbackPercent(params.stopLossPullbackPercent());
+        return strategy;
+    }
+
+    private static void setTierAddedAt(FundStrategyEntity strategy, int tier, Instant value) {
+        switch (tier) {
+            case 1 -> strategy.setTier1AddedAt(value);
+            case 2 -> strategy.setTier2AddedAt(value);
+            case 3 -> strategy.setTier3AddedAt(value);
+            case 4 -> strategy.setTier4AddedAt(value);
+        }
+    }
+
+    private static void clearAllTiers(FundStrategyEntity strategy) {
+        strategy.setTier1AddedAt(null);
+        strategy.setTier2AddedAt(null);
+        strategy.setTier3AddedAt(null);
+        strategy.setTier4AddedAt(null);
+    }
+
+    /** 在 navDates 里找 lastBuy 的索引(近似交易日数);找不到返 i。 */
+    private static int indexOf(List<Instant> navDates, Instant lastBuy) {
+        for (int j = 0; j < navDates.size(); j++) {
+            if (navDates.get(j).equals(lastBuy)) {
+                return j;
+            }
+        }
+        return 0;
     }
 }

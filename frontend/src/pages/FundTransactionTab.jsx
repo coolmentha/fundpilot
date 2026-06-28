@@ -1,7 +1,7 @@
 import {useState} from 'react';
-import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert} from 'antd';
+import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space} from 'antd';
 import {PlusOutlined} from '@ant-design/icons';
-import {useFundTransactions, useCancelTransaction, useCreateManualTransaction} from '../api/hooks.js';
+import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -19,6 +19,7 @@ const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT']);
 export default function FundTransactionTab({fundId}) {
     const {data: transactions, isLoading} = useFundTransactions(fundId);
     const cancelTx = useCancelTransaction();
+    const confirmTx = useConfirmTransaction();
     const createManual = useCreateManualTransaction(fundId);
     const [open, setOpen] = useState(false);
     const [form] = Form.useForm();
@@ -36,10 +37,16 @@ export default function FundTransactionTab({fundId}) {
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
         {title: '状态', dataIndex: 'status', width: 110, render: (v) => <StatusTag value={v}/>},
         {
-            title: '', width: 90, render: (_, r) => r.status === 'PENDING' && (
-                <Popconfirm title="撤单该笔交易?" onConfirm={() => cancelTx.mutate(r.id)}>
-                    <Button type="link" size="small" danger loading={cancelTx.isPending}>撤单</Button>
-                </Popconfirm>
+            title: '', width: 130, render: (_, r) => r.status === 'PENDING' && (
+                <Space size={0}>
+                    <Popconfirm title="确认该笔交易?" description="用最新净值回填另一侧并转 CONFIRMED"
+                                onConfirm={() => confirmTx.mutate(r.id)}>
+                        <Button type="link" size="small" loading={confirmTx.isPending}>确认</Button>
+                    </Popconfirm>
+                    <Popconfirm title="撤单该笔交易?" onConfirm={() => cancelTx.mutate(r.id)}>
+                        <Button type="link" size="small" danger loading={cancelTx.isPending}>撤单</Button>
+                    </Popconfirm>
+                </Space>
             ),
         },
     ];

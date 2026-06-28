@@ -13,7 +13,7 @@ export default function AdminPage() {
             const result = await adminAction.mutateAsync(action);
             message.success(successMsg(result));
         } catch (e) {
-            message.error(e.message);
+            // 错误由全局 mutation onError 弹 notification,这里不重复提示
         }
     };
 
@@ -50,6 +50,15 @@ export default function AdminPage() {
                         </Popconfirm>
                     }>
                         <Text type="secondary">从东方财富拉取所有 EFFECTIVE 基金的行情指标快照。</Text>
+                    </Card>
+                    <Card size="small" title="基金字典同步" extra={
+                        <Popconfirm title="拉取全量基金字典并更新本地缓存？" onConfirm={() =>
+                            run('sync-dict', (r) => `字典同步完成，更新 ${r?.upserted ?? 0} 条`)}>
+                            <Button icon={<DatabaseOutlined/>}
+                                    loading={adminAction.isPending}>同步字典</Button>
+                        </Popconfirm>
+                    }>
+                        <Text type="secondary">每日 03:00 自动触发，拉东方财富全量字典 upsert 到 fund_dict 表，供新建基金搜索框自动补全。</Text>
                     </Card>
                 </Space>
             </Card>

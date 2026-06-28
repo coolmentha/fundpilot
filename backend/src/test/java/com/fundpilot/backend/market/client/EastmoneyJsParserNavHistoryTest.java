@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EastmoneyJsParserNavHistoryTest {
 
     private static final String SAMPLE = """
-            var Data_netWorthTrend = [{"x":20240624,"y":1.0000,"equityReturn":0.0,"unitMoney":""},{"x":20240625,"y":1.0100,"equityReturn":0.01,"unitMoney":""}];
-            var Data_ACWorthTrend = [{"x":20240624,"y":2.0000,"equityReturn":0.0,"unitMoney":""},{"x":20240625,"y":2.0200,"equityReturn":0.01,"unitMoney":""}];
+            var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000,"equityReturn":0.0,"unitMoney":""},{"x":1719273600000,"y":1.0100,"equityReturn":0.01,"unitMoney":""}];
+            var Data_ACWorthTrend = [[1719187200000,2.0000],[1719273600000,2.0200]];
             """;
 
     @Test

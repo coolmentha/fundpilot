@@ -138,6 +138,47 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void calibrate_回测未通过_进_CALIBRATION_FAILED_可校准重测() {
+        FundEntity fund = persistFund();
+        Long strategyId = strategyConfigService.createDraft(fund.getId(), sampleRequest());
+        // Mock #11.run 返回 passed=false(收益不达标)
+        when(strategyBacktestService.run(eq(strategyId), any(BacktestWindow.class)))
+                .thenReturn(backtestEntity(strategyId, false));
+
+        strategyConfigService.calibrate(strategyId);
+
+        FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
+        // 未通过:进 CALIBRATION_FAILED(不是 CALIBRATED)
+        assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.CALIBRATION_FAILED);
+        // 回测结果照样留痕(供前端展示为何不通过)
+        assertThat(strategyBacktestRepository.existsByFundStrategyEntity_IdAndPassedTrue(strategyId)).isFalse();
+        // 未通过态可再次 calibrate 重测(通过则进 CALIBRATED)
+        when(strategyBacktestService.run(eq(strategyId), any(BacktestWindow.class)))
+                .thenReturn(backtestEntity(strategyId, true));
+        strategyConfigService.calibrate(strategyId);
+        assertThat(fundStrategyRepository.findById(strategyId).orElseThrow().getStatus())
+                .isEqualTo(StrategyParamStatus.CALIBRATED);
+    }
+
+    @Test
+    @Transactional
+    void updateDraft_CALIBRATION_FAILED_改参数回退_PENDING_CALIBRATION() {
+        FundEntity fund = persistFund();
+        Long strategyId = strategyConfigService.createDraft(fund.getId(), sampleRequest());
+        when(strategyBacktestService.run(eq(strategyId), any(BacktestWindow.class)))
+                .thenReturn(backtestEntity(strategyId, false));
+        strategyConfigService.calibrate(strategyId); // 进 CALIBRATION_FAILED
+
+        // 未通过态改参数 → 回退 PENDING_CALIBRATION(旧回测基于旧参数,已失效)
+        strategyConfigService.updateDraft(strategyId, configRequest("0.08", "0.40"));
+
+        FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
+        assertThat(saved.getTier1Drawdown()).isEqualByComparingTo(new BigDecimal("0.08"));
+    }
+
+    @Test
+    @Transactional
     void calibrate_CALIBRATED_状态抛_IllegalStateTransition() {
         FundEntity fund = persistFund();
         Long strategyId = strategyConfigService.createDraft(fund.getId(), sampleRequest());
@@ -187,16 +228,31 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void activate_无_passed_true_回测_抛_NO_VALID_BACKTEST() {
+    void activate_CALIBRATED_但无_passed_true_回测_抛_NO_VALID_BACKTEST() {
         FundEntity fund = persistFund();
         Long strategyId = strategyConfigService.createDraft(fund.getId(), sampleRequest());
-        when(strategyBacktestService.run(eq(strategyId), any(BacktestWindow.class)))
-                .thenReturn(backtestEntity(strategyId, false)); // passed=false
-        strategyConfigService.calibrate(strategyId);
+        // 手动置 CALIBRATED 但不落任何 passed=true 回测(模拟数据异常:已校准却无通过记录)
+        FundStrategyEntity strategy = fundStrategyRepository.findById(strategyId).orElseThrow();
+        strategy.setStatus(StrategyParamStatus.CALIBRATED);
+        fundStrategyRepository.save(strategy);
 
         assertThatThrownBy(() -> strategyConfigService.activate(strategyId))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("无 passed=true 的回测");
+    }
+
+    @Test
+    @Transactional
+    void activate_CALIBRATION_FAILED_未通过_抛_IllegalStateTransition() {
+        FundEntity fund = persistFund();
+        Long strategyId = strategyConfigService.createDraft(fund.getId(), sampleRequest());
+        when(strategyBacktestService.run(eq(strategyId), any(BacktestWindow.class)))
+                .thenReturn(backtestEntity(strategyId, false)); // passed=false
+        strategyConfigService.calibrate(strategyId); // 进 CALIBRATION_FAILED
+
+        // 未通过在 CALIBRATION_FAILED,activate 状态门控(只认 CALIBRATED)拦下
+        assertThatThrownBy(() -> strategyConfigService.activate(strategyId))
+                .isInstanceOf(IllegalStateTransitionException.class);
     }
 
     @Test

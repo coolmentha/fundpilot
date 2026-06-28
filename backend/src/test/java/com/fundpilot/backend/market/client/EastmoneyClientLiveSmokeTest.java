@@ -23,6 +23,11 @@ class EastmoneyClientLiveSmokeTest {
             .requestInterceptor(EastmoneyClientConfig.requestInterceptor())
             .target(EastmoneyClient.class, "https://fund.eastmoney.com/");
 
+    /** 指数 K 线在 push2his.eastmoney.com 独立域名,见 {@link EastmoneyKlineClient}。 */
+    private final EastmoneyKlineClient klineClient = Feign.builder()
+            .requestInterceptor(EastmoneyClientConfig.requestInterceptor())
+            .target(EastmoneyKlineClient.class, "https://push2his.eastmoney.com/");
+
     @Test
     void fetchNavHistory_from510300_lastDateWithin7Days() {
         var snapshots = client.fetchNavHistory("510300");
@@ -42,8 +47,8 @@ class EastmoneyClientLiveSmokeTest {
 
     @Test
     void fetchIndexKline_forSh300_returnsAtLeastOneBar() {
-        // 沪深300 K 线,近一周
-        var kline = client.fetchIndexKline("000300", "week");
+        // 沪深300 secid=1.000300(沪市前缀 1.),lmt 取近 5 根日 K
+        var kline = EastmoneyJsParser.parseIndexKline(klineClient.fetchKlineRaw("1.000300", "5"));
 
         assertThat(kline.bars()).isNotEmpty();
         assertThat(kline.bars().getFirst().close()).isPositive();

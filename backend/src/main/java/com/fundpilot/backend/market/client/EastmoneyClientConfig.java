@@ -40,7 +40,7 @@ public class EastmoneyClientConfig {
     }
 
     /**
-     * 注册 {@link EastmoneyClient} 为 Spring Bean,供业务组件注入。
+     * 注册 {@link EastmoneyClient} 为 Spring Bean(fund.eastmoney.com 域名,净值+字典)。
      *
      * @param baseUrl 东方财富服务基础地址,由 {@code eastmoney.base-url} 配置,默认指向官方域名
      */
@@ -53,15 +53,29 @@ public class EastmoneyClientConfig {
     }
 
     /**
-     * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
-     * <p>降级顺序:东方财富(主) → 同花顺(兜底);全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
-     *
-     * @param eastmoneyClient 东方财富数据源(主)
-     * @param thsClient       同花顺数据源(兜底)
+     * 注册 {@link EastmoneyKlineClient} 为 Spring Bean(push2his.eastmoney.com 域名,指数 K 线)。
+     * K 线接口与基金净值不同域名,故独立 target。
      */
     @Bean
-    public MarketDataSource marketDataSource(EastmoneyClient eastmoneyClient, ThsClient thsClient) {
-        return new MarketDataSourceChain(java.util.List.of(eastmoneyClient, thsClient));
+    public EastmoneyKlineClient eastmoneyKlineClient(
+            @Value("${eastmoney.kline-base-url:https://push2his.eastmoney.com}") String klineBaseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(EastmoneyKlineClient.class, klineBaseUrl);
+    }
+
+    /**
+     * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
+     * <p>降级顺序:东方财富(主,聚合 fund+push2his 两域名) → 同花顺(兜底);
+     * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
+     *
+     * @param eastmoney 东方财富数据源(主,聚合净值/字典/K线)
+     * @param thsClient 同花顺数据源(兜底)
+     */
+    @Bean
+    public MarketDataSource marketDataSource(EastmoneyMarketDataSource eastmoney, ThsClient thsClient) {
+        return new MarketDataSourceChain(java.util.List.of(eastmoney, thsClient));
     }
 
     private EastmoneyClientConfig() {

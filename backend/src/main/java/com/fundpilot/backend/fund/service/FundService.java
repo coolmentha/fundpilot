@@ -121,7 +121,7 @@ public class FundService {
                 .multiply(HardConstraintConfig.singlePositionLimit(fundCategory));
         if (plannedTotalAmount.compareTo(limit) > 0) {
             throw new BusinessException(ErrorCode.PLANNED_AMOUNT_EXCEEDS_LIMIT,
-                    "计划总仓位超过单品种仓位上限 " + limit);
+                    "计划总仓位超过单品种仓位上限 " + limit.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
         }
     }
 

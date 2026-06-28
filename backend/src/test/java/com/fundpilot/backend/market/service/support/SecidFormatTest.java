@@ -18,6 +18,12 @@ class SecidFormatTest {
     }
 
     @Test
+    void 中证指数后缀_CSI_转前缀_2() {
+        assertThat(SecidFormat.fromIndexCode("930713.CSI")).contains("2.930713");
+        assertThat(SecidFormat.fromIndexCode("931865.csi")).contains("2.931865");
+    }
+
+    @Test
     void 小写后缀_也能识别() {
         assertThat(SecidFormat.fromIndexCode("000300.sh")).contains("1.000300");
     }

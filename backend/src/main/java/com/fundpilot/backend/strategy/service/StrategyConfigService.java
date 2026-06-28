@@ -28,12 +28,17 @@ import java.util.Optional;
  *
  * <h3>状态机</h3>
  * <pre>
- * PENDING_CALIBRATION --calibrate--> CALIBRATED --activate--> EFFECTIVE
- *        ^                                  ^                   |
- *        |                                  +---回退(CLEARED)---+
- *        +-------------------retire/回退--------------------+
+ * PENDING_CALIBRATION --calibrate(回测 passed=true)--> CALIBRATED --activate--> EFFECTIVE
+ *        |  ^                                              |
+ *        |  +--updateDraft(改参数后回退)---------------------+
+ *        |
+ *        +--calibrate(passed=false)--> CALIBRATION_FAILED --calibrate--> (重测, 通过则 CALIBRATED)
+ *                                            |
+ *                                            +--updateDraft(改参数后回退 PENDING_CALIBRATION)
  * </pre>
- * <p>同基金同时最多一份 EFFECTIVE(数据库 {@code uq_fund_strategy_effective} 兜底)。
+ * <p>语义:PENDING_CALIBRATION=待校准(参数可改),CALIBRATION_FAILED=未通过(回测不达标,参数可改重测),
+ * CALIBRATED=已通过(回测达标,可激活),EFFECTIVE=已生效。
+ * 同基金同时最多一份 EFFECTIVE(数据库 {@code uq_fund_strategy_effective} 兜底)。
  * activate 新版本时旧 EFFECTIVE 自动回退 CALIBRATED;CLEARED→PENDING_HOLDING 时全员回退 PENDING_CALIBRATION。
  */
 @Service
@@ -61,16 +66,22 @@ public class StrategyConfigService {
     }
 
     /**
-     * 更新草稿参数——仅 PENDING_CALIBRATION 状态可改,否则抛 {@link IllegalStateTransitionException}。
+     * 更新草稿参数——仅 PENDING_CALIBRATION / CALIBRATION_FAILED 可改,否则抛 {@link IllegalStateTransitionException}。
+     * CALIBRATION_FAILED 改参数后回退 PENDING_CALIBRATION(旧回测基于旧参数,已失效)。
      */
     @Transactional
     public void updateDraft(Long strategyId, StrategyConfigRequest request) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
-        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION) {
+        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION
+                && strategy.getStatus() != StrategyParamStatus.CALIBRATION_FAILED) {
             throw new IllegalStateTransitionException(
-                    strategy.getStatus().name(), "PENDING_CALIBRATION(可改参数)");
+                    strategy.getStatus().name(), "待校准/未通过(可改参数)");
         }
         applyRequest(strategy, request);
+        // 未通过态改参数→回退待校准,旧回测失效,需重新校准
+        if (strategy.getStatus() == StrategyParamStatus.CALIBRATION_FAILED) {
+            strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
+        }
         fundStrategyRepository.save(strategy);
     }
 
@@ -110,20 +121,25 @@ public class StrategyConfigService {
     }
 
     /**
-     * 校准:PENDING_CALIBRATION → CALIBRATED,同步触发自动回测(过去一年,不足降级),
-     * 落 {@link StrategyBacktestEntity}。非 PENDING_CALIBRATION 状态抛 {@link IllegalStateTransitionException}。
+     * 校准:PENDING_CALIBRATION / CALIBRATION_FAILED 上跑过去一年回测(基金成立不满一年自动降级起始日),
+     * 落 {@link StrategyBacktestEntity};回测通过(passed=true)推进到 CALIBRATED(已通过),未通过则置 CALIBRATION_FAILED(未通过)。
+     * 非 PENDING_CALIBRATION / CALIBRATION_FAILED 抛 {@link IllegalStateTransitionException}。
      */
     @Transactional
     public void calibrate(Long strategyId) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
-        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION) {
-            throw new IllegalStateTransitionException(strategy.getStatus().name(), "CALIBRATED");
+        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION
+                && strategy.getStatus() != StrategyParamStatus.CALIBRATION_FAILED) {
+            throw new IllegalStateTransitionException(strategy.getStatus().name(), "待校准/未通过");
         }
         // 固定窗口「过去一年」,#11 实现内部对基金成立不满一年自动降级起始日期
         Instant end = Instant.now();
         Instant start = end.minus(BacktestWindow.BACKTEST_WINDOW_DAYS, ChronoUnit.DAYS);
-        strategyBacktestService.run(strategyId, new BacktestWindow(start, end));
-        strategy.setStatus(StrategyParamStatus.CALIBRATED);
+        StrategyBacktestEntity backtest = strategyBacktestService.run(strategyId, new BacktestWindow(start, end));
+        // 通过→已通过(可激活);未通过→未通过(可编辑改参数后重测)
+        strategy.setStatus(backtest.isPassed()
+                ? StrategyParamStatus.CALIBRATED
+                : StrategyParamStatus.CALIBRATION_FAILED);
         fundStrategyRepository.save(strategy);
     }
 

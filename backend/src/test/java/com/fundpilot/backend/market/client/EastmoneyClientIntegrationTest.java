@@ -42,8 +42,8 @@ class EastmoneyClientIntegrationTest {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setBody("""
-                        var Data_netWorthTrend = [{"x":20240624,"y":1.0000}];
-                        var Data_ACWorthTrend = [{"x":20240624,"y":2.0000}];
+                        var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000}];
+                        var Data_ACWorthTrend = [[1719187200000,2.0000]];
                         """));
 
         List<FundNavSnapshot> result = client.fetchNavHistory("000001");
@@ -61,12 +61,14 @@ class EastmoneyClientIntegrationTest {
     void fetchFundDict_parsesAndSendsHeaders() throws Exception {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
-                .setBody("var r = [[\"000001\",\"华夏成长\",\"稳健成长型\"],[\"000011\",\"华夏大盘\",\"积极成长型\"]];"));
+                .setBody("var r = [[\"000001\",\"HXCZHH\",\"华夏成长混合\",\"混合型-灵活\",\"HUAXIACHENGZHANGHUNHE\"],[\"000011\",\"HXDPJX\",\"华夏大盘精选\",\"混合型-灵活\",\"HUAXIADAPANJINGXUAN\"]];"));
 
         List<FundDictEntry> result = client.fetchFundDict();
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).fundCode()).isEqualTo("000001");
+        assertThat(result.get(0).fundName()).isEqualTo("华夏成长混合");
+        assertThat(result.get(0).rawName()).isEqualTo("混合型-灵活");
 
         mockWebServer.takeRequest();
     }

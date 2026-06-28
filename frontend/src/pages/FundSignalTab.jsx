@@ -11,7 +11,7 @@ const {RangePicker} = DatePicker;
 const signalColumns = [
     {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
     {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
-    {title: '系数', dataIndex: 'coefficient', width: 80, render: (v) => v ?? '-'},
+    {title: '系数', dataIndex: 'coefficient', width: 80, render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
     {title: '原因', dataIndex: 'reason', render: text},
     {title: '建议量', width: 120, render: (_, r) => {
         const m = r.suggestedMeasure;

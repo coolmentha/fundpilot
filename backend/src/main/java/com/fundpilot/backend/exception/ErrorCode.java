@@ -35,6 +35,9 @@ public enum ErrorCode {
     NAV_HISTORY_EMPTY,
     MARKET_DATA_ALL_SOURCES_FAILED,
 
+    // 寻优(400)
+    OPTIMIZATION_NO_VALID_PARAMS,
+
     // 兜底(500)
     INTERNAL_ERROR;
 
