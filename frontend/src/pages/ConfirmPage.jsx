@@ -13,7 +13,7 @@ export default function ConfirmPage() {
     const {data: funds} = useFunds();
     const [modal, setModal] = useState({open: false, signal: null});
     const [form] = Form.useForm();
-    const confirmOp = useConfirmOperation(modal.signal?.fundEntity?.id);
+    const confirmOp = useConfirmOperation(modal.signal?.fundId);
 
     const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
 
@@ -38,7 +38,7 @@ export default function ConfirmPage() {
     };
 
     const columns = [
-        {title: '基金', width: 140, render: (_, r) => fundName(r.fundEntity?.id)},
+        {title: '基金', width: 140, render: (_, r) => fundName(r.fundId)},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '原因', dataIndex: 'reason', render: text},

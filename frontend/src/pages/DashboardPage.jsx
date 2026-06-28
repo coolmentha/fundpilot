@@ -26,7 +26,7 @@ export default function DashboardPage() {
     const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
 
     const pendingColumns = [
-        {title: '基金', width: 160, render: (_, r) => fundName(r.fundEntity?.id)},
+        {title: '基金', width: 160, render: (_, r) => fundName(r.fundId)},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '建议量', width: 130, render: (_, r) => {
