@@ -107,7 +107,10 @@ export default function FundsPage() {
             title: '今日涨跌/盈亏', width: 130, align: 'right',
             render: (_, r) => (
                 <div className="pnl-cell">
-                    <div style={{color: pnlColor(r.dailyChangePct)}}>{signedPercent(r.dailyChangePct)}</div>
+                    <div style={{color: pnlColor(r.dailyChangePct)}}>
+                        {signedPercent(r.dailyChangePct)}
+                        {r.isEstimated && <span className="estimate-tag">估</span>}
+                    </div>
                     <div style={{color: pnlColor(r.dailyPnl)}}>{signedMoney(r.dailyPnl)}</div>
                 </div>
             ),

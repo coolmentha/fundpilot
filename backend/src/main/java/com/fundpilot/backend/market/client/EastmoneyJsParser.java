@@ -4,6 +4,7 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -121,6 +122,51 @@ public final class EastmoneyJsParser {
         } catch (java.io.IOException e) {
             throw new IllegalStateException("指数 K 线 JSON 解析失败", e);
         }
+    }
+
+    /**
+     * 解析 fundgz.1234567.com.cn 盘中估值响应(issue #36)。
+     * <p>响应是 JSONP 包裹 {@code jsonpgz({...});},剥外壳后是标准 JSON,含:
+     * <ul>
+     *   <li>{@code gszzl} 估算涨跌幅(百分比字符串,如 "-4.62")</li>
+     *   <li>{@code gztime} 估值时间(如 "2026-06-26 15:00")</li>
+     *   <li>{@code jzrq} 基准净值日期(估算所基于的已结算净值日期)</li>
+     * </ul>
+     * 用 Jackson 解析(标准 JSON)。缺 gszzl 字段或空响应返 null(降级,估值失败不影响主流程)。
+     *
+     * @param rawJs fundgz 响应文本(JSONP)
+     * @return 估值快照;空响应或缺关键字段返 null
+     */
+    public static FundEstimateSnapshot parseFundGz(String rawJs) {
+        if (rawJs == null || rawJs.isBlank()) {
+            return null;
+        }
+        String json = stripJsonp(rawJs);
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(json);
+            com.fasterxml.jackson.databind.JsonNode gszzl = root.path("gszzl");
+            if (gszzl.isMissingNode() || gszzl.asText().isBlank()) {
+                return null; // 缺估算涨跌幅,无法用
+            }
+            // gszzl 是百分比字符串(如 "-4.62"),除 100 转小数
+            BigDecimal estimatedChangePct = new BigDecimal(gszzl.asText())
+                    .divide(new BigDecimal("100"), MathContext.DECIMAL64);
+            String estimateTime = root.path("gztime").asText(null);
+            String baseNavDate = root.path("jzrq").asText(null);
+            return new FundEstimateSnapshot(estimatedChangePct, estimateTime, baseNavDate);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("fundgz 盘中估值解析失败", e);
+        }
+    }
+
+    /** 剥 JSONP 外壳 {@code jsonpgz(...);} 取内层 JSON。 */
+    private static String stripJsonp(String raw) {
+        int start = raw.indexOf('(');
+        int end = raw.lastIndexOf(')');
+        if (start < 0 || end < 0 || end <= start) {
+            return raw; // 非标准 JSONP,原样交 Jackson 解析(可能抛异常由调用方处理)
+        }
+        return raw.substring(start + 1, end);
     }
 
     private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();

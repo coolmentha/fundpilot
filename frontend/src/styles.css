@@ -261,3 +261,16 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     font-family: var(--font-mono, 'Fira Code', ui-monospace, monospace);
     color: var(--color-text);
 }
+
+/* 三态今日涨跌的"估"标记(issue #38/#40):盘中估算态标识,灰色小标不阻断 */
+.estimate-tag {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--color-text-secondary, #999);
+    border: 1px solid var(--color-border, #444);
+    border-radius: 3px;
+    vertical-align: middle;
+}

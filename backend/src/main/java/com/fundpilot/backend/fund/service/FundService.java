@@ -10,8 +10,10 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.support.FundTypeClassification;
 import com.fundpilot.backend.fund.service.support.FundTypeClassifier;
 import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
+import com.fundpilot.backend.market.service.MarketDataFetchService;
 import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ import java.util.List;
  * 不再调 {@code FundDictBackfillService.backfillAll()} 批量回填——字典搜索已替代该职责。
  * 返回 {@link FundView} DTO,不直接暴露 {@link FundEntity}。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FundService {
@@ -33,6 +36,7 @@ public class FundService {
     private final FundArchiveService fundArchiveService;
     private final UserConfigService userConfigService;
     private final FundPnlService fundPnlService;
+    private final MarketDataFetchService marketDataFetchService;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     public List<FundView> list() {
@@ -44,8 +48,10 @@ public class FundService {
     /**
      * 新建基金;类型字段优先用请求带入值,缺省时按 fundName 兜底识别。
      * <p>fundCode/fundName 二选一即可(CONTEXT.md「基金字典搜索」);两者都缺 → 业务异常。
+     * <p>save 后自动拉取历史净值落库(issue #37),拉取失败降级不阻断建基金
+     * (用户可稍后手动 refresh 补)。无 @Transactional:create 只 save 单实体 + 只读校验,
+     * save 由 Repository 提交后,fetchOneFund 开 REQUIRES_NEW 独立事务拉取(可见已提交的基金)。
      */
-    @Transactional
     public FundView create(FundCreateRequest request) {
         if ((request.fundCode() == null || request.fundCode().isBlank())
                 && (request.fundName() == null || request.fundName().isBlank())) {
@@ -67,7 +73,15 @@ public class FundService {
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
 
         validatePlannedTotalAmount(fund.getPlannedTotalAmount(), fund.getFundCategory());
-        return FundView.from(fundRepository.save(fund));
+        FundEntity saved = fundRepository.save(fund);
+
+        // 建基金后自动拉历史净值(独立事务,失败降级不阻断建基金)
+        try {
+            marketDataFetchService.fetchOneFund(saved.getId());
+        } catch (RuntimeException ex) {
+            log.warn("建基金 {} 后拉取历史净值失败,降级(可稍后手动 refresh 补): {}", saved.getId(), ex.getMessage());
+        }
+        return FundView.from(saved);
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */

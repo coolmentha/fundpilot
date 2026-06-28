@@ -90,6 +90,18 @@ public class MarketDataFetchService {
         }
     }
 
+    /**
+     * 拉取单只基金的历史净值落库(issue #37):供 {@code FundService.create} 建基金后自动拉取。
+     * <p>用 {@code REQUIRES_NEW} 独立事务,避免与建基金事务共用长事务(东方财富 HTTP 调用秒级,
+     * 不应占着 create 的事务和 DB 连接)。拉取失败(净值空/网络异常)抛异常由调用方 catch 降级。
+     *
+     * @param fundId 基金 id
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void fetchOneFund(Long fundId) {
+        fetchOne(fundId);
+    }
+
     private void fetchOne(Long fundId) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));

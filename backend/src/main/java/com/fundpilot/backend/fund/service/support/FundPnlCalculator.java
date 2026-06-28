@@ -62,6 +62,39 @@ public final class FundPnlCalculator {
     }
 
     /**
+     * 今日盈亏(三态统一口径,issue #38)= 昨日市值 × 今日涨跌幅。
+     * <p>昨日市值 = 持仓份额 × 上一期累计净值(previousNav,确定的基线);
+     * 乘今日涨跌幅(盘后=实际、盘中=fundgz 估算)得今日盈亏。
+     * 与盘后态 {@link #dailyPnl}(份额×(latest-previous))数学等价,但盘中态用估算涨跌幅也能算。
+     * 无持仓/无上一期净值/无涨跌幅 → null。
+     */
+    public static BigDecimal dailyPnlByChangePct(BigDecimal holdingShares, BigDecimal previousAccumulatedNav,
+                                                 BigDecimal todayChangePct) {
+        if (holdingShares == null || previousAccumulatedNav == null || todayChangePct == null) {
+            return null;
+        }
+        BigDecimal yesterdayMarketValue = holdingShares.multiply(previousAccumulatedNav, MATH);
+        return yesterdayMarketValue.multiply(todayChangePct, MATH);
+    }
+
+    /**
+     * 盘中估算总盈亏(issue #38)= 昨日总盈亏 × (1 + 今日涨跌幅)。
+     * <p>昨日总盈亏 = 持仓份额 × 上一期累计净值 - 成本(确定的基线);
+     * 乘 (1+今日涨跌幅) 推算盘中总盈亏。口径与今日盈亏同源(都用涨跌幅比例),不引入单位净值 gsz。
+     * 无持仓/无上一期净值/无涨跌幅 → null;成本为 null 视为 0。
+     */
+    public static BigDecimal estimatedTotalPnl(BigDecimal holdingShares, BigDecimal previousAccumulatedNav,
+                                               BigDecimal cost, BigDecimal todayChangePct) {
+        if (holdingShares == null || previousAccumulatedNav == null || todayChangePct == null) {
+            return null;
+        }
+        BigDecimal yesterdayMarketValue = holdingShares.multiply(previousAccumulatedNav, MATH);
+        BigDecimal effectiveCost = cost != null ? cost : BigDecimal.ZERO;
+        BigDecimal yesterdayTotalPnl = yesterdayMarketValue.subtract(effectiveCost);
+        return yesterdayTotalPnl.multiply(BigDecimal.ONE.add(todayChangePct, MATH), MATH);
+    }
+
+    /**
      * 组合盈亏聚合(issue #18 概览页):汇总一组基金的今日盈亏合计与涨跌/盈亏基金计数。
      * <p>三个列表按基金一一对应(同一下标为同一只基金的三项指标);null 元素跳过不计。
      * 上涨/下跌按今日涨跌幅符号,盈利/亏损按总盈亏符号——两维度独立(故事 24)。

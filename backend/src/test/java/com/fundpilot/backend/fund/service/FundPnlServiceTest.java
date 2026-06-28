@@ -10,16 +10,21 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
+import com.fundpilot.backend.market.service.FundEstimateService;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 /**
  * issue #18 盈亏/涨跌多表聚合集成测试(CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
@@ -28,10 +33,19 @@ import static org.assertj.core.api.Assertions.within;
  */
 class FundPnlServiceTest extends AbstractIntegrationTest {
 
+    /** issue #38:mock FundEstimateService 返 empty,让三态降级到落库净值算(隔离网络,恢复原数值断言)。 */
+    @MockitoBean
+    FundEstimateService fundEstimateService;
+
     @Autowired FundPnlService fundPnlService;
     @Autowired FundRepository fundRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundNavHistoryRepository fundNavHistoryRepository;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        when(fundEstimateService.fetchEstimate(anyString())).thenReturn(Optional.empty());
+    }
 
     @Test
     @Transactional

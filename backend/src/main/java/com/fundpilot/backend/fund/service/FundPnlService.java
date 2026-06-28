@@ -5,14 +5,23 @@ import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.support.DailyChangeResolver;
+import com.fundpilot.backend.fund.service.support.DailyChangeResult;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
+import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.service.FundEstimateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 盈亏与涨跌聚合服务(issue #18,CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
@@ -32,31 +41,77 @@ public class FundPnlService {
     private final FundPositionService fundPositionService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
+    private final FundEstimateService fundEstimateService;
 
     /**
-     * 聚合单基金的涨跌与盈亏。
+     * 聚合单基金的涨跌与盈亏(三态,issue #38)。
+     * <p>今日涨跌经 {@link DailyChangeResolver} 三态判定(盘前0/盘中估值/盘后实际),
+     * 今日盈亏 = 昨日市值 × 今日涨跌幅,总盈亏盘后用落库净值算 / 盘中估算(详见 PRD #34 / ADR-0008)。
      *
      * @param fundId 基金 ID
-     * @return 五字段(均可为 null)封装的 Pnl
+     * @return 六字段(均可为 null,除 isEstimated)封装的 Pnl
      */
     public Pnl computeForFund(Long fundId) {
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
         BigDecimal latestNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
+        boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
 
-        BigDecimal dailyChangePct = FundPnlCalculator.dailyChangePct(latestNav, previousNav);
+        // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)按需拉 fundgz 估值
+        Optional<FundEstimateSnapshot> estimate = todayNavConfirmed
+                ? Optional.empty()  // 盘后不需要估值
+                : fetchEstimate(fundId);
+        DailyChangeResult changeResult = DailyChangeResolver.resolve(
+                Instant.now(), todayNavConfirmed, latestNav, previousNav, estimate);
+        BigDecimal dailyChangePct = changeResult.todayChangePct();
+        boolean isEstimated = changeResult.isEstimated();
 
-        // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回
+        // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
         BigDecimal cost = holdingShares != null ? fundPositionService.getCost(fundId) : null;
 
-        BigDecimal holdingAmount = (holdingShares != null && latestNav != null)
-                ? holdingShares.multiply(latestNav) : null;
-        BigDecimal dailyPnl = FundPnlCalculator.dailyPnl(holdingShares, latestNav, previousNav);
-        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, latestNav, cost);
+        // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
+        BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, previousNav, dailyChangePct);
+        // 持仓市值:盘后用 latestNav,盘中(估算态)用 previousNav × (1+涨跌幅) 推算
+        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, latestNav, previousNav, dailyChangePct, isEstimated);
+        // 总盈亏:盘后用落库净值算,盘中估算 = 昨日总盈亏 × (1+涨跌幅)
+        BigDecimal totalPnl = isEstimated
+                ? FundPnlCalculator.estimatedTotalPnl(holdingShares, previousNav, cost, dailyChangePct)
+                : FundPnlCalculator.totalPnl(holdingShares, latestNav, cost);
 
-        return new Pnl(dailyChangePct, holdingShares, holdingAmount, dailyPnl, totalPnl);
+        return new Pnl(dailyChangePct, isEstimated, holdingShares, holdingAmount, dailyPnl, totalPnl);
+    }
+
+    /** 拉取 fundgz 盘中估值(基金实体查 code);失败降级返 empty。 */
+    private Optional<FundEstimateSnapshot> fetchEstimate(Long fundId) {
+        return fundRepository.findById(fundId)
+                .map(FundEntity::getFundCode)
+                .flatMap(fundEstimateService::fetchEstimate);
+    }
+
+    /** 当日净值是否已落库:最近一期 navDate 是否 = 今天(UTC)。 */
+    private boolean isTodayNavConfirmed(List<FundNavHistoryEntity> latestTwo) {
+        if (latestTwo.isEmpty()) {
+            return false;
+        }
+        Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant latestDate = latestTwo.get(0).getNavDate();
+        // navDate 落库为 UTC 0 点,与 today 对齐比较
+        return !latestDate.isBefore(today);
+    }
+
+    /** 持仓市值:估算态用 previousNav × (1+涨跌幅) 推算,非估算态用 latestNav。 */
+    private BigDecimal computeHoldingAmount(BigDecimal holdingShares, BigDecimal latestNav,
+                                           BigDecimal previousNav, BigDecimal todayChangePct, boolean isEstimated) {
+        if (holdingShares == null) {
+            return null;
+        }
+        if (isEstimated && previousNav != null && todayChangePct != null) {
+            return holdingShares.multiply(previousNav, MathContext.DECIMAL64)
+                    .multiply(BigDecimal.ONE.add(todayChangePct, MathContext.DECIMAL64), MathContext.DECIMAL64);
+        }
+        return latestNav != null ? holdingShares.multiply(latestNav, MathContext.DECIMAL64) : null;
     }
 
     /**
@@ -81,16 +136,18 @@ public class FundPnlService {
     }
 
     /**
-     * 单基金盈亏结果(五字段均可为 null,对应 FundView 可空字段)。
+     * 单基金盈亏结果(字段均可为 null,除 isEstimated;对应 FundView 可空字段)。
      *
-     * @param dailyChangePct 今日涨跌幅
+     * @param dailyChangePct 今日涨跌幅(三态:盘前0/盘中估值/盘后实际)
+     * @param isEstimated    是否估算态(true=盘中 fundgz 估算)
      * @param holdingShares  持仓份额
-     * @param holdingAmount  持仓市值(份额 × 最近净值)
-     * @param dailyPnl       今日盈亏
-     * @param totalPnl       总盈亏
+     * @param holdingAmount  持仓市值(份额 × 最近净值;估算态用昨日净值×(1+涨跌幅)推算)
+     * @param dailyPnl       今日盈亏(昨日市值 × 今日涨跌幅)
+     * @param totalPnl       总盈亏(盘后用落库净值算 / 盘中估算)
      */
     public record Pnl(
             BigDecimal dailyChangePct,
+            boolean isEstimated,
             BigDecimal holdingShares,
             BigDecimal holdingAmount,
             BigDecimal dailyPnl,

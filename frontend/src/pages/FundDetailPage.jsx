@@ -46,7 +46,10 @@ export default function FundDetailPage() {
                     <span className="num-cell">{money(fund.plannedTotalAmount)}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日涨跌">
-                    <span style={{color: pnlColor(fund.dailyChangePct)}}>{signedPercent(fund.dailyChangePct)}</span>
+                    <span style={{color: pnlColor(fund.dailyChangePct)}}>
+                        {signedPercent(fund.dailyChangePct)}
+                        {fund.isEstimated && <span className="estimate-tag">估</span>}
+                    </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="持仓市值">
                     <span className="num-cell">
