@@ -19,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +45,10 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundNavHistoryRepository fundNavHistoryRepository;
 
+    /** 当日净值 navDate 对齐 FundPnlService.isTodayNavConfirmed(今天 UTC 0 点),避免硬编码日期跨天后 todayNavConfirmed=false,跌入 isBeforeMarketOpen 实时时段判定导致断言随时段漂移。 */
+    private final Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+    private final Instant yesterday = today.minus(1, ChronoUnit.DAYS);
+
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         when(fundEstimateService.fetchEstimate(anyString())).thenReturn(Optional.empty());
@@ -56,8 +63,8 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     void 持仓基金_聚合今日涨跌今日盈亏总盈亏() {
         FundEntity fund = persistHoldingFund();
         // 累计净值 1.20 → 1.26(涨 5%);持仓 1000 份;成本单价 1.20;总盈亏 = 1000×(1.26-1.20) = 60
-        navHistory(fund, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
-        navHistory(fund, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
+        navHistory(fund, yesterday, "1.20");
+        navHistory(fund, today, "1.26");
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
         // 成本单价存在 FundEntity 上,不再从交易派生
         fund.setCostPerShare(new BigDecimal("1.20"));
@@ -92,8 +99,8 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @Transactional
     void 未建仓基金_有净值可看涨跌但持仓盈亏为null() {
         FundEntity fund = persistPendingFund();
-        navHistory(fund, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
-        navHistory(fund, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
+        navHistory(fund, yesterday, "1.20");
+        navHistory(fund, today, "1.26");
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
@@ -111,16 +118,16 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     void 组合聚合_汇总所有持仓基金的今日盈亏合计与涨跌盈亏计数() {
         // 基金A:今日上涨 +5%(1.20→1.26),持仓1000份 成本单价1.20 → 今日盈亏+60 总盈亏+60(盈)
         FundEntity fundA = persistHoldingFundWithCode("510300", "沪深300ETF");
-        navHistory(fundA, Instant.parse("2025-06-01T00:00:00Z"), "1.20");
-        navHistory(fundA, Instant.parse("2025-06-02T00:00:00Z"), "1.26");
+        navHistory(fundA, yesterday, "1.20");
+        navHistory(fundA, today, "1.26");
         txWithAmount(fundA, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
         fundA.setCostPerShare(new BigDecimal("1.20"));
         fundRepository.save(fundA);
 
         // 基金B:今日下跌 -2%(1.00→0.98),持仓1000份 成本单价1.00 → 今日盈亏-20 总盈亏-20(亏)
         FundEntity fundB = persistHoldingFundWithCode("159825", "半导体ETF");
-        navHistory(fundB, Instant.parse("2025-06-01T00:00:00Z"), "1.00");
-        navHistory(fundB, Instant.parse("2025-06-02T00:00:00Z"), "0.98");
+        navHistory(fundB, yesterday, "1.00");
+        navHistory(fundB, today, "0.98");
         txWithAmount(fundB, FundTransactionSource.INCREASE, "1000", "1000", FundTransactionStatus.CONFIRMED);
         fundB.setCostPerShare(new BigDecimal("1.00"));
         fundRepository.save(fundB);
