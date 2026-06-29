@@ -61,8 +61,10 @@ public class FundPnlService {
         Optional<FundEstimateSnapshot> estimate = todayNavConfirmed
                 ? Optional.empty()  // 盘后不需要估值
                 : fetchEstimate(fundId);
-        DailyChangeResult changeResult = DailyChangeResolver.resolve(
-                Instant.now(), todayNavConfirmed, latestNav, previousNav, estimate);
+        // 无净值历史:涨跌无数据 → null,不经三态判定(「盘前=0」前提是有 T-1 净值,无净值时不适用)
+        DailyChangeResult changeResult = latestNav == null
+                ? new DailyChangeResult(null, false)
+                : DailyChangeResolver.resolve(Instant.now(), todayNavConfirmed, latestNav, previousNav, estimate);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
 
