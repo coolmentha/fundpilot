@@ -1,4 +1,4 @@
-# Grafana 数据源预置:启动即自动配好 Prometheus,免手动 UI 操作。
+# Grafana 数据源预置:启动即自动配好 Prometheus + Loki,免手动 UI 操作。
 apiVersion: 1
 datasources:
   - name: Prometheus
@@ -7,3 +7,10 @@ datasources:
     access: proxy
     url: http://fundpilot-prometheus:9090
     isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://fundpilot-loki:3100
+    jsonData:
+      maxLines: 1000

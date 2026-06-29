@@ -1,0 +1,37 @@
+# Promtail 采集配置:只采 fundpilot-backend 的 Docker 容器日志,推送给 Loki。
+# backend 日志走 stdout,Docker 落成 /var/lib/docker/containers/*/<id>.json 的 JSON 日志文件,
+# 每行是 {"log":"...","stream":"stdout",...}。promtail 读这些文件,按 docker 元数据打 container_name 标签。
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://fundpilot-loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      # 自动发现所有运行中的容器,从 docker.sock 读元数据
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # docker 元数据里容器名带 / 前缀,去掉
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container_name
+      # 只保留 fundpilot-backend,其余 drop(避免采 db/frontend/监控栈自身的日志)
+      - source_labels: [container_name]
+        regex: 'fundpilot-backend'
+        action: keep
+    pipeline_stages:
+      # Docker JSON 日志行的 log 字段是实际日志内容,先提取出来
+      - docker:
+      # 解析 Spring Boot 日志,提取 level(INFO/WARN/ERROR)做标签,方便 Grafana 按级别过滤
+      # 格式: 2026-06-29T22:55:00.006+08:00  INFO 7 --- [fundpilot-backend] [scheduling-1] c.f.b... : 消息
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<level>\w+)\s+\d+\s+---\s+\[(?P<thread>[^\]]+)\]\s+(?P<logger>\S+)\s+:\s+(?P<message>.*)$'
+      - labels:
+          level:
