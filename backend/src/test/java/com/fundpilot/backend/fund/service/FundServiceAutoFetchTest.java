@@ -13,7 +13,10 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
+import com.fundpilot.backend.user.entity.UserConfigEntity;
+import com.fundpilot.backend.user.repository.UserConfigRepository;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -56,6 +59,20 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
     @Autowired
     EntityManager entityManager;
+
+    @Autowired
+    UserConfigRepository userConfigRepository;
+
+    @BeforeEach
+    void setUpUserConfig() {
+        // FundService.create → validatePlannedTotalAmount → requireTotalInvestableCapital 依赖 user_config 已初始化;
+        // CI 全新库无此行会抛 USER_CONFIG_NOT_INITIALIZED。每个测试前清空+插入唯一可控资金值(对齐 FundServiceTest)。
+        // @Transactional 测试方法下随事务回滚;非事务测试方法下 repository.save 自动提交(后者需 Service 独立事务读到)。
+        userConfigRepository.deleteAll();
+        UserConfigEntity config = new UserConfigEntity();
+        config.setTotalInvestableCapital(new BigDecimal("100000"));
+        userConfigRepository.save(config);
+    }
 
     @Test
     @Transactional
