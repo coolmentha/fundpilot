@@ -2,6 +2,7 @@ package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.signal.controller.SignalLogView;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
+import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,9 +38,11 @@ public class SignalQueryService {
                 .stream().map(SignalLogView::from).toList();
     }
 
-    /** 跨基金未回应信号工作台:全量倒序前 100。 */
+    /**
+     * 跨基金未回应信号工作台:非 NONE 信号倒序前 100(NONE 无需确认,见 Repository 注释)。
+     */
     public List<SignalLogView> pending() {
-        return signalLogRepository.findTop100ByOrderBySignalDateDesc()
+        return signalLogRepository.findTop100BySignalTypeNotOrderBySignalDateDesc(SignalType.NONE)
                 .stream().map(SignalLogView::from).toList();
     }
 }

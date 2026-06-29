@@ -37,13 +37,15 @@ public class FundDictSearchService {
             return List.of();
         }
         // 表为空时首次自动同步(降级保证可用);同步失败不阻断搜索
-        if (fundDictRepository.count() == 0) {
-            try {
-                log.info("fund_dict 表为空,首次搜索自动触发同步");
-                fundDictSyncService.syncAll();
-            } catch (RuntimeException ex) {
-                log.warn("首次搜索自动同步失败,返回空列表: {}", ex.getMessage());
-                return List.of();
+        synchronized (this) {
+            if (fundDictRepository.count() == 0) {
+                try {
+                    log.info("fund_dict 表为空,首次搜索自动触发同步");
+                    fundDictSyncService.syncAll();
+                } catch (RuntimeException ex) {
+                    log.warn("首次搜索自动同步失败,返回空列表: {}", ex.getMessage());
+                    return List.of();
+                }
             }
         }
         List<FundDictEntity> matches = fundDictRepository.search(q.trim());

@@ -1,6 +1,7 @@
 package com.fundpilot.backend.signal.repository;
 
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
+import com.fundpilot.backend.signal.enums.SignalType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
@@ -26,8 +27,10 @@ public interface SignalLogRepository extends JpaRepository<SignalLogEntity, Long
     Optional<SignalLogEntity> findTopByFundEntity_IdOrderBySignalDateDesc(Long fundId);
 
     /**
-     * 查所有基金最新信号(issue #16 GET /api/signals/pending 跨基金未回应信号工作台用)。
-     * 取每只基金最新一行(子查询或 native 更精确,本期用全量倒序取前 100 简化)。
+     * 跨基金未回应信号工作台(issue #16 GET /api/signals/pending):非 NONE 信号倒序前 100。
+     * <p>NONE 是"系统建议不操作",无需用户确认,不应出现在待确认工作台;否则后端 confirmOperation
+     * 拒绝确认会导致红点永远消不掉。过滤掉 NONE 后工作台只剩 BUILD/ADD/SELL——这些才是可确认的。
+     * 软删行由 {@code @SQLRestriction} 自动过滤。
      */
-    List<SignalLogEntity> findTop100ByOrderBySignalDateDesc();
+    List<SignalLogEntity> findTop100BySignalTypeNotOrderBySignalDateDesc(SignalType excludedType);
 }
