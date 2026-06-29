@@ -19,6 +19,9 @@ FROM eclipse-temurin:25-jre
 RUN groupadd -r fundpilot && useradd -r -g fundpilot -u 1001 fundpilot
 WORKDIR /app
 
+# 装 curl:容器内 actuator/health 探活(CI Smoke test 与运维诊断依赖);temurin-jre 不自带
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # spring-boot-maven-plugin 重打包后的 fat jar;*.original 是重打包前的薄 jar,不匹配 *.jar
 COPY --from=build --chown=fundpilot:fundpilot /workspace/target/*.jar /app/app.jar
 
