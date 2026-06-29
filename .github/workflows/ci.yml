@@ -46,6 +46,15 @@ jobs:
       - name: Maven verify
         run: ./mvnw -B verify
 
+      # jacoco 在 verify 阶段生成报告(pom.xml 已配 report execution),上传 artifact 便于下载查看
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/
+          retention-days: 7
+
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest

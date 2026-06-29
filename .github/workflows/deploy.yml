@@ -81,8 +81,8 @@ jobs:
             EOF
             chmod 600 .env
 
-            TAG=${{ github.ref_name }} docker compose -f deploy/docker-compose.prod.yml pull
-            TAG=${{ github.ref_name }} docker compose -f deploy/docker-compose.prod.yml up -d
+            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml pull
+            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml up -d
 
       - name: Smoke test
         uses: appleboy/ssh-action@v1
@@ -91,17 +91,16 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # backend/frontend 都只 expose 不映射宿主端口,外部唯一入口是 Caddy 的 443(映射到宿主)
-            # 用 --resolve 把域名强制指向 127.0.0.1,走本机回环到 Caddy,避开 hairpin NAT 问题
-            # 等 backend 起来(最多 60s),探 actuator health
-            for i in $(seq 1 30); do
-              if curl -sf --resolve www.fundpilot.duckdns.org:443:127.0.0.1 https://www.fundpilot.duckdns.org/actuator/health | grep -q '"status":"UP"'; then
+            # 直连 backend 容器探 actuator health(绕过 Caddy/nginx 入口层,且不把 actuator 暴露公网)
+            # -T 关闭 TTY 分配(非交互 SSH 下 exec 需要);backend 启动含 Flyway 首次迁移,最多等 90s
+            for i in $(seq 1 45); do
+              if docker compose -p fundpilot -f ${{ secrets.VPS_PATH }}/deploy/docker-compose.prod.yml exec -T backend curl -sf http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
                 echo "backend healthy"
                 exit 0
               fi
               sleep 2
             done
             echo "backend not healthy" >&2
-            docker compose -f ${{ secrets.VPS_PATH }}/deploy/docker-compose.prod.yml logs --tail=50 backend
+            docker compose -p fundpilot -f ${{ secrets.VPS_PATH }}/deploy/docker-compose.prod.yml logs --tail=50 backend
             exit 1
 
