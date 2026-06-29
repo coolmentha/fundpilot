@@ -36,6 +36,8 @@ services:
       - ./monitor/grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - fundpilot_default
+      # sub2api-network:让统一入口 gateway caddy 能按容器名 fundpilot-grafana 直连(收编 /grafana/ 路由)
+      - sub2api-network
 
   loki:
     image: grafana/loki
@@ -62,10 +64,14 @@ services:
       - fundpilot_default
 
 # external:复用应用 compose 的默认网络(Prometheus 才能按 fundpilot-backend 容器名抓指标)
+# sub2api-network:gateway caddy 收编 /grafana/ 路由后,按容器名直连 grafana 用
 networks:
   fundpilot_default:
     external: true
     name: fundpilot_default
+  sub2api-network:
+    external: true
+    name: deploy_sub2api-network
 
 volumes:
   prometheus-data:
