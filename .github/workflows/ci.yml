@@ -12,6 +12,23 @@ jobs:
   backend-test:
     name: Backend test
     runs-on: ubuntu-latest
+    # 集成测试继承 AbstractIntegrationTest(@ActiveProfiles("test")),
+    # 连 localhost:5432(application-test.yml 默认值)。用 service container 提供同址 PG,
+    # 匹配本地开发环境,无需改测试代码。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fundpilot
+          POSTGRES_USER: fundpilot
+          POSTGRES_PASSWORD: fundpilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fundpilot -d fundpilot"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
