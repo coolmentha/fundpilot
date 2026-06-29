@@ -21,6 +21,11 @@ services:
     container_name: fundpilot-grafana
     restart: unless-stopped
     environment:
+      # DOMAIN:设了 domain grafana 才信任 X-Forwarded-Proto 头,识别对外是 https
+      # 不设时 grafana 用自身监听的 http,与 ROOT_URL 的 https 冲突 → 一直 301 到 https → 死循环
+      GF_SERVER_DOMAIN: "www.fundpilot.duckdns.org"
+      # DOMAIN:设了 grafana 才信任 nginx 透传的 X-Forwarded-Proto,正确识别对外是 https(避免重定向循环)
+      GF_SERVER_DOMAIN: "www.fundpilot.duckdns.org"
       # ROOT_URL 写死完整地址:%(domain)s 默认 localhost,会让 grafana 把重定向/资源链接生成成
       # https://localhost/grafana/,经 nginx 反代访问 /grafana/ 时浏览器跳 localhost 报"拒绝连接"
       GF_SERVER_ROOT_URL: "https://www.fundpilot.duckdns.org/grafana/"
