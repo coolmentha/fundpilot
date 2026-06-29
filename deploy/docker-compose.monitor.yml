@@ -21,8 +21,9 @@ services:
     container_name: fundpilot-grafana
     restart: unless-stopped
     environment:
-      # 子路径:nginx 把 /grafana/ 转给本服务,Grafana 需知道自己跑在子路径下
-      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      # ROOT_URL 写死完整地址:%(domain)s 默认 localhost,会让 grafana 把重定向/资源链接生成成
+      # https://localhost/grafana/,经 nginx 反代访问 /grafana/ 时浏览器跳 localhost 报"拒绝连接"
+      GF_SERVER_ROOT_URL: "https://www.fundpilot.duckdns.org/grafana/"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       # 允许 iframe 嵌入前端 /monitor 页(仍保留登录鉴权,不裸奔)
       GF_SECURITY_ALLOW_EMBEDDING: "true"
