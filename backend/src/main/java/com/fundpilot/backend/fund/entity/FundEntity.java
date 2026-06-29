@@ -6,12 +6,17 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
+@Table(name = "fund")
+@SQLDelete(sql = "UPDATE fund SET deleted_date = now() WHERE id = ? AND version = ?")
 @Getter
 @Setter
 public class FundEntity extends AbstractEntity {
@@ -41,8 +46,20 @@ public class FundEntity extends AbstractEntity {
 
     private BigDecimal plannedTotalAmount;
 
-    private BigDecimal peakNav;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private FundSubType fundSubType;
 
-    private BigDecimal holdingPeriodPeakNav;
+    @Column(length = 64)
+    private String benchmarkIndexCode;
+
+    private Instant openedAt;
+
+    /**
+     * 持仓成本价(每份成本单价,ADR-0013)。建仓时用户可填(不填默认 T-1 净值);
+     * 后续 INCREASE/TRANSFER_IN/INVEST 交易 CONFIRMED 时加权更新。
+     * 卖出不改单价;清仓再入场时自然覆盖。
+     */
+    private BigDecimal costPerShare;
 
 }

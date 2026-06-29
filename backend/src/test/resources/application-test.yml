@@ -1,0 +1,11 @@
+# Test profile:本地开发集成测试配置。
+# 连本地 PostgreSQL 的 fundpilot 库(与 main profile 同库,靠 @Transactional 回滚隔离测试数据)。
+# 凭证默认 fundpilot/fundpilot(本地开发默认,非生产凭据),可被环境变量覆盖。
+# Flyway 真实跑迁移,Hibernate ddl-auto=validate 真实校验 schema。
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fundpilot}
+    username: ${DB_USERNAME:fundpilot}
+    password: ${DB_PASSWORD:fundpilot}
+  flyway:
+    clean-disabled: false   # 允许测试间清理(开发期方便)

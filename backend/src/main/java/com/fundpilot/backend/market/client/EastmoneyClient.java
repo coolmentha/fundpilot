@@ -1,0 +1,46 @@
+package com.fundpilot.backend.market.client;
+
+import feign.Param;
+import feign.RequestLine;
+
+import java.util.List;
+
+/**
+ * 东方财富基金数据 Feign 客户端(fund.eastmoney.com 域名)。两条数据线:
+ * <ol>
+ *   <li>基金净值历史 — pingzhongdata.js</li>
+ *   <li>基金字典 — fundcode_search.js</li>
+ * </ol>
+ * 指数 K 线在 push2his.eastmoney.com 不同域名,见 {@link EastmoneyKlineClient};
+ * 三者由 {@link EastmoneyMarketDataSource} 聚合实现 {@link MarketDataSource}。
+ * <p>所有请求经 {@link EastmoneyClientConfig#requestInterceptor()} 加 Referer/UA 头,
+ * 经 {@link EastmoneyClientConfig#semaphore()} 限流(共享 Semaphore,约每秒 2-3 次)。
+ * Feign {@code url} 通过 Spring 属性 {@code eastmoney.base-url} 配置(默认指向东方财富服务),
+ * 测试时通过 {@code feign.Feign.builder()} 编程指向 MockWebServer 地址。
+ *
+ * @see EastmoneyClientConfig
+ */
+public interface EastmoneyClient {
+
+    /**
+     * 最原始 GET 请求,返回 Raw String(JS 字面量),由解析器处理。
+     */
+    @RequestLine("GET /{path}")
+    String fetchRaw(@Param("path") String path);
+
+    /**
+     * 获取基金净值历史:调 pingzhongdata.js 并返回结构化快照列表。
+     */
+    default List<FundNavSnapshot> fetchNavHistory(String fundCode) {
+        String raw = fetchRaw("pingzhongdata/" + fundCode + ".js");
+        return EastmoneyJsParser.parseNavHistory(raw);
+    }
+
+    /**
+     * 获取全量基金字典:调 fundcode_search.js 并返回条目列表。
+     */
+    default List<FundDictEntry> fetchFundDict() {
+        String raw = fetchRaw("js/fundcode_search.js");
+        return EastmoneyJsParser.parseFundDict(raw);
+    }
+}
