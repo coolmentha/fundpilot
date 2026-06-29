@@ -7,11 +7,7 @@ import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.enums.FundStatus;
-import com.fundpilot.backend.fund.enums.FundSubType;
-import com.fundpilot.backend.fund.enums.FundTransactionSource;
-import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.fund.enums.*;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
@@ -30,9 +26,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 /**
  * issue #37 验收:建基金后自动拉历史净值。
@@ -118,7 +112,8 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         assertThat(tx.getAmount()).isEqualByComparingTo("3000");
         assertThat(tx.getNav()).isEqualByComparingTo("1.5");
         assertThat(tx.getShares()).isEqualByComparingTo("2000");
-        assertThat(tx.getConfirmTime()).isNotNull();
+        // 6079ba1:confirmTime 语义改为 openedAt;本场景未传 openedAt → confirmTime=null(同步确认不伪造时点)
+        assertThat(tx.getConfirmTime()).isNull();
         assertThat(tx.getSignalLogEntity()).isNull(); // 绕过信号
     }
 
@@ -141,9 +136,9 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         FundEntity fund = fundRepository.findById(view.id()).orElseThrow();
         // openedAt 用用户填值(历史日期),不是 now(DB timestamp 精度可能截断,按秒比较)
         assertThat(fund.getOpenedAt().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
-        // 交易的 confirmTime 仍是 now(交易当下确认),与 openedAt 解耦
+        // 6079ba1:confirmTime 语义改为 openedAt,与建仓时间一致(不再用 now)
         FundTransactionEntity tx = fundTransactionRepository.findByFundEntity_IdOrderByCreatedDateDesc(view.id()).get(0);
-        assertThat(tx.getConfirmTime().getEpochSecond()).isGreaterThan(userOpenedAt.getEpochSecond());
+        assertThat(tx.getConfirmTime().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
     }
 
     @Test

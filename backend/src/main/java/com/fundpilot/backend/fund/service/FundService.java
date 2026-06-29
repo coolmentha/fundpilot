@@ -162,13 +162,14 @@ public class FundService {
         tx.setSignalLogEntity(null);
         fundTransactionRepository.save(tx);
 
-        // 状态流转:对齐 handleBuild。openedAt 用用户填值(移动止盈高点起算),confirmTime 仍用 now(交易当下确认)
+        // 状态流转:对齐 handleBuild。openedAt/confirmTime 均用用户填建仓时间(6079ba1:建仓流水用建仓时间)
         fund.setStatus(FundStatus.HOLDING);
         fund.setOpenedAt(effectiveOpenedAt);
         fund.setCostPerShare(effectiveCostPerShare);
         fundRepository.save(fund);
         log.info("初始持仓建仓 fund={} initialMarketValue={} nav={} shares={} costPerShare={} openedAt={} confirmTime={}",
-                fund.getId(), initialMarketValue, navValue, tx.getShares(), effectiveCostPerShare, effectiveOpenedAt, now);
+                 fund.getId(), initialMarketValue, navValue, tx.getShares(), effectiveCostPerShare, effectiveOpenedAt,
+                 tx.getConfirmTime());
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */

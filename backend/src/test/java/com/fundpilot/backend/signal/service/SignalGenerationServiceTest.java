@@ -1,6 +1,7 @@
 package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
@@ -38,14 +39,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * SignalGenerationService 单元测试(issue #13):Mockito 纯单元测试,验证编排逻辑——
@@ -103,6 +98,11 @@ class SignalGenerationServiceTest {
                 eq(id), eq(SignalType.ADD), anyInt(), eq(FundTransactionStatus.CONFIRMED))).thenReturn(List.of());
         when(fundTransactionRepository.findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
                 eq(id), eq(SignalType.BUILD), eq(FundTransactionStatus.CONFIRMED))).thenReturn(List.of());
+        // 285ca31 起 SignalGenerationService 调 findTopByFundEntity_IdOrderByConfirmTimeDesc 算
+        // computeLastBuyConfirmTime;返回 null 会抛 IllegalArgumentException 被外层 catch 吞,save 永不执行
+        FundTransactionEntity confirmTx = new FundTransactionEntity();
+        confirmTx.setConfirmTime(DATE.minus(10, java.time.temporal.ChronoUnit.DAYS));
+        when(fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(id)).thenReturn(confirmTx);
         return strategy;
     }
 

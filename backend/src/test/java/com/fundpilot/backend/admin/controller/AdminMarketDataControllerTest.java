@@ -1,6 +1,7 @@
 package com.fundpilot.backend.admin.controller;
 
 import com.fundpilot.backend.market.service.MarketDataFetchService;
+import com.fundpilot.backend.market.service.TradingCalendarSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
@@ -32,6 +33,12 @@ class AdminMarketDataControllerTest {
 
     @MockitoBean
     MarketDataFetchService marketDataFetchService;
+
+    // 285ca31 给 controller 加了 /sync-trading-calendar 端点,注入 TradingCalendarSyncService;
+    // 285ca31 给 controller 加了 /sync-trading-calendar 端点,引入 TradingCalendarSyncService 依赖;
+    // @WebMvcTest 切片不扫描 @Service,需显式 mock 该 bean 才能加载 ApplicationContext
+    @MockitoBean
+    TradingCalendarSyncService tradingCalendarSyncService;
 
     @Test
     void refresh_返回成功响应并调用_refreshAll() throws Exception {
