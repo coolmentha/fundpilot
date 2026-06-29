@@ -1,0 +1,44 @@
+# 监控栈编排:VPS 上 docker compose -p fundpilot-monitor -f deploy/docker-compose.monitor.yml up -d
+#
+# 独立于应用 tag CD,一次性手动起。复用 fundpilot_default 网络(Prometheus 按容器名抓 backend,
+# Grafana 不需接 backend),Grafana UI 经 frontend 的 nginx /grafana/ 反代转入(见 frontend/nginx.conf)。
+#
+# 首次起后改 Grafana admin 密码:
+#   docker exec fundpilot-grafana grafana-cli admin reset-admin-password <强口令>
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: fundpilot-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitor/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - fundpilot_default
+
+  grafana:
+    image: grafana/grafana
+    container_name: fundpilot-grafana
+    restart: unless-stopped
+    environment:
+      # 子路径:nginx 把 /grafana/ 转给本服务,Grafana 需知道自己跑在子路径下
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # 允许 iframe 嵌入前端 /monitor 页(仍保留登录鉴权,不裸奔)
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitor/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - fundpilot_default
+
+# external:复用应用 compose 的默认网络(Prometheus 才能按 fundpilot-backend 容器名抓指标)
+networks:
+  fundpilot_default:
+    external: true
+    name: fundpilot_default
+
+volumes:
+  prometheus-data:
+  grafana-data:
