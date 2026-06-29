@@ -83,6 +83,7 @@ jobs:
             chmod 600 .env
 
             TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml pull
+            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
             TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml up -d
 
       - name: Smoke test
