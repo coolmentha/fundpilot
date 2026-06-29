@@ -1,0 +1,64 @@
+# 生产部署编排:VPS 上 docker compose -f deploy/docker-compose.prod.yml up -d
+#
+# 与根目录 docker-compose.yml 的区别:那个只起本地开发用的 db;
+# 这个起完整三件套(db + backend + frontend),镜像从 GHCR 拉,配置走 .env。
+#
+# 部署前在 VPS 仓库根目录建 .env(参考 .env.example),填强口令和镜像 tag。
+# 升级:改 .env 的 TAG 后 docker compose -f deploy/docker-compose.prod.yml pull && up -d
+services:
+  db:
+    image: postgres:16
+    container_name: fundpilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fundpilot
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d fundpilot" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # 数据库不对外暴露,仅 compose 内部网络可达
+
+  backend:
+    image: ghcr.io/coolmentha/fundpilot-backend:${TAG:-latest}
+    container_name: fundpilot-backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/fundpilot
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+      JAVA_OPTS: -Duser.timezone=Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+    # 不映射宿主端口,由 frontend 的 nginx 反代 /api 到本服务
+
+  frontend:
+    image: ghcr.io/coolmentha/fundpilot-frontend:${TAG:-latest}
+    container_name: fundpilot-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "80"
+    # 不映射宿主端口,由 sub2api-caddy 按 Host 头反代转入(共享 sub2api 网络)
+    networks:
+      - default
+      - sub2api-network
+
+# 共享 sub2api 的 Caddy 网络(external),让 sub2api-caddy 能用容器名 fundpilot-frontend 反代
+networks:
+  sub2api-network:
+    external: true
+    name: deploy_sub2api-network
+
+volumes:
+  db-data:
