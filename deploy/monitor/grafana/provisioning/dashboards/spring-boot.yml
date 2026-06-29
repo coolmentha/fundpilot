@@ -1,0 +1,13 @@
+# Grafana 仪表盘预置:从 /etc/grafana/provisioning/dashboards/json 自动加载 JSON。
+# JSON 文件由 compose 挂载(provisioning 目录整体只读挂载到 /etc/grafana/provisioning)。
+apiVersion: 1
+providers:
+  - name: default
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

@@ -6,6 +6,7 @@ import {
     ToolOutlined,
     ThunderboltOutlined,
     DashboardOutlined,
+    LineChartOutlined,
     EllipsisOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
@@ -23,6 +24,7 @@ const PAGE_META = {
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
     '/settings': {title: '用户配置', subtitle: '总可投资资金等账户参数'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
+    '/monitor': {title: '监控', subtitle: '系统运行面板'},
 };
 
 const NAV_GROUPS = [
@@ -42,6 +44,7 @@ const NAV_GROUPS = [
         key: 'system', label: '系统', children: [
             {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
             {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
+            {key: '/monitor', icon: <LineChartOutlined/>, label: '监控'},
         ],
     },
 ];
@@ -56,6 +59,7 @@ const BOTTOM_NAV = [
 const BOTTOM_MORE = [
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
+    {key: '/monitor', icon: <LineChartOutlined/>, label: '监控'},
 ];
 
 const useSelectedKey = () => {

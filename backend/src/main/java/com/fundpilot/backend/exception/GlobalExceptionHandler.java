@@ -1,6 +1,8 @@
 package com.fundpilot.backend.exception;
 
 import com.fundpilot.backend.common.ApiResponse;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +18,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * 用 logger 记录原始堆栈便于排查,响应体只返固定文案,不泄露内部细节。
  */
 @RestControllerAdvice
+@RequiredArgsConstructor
 class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final MeterRegistry meterRegistry;
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
@@ -28,6 +32,7 @@ class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex) {
         log.error("未预期的异常,转 500 INTERNAL_ERROR", ex);
+        meterRegistry.counter("http_server_errors_total", "code", ErrorCode.INTERNAL_ERROR.name()).increment();
         return ResponseEntity.status(500).body(ApiResponse.error(ErrorCode.INTERNAL_ERROR.name(), "服务器内部错误"));
     }
 }

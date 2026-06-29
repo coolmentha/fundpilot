@@ -1,0 +1,12 @@
+# Prometheus 抓取配置:仅抓 fundpilot-backend 的 /actuator/prometheus。
+# backend 容器名跨 project 稳定(CD 固定 -p fundpilot),且只 expose 不映射宿主端口,
+# 仅 fundpilot_default 网络内可达,公网抓不到。
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: fundpilot-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - fundpilot-backend:8080

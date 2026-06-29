@@ -24,7 +24,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # prometheus:供 fundpilot_default 网络内 Prometheus 抓取(backend 不映射宿主端口,公网不可达)
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when-authorized
