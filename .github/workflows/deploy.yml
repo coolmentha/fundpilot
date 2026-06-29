@@ -83,7 +83,11 @@ jobs:
             chmod 600 .env
 
             TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml pull
+            # 清理残留容器:先按 project 停掉本编排的容器,再兜底按名删除
+            # (早期部署未指定 -p fundpilot 或手动启的容器属于别的 project,
+            #  compose down 管不到,但 container_name 跨 project 唯一会顶掉 up -d)
             TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker rm -f fundpilot-db fundpilot-backend fundpilot-frontend 2>/dev/null || true
             TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml up -d
 
       - name: Smoke test
