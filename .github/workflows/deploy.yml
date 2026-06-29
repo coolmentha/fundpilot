@@ -70,7 +70,8 @@ jobs:
               git clone https://github.com/coolmentha/fundpilot.git ${{ secrets.VPS_PATH }}
             fi
             cd ${{ secrets.VPS_PATH }}
-            git fetch --tags
+            # --force:允许覆盖本地已有同名 tag(重打 tag 时 VPS 本地旧 tag 要被远端覆盖)
+            git fetch --tags --force
             git checkout ${{ github.ref_name }}
 
             # 动态生成 .env(机密从 Secrets 注入,不落工作流日志)
