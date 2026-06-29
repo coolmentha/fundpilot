@@ -1,0 +1,42 @@
+# Loki 单机配置:BoltDB 索引 + 本地文件系统存储。
+# 仅 fundpilot_default 网络内可达(promtail 推送 + grafana 查询),不暴露公网。
+# retention 7 天:VPS 磁盘有限,避免日志无限增长。
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# 索引采用 BoltDB Shipper(V2.8+ 默认),适配单机文件存储
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 168h   # 7 天
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+  rule_path: /loki/rules-temp
+  alertmanager_url: ""
+  enable_api: true

@@ -82,6 +82,26 @@
       "targets": [
         {"refId": "A", "expr": "sum(increase(http_server_errors_total[5m]))", "legendFormat": "500 errors"}
       ]
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Backend 应用日志",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 10},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {"refId": "A", "expr": "{container_name=\"fundpilot-backend\"}", "datasource": {"type": "loki", "uid": "loki"}}
+      ]
     }
   ]
 }

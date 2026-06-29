@@ -37,6 +37,30 @@ services:
     networks:
       - fundpilot_default
 
+  loki:
+    image: grafana/loki
+    container_name: fundpilot-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./monitor/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    networks:
+      - fundpilot_default
+
+  promtail:
+    image: grafana/promtail
+    container_name: fundpilot-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./monitor/promtail.yml:/etc/promtail/promtail.yml:ro
+      # 读宿主 Docker 容器日志文件(JSON 日志)+ docker.sock 取容器元数据(container_name)
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - fundpilot_default
+
 # external:复用应用 compose 的默认网络(Prometheus 才能按 fundpilot-backend 容器名抓指标)
 networks:
   fundpilot_default:
@@ -46,3 +70,4 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
+  loki-data:
