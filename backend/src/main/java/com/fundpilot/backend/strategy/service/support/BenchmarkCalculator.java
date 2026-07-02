@@ -56,18 +56,18 @@ public final class BenchmarkCalculator {
     }
 
     /**
-     * 等额定投:每月最后交易日扣款,金额 = {@code plannedTotalAmount / 月数}。
-     * 逐日累计份额,市值 = 份额 × 当日净值。
+     * 等额定投基准(ADR-0015 修订):每月最后交易日扣款,金额 = 每期定投金额(基金级用户输入,不再 用 {@code plannedTotalAmount/月数})。
+     * dca 基准 = 「纯定投不止盈」,与策略「定投+移动止盈」同口径对照。逐日累计份额,市值 = 份额 × 当日净值。
      *
-     * @param navSequence       累计净值序列(升序)
-     * @param navDates          对应净值日期(UTC,长度须与 navSequence 一致)
-     * @param plannedTotalAmount 计划总仓位
+     * @param navSequence 累计净值序列(升序)
+     * @param navDates     对应净值日期(UTC,长度须与 navSequence 一致)
+     * @param dcaAmount   每期定投金额(等额,与生产定投任务同口径)
      */
     public static BenchmarkMetrics dca(List<BigDecimal> navSequence, List<Instant> navDates,
-                                       BigDecimal plannedTotalAmount) {
+                                       BigDecimal dcaAmount) {
         if (navSequence == null || navSequence.isEmpty()
                 || navDates == null || navDates.size() != navSequence.size()
-                || plannedTotalAmount == null || plannedTotalAmount.signum() <= 0) {
+                || dcaAmount == null || dcaAmount.signum() <= 0) {
             return new BenchmarkMetrics(BigDecimal.ZERO, BigDecimal.ZERO);
         }
         // 按年月分组,取每月最后一个交易日的下标(该日扣款)
@@ -76,8 +76,6 @@ public final class BenchmarkCalculator {
             YearMonth ym = YearMonth.from(navDates.get(i).atZone(ZoneOffset.UTC));
             lastDayOfMonth.put(ym, i);
         }
-        int monthCount = lastDayOfMonth.size();
-        BigDecimal perMonthAmount = plannedTotalAmount.divide(BigDecimal.valueOf(monthCount), MATH);
         Set<Integer> dcaDayIndices = new HashSet<>(lastDayOfMonth.values());
 
         BigDecimal shares = BigDecimal.ZERO;
@@ -85,8 +83,8 @@ public final class BenchmarkCalculator {
         List<BigDecimal> dailyValues = new java.util.ArrayList<>(navSequence.size());
         for (int i = 0; i < navSequence.size(); i++) {
             if (dcaDayIndices.contains(i)) {
-                shares = shares.add(perMonthAmount.divide(navSequence.get(i), MATH));
-                invested = invested.add(perMonthAmount);
+                shares = shares.add(dcaAmount.divide(navSequence.get(i), MATH));
+                invested = invested.add(dcaAmount);
             }
             dailyValues.add(shares.multiply(navSequence.get(i), MATH));
         }

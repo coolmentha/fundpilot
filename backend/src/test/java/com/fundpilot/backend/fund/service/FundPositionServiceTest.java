@@ -187,49 +187,7 @@ class FundPositionServiceTest extends AbstractIntegrationTest {
         return fundTransactionRepository.save(entity);
     }
 
-    // ===== 循环 C:峰值派生 =====
-
-    @Test
-    @Transactional
-    void peakNav_取_fund_nav_history_accumulated_nav_最大值() {
-        FundEntity fund = persistFund();
-        navHistory(fund, Instant.parse("2025-01-01T00:00:00Z"), "1.00", "1.00");
-        navHistory(fund, Instant.parse("2025-02-01T00:00:00Z"), "1.50", "1.50");
-        navHistory(fund, Instant.parse("2025-03-01T00:00:00Z"), "1.20", "1.20");
-
-        var peakNav = fundPositionService.getPeakNav(fund.getId());
-
-        assertThat(peakNav).hasValueSatisfying(v ->
-                assertThat(v).isEqualByComparingTo(new BigDecimal("1.50")));
-    }
-
-    @Test
-    @Transactional
-    void holdingPeriodPeakNav_加_openedAt_过滤_只取持仓期内峰值() {
-        FundEntity fund = persistFund();
-        // openedAt = 2025-02-01,之前的净值 1.80 高于持仓期内任何值,但不应计入
-        fund.setOpenedAt(Instant.parse("2025-02-01T00:00:00Z"));
-        fundRepository.save(fund);
-        navHistory(fund, Instant.parse("2025-01-01T00:00:00Z"), "1.80", "1.80");
-        navHistory(fund, Instant.parse("2025-02-15T00:00:00Z"), "1.20", "1.20");
-        navHistory(fund, Instant.parse("2025-03-01T00:00:00Z"), "1.40", "1.40");
-
-        var peakNav = fundPositionService.getHoldingPeriodPeakNav(fund.getId());
-
-        // 持仓期内峰值 = 1.40(1.80 在 openedAt 之前,排除)
-        assertThat(peakNav).hasValueSatisfying(v ->
-                assertThat(v).isEqualByComparingTo(new BigDecimal("1.40")));
-    }
-
-    @Test
-    @Transactional
-    void peakNav_无净值历史_返回_empty() {
-        FundEntity fund = persistFund();
-
-        var peakNav = fundPositionService.getPeakNav(fund.getId());
-
-        assertThat(peakNav).isEmpty();
-    }
+    // ===== 循环 C:峰值派生(ADR-0015 废弃,移动止盈用 High 市值派生,不再用 peakNav) =====
 
     private void navHistory(FundEntity fund, Instant navDate, String nav, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();

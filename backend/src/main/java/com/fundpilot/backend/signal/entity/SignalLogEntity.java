@@ -32,10 +32,6 @@ public class SignalLogEntity extends AbstractEntity {
 
     private BigDecimal triggerNav;
 
-    private Integer triggerTier;
-
-    private BigDecimal coefficient;
-
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
     private SignalType signalType;
@@ -48,9 +44,4 @@ public class SignalLogEntity extends AbstractEntity {
     private SignalReason reason;
 
     private String warnings;
-
-    private String hardConstraintBreaches;
-
-
-
 }

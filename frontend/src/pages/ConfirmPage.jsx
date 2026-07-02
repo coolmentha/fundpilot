@@ -40,7 +40,6 @@ export default function ConfirmPage() {
     const columns = [
         {title: '基金', width: 140, render: (_, r) => fundName(r.fundId)},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '原因', dataIndex: 'reason', render: text},
         {title: '建议量', width: 120, render: (_, r) => {
             const m = r.suggestedMeasure;

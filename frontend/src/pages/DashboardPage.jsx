@@ -17,9 +17,8 @@ export default function DashboardPage() {
     const {data: summary} = usePortfolioSummary();
 
     const holdingFunds = (funds || []).filter((f) => f.status === 'HOLDING');
-    const plannedTotal = holdingFunds.reduce((s, f) => s + Number(f.plannedTotalAmount || 0), 0);
+    const monthlyDcaTotal = holdingFunds.reduce((s, f) => s + Number(f.dcaAmount || 0), 0);
     const capital = Number(config?.totalInvestableCapital || 0);
-    const usageRatio = capital > 0 ? plannedTotal / capital : 0;
     const pendingCount = pending?.length ?? 0;
     const dailyPnlTotal = summary?.dailyPnlTotal;
 
@@ -28,7 +27,6 @@ export default function DashboardPage() {
     const pendingColumns = [
         {title: '基金', width: 160, render: (_, r) => fundName(r.fundId)},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '建议量', width: 130, render: (_, r) => {
             const m = r.suggestedMeasure;
             return m ? <span className="num-cell">{Number(m.value).toFixed(2)} ({text(m.measureUnit)})</span> : '-';
@@ -45,7 +43,7 @@ export default function DashboardPage() {
         {title: '代码', dataIndex: 'fundCode', width: 110},
         {title: '名称', dataIndex: 'fundName', ellipsis: true},
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '计划仓位', dataIndex: 'plannedTotalAmount', width: 140, align: 'right',
+        {title: '每期定投', dataIndex: 'dcaAmount', width: 140, align: 'right',
             render: (v) => <span className="num-cell">{money(v)}</span>},
         {
             title: '', width: 90, render: (_, r) => (
@@ -80,9 +78,10 @@ export default function DashboardPage() {
                 </Col>
                 <Col xs={12} md={6}>
                     <Card className="kpi-card kpi-violet">
-                        <Statistic title={<span className="kpi-label">计划仓位占比</span>}
-                                   value={usageRatio * 100} precision={1} suffix="%"
-                                   prefix={<PieChartOutlined/>}/>
+                        <Statistic title={<span className="kpi-label">每月定投合计</span>}
+                                   value={monthlyDcaTotal}
+                                   prefix={<PieChartOutlined/>}
+                                   formatter={(v) => money(v)}/>
                     </Card>
                 </Col>
             </Row>

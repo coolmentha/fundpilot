@@ -1,0 +1,32 @@
+# 本地开发用 PostgreSQL。
+# 与 backend/src/main/resources/application.yml 的默认值对齐:
+#   host=localhost port=5432 db=fundpilot user=fundpilot password=fundpilot
+#
+# 启动: docker compose up -d
+# 停止: docker compose down            (保留数据卷)
+# 重置: docker compose down -v         (删除数据卷,清库)
+# 查日志: docker compose logs -f db
+services:
+  db:
+    image: postgres:16
+    container_name: fundpilot-db
+    environment:
+      POSTGRES_DB: fundpilot
+      POSTGRES_USER: fundpilot
+      POSTGRES_PASSWORD: fundpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - fundpilot-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U fundpilot -d fundpilot" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    build:
+      args:
+        - HTTP_PROXY=http://host.docker.internal:10809
+        - HTTPS_PROXY=http://host.docker.internal:10809
+
+volumes:
+  fundpilot-db-data:

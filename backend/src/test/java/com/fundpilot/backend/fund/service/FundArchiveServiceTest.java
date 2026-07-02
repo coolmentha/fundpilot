@@ -89,7 +89,7 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
         fund.setStatus(FundStatus.HOLDING);
-        fund.setPlannedTotalAmount(new BigDecimal("100000"));
+        fund.setDcaAmount(new BigDecimal("100000"));
         entityManager.persist(fund);
         return fund;
     }
@@ -98,16 +98,18 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         FundStrategyEntity s = new FundStrategyEntity();
         s.setFundEntity(fund);
         s.setStatus(StrategyParamStatus.EFFECTIVE);
-        s.setTier1Drawdown(new BigDecimal("-0.08"));
-        s.setTier2Drawdown(new BigDecimal("-0.16"));
-        s.setTier3Drawdown(new BigDecimal("-0.25"));
-        s.setTier4Drawdown(new BigDecimal("-0.35"));
-        s.setTier1Ratio(new BigDecimal("0.30"));
-        s.setTier2Ratio(new BigDecimal("0.30"));
-        s.setTier3Ratio(new BigDecimal("0.20"));
-        s.setTier4Ratio(new BigDecimal("0.20"));
-        s.setWeeklyCoolDownThreshold(new BigDecimal("-0.08"));
-        s.setStopLossPullbackPercent(new BigDecimal("-0.08"));
+        // 移动止盈参数(ADR-0015):归档测试只验证级联软删,参数值用宽基默认
+        s.setActivationThreshold(new BigDecimal("0.50"));
+        s.setPullbackTierCount(3);
+        s.setPullbackTier1Yield(new BigDecimal("0.50"));
+        s.setPullbackTier1Ratio(new BigDecimal("0.15"));
+        s.setPullbackTier2Yield(new BigDecimal("0.80"));
+        s.setPullbackTier2Ratio(new BigDecimal("0.18"));
+        s.setPullbackTier3Yield(new BigDecimal("1.50"));
+        s.setPullbackTier3Ratio(new BigDecimal("0.20"));
+        s.setSellRatio(new BigDecimal("0.20"));
+        s.setFloorRatio(new BigDecimal("0.40"));
+        s.setCooldownDays(20);
         entityManager.persist(s);
         return s;
     }

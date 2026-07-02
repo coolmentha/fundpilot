@@ -21,15 +21,7 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
     List<FundTransactionEntity> findByFundEntity_IdAndStatus(Long fundId, FundTransactionStatus status);
 
     /**
-     * 按基金 + 信号类型 + 档位 + 状态查交易(issue #13 移动止盈份额来源 A1 规则)。
-     * 找 {@code signalLog.signalType=ADD AND signalLog.triggerTier=:tier AND status=CONFIRMED} 的加仓交易,
-     * 取其 shares 作为该档移动止盈的卖出份额。建仓份额用 signalType=BUILD。
-     */
-    List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndSignalLogEntity_TriggerTierAndStatus(
-            Long fundId, SignalType signalType, Integer triggerTier, FundTransactionStatus status);
-
-    /**
-     * 按基金 + 信号类型 + 状态查交易(issue #13 建仓份额来源)。
+     * 按基金 + 信号类型 + 状态查交易(ADR-0015 后保留通用查询;SignalType 仅 NONE/SELL)。
      */
     List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
             Long fundId, SignalType signalType, FundTransactionStatus status);

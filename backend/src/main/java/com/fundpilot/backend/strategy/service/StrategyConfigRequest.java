@@ -3,30 +3,35 @@ package com.fundpilot.backend.strategy.service;
 import java.math.BigDecimal;
 
 /**
- * 策略参数配置请求(issue #10):四档回撤阈值 + 四档加仓比例 + 周跌幅冷静阈值 + 移动止盈回落幅度。
- * <p>对应 {@code FundStrategyEntity} 的 tier1-4Drawdown / tier1-4Ratio /
- * weeklyCoolDownThreshold / stopLossPullbackPercent 字段。
+ * 策略参数配置请求(ADR-0015):移动止盈参数。对应 {@code FundStrategyEntity} 的移动止盈字段。
+ * <p>回撤分级表用至多 4 档 yield/ratio 对(第一档起算收益率对齐启动门槛)。
  *
- * @param tier1Drawdown            一档回撤阈值
- * @param tier2Drawdown            二档回撤阈值
- * @param tier3Drawdown            三档回撤阈值
- * @param tier4Drawdown            四档回撤阈值
- * @param tier1Ratio               一档加仓比例
- * @param tier2Ratio               二档加仓比例
- * @param tier3Ratio               三档加仓比例
- * @param tier4Ratio               四档加仓比例
- * @param weeklyCoolDownThreshold  周跌幅冷静阈值
- * @param stopLossPullbackPercent  移动止盈回落幅度
+ * @param activationThreshold   启动门槛(宽基 0.50、行业 0.40)
+ * @param pullbackTierCount     回撤分级有效档数(2~4)
+ * @param pullbackTier1Yield    一档起算收益率
+ * @param pullbackTier1Ratio    一档回撤比例
+ * @param pullbackTier2Yield    二档起算收益率
+ * @param pullbackTier2Ratio    二档回撤比例
+ * @param pullbackTier3Yield    三档起算收益率
+ * @param pullbackTier3Ratio    三档回撤比例
+ * @param pullbackTier4Yield    四档起算收益率(行业用;宽基可 null)
+ * @param pullbackTier4Ratio    四档回撤比例(行业用;宽基可 null)
+ * @param sellRatio             每次卖出比例(宽基 0.20、行业 0.25)
+ * @param floorRatio            底仓保留比例(宽基 0.40、行业 0.25)
+ * @param cooldownDays          卖出冷却交易日数(20)
  */
 public record StrategyConfigRequest(
-        BigDecimal tier1Drawdown,
-        BigDecimal tier2Drawdown,
-        BigDecimal tier3Drawdown,
-        BigDecimal tier4Drawdown,
-        BigDecimal tier1Ratio,
-        BigDecimal tier2Ratio,
-        BigDecimal tier3Ratio,
-        BigDecimal tier4Ratio,
-        BigDecimal weeklyCoolDownThreshold,
-        BigDecimal stopLossPullbackPercent) {
+        BigDecimal activationThreshold,
+        Integer pullbackTierCount,
+        BigDecimal pullbackTier1Yield,
+        BigDecimal pullbackTier1Ratio,
+        BigDecimal pullbackTier2Yield,
+        BigDecimal pullbackTier2Ratio,
+        BigDecimal pullbackTier3Yield,
+        BigDecimal pullbackTier3Ratio,
+        BigDecimal pullbackTier4Yield,
+        BigDecimal pullbackTier4Ratio,
+        BigDecimal sellRatio,
+        BigDecimal floorRatio,
+        Integer cooldownDays) {
 }
