@@ -32,6 +32,8 @@ class DcaServiceTest extends AbstractIntegrationTest {
     @Test
     void 持仓基金有定投金额_产生INVEST交易() {
         FundEntity fund = persistHoldingFund(FundCategory.BROAD_BASE, new BigDecimal("1000"));
+        entityManager.flush();
+        entityManager.clear();
 
         int count = dcaService.investMonthly();
 
@@ -47,6 +49,8 @@ class DcaServiceTest extends AbstractIntegrationTest {
     @Test
     void 无定投金额_跳过不产生交易() {
         FundEntity fund = persistHoldingFund(FundCategory.BROAD_BASE, null);
+        entityManager.flush();
+        entityManager.clear();
 
         int count = dcaService.investMonthly();
 
