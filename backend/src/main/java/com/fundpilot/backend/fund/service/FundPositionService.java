@@ -72,26 +72,6 @@ public class FundPositionService {
         return holdingAmount.divide(totalEquity, MATH);
     }
 
-    /**
-     * 全历史累计净值峰值(ADR-0001:不落字段,实时派生)。
-     * 无净值历史时返回 {@link Optional#empty()}。
-     */
-    public Optional<BigDecimal> getPeakNav(Long fundId) {
-        return fundNavHistoryRepository.findPeakAccumulatedNav(fundId);
-    }
-
-    /**
-     * 持仓期内累计净值峰值:加 {@code navDate >= fund.openedAt} 过滤(ADR-0001)。
-     * 无净值历史或 fund.openedAt 为空(返回全历史峰值)时降级。
-     */
-    public Optional<BigDecimal> getHoldingPeriodPeakNav(Long fundId) {
-        FundEntity fund = fundRepository.findById(fundId).orElse(null);
-        if (fund == null || fund.getOpenedAt() == null) {
-            return getPeakNav(fundId);
-        }
-        return fundNavHistoryRepository.findPeakAccumulatedNavSince(fundId, fund.getOpenedAt());
-    }
-
     private BigDecimal sumShares(List<FundTransactionEntity> transactions) {
         BigDecimal sum = BigDecimal.ZERO;
         for (FundTransactionEntity tx : transactions) {

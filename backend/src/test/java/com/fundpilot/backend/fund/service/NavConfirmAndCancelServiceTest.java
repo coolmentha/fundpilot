@@ -44,7 +44,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
         fund.setStatus(FundStatus.HOLDING);
-        fund.setPlannedTotalAmount(new BigDecimal("100000"));
+        fund.setDcaAmount(new BigDecimal("100000"));
         entityManager.persist(fund);
     }
 

@@ -57,12 +57,24 @@ export default function StrategyTab({fundId}) {
 
     const tierColumns = [
         {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
-        {title: '一档', width: 100, render: (_, r) => `${percent(r.tier1Drawdown)} / ${percent(r.tier1Ratio)}`},
-        {title: '二档', width: 100, render: (_, r) => `${percent(r.tier2Drawdown)} / ${percent(r.tier2Ratio)}`},
-        {title: '三档', width: 100, render: (_, r) => `${percent(r.tier3Drawdown)} / ${percent(r.tier3Ratio)}`},
-        {title: '四档', width: 100, render: (_, r) => `${percent(r.tier4Drawdown)} / ${percent(r.tier4Ratio)}`},
-        {title: '周冷静', dataIndex: 'weeklyCoolDownThreshold', width: 90, render: percent},
-        {title: '止盈回落', dataIndex: 'stopLossPullbackPercent', width: 90, render: percent},
+        {title: '启动门槛', dataIndex: 'activationThreshold', width: 90, render: percent},
+        {title: '每次卖出', dataIndex: 'sellRatio', width: 90, render: percent},
+        {title: '底仓保留', dataIndex: 'floorRatio', width: 90, render: percent},
+        {title: '冷却(日)', dataIndex: 'cooldownDays', width: 90},
+        {title: '回撤分级', width: 200, render: (_, r) => {
+            // 拼接有效档 yield→ratio
+            const tiers = [
+                [r.pullbackTier1Yield, r.pullbackTier1Ratio],
+                [r.pullbackTier2Yield, r.pullbackTier2Ratio],
+                [r.pullbackTier3Yield, r.pullbackTier3Ratio],
+                [r.pullbackTier4Yield, r.pullbackTier4Ratio],
+            ].filter(([y]) => y != null);
+            return tiers.map(([y, ratio], i) => (
+                <span key={i} className="num-cell">
+                    {i > 0 && ' / '}{percent(y)}→{percent(ratio)}
+                </span>
+            ));
+        }},
         {
             title: '操作', width: 280, render: (_, r) => (
                 <Space wrap size="small">
@@ -102,10 +114,10 @@ export default function StrategyTab({fundId}) {
                 <Card className="data-card" size="small" title="当前生效策略">
                     <Space wrap>
                         <StatusTag value={active.status}/>
-                        <Text>一档 {percent(active.tier1Drawdown)}</Text>
-                        <Text>二档 {percent(active.tier2Drawdown)}</Text>
-                        <Text>三档 {percent(active.tier3Drawdown)}</Text>
-                        <Text>四档 {percent(active.tier4Drawdown)}</Text>
+                        <Text>启动门槛 {percent(active.activationThreshold)}</Text>
+                        <Text>每次卖出 {percent(active.sellRatio)}</Text>
+                        <Text>底仓 {percent(active.floorRatio)}</Text>
+                        <Text>冷却 {active.cooldownDays} 日</Text>
                     </Space>
                 </Card>
             )}

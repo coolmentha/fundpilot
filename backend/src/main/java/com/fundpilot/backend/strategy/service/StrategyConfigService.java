@@ -236,15 +236,18 @@ public class StrategyConfigService {
     }
 
     private void applyRequest(FundStrategyEntity strategy, StrategyConfigRequest request) {
-        strategy.setTier1Drawdown(request.tier1Drawdown());
-        strategy.setTier2Drawdown(request.tier2Drawdown());
-        strategy.setTier3Drawdown(request.tier3Drawdown());
-        strategy.setTier4Drawdown(request.tier4Drawdown());
-        strategy.setTier1Ratio(request.tier1Ratio());
-        strategy.setTier2Ratio(request.tier2Ratio());
-        strategy.setTier3Ratio(request.tier3Ratio());
-        strategy.setTier4Ratio(request.tier4Ratio());
-        strategy.setWeeklyCoolDownThreshold(request.weeklyCoolDownThreshold());
-        strategy.setStopLossPullbackPercent(request.stopLossPullbackPercent());
+        strategy.setActivationThreshold(request.activationThreshold());
+        strategy.setPullbackTierCount(request.pullbackTierCount());
+        strategy.setPullbackTier1Yield(request.pullbackTier1Yield());
+        strategy.setPullbackTier1Ratio(request.pullbackTier1Ratio());
+        strategy.setPullbackTier2Yield(request.pullbackTier2Yield());
+        strategy.setPullbackTier2Ratio(request.pullbackTier2Ratio());
+        strategy.setPullbackTier3Yield(request.pullbackTier3Yield());
+        strategy.setPullbackTier3Ratio(request.pullbackTier3Ratio());
+        strategy.setPullbackTier4Yield(request.pullbackTier4Yield());
+        strategy.setPullbackTier4Ratio(request.pullbackTier4Ratio());
+        strategy.setSellRatio(request.sellRatio());
+        strategy.setFloorRatio(request.floorRatio());
+        strategy.setCooldownDays(request.cooldownDays());
     }
 }

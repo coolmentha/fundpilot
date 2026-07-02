@@ -30,6 +30,7 @@ public class FundEstimateService {
      * @return 盘中估值快照(含估算涨跌幅);拉取失败或解析失败返 empty
      */
     public Optional<FundEstimateSnapshot> fetchEstimate(String fundCode) {
+        log.info("拉取基金 {} 盘中估值", fundCode);
         if (fundCode == null || fundCode.isBlank()) {
             return Optional.empty();
         }

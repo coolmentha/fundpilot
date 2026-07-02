@@ -1,36 +1,27 @@
 package com.fundpilot.backend.strategy.service.support;
 
-import com.fundpilot.backend.fund.service.support.Breach;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
-import com.fundpilot.backend.signal.enums.SignalWarningValue;
-import com.fundpilot.backend.signal.valueobject.Measure;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 信号引擎输出(issue #12):evaluateSignal 的返回值,后续由 #13 SignalGenerationJob 落入 {@code SignalLogEntity}。
+ * 信号引擎输出(ADR-0015 重写):evaluateSignal 的返回值,落入 {@code SignalLogEntity}。
+ * <p>定投移动止盈只有 NONE/SELL 两态;SELL 携带建议卖出份额(供 SignalOperationService 写 DECREASE 交易)。
  *
- * @param signalType             信号类型(NONE/BUILD/ADD/SELL)
- * @param triggerTier            触发档位(1~4),BUILD/SELL-移动止盈 填,其他可 null
- * @param coefficient            调节系数(ADD 时填,BUILD 固定 1.0,其他可 null)
- * @param suggestedMeasure       建议量值(BUILD/ADD 存金额,SELL 存份额),NONE 可 null
- * @param reason                 触发原因(枚举,详见 {@link SignalReason})
- * @param warnings               强提示列表(详见 {@link SignalWarningValue})
- * @param hardConstraintBreaches 硬约束违反记录(空=通过)
+ * @param signalType   信号类型(NONE/SELL)
+ * @param sellShares  SELL 时的建议卖出份额(当前持仓 × sellRatio);NONE 可 null
+ * @param reason      触发原因(枚举,详见 {@link SignalReason})
+ * @param warnings    强提示列表
  */
 public record SignalResult(
         SignalType signalType,
-        Integer triggerTier,
-        BigDecimal coefficient,
-        Measure suggestedMeasure,
+        java.math.BigDecimal sellShares,
         SignalReason reason,
-        List<SignalWarningValue> warnings,
-        List<Breach> hardConstraintBreaches) {
+        List<com.fundpilot.backend.signal.enums.SignalWarningValue> warnings) {
 
     /** 快速构造 NONE 结果。 */
     public static SignalResult none(SignalReason reason) {
-        return new SignalResult(SignalType.NONE, null, null, null, reason, List.of(), List.of());
+        return new SignalResult(SignalType.NONE, null, reason, List.of());
     }
 }

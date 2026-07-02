@@ -44,7 +44,8 @@ public class FundEntity extends AbstractEntity {
     @Column(length = 32)
     private FundStatus status = FundStatus.PENDING_HOLDING;
 
-    private BigDecimal plannedTotalAmount;
+    /** 每期定投金额(ADR-0015):基金级用户输入,每月最后交易日扣款;定投无上限、无计划期数。 */
+    private BigDecimal dcaAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 32)

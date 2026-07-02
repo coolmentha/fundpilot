@@ -9,20 +9,17 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * 信号日志视图 DTO(issue #16):只含业务字段,关联对象只取 id,不暴露 Entity 内部字段。
+ * 信号日志视图 DTO(ADR-0015):只含业务字段,关联对象只取 id。定投移动止盈只有 NONE/SELL。
  *
- * @param id                    信号日志 ID
- * @param fundId                基金 ID
- * @param fundStrategyId        策略 ID
- * @param signalDate            信号生成时间
- * @param triggerNav            触发净值
- * @param triggerTier           触发档位(1~4)
- * @param coefficient           调节系数
- * @param signalType            信号类型(NONE/BUILD/ADD/SELL)
- * @param suggestedMeasure      建议量值(BUILD/ADD 存金额,SELL 存份额)
- * @param reason                触发原因
- * @param warnings              强提示(逗号分隔)
- * @param hardConstraintBreaches 硬约束违反(逗号分隔)
+ * @param id              信号日志 ID
+ * @param fundId          基金 ID
+ * @param fundStrategyId  策略 ID
+ * @param signalDate      信号生成时间
+ * @param triggerNav      触发净值
+ * @param signalType      信号类型(NONE/SELL)
+ * @param suggestedMeasure 建议量值(SELL 存份额)
+ * @param reason          触发原因
+ * @param warnings        强提示(逗号分隔)
  */
 public record SignalLogView(
         Long id,
@@ -30,13 +27,10 @@ public record SignalLogView(
         Long fundStrategyId,
         Instant signalDate,
         BigDecimal triggerNav,
-        Integer triggerTier,
-        BigDecimal coefficient,
         SignalType signalType,
         Measure suggestedMeasure,
         SignalReason reason,
-        String warnings,
-        String hardConstraintBreaches) {
+        String warnings) {
 
     public static SignalLogView from(SignalLogEntity log) {
         return new SignalLogView(
@@ -45,12 +39,9 @@ public record SignalLogView(
                 log.getFundStrategyEntity() != null ? log.getFundStrategyEntity().getId() : null,
                 log.getSignalDate(),
                 log.getTriggerNav(),
-                log.getTriggerTier(),
-                log.getCoefficient(),
                 log.getSignalType(),
                 log.getSuggestedMeasure(),
                 log.getReason(),
-                log.getWarnings(),
-                log.getHardConstraintBreaches());
+                log.getWarnings());
     }
 }

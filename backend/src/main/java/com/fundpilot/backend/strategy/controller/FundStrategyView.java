@@ -7,45 +7,43 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * 策略视图 DTO(issue #16):只含业务字段,关联对象只取 id,不暴露 Entity 内部字段。
+ * 策略视图 DTO(ADR-0015):只含业务字段,关联对象只取 id。移动止盈参数。
  *
- * @param id                        策略 ID
- * @param fundId                    基金 ID
- * @param status                    策略状态(PENDING_CALIBRATION/CALIBRATED/EFFECTIVE)
- * @param tier1Drawdown             一档回撤阈值
- * @param tier2Drawdown             二档回撤阈值
- * @param tier3Drawdown             三档回撤阈值
- * @param tier4Drawdown             四档回撤阈值
- * @param tier1Ratio                一档加仓比例
- * @param tier2Ratio                二档加仓比例
- * @param tier3Ratio                三档加仓比例
- * @param tier4Ratio                四档加仓比例
- * @param weeklyCoolDownThreshold   单周跌幅冷却阈值
- * @param stopLossPullbackPercent   移动止盈回撤比例
- * @param tier1AddedAt              一档已加时间
- * @param tier2AddedAt              二档已加时间
- * @param tier3AddedAt              三档已加时间
- * @param tier4AddedAt              四档已加时间
- * @param createdDate               创建时间
+ * @param id                    策略 ID
+ * @param fundId                基金 ID
+ * @param status                策略状态
+ * @param activationThreshold   启动门槛
+ * @param pullbackTierCount     回撤分级有效档数
+ * @param pullbackTier1Yield    一档起算收益率
+ * @param pullbackTier1Ratio    一档回撤比例
+ * @param pullbackTier2Yield    二档起算收益率
+ * @param pullbackTier2Ratio    二档回撤比例
+ * @param pullbackTier3Yield    三档起算收益率
+ * @param pullbackTier3Ratio    三档回撤比例
+ * @param pullbackTier4Yield    四档起算收益率
+ * @param pullbackTier4Ratio    四档回撤比例
+ * @param sellRatio             每次卖出比例
+ * @param floorRatio            底仓保留比例
+ * @param cooldownDays          卖出冷却交易日数
+ * @param createdDate           创建时间
  */
 public record FundStrategyView(
         Long id,
         Long fundId,
         StrategyParamStatus status,
-        BigDecimal tier1Drawdown,
-        BigDecimal tier2Drawdown,
-        BigDecimal tier3Drawdown,
-        BigDecimal tier4Drawdown,
-        BigDecimal tier1Ratio,
-        BigDecimal tier2Ratio,
-        BigDecimal tier3Ratio,
-        BigDecimal tier4Ratio,
-        BigDecimal weeklyCoolDownThreshold,
-        BigDecimal stopLossPullbackPercent,
-        Instant tier1AddedAt,
-        Instant tier2AddedAt,
-        Instant tier3AddedAt,
-        Instant tier4AddedAt,
+        BigDecimal activationThreshold,
+        Integer pullbackTierCount,
+        BigDecimal pullbackTier1Yield,
+        BigDecimal pullbackTier1Ratio,
+        BigDecimal pullbackTier2Yield,
+        BigDecimal pullbackTier2Ratio,
+        BigDecimal pullbackTier3Yield,
+        BigDecimal pullbackTier3Ratio,
+        BigDecimal pullbackTier4Yield,
+        BigDecimal pullbackTier4Ratio,
+        BigDecimal sellRatio,
+        BigDecimal floorRatio,
+        Integer cooldownDays,
         Instant createdDate) {
 
     public static FundStrategyView from(FundStrategyEntity strategy) {
@@ -53,20 +51,19 @@ public record FundStrategyView(
                 strategy.getId(),
                 strategy.getFundEntity() != null ? strategy.getFundEntity().getId() : null,
                 strategy.getStatus(),
-                strategy.getTier1Drawdown(),
-                strategy.getTier2Drawdown(),
-                strategy.getTier3Drawdown(),
-                strategy.getTier4Drawdown(),
-                strategy.getTier1Ratio(),
-                strategy.getTier2Ratio(),
-                strategy.getTier3Ratio(),
-                strategy.getTier4Ratio(),
-                strategy.getWeeklyCoolDownThreshold(),
-                strategy.getStopLossPullbackPercent(),
-                strategy.getTier1AddedAt(),
-                strategy.getTier2AddedAt(),
-                strategy.getTier3AddedAt(),
-                strategy.getTier4AddedAt(),
+                strategy.getActivationThreshold(),
+                strategy.getPullbackTierCount(),
+                strategy.getPullbackTier1Yield(),
+                strategy.getPullbackTier1Ratio(),
+                strategy.getPullbackTier2Yield(),
+                strategy.getPullbackTier2Ratio(),
+                strategy.getPullbackTier3Yield(),
+                strategy.getPullbackTier3Ratio(),
+                strategy.getPullbackTier4Yield(),
+                strategy.getPullbackTier4Ratio(),
+                strategy.getSellRatio(),
+                strategy.getFloorRatio(),
+                strategy.getCooldownDays(),
                 strategy.getCreatedDate());
     }
 }

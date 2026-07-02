@@ -47,6 +47,10 @@ public final class DailyChangeResolver {
     public static DailyChangeResult resolve(Instant now, boolean todayNavConfirmed,
                                             BigDecimal latestNav, BigDecimal previousNav,
                                             Optional<FundEstimateSnapshot> estimate) {
+        // 无净值历史:latestNav/previousNav 都 null → 无法算涨跌,返 null(优先于盘前0)
+        if (latestNav == null && previousNav == null) {
+            return new DailyChangeResult(null, false);
+        }
         // 盘后态:当日净值已落库 → 用落库净值算(当日/昨日-1),非估算
         if (todayNavConfirmed) {
             return new DailyChangeResult(FundPnlCalculator.dailyChangePct(latestNav, previousNav), false);

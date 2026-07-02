@@ -15,12 +15,13 @@ import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.repository.StrategyBacktestRepository;
 import com.fundpilot.backend.strategy.service.support.BacktestIndicatorCalculator;
 import com.fundpilot.backend.strategy.service.support.BacktestParams;
-import com.fundpilot.backend.strategy.service.support.BacktestResult;
 import com.fundpilot.backend.strategy.service.support.BacktestSimulator;
+import com.fundpilot.backend.strategy.service.support.DcaTakeProfitResult;
 import com.fundpilot.backend.strategy.service.support.BenchmarkCalculator;
 import com.fundpilot.backend.strategy.service.support.BenchmarkMetrics;
 import com.fundpilot.backend.strategy.service.support.MarketIndicators;
 import com.fundpilot.backend.strategy.service.support.MaxDrawdownCalculator;
+import com.fundpilot.backend.strategy.service.support.TakeProfitParamsFactory;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +68,7 @@ public class DefaultStrategyBacktestService implements StrategyBacktestService {
         FundStrategyEntity strategy = fundStrategyRepository.findById(strategyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "FundStrategy #" + strategyId + " 不存在"));
         FundEntity fund = strategy.getFundEntity();
-        BigDecimal plannedTotalAmount = Optional.ofNullable(fund.getPlannedTotalAmount())
+        BigDecimal dcaAmount = Optional.ofNullable(fund.getDcaAmount())
                 .orElse(BigDecimal.ZERO);
 
         // 窗口降级:基金成立不满 window.start 时,起始日降级为最早可用净值日期
@@ -86,23 +87,23 @@ public class DefaultStrategyBacktestService implements StrategyBacktestService {
         entity.setBacktestStartDate(start);
         entity.setBacktestEndDate(end);
 
-        if (navHistory.size() < 2 || plannedTotalAmount.signum() <= 0) {
-            // 净值序列不足或无计划仓位:无法回测,落零指标 + passed=false 留痕
+        if (navHistory.size() < 2 || dcaAmount.signum() <= 0) {
+            // 净值序列不足或无每期定投金额:无法回测,落零指标 + passed=false 留痕
             return saveZero(entity);
         }
 
         List<BigDecimal> navSequence = navHistory.stream().map(FundNavHistoryEntity::getAccumulatedNav).toList();
         List<Instant> navDates = navHistory.stream().map(FundNavHistoryEntity::getNavDate).toList();
 
-        BacktestParams params = toParams(strategy, plannedTotalAmount, fund);
+        BacktestParams params = toParams(strategy, fund);
         IndexKline benchmarkKline = fetchBenchmarkKline(fund);
         List<MarketIndicators> indicators = BacktestIndicatorCalculator.calculate(navSequence, navDates, benchmarkKline);
-        BacktestResult result = BacktestSimulator.simulate(navSequence, navDates, indicators, params);
+        DcaTakeProfitResult result = BacktestSimulator.simulate(navSequence, navDates, indicators, params);
         BigDecimal strategyReturn = result.strategyReturn();
         BigDecimal strategyMaxDrawdown = MaxDrawdownCalculator.calculate(result.dailyValues());
 
         BenchmarkMetrics allIn = BenchmarkCalculator.allIn(navSequence);
-        BenchmarkMetrics dca = BenchmarkCalculator.dca(navSequence, navDates, plannedTotalAmount);
+        BenchmarkMetrics dca = BenchmarkCalculator.dca(navSequence, navDates, fund.getDcaAmount() != null ? fund.getDcaAmount() : BigDecimal.ZERO);
         BenchmarkMetrics hs300 = hs300BenchmarkProvider.fetch(start, end);
         boolean passed = BenchmarkCalculator.judgePassed(strategyReturn, strategyMaxDrawdown, hs300, allIn, dca);
 
@@ -137,17 +138,11 @@ public class DefaultStrategyBacktestService implements StrategyBacktestService {
         return strategyBacktestRepository.save(entity);
     }
 
-    private static BacktestParams toParams(FundStrategyEntity strategy, BigDecimal plannedTotalAmount, FundEntity fund) {
+    private static BacktestParams toParams(FundStrategyEntity strategy, FundEntity fund) {
         return new BacktestParams(
-                strategy.getTier1Drawdown(), strategy.getTier2Drawdown(),
-                strategy.getTier3Drawdown(), strategy.getTier4Drawdown(),
-                strategy.getTier1Ratio(), strategy.getTier2Ratio(),
-                strategy.getTier3Ratio(), strategy.getTier4Ratio(),
-                strategy.getWeeklyCoolDownThreshold(),
-                strategy.getStopLossPullbackPercent(),
-                plannedTotalAmount,
-                fund.getFundCategory(),
-                fund.getFundSubType());
+                fund.getDcaAmount() != null ? fund.getDcaAmount() : BigDecimal.ZERO,
+                TakeProfitParamsFactory.from(strategy, fund.getFundCategory()),
+                fund.getFundCategory());
     }
 
     /** 拉跟踪指数 K 线供指标计算;无 benchmarkIndexCode 或拉取失败时返 null(量能类指标降级)。 */

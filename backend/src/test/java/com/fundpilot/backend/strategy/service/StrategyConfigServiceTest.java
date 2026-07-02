@@ -61,8 +61,8 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
 
         FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
-        assertThat(saved.getTier1Drawdown()).isEqualByComparingTo(new BigDecimal("0.05"));
-        assertThat(saved.getTier1Ratio()).isEqualByComparingTo(new BigDecimal("0.30"));
+        assertThat(saved.getPullbackTier1Yield()).isEqualByComparingTo(new BigDecimal("0.50"));
+        assertThat(saved.getPullbackTier1Ratio()).isEqualByComparingTo(new BigDecimal("0.15"));
     }
 
     @Test
@@ -74,8 +74,8 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
         strategyConfigService.updateDraft(strategyId, configRequest("0.08", "0.40"));
 
         FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
-        assertThat(saved.getTier1Drawdown()).isEqualByComparingTo(new BigDecimal("0.08"));
-        assertThat(saved.getTier1Ratio()).isEqualByComparingTo(new BigDecimal("0.40"));
+        assertThat(saved.getPullbackTier1Yield()).isEqualByComparingTo(new BigDecimal("0.08"));
+        assertThat(saved.getPullbackTier1Ratio()).isEqualByComparingTo(new BigDecimal("0.40"));
         // 改参数后状态仍是 PENDING_CALIBRATION
         assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
     }
@@ -174,7 +174,7 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
 
         FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
-        assertThat(saved.getTier1Drawdown()).isEqualByComparingTo(new BigDecimal("0.08"));
+        assertThat(saved.getPullbackTier1Yield()).isEqualByComparingTo(new BigDecimal("0.08"));
     }
 
     @Test
@@ -374,13 +374,17 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
     }
 
     private static StrategyConfigRequest sampleRequest() {
-        return configRequest("0.05", "0.30");
+        return configRequest("0.50", "0.15");
     }
 
-    private static StrategyConfigRequest configRequest(String tier1Drawdown, String tier1Ratio) {
+    /** @param tier1Yield 一档起算收益率;@param tier1Ratio 一档回撤比例(用于 createDraft/updateDraft 断言) */
+    private static StrategyConfigRequest configRequest(String tier1Yield, String tier1Ratio) {
         return new StrategyConfigRequest(
-                new BigDecimal(tier1Drawdown), new BigDecimal("0.10"), new BigDecimal("0.15"), new BigDecimal("0.20"),
-                new BigDecimal(tier1Ratio), new BigDecimal("0.30"), new BigDecimal("0.20"), new BigDecimal("0.20"),
-                new BigDecimal("0.05"), new BigDecimal("0.08"));
+                new BigDecimal("0.50"), 3,
+                new BigDecimal(tier1Yield), new BigDecimal(tier1Ratio),
+                new BigDecimal("0.80"), new BigDecimal("0.18"),
+                new BigDecimal("1.50"), new BigDecimal("0.20"),
+                null, null,
+                new BigDecimal("0.20"), new BigDecimal("0.40"), 20);
     }
 }

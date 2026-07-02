@@ -47,8 +47,8 @@ export default function FundDetailPage() {
                         {fund.costPerShare === null || fund.costPerShare === undefined ? '-' : money(fund.costPerShare)}
                     </span>
                 </Descriptions.Item>
-                <Descriptions.Item label="计划仓位">
-                    <span className="num-cell">{money(fund.plannedTotalAmount)}</span>
+                <Descriptions.Item label="每期定投">
+                    <span className="num-cell">{money(fund.dcaAmount)}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日涨跌">
                     <span style={{color: pnlColor(fund.dailyChangePct)}}>

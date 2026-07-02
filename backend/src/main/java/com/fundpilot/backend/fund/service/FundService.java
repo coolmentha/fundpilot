@@ -16,9 +16,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.FundTypeClassification;
 import com.fundpilot.backend.fund.service.support.FundTypeClassifier;
-import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
-import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,7 +41,6 @@ public class FundService {
 
     private final FundRepository fundRepository;
     private final FundArchiveService fundArchiveService;
-    private final UserConfigService userConfigService;
     private final FundPnlService fundPnlService;
     private final MarketDataFetchService marketDataFetchService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
@@ -79,7 +76,7 @@ public class FundService {
         FundEntity fund = new FundEntity();
         fund.setFundCode(request.fundCode());
         fund.setFundName(request.fundName());
-        fund.setPlannedTotalAmount(request.plannedTotalAmount());
+        fund.setDcaAmount(request.dcaAmount());
 
         // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填)
         FundTypeClassification fallback = request.fundSubType() == null && request.fundCategory() == null
@@ -91,7 +88,6 @@ public class FundService {
         fund.setBenchmarkIndexCode(request.benchmarkIndexCode() != null ? request.benchmarkIndexCode()
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
 
-        validatePlannedTotalAmount(fund.getPlannedTotalAmount(), fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
 
         // 建基金后自动拉历史净值(独立事务,失败降级不阻断建基金)
@@ -194,9 +190,8 @@ public class FundService {
         if (request.benchmarkIndexCode() != null) {
             fund.setBenchmarkIndexCode(request.benchmarkIndexCode());
         }
-        if (request.plannedTotalAmount() != null) {
-            fund.setPlannedTotalAmount(request.plannedTotalAmount());
-            validatePlannedTotalAmount(fund.getPlannedTotalAmount(), fund.getFundCategory());
+        if (request.dcaAmount() != null) {
+            fund.setDcaAmount(request.dcaAmount());
         }
         return FundView.from(fundRepository.save(fund));
     }
@@ -208,25 +203,9 @@ public class FundService {
     }
 
     /**
-     * 计划仓位校验(CONTEXT.md「计划仓位校验」):plannedTotalAmount ≤ 总可投资金 × 单只仓位上限(30% 无关类型),
-     * 防止填一个根本建不了的死状态;与硬约束互补(意图上限 vs 事实上限)。
-     * plannedTotalAmount 为 null 不校验;fundCategory 为 null 抛 FUND_CATEGORY_REQUIRED
-     * (类型为 null 会阻塞后续默认档位查询,与 singlePositionLimit 无关——后者已统一 30% 无关类型)。
+     * 计划仓位校验已随 ADR-0015 废弃(仓位硬约束退场,定投无上限)。
+     * fundCategory 仍由前端兜底带入,不再做单只仓位上限校验。
      */
-    private void validatePlannedTotalAmount(BigDecimal plannedTotalAmount, FundCategory fundCategory) {
-        if (plannedTotalAmount == null) {
-            return;
-        }
-        if (fundCategory == null) {
-            throw new BusinessException(ErrorCode.FUND_CATEGORY_REQUIRED, "计划仓位校验需要基金类型");
-        }
-        BigDecimal limit = userConfigService.requireTotalInvestableCapital()
-                .multiply(HardConstraintConfig.singlePositionLimit());
-        if (plannedTotalAmount.compareTo(limit) > 0) {
-            throw new BusinessException(ErrorCode.PLANNED_AMOUNT_EXCEEDS_LIMIT,
-                    "计划总仓位超过单只仓位上限 " + limit.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
-        }
-    }
 
     private FundEntity requireFund(Long id) {
         return fundRepository.findById(id)
