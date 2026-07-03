@@ -1,5 +1,6 @@
 import {Navigate, Route, Routes} from 'react-router-dom';
 import Shell from './components/Shell.jsx';
+import MarketDashboardPage from './pages/MarketDashboardPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import FundsPage from './pages/FundsPage.jsx';
 import FundDetailPage from './pages/FundDetailPage.jsx';
@@ -13,7 +14,8 @@ export default function App() {
     return (
         <Routes>
             <Route element={<Shell/>}>
-                <Route index element={<DashboardPage/>}/>
+                <Route index element={<MarketDashboardPage/>}/>
+                <Route path="/dashboard" element={<DashboardPage/>}/>
                 <Route path="/funds" element={<FundsPage/>}/>
                 <Route path="/funds/:fundId" element={<FundDetailPage/>}/>
                 <Route path="/signals" element={<SignalsPage/>}/>

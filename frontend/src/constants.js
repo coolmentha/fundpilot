@@ -127,6 +127,26 @@ export const fundCategoryOptions = [
     {value: 'MIXED', label: '混合'},
 ];
 
+// 大数缩写(成交额/资金流向用):亿/万。null/0/负 → 原样返回。
+export const compactMoney = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    if (!isFinite(n)) return '-';
+    const abs = Math.abs(n);
+    if (abs >= 1e8) return `${(n / 1e8).toFixed(2)}亿`;
+    if (abs >= 1e4) return `${(n / 1e4).toFixed(2)}万`;
+    return n.toFixed(2);
+};
+
+// 带正负号的大数缩写(资金流向净额用)。
+export const signedCompactMoney = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    const formatted = compactMoney(n);
+    if (formatted === '-') return '-';
+    return n > 0 ? `+${formatted}` : formatted;
+};
+
 // FundTransactionSource 下拉选项(issue #18 手动录入)
 export const fundSourceOptions = [
     {value: 'INCREASE', label: '加仓'},

@@ -211,3 +211,58 @@ export function useAdminAction() {
         onSuccess: () => qc.invalidateQueries(),
     });
 }
+
+// ===== 行情实时(行情工作台) =====
+// 前端高频轮询后端内存缓存,不直接击穿到东方财富。
+// 交易时段内刷新;react-query refetchInterval 常驻轮询,非交易时段数据不变也无副作用。
+
+/** 用户关注指数的实时行情,5 秒轮询。 */
+export function useRealtimeIndices() {
+    return useQuery({
+        queryKey: ['market', 'indices'],
+        queryFn: () => get('/api/market/indices/realtime'),
+        refetchInterval: 5_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 批量基金盘中估值,10 秒轮询。codes 为空时不启用。 */
+export function useFundEstimates(codes) {
+    const codeStr = (codes || []).filter(Boolean).join(',');
+    return useQuery({
+        queryKey: ['market', 'estimates', codeStr],
+        queryFn: () => get(`/api/market/funds/estimates?codes=${encodeURIComponent(codeStr)}`),
+        enabled: !!codeStr,
+        refetchInterval: 10_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 行业板块涨跌排行,30 秒轮询。 */
+export function useSectorPerformance() {
+    return useQuery({
+        queryKey: ['market', 'sectors'],
+        queryFn: () => get('/api/market/sectors'),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 北向资金净流入,30 秒轮询。 */
+export function useMoneyFlow() {
+    return useQuery({
+        queryKey: ['market', 'money-flow'],
+        queryFn: () => get('/api/market/money-flow'),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 基金 K 线/走势图数据(用户主动查看,不轮询)。period: daily/weekly/monthly。 */
+export function useFundKline(fundId, period = 'daily') {
+    return useQuery({
+        queryKey: ['funds', fundId, 'kline', period],
+        queryFn: () => get(`/api/funds/${fundId}/kline?period=${period}`),
+        enabled: !!fundId,
+    });
+}

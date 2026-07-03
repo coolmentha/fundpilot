@@ -27,7 +27,7 @@ export default function FundDetailPage() {
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
         {key: 'signal', label: '交易信号', children: <SignalTab fundId={id}/>},
-        {key: 'market', label: '行情指标', children: <MarketTab fundId={id}/>},
+        {key: 'market', label: '行情指标', children: <MarketTab fundId={id} fundSubType={fund.fundSubType}/>},
     ];
 
     return (

@@ -5,9 +5,10 @@ import {
     BarChartOutlined,
     ToolOutlined,
     ThunderboltOutlined,
-    DashboardOutlined,
     LineChartOutlined,
     EllipsisOutlined,
+    StockOutlined,
+    FundProjectionScreenOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {usePendingSignals} from '../api/hooks.js';
@@ -18,40 +19,43 @@ const {Text} = Typography;
 
 // 路由 → 页面标题/副标题。Shell 层显示通用标题，详情页标题由页面自身渲染。
 const PAGE_META = {
-    '/': {title: '概览', subtitle: '账户全局与今日待办'},
-    '/funds': {title: '基金管理', subtitle: '维护基金档案与计划仓位'},
+    '/': {title: '行情工作台', subtitle: '实时行情与市场动态'},
+    '/dashboard': {title: '策略概览', subtitle: '账户全局与今日待办(旧)'},
+    '/funds': {title: '我的基金', subtitle: '维护基金档案与计划仓位'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
-    '/settings': {title: '用户配置', subtitle: '总可投资资金等账户参数'},
+    '/settings': {title: '用户配置', subtitle: '总可投资资金、关注指数等账户参数'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
     '/monitor': {title: '监控', subtitle: '系统运行面板'},
 };
 
+// 导航重组(行情工作台转向):行情 → 策略 → 系统。首页 = 行情工作台。
 const NAV_GROUPS = [
     {
-        key: 'daily', label: '日常', children: [
-            {key: '/', icon: <DashboardOutlined/>, label: '概览'},
-            {key: '/signals', icon: <BarChartOutlined/>, label: '交易信号'},
-            {key: '/confirm', icon: <ThunderboltOutlined/>, label: '操作确认', badge: true},
+        key: 'market', label: '行情', children: [
+            {key: '/', icon: <LineChartOutlined/>, label: '行情工作台'},
         ],
     },
     {
-        key: 'asset', label: '资产', children: [
-            {key: '/funds', icon: <FundOutlined/>, label: '基金管理'},
+        key: 'strategy', label: '策略', children: [
+            {key: '/signals', icon: <BarChartOutlined/>, label: '交易信号'},
+            {key: '/confirm', icon: <ThunderboltOutlined/>, label: '操作确认', badge: true},
+            {key: '/funds', icon: <FundOutlined/>, label: '我的基金'},
         ],
     },
     {
         key: 'system', label: '系统', children: [
             {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
             {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
-            {key: '/monitor', icon: <LineChartOutlined/>, label: '监控'},
+            {key: '/monitor', icon: <StockOutlined/>, label: '监控'},
         ],
     },
 ];
 
-// 移动端底部导航：4 个高频入口 + 更多（抽屉展开剩余）。
+// 移动端底部导航:4 个高频入口 + 更多(抽屉展开剩余)。
+// 行情转向后:行情(首页) / 基金 / 信号 / 确认 为四个主入口。
 const BOTTOM_NAV = [
-    {key: '/', icon: <DashboardOutlined/>, label: '概览'},
+    {key: '/', icon: <LineChartOutlined/>, label: '行情'},
     {key: '/funds', icon: <FundOutlined/>, label: '基金'},
     {key: '/signals', icon: <BarChartOutlined/>, label: '信号'},
     {key: '/confirm', icon: <ThunderboltOutlined/>, label: '确认', badge: true},
@@ -59,7 +63,7 @@ const BOTTOM_NAV = [
 const BOTTOM_MORE = [
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
-    {key: '/monitor', icon: <LineChartOutlined/>, label: '监控'},
+    {key: '/monitor', icon: <StockOutlined/>, label: '监控'},
 ];
 
 const useSelectedKey = () => {
