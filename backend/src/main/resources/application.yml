@@ -9,6 +9,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # VPS 历史:曾跑过未合并的 V7(dca_take_profit),代码回滚后 flyway_schema_history 残留坏记录。
+    # ignoreMigrationPatterns 容忍"缺失的已应用迁移"(旧 V7 文件不在代码库里),让应用能启动。
+    # 新迁移用 V8+ 版本号避开冲突。testcontainers/CI 重建库无此问题。
+    ignoreMigrationPatterns: '*:missing'
   jpa:
     hibernate:
       ddl-auto: validate
