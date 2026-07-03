@@ -58,9 +58,10 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     void 持仓基金_聚合今日涨跌今日盈亏总盈亏() {
         FundEntity fund = persistHoldingFund();
         // 累计净值 1.20 → 1.26(涨 5%);持仓 1000 份;成本单价 1.20;总盈亏 = 1000×(1.26-1.20) = 60
-        // 净值日期用相对当前(T-2、T-1),保证无论何时跑都是"最近两期"
-        navHistory(fund, daysAgo(2), "1.20");
-        navHistory(fund, daysAgo(1), "1.26");
+        // 最近一期净值日期 = 今天,触发"盘后态"(todayNavConfirmed=true),
+        // 这样今日涨跌用落库净值算,不受当前时段(盘前/盘中)影响,测试随时跑都稳定。
+        navHistory(fund, daysAgo(1), "1.20");
+        navHistory(fund, daysAgo(0), "1.26");
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
         // 成本单价存在 FundEntity 上,不再从交易派生
         fund.setCostPerShare(new BigDecimal("1.20"));
@@ -95,8 +96,8 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @Transactional
     void 未建仓基金_有净值可看涨跌但持仓盈亏为null() {
         FundEntity fund = persistPendingFund();
-        navHistory(fund, daysAgo(2), "1.20");
-        navHistory(fund, daysAgo(1), "1.26");
+        navHistory(fund, daysAgo(1), "1.20");
+        navHistory(fund, daysAgo(0), "1.26");
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
@@ -113,17 +114,18 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @Transactional
     void 组合聚合_汇总所有持仓基金的今日盈亏合计与涨跌盈亏计数() {
         // 基金A:今日上涨 +5%(1.20→1.26),持仓1000份 成本单价1.20 → 今日盈亏+60 总盈亏+60(盈)
+        // 最近一期净值 = 今天,触发盘后态,不受 CI 运行时段影响
         FundEntity fundA = persistHoldingFundWithCode("510300", "沪深300ETF");
-        navHistory(fundA, daysAgo(2), "1.20");
-        navHistory(fundA, daysAgo(1), "1.26");
+        navHistory(fundA, daysAgo(1), "1.20");
+        navHistory(fundA, daysAgo(0), "1.26");
         txWithAmount(fundA, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
         fundA.setCostPerShare(new BigDecimal("1.20"));
         fundRepository.save(fundA);
 
         // 基金B:今日下跌 -2%(1.00→0.98),持仓1000份 成本单价1.00 → 今日盈亏-20 总盈亏-20(亏)
         FundEntity fundB = persistHoldingFundWithCode("159825", "半导体ETF");
-        navHistory(fundB, daysAgo(2), "1.00");
-        navHistory(fundB, daysAgo(1), "0.98");
+        navHistory(fundB, daysAgo(1), "1.00");
+        navHistory(fundB, daysAgo(0), "0.98");
         txWithAmount(fundB, FundTransactionSource.INCREASE, "1000", "1000", FundTransactionStatus.CONFIRMED);
         fundB.setCostPerShare(new BigDecimal("1.00"));
         fundRepository.save(fundB);
