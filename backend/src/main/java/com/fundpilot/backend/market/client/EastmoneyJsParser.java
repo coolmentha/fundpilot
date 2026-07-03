@@ -159,6 +159,160 @@ public final class EastmoneyJsParser {
         }
     }
 
+    /**
+     * 解析 push2 ulist.np 批量指数实时行情 JSON。
+     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f2(价格 ÷100)、f3(涨跌幅 ÷100)、
+     * f4(涨跌额 ÷100)、f6(成交额 元)、f12(代码)、f14(名称)。
+     * f12 只含代码不含市场前缀(如 "000001"),secid 由调用方按请求顺序映射回填。
+     *
+     * @param rawJson    ulist.np 响应文本
+     * @param secidOrder 请求时的 secid 顺序(如 ["1.000001","1.000300"]),用于按 f12 回填完整 secid
+     * @return 指数实时快照列表;data 为空或解析失败返空列表(降级,不抛异常)
+     */
+    public static List<IndexRealtimeSnapshot> parseIndexRealtime(String rawJson, List<String> secidOrder) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode diff = root.path("data").path("diff");
+            if (!diff.isArray() || diff.isEmpty()) {
+                return List.of();
+            }
+            // f12(如 "000001") → secid(如 "1.000001") 的反查表:按后缀匹配 secidOrder
+            java.util.Map<String, String> codeToSecid = new java.util.HashMap<>();
+            for (String secid : secidOrder) {
+                int dot = secid.indexOf('.');
+                if (dot > 0 && dot < secid.length() - 1) {
+                    codeToSecid.put(secid.substring(dot + 1), secid);
+                }
+            }
+            List<IndexRealtimeSnapshot> result = new ArrayList<>(diff.size());
+            for (com.fasterxml.jackson.databind.JsonNode node : diff) {
+                String code = textOrNull(node, "f12");
+                String secid = code == null ? null : codeToSecid.getOrDefault(code, code);
+                BigDecimal price = scaledDecimal(node, "f2", 100);
+                BigDecimal changePct = scaledDecimal(node, "f3", 100);
+                BigDecimal changeAmount = scaledDecimal(node, "f4", 100);
+                BigDecimal turnover = decimalOrNull(node, "f6");
+                result.add(new IndexRealtimeSnapshot(secid, textOrNull(node, "f14"),
+                        price, changeAmount, changePct, turnover));
+            }
+            return List.copyOf(result);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("指数实时行情 JSON 解析失败", e);
+        }
+    }
+
+    /**
+     * 解析 push2 clist 行业板块涨跌 + 资金流向 JSON。
+     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f3(涨跌幅 ÷100)、f6(成交额)、
+     * f12(板块代码)、f14(板块名称)、f62(主力净流入 元,可缺失)。
+     *
+     * @param rawJson clist 响应文本
+     * @return 板块快照列表(按东方财富返回顺序);data 为空或解析失败返空列表
+     */
+    public static List<SectorSnapshot> parseSectorList(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode diff = root.path("data").path("diff");
+            if (!diff.isArray() || diff.isEmpty()) {
+                return List.of();
+            }
+            List<SectorSnapshot> result = new ArrayList<>(diff.size());
+            for (com.fasterxml.jackson.databind.JsonNode node : diff) {
+                result.add(new SectorSnapshot(
+                        textOrNull(node, "f12"),
+                        textOrNull(node, "f14"),
+                        scaledDecimal(node, "f3", 100),
+                        decimalOrNull(node, "f6"),
+                        decimalOrNull(node, "f62")));
+            }
+            return List.copyOf(result);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("行业板块 JSON 解析失败", e);
+        }
+    }
+
+    /**
+     * 解析 push2 kamt.rtmin 北向资金实时净流入 JSON。
+     * <p>响应结构 {@code data.s2n[]} 字符串数组,每条 CSV 格式
+     * {@code HH:MM,沪股通净流入,沪股通余额,深股通净流入,深股通余额,北向合计净流入}。
+     * 取最后一条作为最新值,北向合计 = CSV 第 5 列(索引 5)。时间为当日 + "HH:MM"。
+     *
+     * @param rawJson kamt.rtmin 响应文本
+     * @return 北向资金快照;s2n 为空或解析失败返 null(降级)
+     */
+    public static MoneyFlowSnapshot parseNorthbound(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode s2n = root.path("data").path("s2n");
+            if (!s2n.isArray() || s2n.isEmpty()) {
+                return null;
+            }
+            String last = s2n.get(s2n.size() - 1).asText();
+            String[] parts = last.split(",");
+            if (parts.length < 6) {
+                return null;
+            }
+            BigDecimal northboundNet = decimalFromText(parts[5]);
+            if (northboundNet == null) {
+                return null;
+            }
+            // 时间:当日 UTC 日期 + "HH:MM"(北向资金是 A 股盘中数据,用 UTC 当日即可,前端按本地时区展示)
+            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+            String[] hm = parts[0].split(":");
+            Instant snapshotTime = today.atTime(
+                    Integer.parseInt(hm[0]), Integer.parseInt(hm[1]))
+                    .atZone(java.time.ZoneOffset.UTC).toInstant();
+            return new MoneyFlowSnapshot(northboundNet, snapshotTime);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("北向资金 JSON 解析失败", e);
+        }
+    }
+
+    /** 取 JSON 节点的字符串值,缺失返 null。 */
+    private static String textOrNull(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        com.fasterxml.jackson.databind.JsonNode child = node.path(field);
+        return child.isMissingNode() || child.isNull() ? null : child.asText();
+    }
+
+    /** 取 JSON 节点的数值字段并 ÷scale 还原(如 f3=37 → 0.37)。缺失返 null。 */
+    private static BigDecimal scaledDecimal(com.fasterxml.jackson.databind.JsonNode node, String field, int scale) {
+        com.fasterxml.jackson.databind.JsonNode child = node.path(field);
+        if (child.isMissingNode() || child.isNull()) {
+            return null;
+        }
+        return child.decimalValue().divide(new BigDecimal(scale), MathContext.DECIMAL64);
+    }
+
+    /** 取 JSON 节点的数值字段(原值不缩放)。缺失返 null。 */
+    private static BigDecimal decimalOrNull(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        com.fasterxml.jackson.databind.JsonNode child = node.path(field);
+        if (child.isMissingNode() || child.isNull()) {
+            return null;
+        }
+        return child.decimalValue();
+    }
+
+    /** 从 CSV 文本片段解析 BigDecimal,空或非法返 null。 */
+    private static BigDecimal decimalFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     /** 剥 JSONP 外壳 {@code jsonpgz(...);} 取内层 JSON。 */
     private static String stripJsonp(String raw) {
         int start = raw.indexOf('(');

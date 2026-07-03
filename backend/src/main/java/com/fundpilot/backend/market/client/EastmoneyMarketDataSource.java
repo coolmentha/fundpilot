@@ -38,4 +38,11 @@ public class EastmoneyMarketDataSource implements MarketDataSource {
         String raw = eastmoneyKlineClient.fetchKlineRaw(indexCode, KLINE_LIMIT);
         return EastmoneyJsParser.parseIndexKline(raw);
     }
+
+    @Override
+    public IndexKline fetchIndexKlineWithPeriod(String indexCode, String klt, String lmt) {
+        // 用参数化 klt 的重载,支持日/周/月 K 切换
+        String raw = eastmoneyKlineClient.fetchKlineRaw(indexCode, klt, lmt);
+        return EastmoneyJsParser.parseIndexKline(raw);
+    }
 }

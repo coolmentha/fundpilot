@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 用户配置 Controller(issue #16):单用户场景,只有一行 UserConfig。
@@ -30,9 +31,9 @@ public class UserConfigController {
 
     @PutMapping
     public ApiResponse<UserConfigView> update(@RequestBody UserConfigUpdateRequest request) {
-        return ApiResponse.ok(userConfigService.update(request.totalInvestableCapital()));
+        return ApiResponse.ok(userConfigService.update(request.totalInvestableCapital(), request.watchedIndices()));
     }
 
-    public record UserConfigUpdateRequest(BigDecimal totalInvestableCapital) {
+    public record UserConfigUpdateRequest(BigDecimal totalInvestableCapital, List<String> watchedIndices) {
     }
 }

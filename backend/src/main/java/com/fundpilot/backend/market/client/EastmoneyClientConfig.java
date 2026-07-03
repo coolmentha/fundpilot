@@ -89,6 +89,21 @@ public class EastmoneyClientConfig {
     }
 
     /**
+     * 注册 {@link EastmoneyPush2Client} 为 Spring Bean(push2.eastmoney.com 域名,实时行情)。
+     * 实时行情(指数/板块/北向资金)在第四个域名 push2(注意非 push2his 历史数据),故独立 target;
+     * 共享同一限流桶。
+     */
+    @Bean
+    public EastmoneyPush2Client eastmoneyPush2Client(
+            @Value("${eastmoney.push2-base-url:https://push2.eastmoney.com}") String push2BaseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(EastmoneyPush2Client.class, push2BaseUrl);
+    }
+
+    /**
      * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
      * <p>降级顺序:东方财富(主,聚合 fund+push2his 两域名) → 同花顺(兜底);
      * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。

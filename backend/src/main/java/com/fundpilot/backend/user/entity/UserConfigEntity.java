@@ -24,4 +24,8 @@ public class UserConfigEntity extends AbstractEntity {
 
     @Column(nullable = false)
     private BigDecimal totalInvestableCapital;
+
+    /** 用户关注的大盘指数列表(secid 逗号分隔,如 "1.000001,1.000300,0.399006");null/空用默认列表。 */
+    @Column(name = "watched_indices", length = 512)
+    private String watchedIndices;
 }
