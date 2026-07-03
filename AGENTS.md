@@ -19,3 +19,24 @@ Issues 与 PRD 通过 `gh` CLI 写入 GitHub 仓库 `coolmentha/fundpilot` 的 I
 ### Coding standards
 
 backend Java 代码硬性规范（Controller 不写逻辑、@RequiredArgsConstructor、ErrorCode 枚举、Actuator、数据源降级链、全局 Instant、View DTO、魔法值枚举化）。详见 `docs/agents/coding-standards.md`。
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+
+- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
+- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.trellis/workspace/` — per-developer journals and session traces
+- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+- `.agents/skills/` — reusable Trellis skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
+
+<!-- TRELLIS:END -->
