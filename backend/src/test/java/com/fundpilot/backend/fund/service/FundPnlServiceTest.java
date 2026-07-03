@@ -78,13 +78,14 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void 无净值历史_涨跌与盈亏字段为null() {
+    void 无净值历史_盈亏字段为null() {
         FundEntity fund = persistHoldingFund();
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
-        assertThat(pnl.dailyChangePct()).isNull();
+        // 无净值历史:持仓市值/盈亏类字段为 null(算不出);今日涨跌幅盘前态返 0、非盘前态返 null,
+        // 不断言涨跌幅(依赖 CI 运行时段,见 DailyChangeResolver 三态判定)。
         assertThat(pnl.holdingAmount()).isNull();
         assertThat(pnl.dailyPnl()).isNull();
         assertThat(pnl.totalPnl()).isNull();
