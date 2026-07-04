@@ -147,6 +147,17 @@ _Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值�
 **必须读本地缓存**:push2his.eastmoney.com 对按需高频请求 IP-blocks(http 000 "Unexpected end of file"),
 图表按 view/切周期拉会触发限流;改读缓存后图表不再直连 push2his。缓存空(尚未同步)时实时拉作兜底。
 `KlineService` period→klt(101/102/103)仅兜底用;`MarketDataSourceChain` **必须 override `fetchIndexKlineWithPeriod`** 透传 klt(接口 default 会忽略 klt 降级日K)。
+
+**指数 K 线数据源(中证指数公司 csindex.com.cn)**:
+借鉴 akshare `stock_zh_index_hist_csindex`,指数日 K 主源改为中证指数公司官方接口
+`www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=...&endDate=...`(返回 OHLCV JSON,不封 IP、不要求 Referer)。
+`CsindexMarketDataSource` 置于 `MarketDataSourceChain` 链首 [csindex, eastmoney, ths]:CSI 主题指数(930xxx,如 930713 中证人工智能)
+与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。
+csindex 仅提供日 K,周/月 K 在源内聚合(`CsindexJsParser.aggregate`,语义同 KlineService)。secid "2.930713"/"1.000300" 剥前缀取裸代码调 csindex。
+深交所指数(399xxx)csindex 返空 data → 抛异常让链回退 eastmoney。csindex 不支持基金净值/字典,抛 `UnsupportedOperationException`,
+`MarketDataSourceChain.tryEach` 对该异常静默跳过(不污染日志),直接回退 eastmoney。详见 ADR-0017。
+_Avoid_: 指数 K 线仍走 push2his(VPS IP 被限流,http 000 永久失败,缓存无法填充陷入死循环);把 csindex 用于基金净值(它只发指数)
+
 _Avoid_: 图表直连 push2his(触发 IP 限流);在缓存空时直接降级净值(应先实时拉兜底);后端算指标(klinecharts 内置,前端只喂 OHLCV)
 
 ## 盈亏与涨跌

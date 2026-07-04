@@ -61,6 +61,10 @@ public class MarketDataSourceChain implements MarketDataSource {
             MarketDataSource source = sources.get(i);
             try {
                 return fn.apply(source);
+            } catch (UnsupportedOperationException ex) {
+                // 该源不支持此操作(如 CsindexMarketDataSource 不做净值/字典)——非真实失败,
+                // 静默跳过回退下一源,不记 warn 日志,避免链首专用源污染日志。
+                continue;
             } catch (Exception ex) {
                 log.warn("数据源[{}] {} 失败 code={}: {}", source.getClass().getSimpleName(), operation, code, ex.getMessage());
                 failures.add(ex);
