@@ -9,10 +9,12 @@ import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
 import com.fundpilot.backend.market.client.SectorSnapshot;
+import com.fundpilot.backend.user.event.WatchedIndicesChangedEvent;
 import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,6 +109,17 @@ public class MarketRealtimeCache {
         refreshIndices();
         refreshSectors();
         refreshMoneyFlow();
+    }
+
+    /**
+     * 用户关注指数变更时即时刷新指数缓存(由 UserConfigService.update 发的事件触发)。
+     * <p>不受交易时段限制——用户改了关注列表就是想立刻看,即便盘后也应展示最新选中的指数行情
+     * (东方财富盘后仍可返回收盘数据)。仅刷新指数,板块/资金/估值由各自周期维护。
+     */
+    @EventListener
+    @Transactional(readOnly = true)
+    public void onWatchedIndicesChanged(@SuppressWarnings("unused") WatchedIndicesChangedEvent event) {
+        refreshIndices();
     }
 
     private void refreshIndices() {

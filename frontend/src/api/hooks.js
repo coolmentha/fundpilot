@@ -183,7 +183,12 @@ export function useUpdateUserConfig() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => put('/api/user-config', body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['user-config']}),
+        // 配置更新后既刷配置页,也强制失效指数行情查询——后端已发事件即时刷缓存,
+        // 前端必须重取才能立刻看到新关注指数,否则要等下一轮 5s 轮询。
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['user-config']});
+            qc.invalidateQueries({queryKey: ['market', 'indices']});
+        },
     });
 }
 
