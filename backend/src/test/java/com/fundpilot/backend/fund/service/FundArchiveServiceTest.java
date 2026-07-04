@@ -89,7 +89,6 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
         fund.setStatus(FundStatus.HOLDING);
-        fund.setPlannedTotalAmount(new BigDecimal("100000"));
         entityManager.persist(fund);
         return fund;
     }
@@ -98,16 +97,7 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         FundStrategyEntity s = new FundStrategyEntity();
         s.setFundEntity(fund);
         s.setStatus(StrategyParamStatus.EFFECTIVE);
-        s.setTier1Drawdown(new BigDecimal("-0.08"));
-        s.setTier2Drawdown(new BigDecimal("-0.16"));
-        s.setTier3Drawdown(new BigDecimal("-0.25"));
-        s.setTier4Drawdown(new BigDecimal("-0.35"));
-        s.setTier1Ratio(new BigDecimal("0.30"));
-        s.setTier2Ratio(new BigDecimal("0.30"));
-        s.setTier3Ratio(new BigDecimal("0.20"));
-        s.setTier4Ratio(new BigDecimal("0.20"));
-        s.setWeeklyCoolDownThreshold(new BigDecimal("-0.08"));
-        s.setStopLossPullbackPercent(new BigDecimal("-0.08"));
+        s.setStopLossPullbackPercent(new BigDecimal("0.08"));
         entityManager.persist(s);
         return s;
     }

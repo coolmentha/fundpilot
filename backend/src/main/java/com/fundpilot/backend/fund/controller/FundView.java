@@ -21,7 +21,6 @@ import java.time.Instant;
  * @param fundCategory         基金类型(宽基/行业/主动/混合)
  * @param fundSubType          基金子类型(ETF/INDEX/INDEX_ENHANCED/ACTIVE,字典回填)
  * @param status               基金状态(PENDING_HOLDING/HOLDING/CLEARED)
- * @param plannedTotalAmount   计划总仓位金额
  * @param benchmarkIndexCode   基准指数代码
  * @param investmentTarget     投资目标
  * @param operationMode        运作方式
@@ -43,7 +42,6 @@ public record FundView(
         FundCategory fundCategory,
         FundSubType fundSubType,
         FundStatus status,
-        BigDecimal plannedTotalAmount,
         String benchmarkIndexCode,
         InvestmentTarget investmentTarget,
         OperationMode operationMode,
@@ -67,7 +65,6 @@ public record FundView(
                 fund.getFundCategory(),
                 fund.getFundSubType(),
                 fund.getStatus(),
-                fund.getPlannedTotalAmount(),
                 fund.getBenchmarkIndexCode(),
                 fund.getInvestmentTarget(),
                 fund.getOperationMode(),
@@ -87,7 +84,6 @@ public record FundView(
                 fund.getFundCategory(),
                 fund.getFundSubType(),
                 fund.getStatus(),
-                fund.getPlannedTotalAmount(),
                 fund.getBenchmarkIndexCode(),
                 fund.getInvestmentTarget(),
                 fund.getOperationMode(),

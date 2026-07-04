@@ -41,8 +41,6 @@ export default function DashboardPage() {
         {title: '代码', dataIndex: 'fundCode', width: 110},
         {title: '名称', dataIndex: 'fundName', ellipsis: true},
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '计划仓位', dataIndex: 'plannedTotalAmount', width: 140, align: 'right',
-            render: (v) => <span className="num-cell">{money(v)}</span>},
         {
             title: '', width: 90, render: (_, r) => (
                 <Link to={`/funds/${r.id}`}>详情</Link>

@@ -46,14 +46,7 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
         strategy = new FundStrategyEntity();
         strategy.setFundEntity(fund);
         strategy.setStatus(StrategyParamStatus.EFFECTIVE);
-        strategy.setTier1Drawdown(new BigDecimal("-0.08"));
-        strategy.setTier2Drawdown(new BigDecimal("-0.16"));
-        strategy.setTier3Drawdown(new BigDecimal("-0.25"));
-        strategy.setTier4Drawdown(new BigDecimal("-0.35"));
-        strategy.setTier1Ratio(new BigDecimal("0.30"));
-        strategy.setTier2Ratio(new BigDecimal("0.30"));
-        strategy.setTier3Ratio(new BigDecimal("0.20"));
-        strategy.setTier4Ratio(new BigDecimal("0.20"));
+        strategy.setStopLossPullbackPercent(new BigDecimal("-0.08"));
         entityManager.persist(strategy);
     }
 
@@ -66,7 +59,6 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
         f.setFundName(name);
         f.setFundCategory(FundCategory.BROAD_BASE);
         f.setStatus(FundStatus.HOLDING);
-        f.setPlannedTotalAmount(new BigDecimal("100000"));
         return f;
     }
 

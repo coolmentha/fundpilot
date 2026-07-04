@@ -66,13 +66,6 @@ export function useActiveStrategy(fundId) {
         enabled: !!fundId,
     });
 }
-export function useBacktests(strategyId) {
-    return useQuery({
-        queryKey: ['backtests', strategyId],
-        queryFn: () => get(`/api/strategies/${strategyId}/backtests`),
-        enabled: !!strategyId,
-    });
-}
 const invalidateStrategies = (fundId) => {
     const qc = useQueryClient();
     return () => {
@@ -95,14 +88,6 @@ export function useStrategyAction(fundId) {
     const onSuccess = invalidateStrategies(fundId);
     return useMutation({
         mutationFn: ({id, action}) => post(`/api/strategies/${id}/${action}`),
-        onSuccess,
-    });
-}
-/** 自动寻优(issue #30):从默认基准网格搜索最优参数,样本外验证通过则落库草稿+calibrate。 */
-export function useOptimizeStrategy(fundId) {
-    const onSuccess = invalidateStrategies(fundId);
-    return useMutation({
-        mutationFn: () => post(`/api/funds/${fundId}/strategies/optimize`),
         onSuccess,
     });
 }

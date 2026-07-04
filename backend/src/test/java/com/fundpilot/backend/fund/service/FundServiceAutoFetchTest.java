@@ -107,7 +107,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
         FundView view = fundService.create(new FundCreateRequest(
                 "161727", "现有持仓基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("5000"), new BigDecimal("3000")));
+                new BigDecimal("3000")));
 
         // 状态流转:HOLDING + openedAt 已设
         entityManager.flush();
@@ -184,7 +184,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
                 "161728", "无净值基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("5000"), new BigDecimal("3000"))))
+                new BigDecimal("3000"))))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.NAV_HISTORY_EMPTY.name());
 
