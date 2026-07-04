@@ -3,7 +3,6 @@ package com.fundpilot.backend.signal.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
-import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -14,7 +13,6 @@ import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.service.MarketIndicatorProvider;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
-import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.enums.SignalWarningValue;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
@@ -32,9 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -58,6 +54,8 @@ public class SignalGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(SignalGenerationService.class);
     private static final MathContext MATH = MathContext.DECIMAL64;
+    /** 7 天内不赎回硬约束窗口(交易日),与 DisciplineStrategyService.MIN_HOLD_DAYS 一致。 */
+    private static final int MIN_HOLD_DAYS = 5;
 
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
@@ -142,99 +140,24 @@ public class SignalGenerationService {
                 ? fundNavHistoryRepository.findPeakAccumulatedNavSince(fund.getId(), fund.getOpenedAt()).orElse(currentNav)
                 : peakNav;
         BigDecimal holdingShares = fundPositionService.getHoldingShares(fund.getId());
-        BigDecimal holdingAmount = holdingShares.multiply(currentNav, MATH);
-        BigDecimal totalEquityAmount = computeTotalEquityAmount(currentNav);
-        BigDecimal singlePositionPct = totalEquityAmount.signum() > 0
-                ? holdingAmount.divide(totalEquityAmount, MATH) : BigDecimal.ZERO;
-        BigDecimal categoryPositionPct = computeCategoryPositionPct(fund.getFundCategory(), currentNav, totalEquityAmount);
-        BigDecimal buildShares = sumShares(fundTransactionRepository
-                .findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(fund.getId(), SignalType.BUILD, FundTransactionStatus.CONFIRMED));
-        Map<Integer, BigDecimal> tierAddShares = buildTierAddShares(fund.getId());
-        Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund, strategy);
+        Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund);
 
-        return new CapitalContext(peakNav, holdingPeakNav, singlePositionPct, categoryPositionPct,
-                totalEquityAmount, fund.getPlannedTotalAmount() != null ? fund.getPlannedTotalAmount() : BigDecimal.ZERO,
-                buildShares, tierAddShares, holdingShares, lastBuyConfirmTime);
+        return new CapitalContext(peakNav, holdingPeakNav, holdingShares, lastBuyConfirmTime);
     }
 
-    /** 总权益持仓金额 = 所有基金 CONFIRMED 持仓份额 × 各自最近净值 之和。 */
-    private BigDecimal computeTotalEquityAmount(BigDecimal fallbackNav) {
-        List<Long> allFundIds = fundStrategyRepository.findEffectiveFundIds();
-        BigDecimal sum = BigDecimal.ZERO;
-        for (Long fid : allFundIds) {
-            BigDecimal shares = fundPositionService.getHoldingShares(fid);
-            BigDecimal nav = fundNavHistoryRepository.findTop5ByFundEntity_IdOrderByNavDateDesc(fid).stream()
-                    .findFirst().map(FundNavHistoryEntity::getAccumulatedNav).orElse(fallbackNav);
-            sum = sum.add(shares.multiply(nav, MATH), MATH);
-        }
-        return sum;
-    }
-
-    /** 单类基金占比 = 该 category 所有基金持仓金额 / 总权益。 */
-    private BigDecimal computeCategoryPositionPct(com.fundpilot.backend.fund.enums.FundCategory category,
-                                                   BigDecimal fallbackNav, BigDecimal totalEquityAmount) {
-        if (totalEquityAmount.signum() <= 0 || category == null) {
-            return BigDecimal.ZERO;
-        }
-        List<Long> allFundIds = fundStrategyRepository.findEffectiveFundIds();
-        BigDecimal categorySum = BigDecimal.ZERO;
-        for (Long fid : allFundIds) {
-            FundEntity f = fundRepository.findById(fid).orElse(null);
-            if (f == null || f.getFundCategory() != category) {
-                continue;
-            }
-            BigDecimal shares = fundPositionService.getHoldingShares(fid);
-            BigDecimal nav = fundNavHistoryRepository.findTop5ByFundEntity_IdOrderByNavDateDesc(fid).stream()
-                    .findFirst().map(FundNavHistoryEntity::getAccumulatedNav).orElse(fallbackNav);
-            categorySum = categorySum.add(shares.multiply(nav, MATH), MATH);
-        }
-        return categorySum.divide(totalEquityAmount, MATH);
-    }
-
-    /** 各档加仓份额 map(key 1~4):查 signalLog.signalType=ADD AND triggerTier=N AND status=CONFIRMED 的交易 shares。 */
-    private Map<Integer, BigDecimal> buildTierAddShares(Long fundId) {
-        Map<Integer, BigDecimal> map = new HashMap<>();
-        for (int tier = 1; tier <= HardConstraintConfigHolder.TIER_COUNT; tier++) {
-            List<FundTransactionEntity> txs = fundTransactionRepository
-                    .findByFundEntity_IdAndSignalLogEntity_SignalTypeAndSignalLogEntity_TriggerTierAndStatus(
-                            fundId, SignalType.ADD, tier, FundTransactionStatus.CONFIRMED);
-            map.put(tier, sumShares(txs));
-        }
-        return map;
-    }
-
-    private static BigDecimal sumShares(List<FundTransactionEntity> txs) {
-        return txs.stream().map(FundTransactionEntity::getShares)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /** 最近一次买入确认时间 = max(openedAt, tier1-4AddedAt)。 */
-    private Instant computeLastBuyConfirmTime(FundEntity fund, FundStrategyEntity strategy) {
-        FundTransactionEntity topByFundEntityIdOrderByConfirmTimeDesc = fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(fund.getId());
-        if (topByFundEntityIdOrderByConfirmTimeDesc == null) {
+    /** 最近一次买入确认时间 = 最近一笔 CONFIRMED 交易的 confirmTime(金字塔 tierAddedAt 已移除)。 */
+    private Instant computeLastBuyConfirmTime(FundEntity fund) {
+        FundTransactionEntity latest = fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(fund.getId());
+        if (latest == null) {
             throw new IllegalArgumentException("Fund " + fund.getId() + " has no confirm transaction.");
         }
-        Instant latest = topByFundEntityIdOrderByConfirmTimeDesc.getConfirmTime();
-        for (int tier = 1; tier <= HardConstraintConfigHolder.TIER_COUNT; tier++) {
-            Instant t = switch (tier) {
-                case 1 -> strategy.getTier1AddedAt();
-                case 2 -> strategy.getTier2AddedAt();
-                case 3 -> strategy.getTier3AddedAt();
-                case 4 -> strategy.getTier4AddedAt();
-                default -> null;
-            };
-            if (t != null && (latest == null || t.isAfter(latest))) {
-                latest = t;
-            }
-        }
-        return latest;
+        return latest.getConfirmTime();
     }
 
     private long computeTradingDaysSinceLastBuy(FundEntity fund, FundStrategyEntity strategy, Instant today) {
-        Instant lastBuy = computeLastBuyConfirmTime(fund, strategy);
+        Instant lastBuy = computeLastBuyConfirmTime(fund);
         if (lastBuy == null) {
-            return HardConstraintConfigHolder.MIN_HOLD_DAYS + 1; // 无买入记录视为已满窗口
+            return MIN_HOLD_DAYS + 1; // 无买入记录视为已满窗口
         }
         return tradingCalendarService.daysBetweenTradingDays(lastBuy, today);
     }
@@ -257,11 +180,5 @@ public class SignalGenerationService {
         entity.setHardConstraintBreaches(result.hardConstraintBreaches().isEmpty() ? null
                 : result.hardConstraintBreaches().stream().map(b -> b.name()).reduce((a, b) -> a + "," + b).orElse(null));
         return entity;
-    }
-
-    /** HardConstraintConfig 的 holder(避免循环依赖,直接引用常量)。 */
-    private static final class HardConstraintConfigHolder {
-        static final int MIN_HOLD_DAYS = com.fundpilot.backend.fund.service.support.HardConstraintConfig.MIN_HOLD_DAYS;
-        static final int TIER_COUNT = com.fundpilot.backend.fund.service.support.HardConstraintConfig.TIER_COUNT;
     }
 }

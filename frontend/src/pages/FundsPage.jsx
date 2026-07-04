@@ -10,9 +10,9 @@ import StatusTag from '../components/StatusTag.jsx';
 
 const {Title} = Typography;
 
-// 新建表单初始值:仅计划总仓位有默认值,基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
+// 新建表单初始值:基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
-    benchmarkIndexCode: '', plannedTotalAmount: 100000, initialMarketValue: null, costPerShare: null, openedAt: null};
+    benchmarkIndexCode: '', initialMarketValue: null, costPerShare: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
@@ -60,7 +60,6 @@ export default function FundsPage() {
             fundCategory: fund.fundCategory,
             fundSubType: fund.fundSubType,
             benchmarkIndexCode: fund.benchmarkIndexCode,
-            plannedTotalAmount: fund.plannedTotalAmount,
         });
         setOpen(true);
     };
@@ -109,7 +108,6 @@ export default function FundsPage() {
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 100, render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
-        {title: '计划仓位', dataIndex: 'plannedTotalAmount', width: 140, align: 'right', render: money},
         {
             title: '今日涨跌/盈亏', width: 130, align: 'right',
             render: (_, r) => (
@@ -213,13 +211,6 @@ export default function FundsPage() {
                     <Form.Item label="基金类型" name="fundCategory"
                                help="自动识别,可手动调整(决定默认档位和硬约束上限)">
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
-                    </Form.Item>
-                    <Form.Item label="计划总仓位" name="plannedTotalAmount"
-                               help="目标投入总额(金字塔加仓分母,纪律意图)"
-                               rules={[{required: true, message: '请输入计划总仓位'}]}>
-                        <InputNumber min={0} precision={2} className="full-width"
-                                     formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                     parser={(v) => v.replace(/,/g, '')}/>
                     </Form.Item>
                     {!editing && (
                         <Form.Item label="入仓市值（可选）" name="initialMarketValue"

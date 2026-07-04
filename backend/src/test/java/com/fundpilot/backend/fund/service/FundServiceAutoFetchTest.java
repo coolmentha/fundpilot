@@ -74,7 +74,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     @Transactional
     void create_建基金后调用fetchOneFund拉取净值() {
         FundView view = fundService.create(new FundCreateRequest(
-                "161725", "测试基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH", new BigDecimal("5000")));
+                "161725", "测试基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
 
         assertThat(view.id()).isNotNull();
         // save 后调用了 fetchOneFund 拉取历史净值
@@ -88,7 +88,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         doThrow(new RuntimeException("东方财富不可达")).when(marketDataFetchService).fetchOneFund(anyLong());
 
         FundView view = fundService.create(new FundCreateRequest(
-                "161726", "测试基金2", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH", new BigDecimal("5000")));
+                "161726", "测试基金2", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
 
         // 拉取失败降级:基金仍创建成功
         assertThat(view.id()).isNotNull();
@@ -107,7 +107,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
         FundView view = fundService.create(new FundCreateRequest(
                 "161727", "现有持仓基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("5000"), new BigDecimal("3000")));
+                new BigDecimal("3000")));
 
         // 状态流转:HOLDING + openedAt 已设
         entityManager.flush();
@@ -184,7 +184,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
                 "161728", "无净值基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("5000"), new BigDecimal("3000"))))
+                new BigDecimal("3000"))))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.NAV_HISTORY_EMPTY.name());
 
@@ -196,8 +196,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     @Transactional
     void create_不录现有金额_走原PENDING_HOLDING流程不建仓() {
         FundView view = fundService.create(new FundCreateRequest(
-                "161729", "空仓基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("5000"), null));
+                "161729", "空仓基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
 
         entityManager.flush();
         entityManager.clear();

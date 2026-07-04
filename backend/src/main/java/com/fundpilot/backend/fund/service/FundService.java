@@ -76,7 +76,6 @@ public class FundService {
         FundEntity fund = new FundEntity();
         fund.setFundCode(request.fundCode());
         fund.setFundName(request.fundName());
-        fund.setPlannedTotalAmount(request.plannedTotalAmount());
 
         // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填)
         FundTypeClassification fallback = request.fundSubType() == null && request.fundCategory() == null
@@ -190,9 +189,6 @@ public class FundService {
         }
         if (request.benchmarkIndexCode() != null) {
             fund.setBenchmarkIndexCode(request.benchmarkIndexCode());
-        }
-        if (request.plannedTotalAmount() != null) {
-            fund.setPlannedTotalAmount(request.plannedTotalAmount());
         }
         return FundView.from(fundRepository.save(fund));
     }
