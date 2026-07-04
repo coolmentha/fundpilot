@@ -164,9 +164,8 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
     @Transactional
     void enabled_false_即使命中定投日也跳过() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(),
+        Long planId = dcaPlanService.create(fund.getId(),
                 new DcaPlanRequest(false, new BigDecimal("1000"), DcaFrequency.WEEKLY, 1, null));
-        dcaPlanService.activate(planId);
         Instant monday = date(2026, 6, 22);
 
         boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), monday);
@@ -195,24 +194,18 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
     // ===== 辅助 =====
 
     private Long activateDaily(FundEntity fund) {
-        Long planId = dcaPlanService.createDraft(fund.getId(),
+        return dcaPlanService.create(fund.getId(),
                 new DcaPlanRequest(true, new BigDecimal("1000"), DcaFrequency.DAILY, null, null));
-        dcaPlanService.activate(planId);
-        return planId;
     }
 
     private Long activateWeekly(FundEntity fund, int dayOfWeek) {
-        Long planId = dcaPlanService.createDraft(fund.getId(),
+        return dcaPlanService.create(fund.getId(),
                 new DcaPlanRequest(true, new BigDecimal("1000"), DcaFrequency.WEEKLY, dayOfWeek, null));
-        dcaPlanService.activate(planId);
-        return planId;
     }
 
     private Long activateMonthly(FundEntity fund, int dayOfMonth) {
-        Long planId = dcaPlanService.createDraft(fund.getId(),
+        return dcaPlanService.create(fund.getId(),
                 new DcaPlanRequest(true, new BigDecimal("1000"), DcaFrequency.MONTHLY, null, dayOfMonth));
-        dcaPlanService.activate(planId);
-        return planId;
     }
 
     private FundEntity persistFund() {

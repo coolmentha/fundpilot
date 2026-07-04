@@ -19,8 +19,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 定投计划服务:CRUD + 状态机(DRAFT → activate → EFFECTIVE → retire → DRAFT)。
- * <p>镜像 StrategyConfigService 的模式。EFFECTIVE 计划由 DcaSuggestionJob 在定投日自动生成 INVEST 交易。
+ * 定投计划服务:CRUD + 状态机。
+ * <p>新建即激活:create 直接落 EFFECTIVE(同基金已有 EFFECTIVE 则回退为 DRAFT)。
+ * 状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE。EFFECTIVE 计划由 DcaSuggestionJob 在定投日自动生成 INVEST 交易。
  * 同基金同时最多一份 EFFECTIVE(数据库 uq_fund_dca_plan_effective 兜底)。
  */
 @Service
@@ -31,12 +32,14 @@ public class DcaPlanService {
     private final FundRepository fundRepository;
 
     @Transactional
-    public Long createDraft(Long fundId, DcaPlanRequest request) {
+    public Long create(Long fundId, DcaPlanRequest request) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+        // 新建即激活:同基金已有 EFFECTIVE 计划则回退为 DRAFT(同基金同时最多一份 EFFECTIVE)
+        demoteExistingEffective(fundId);
         FundDcaPlanEntity plan = new FundDcaPlanEntity();
         plan.setFundEntity(fund);
-        plan.setStatus(DcaPlanStatus.DRAFT);
+        plan.setStatus(DcaPlanStatus.EFFECTIVE);
         plan.setEnabled(true);
         applyRequest(plan, request);
         return fundDcaPlanRepository.save(plan).getId();
@@ -78,12 +81,7 @@ public class DcaPlanService {
         if (plan.getStatus() == DcaPlanStatus.EFFECTIVE) {
             return;
         }
-        Long fundId = plan.getFundEntity().getId();
-        fundDcaPlanRepository.findByFundEntity_IdAndStatus(fundId, DcaPlanStatus.EFFECTIVE)
-                .ifPresent(old -> {
-                    old.setStatus(DcaPlanStatus.DRAFT);
-                    fundDcaPlanRepository.save(old);
-                });
+        demoteExistingEffective(plan.getFundEntity().getId());
         plan.setStatus(DcaPlanStatus.EFFECTIVE);
         fundDcaPlanRepository.save(plan);
     }
@@ -101,6 +99,16 @@ public class DcaPlanService {
     private FundDcaPlanEntity requirePlan(Long planId) {
         return fundDcaPlanRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DCA_PLAN_NOT_FOUND, "DcaPlan #" + planId + " 不存在"));
+    }
+
+    /** 同基金已有 EFFECTIVE 计划则回退为 DRAFT(保证同时最多一份 EFFECTIVE)。
+     *  用 saveAndFlush 强制先 UPDATE,避免随后新建 EFFECTIVE 的 INSERT 先于 UPDATE 触发 uq_fund_dca_plan_effective 冲突。 */
+    private void demoteExistingEffective(Long fundId) {
+        fundDcaPlanRepository.findByFundEntity_IdAndStatus(fundId, DcaPlanStatus.EFFECTIVE)
+                .ifPresent(old -> {
+                    old.setStatus(DcaPlanStatus.DRAFT);
+                    fundDcaPlanRepository.saveAndFlush(old);
+                });
     }
 
     private void applyRequest(FundDcaPlanEntity plan, DcaPlanRequest request) {

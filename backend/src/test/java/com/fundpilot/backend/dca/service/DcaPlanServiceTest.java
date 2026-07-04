@@ -20,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * DcaPlanService CRUD + 状态机(DRAFT → activate → EFFECTIVE → retire → DRAFT)。
- * <p>镜像 StrategyConfigServiceTest 的断言模式。同基金同时最多一份 EFFECTIVE:
- * 新版本激活时旧 EFFECTIVE 回退 DRAFT。
+ * DcaPlanService CRUD + 状态机。
+ * <p>新建即激活:create 直接落 EFFECTIVE(同基金已有 EFFECTIVE 则回退 DRAFT)。
+ * 状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE。同基金同时最多一份 EFFECTIVE。
  */
 class DcaPlanServiceTest extends AbstractIntegrationTest {
 
@@ -37,13 +37,13 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void createDraft_写入_DRAFT_计划() {
+    void create_新建即激活为_EFFECTIVE() {
         FundEntity fund = persistFund();
 
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
 
         FundDcaPlanEntity saved = fundDcaPlanRepository.findById(planId).orElseThrow();
-        assertThat(saved.getStatus()).isEqualTo(DcaPlanStatus.DRAFT);
+        assertThat(saved.getStatus()).isEqualTo(DcaPlanStatus.EFFECTIVE);
         assertThat(saved.getEnabled()).isTrue();
         assertThat(saved.getAmount()).isEqualByComparingTo(new BigDecimal("1000"));
         assertThat(saved.getFrequency()).isEqualTo(DcaFrequency.WEEKLY);
@@ -54,7 +54,8 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void updateDraft_DRAFT_状态可改() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+        dcaPlanService.retire(planId); // EFFECTIVE → DRAFT 才可改
 
         dcaPlanService.updateDraft(planId, new DcaPlanRequest(
                 false, new BigDecimal("2000"), DcaFrequency.MONTHLY, null, 15));
@@ -71,8 +72,7 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void updateDraft_EFFECTIVE_状态抛_IllegalStateTransition() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
-        dcaPlanService.activate(planId);
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest()); // 新建即 EFFECTIVE
 
         assertThatThrownBy(() -> dcaPlanService.updateDraft(planId, weeklyRequest(new BigDecimal("2000"))))
                 .isInstanceOf(IllegalStateTransitionException.class);
@@ -82,8 +82,8 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void listByFund_返回该基金所有计划版本() {
         FundEntity fund = persistFund();
-        dcaPlanService.createDraft(fund.getId(), weeklyRequest());
-        dcaPlanService.createDraft(fund.getId(), monthlyRequest());
+        dcaPlanService.create(fund.getId(), weeklyRequest());
+        dcaPlanService.create(fund.getId(), monthlyRequest());
 
         var list = dcaPlanService.listByFund(fund.getId());
 
@@ -94,7 +94,6 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void findActive_无_EFFECTIVE_返回_empty() {
         FundEntity fund = persistFund();
-        dcaPlanService.createDraft(fund.getId(), weeklyRequest());
 
         Optional<FundDcaPlanEntity> active = dcaPlanService.findActive(fund.getId());
 
@@ -103,9 +102,10 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void activate_DRAFT_直接跃迁_EFFECTIVE() {
+    void activate_DRAFT_跃迁_EFFECTIVE() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+        dcaPlanService.retire(planId); // → DRAFT
 
         dcaPlanService.activate(planId);
 
@@ -115,13 +115,11 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void activate_新版本激活后_旧_EFFECTIVE_回退_DRAFT() {
+    void create_新版本新建后_旧_EFFECTIVE_回退_DRAFT() {
         FundEntity fund = persistFund();
-        Long oldId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
-        dcaPlanService.activate(oldId);
+        Long oldId = dcaPlanService.create(fund.getId(), weeklyRequest()); // 新建即 EFFECTIVE
 
-        Long newId = dcaPlanService.createDraft(fund.getId(), monthlyRequest());
-        dcaPlanService.activate(newId);
+        Long newId = dcaPlanService.create(fund.getId(), monthlyRequest()); // 旧 EFFECTIVE 回退 DRAFT
 
         FundDcaPlanEntity oldPlan = fundDcaPlanRepository.findById(oldId).orElseThrow();
         assertThat(oldPlan.getStatus()).isEqualTo(DcaPlanStatus.DRAFT);
@@ -136,8 +134,7 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void retire_EFFECTIVE_回退_DRAFT() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
-        dcaPlanService.activate(planId);
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
 
         dcaPlanService.retire(planId);
 
@@ -149,7 +146,8 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Transactional
     void retire_非_EFFECTIVE_状态抛_IllegalStateTransition() {
         FundEntity fund = persistFund();
-        Long planId = dcaPlanService.createDraft(fund.getId(), weeklyRequest());
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+        dcaPlanService.retire(planId); // → DRAFT
 
         assertThatThrownBy(() -> dcaPlanService.retire(planId))
                 .isInstanceOf(IllegalStateTransitionException.class);
