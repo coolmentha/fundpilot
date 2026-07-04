@@ -141,6 +141,13 @@ _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值
 让三态今日涨跌「盘后实际值」生效的机制。场外基金当日净值收盘后约 20:00 才公布（14:50 定时任务拉到的是 T-1 昨日净值）。每晚 20:00-23:00 每分钟轮询所有基金，查 fund_nav_history 最近 navDate ≠ 今天（未确认）→ fundgz 判 jzrq 是否 = 今天（轻量判定已公布）→ 是则调 pingzhongdata 拿累计净值落库。已确认跳过（天然停止条件，全部确认后空跑）。用 fundgz 判定 + pingzhongdata 落库双接口，保证落累计净值而非单位净值。
 _Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值失真）；已确认基金重复拉取（浪费请求）
 
+**K 线图（Kline Chart）**:
+行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金拉 `benchmarkIndexCode` 的指数 K 线(OHLCV),支持日/周/月 K 切换;
+主图蜡烛 + MA5/10/20/30(可开关),副图成交量(常驻)+ MACD(可切换)。主动/混合基金或指数拉取降级时读本地累计净值画面积图(无工具栏无指标)。
+`KlineService` 把 period→klt(101/102/103)透传;`MarketDataSourceChain` **必须 override `fetchIndexKlineWithPeriod`** 透传 klt(接口 default 会忽略 klt 降级日K,导致日/周/月都一样)。
+push2his 偶发 "Unexpected end of file" 时 `EastmoneyMarketDataSource` 重试一次(Feign 默认 0 重试会直接降级净值)。secid `2.930713`(中证 CSI)经验证可用,失败是瞬时网络抖动非 secid 错误。
+_Avoid_: 在后端算指标(klinecharts 内置,前端只喂 OHLCV);走接口 default 不 override(吞 klt)
+
 ## 盈亏与涨跌
 
 **今日涨跌（Daily Change）**:

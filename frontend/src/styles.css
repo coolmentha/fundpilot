@@ -532,9 +532,17 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .kline-toolbar {
     display: flex;
+    align: flex-start;
     align-items: center;
     gap: 12px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.kline-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .kline-benchmark {
@@ -543,7 +551,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .kline-container {
     width: 100%;
-    min-height: 400px;
+    min-height: 360px;
 }
 
 .kline-loading {
