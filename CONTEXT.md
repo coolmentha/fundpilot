@@ -27,11 +27,9 @@ _Avoid_: 首笔比例做成 `FundStrategyEntity` 可调字段（会破坏闭环�
 30%），差异化体现在回撤阈值上，不在比例上。
 _Avoid_: 固定金额（tier1~4Amount 字段已废弃）
 
-**计划仓位校验（plannedTotalAmount 校验）**:
-`plannedTotalAmount` 是该基金目标投入总额（金字塔加仓分母，纪律意图），与硬约束的"实际持仓占比上限"是两个维度。但为防止用户填一个
-根本建不了的死状态，建仓时校验 `plannedTotalAmount ≤ totalInvestableCapital × singlePositionLimit`（单只 30%、
-无关类型）。超限报错不让填。硬约束在信号生成时仍照常卡实际持仓占比——两者互补：计划仓位校验管"意图上限"，硬约束管"事实上限"。
-_Avoid_: 把 plannedTotalAmount 当硬约束本身（它是分母不是上限）；完全不校验（会让用户填了 100 万、总资金才 50 万，建仓永远被卡）
+**~~计划仓位校验~~（已移除）**:
+行情工作台转向后,`totalInvestableCapital` 已删除(V9 迁移),计划仓位校验随之移除。
+`plannedTotalAmount` 仍可填(金字塔加仓分母),但不再卡上限。建仓时仅校验 `fundCategory` 非 null。
 
 ## 策略寻优
 
@@ -126,13 +124,13 @@ _Avoid_: 用基金自身净值算量能——基金没有成交量
 。主动基金无跟踪指数、无真实成交量，用单周跌幅作"资金在撤"的代理信号。复用已有字段，不引入新数据源。
 _Avoid_: 用沪深300 量能代理（反映大盘情绪不反映个股层面）或持仓股聚合量能（数据滞后一季度，实战价值打折）
 
-**再平衡减仓（Rebalance）**:
-存量超限的被动卖出，区别于硬约束（管"主动加仓不能突破上限"）。每日 14:50 同时满足双条件才触发：① 总权益仓位 ≥ 80%（满仓）；② 基金持仓市值 > `plannedTotalAmount × 1.1`（10% 容忍缓冲）。卖出金额 = `持仓市值 - plannedTotalAmount`（超出计划的部分全卖），按最近净值反算为份额。**遵守 7 天内不赎回硬约束**（不豁免）；触发后不清档位（持仓还在）。
-_Avoid_: 用单只 30% 占比触发再平衡（单基金组合永远满 100%，每次必触）；用单类型 30% 触发再平衡（加仓硬约束和再平衡不应共享同一阈值）
+**~~再平衡减仓（Rebalance）~~（已移除）**:
+行情工作台转向后,`totalInvestableCapital` 已删除,再平衡信号(满仓且超计划时被动减仓)随之移除。
+`SignalReason.REBALANCE` 枚举值保留供存量 SignalLog 反序列化,但不再产生新信号。
 
 **SELL 信号优先级**:
-一只基金每日一行 SignalLog，SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈 > 再平衡**"顺序检查，命中即返回。
-`reason` 三值：`LOGIC_BROKEN` / `TRAILING_STOP` / `REBALANCE`。
+一只基金每日一行 SignalLog，SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈**"顺序检查，命中即返回。
+`reason` 两值：`LOGIC_BROKEN` / `TRAILING_STOP`（`REBALANCE` 已废弃,存量数据可见）。
 _Avoid_: 同日多类型 SELL 信号叠加（违反"一只基金每日一行"的唯一性约束）
 
 **7 天内不赎回硬约束（MIN_HOLD_DAYS）**:
@@ -224,24 +222,17 @@ _Avoid_: 把破位观望做成硬约束（框架明确是强提示，可 overrid
 今天就是 60 日新高"）。第三条收紧解读为"今天创新高"，非今天创新高是过去的信号，不应在今天出建议。
 _Avoid_: 把"近 60 日创过阶段新高"解读为"过去 60 日内某天创过新高"（会延迟信号）；把建仓条件参数化（框架明确写死）
 
-## 总仓位硬约束
+## ~~总仓位硬约束~~（已移除）
 
-**总可投资金（UserConfig.totalInvestableCapital）**:
-硬约束 #3（总仓位 ≤ 80%）的分母来源，用户整个账户的总可投资金额（含未入场的现金、其他基金等）。本期单用户场景下新增
-`user_config` 表，只一行，用户首次配置时手动填。非某只基金的 `plannedTotalAmount` 加总（那是单基金的纪律意图，不是账户可投资金）。
-_Avoid_: 用 `Σ plannedTotalAmount ÷ 0.8` 反推（语义不对）；本期跳过总仓位硬约束（硬约束是框架核心，不能省）
+行情工作台转向后,`totalInvestableCapital` 字段(V9 迁移删除)与总仓位 ≤80% 硬约束已移除。
+`UserConfig` 只剩 `watchedIndices`(关注指数)。`HardConstraintChecker` 从 check5 降为 check4
+(建仓比例/单只仓位/单类仓位/单次加仓比例,无总仓位)。
 
-## 计划仓位校验
+## ~~计划仓位校验~~（已移除）
 
-**计划总仓位校验（plannedTotalAmount 校验）**:
-建仓/编辑基金时校验 `plannedTotalAmount ≤ 总可投资金 × 单只仓位上限`，防止用户填一个根本建不了的死状态。
-单只上限 30%、无关类型（复用 `HardConstraintConfig.singlePositionLimit`，曾按 fundCategory 区分 20%/15% 已统一）。
-超限抛 `PLANNED_AMOUNT_EXCEEDS_LIMIT`；fundCategory 为 null（兜底识别后仍可能）抛 `FUND_CATEGORY_REQUIRED`
-（类型为 null 会阻塞后续默认档位查询，与 singlePositionLimit 无关——后者已无关类型）；
-`plannedTotalAmount` 为 null 不校验（更新时允许不传，仅改到超限才报错）。与硬约束互补——计划仓位校验管
-"意图上限"（建仓时防死状态），硬约束管"事实上限"（信号生成时卡实际持仓占比），两者不混淆。
-资金未配置走 `USER_CONFIG_NOT_INITIALIZED`（复用 `UserConfigService.requireTotalInvestableCapital` 单一事实源）。
-_Avoid_: 用硬约束替代计划仓位校验（硬约束在信号生成时才卡，建仓时填死状态会到信号阶段才报错，体验差）
+行情工作台转向后,计划仓位校验(`plannedTotalAmount ≤ 总可投资金 × 30%`)已随 `totalInvestableCapital` 移除。
+建仓时仅校验 `fundCategory` 非 null(阻塞默认档位查询,抛 `FUND_CATEGORY_REQUIRED`)。
+`plannedTotalAmount` 仍可填(金字塔加仓分母),不再卡上限。
 
 ## 行情数据缓存
 

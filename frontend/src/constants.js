@@ -164,11 +164,9 @@ export const errorTitles = {
     STRATEGY_NOT_FOUND: '策略不存在',
     TRANSACTION_NOT_FOUND: '交易不存在',
     SIGNAL_LOG_NOT_FOUND: '信号不存在',
-    USER_CONFIG_NOT_INITIALIZED: '未配置总可投资金',
     ENTITY_NOT_FOUND: '记录不存在',
     MISSING_FUND_IDENTITY: '缺少基金身份信息',
     // 输入校验
-    PLANNED_AMOUNT_EXCEEDS_LIMIT: '计划仓位超限',
     FUND_CATEGORY_REQUIRED: '缺少基金类型',
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
     // 交易/信号状态非法
