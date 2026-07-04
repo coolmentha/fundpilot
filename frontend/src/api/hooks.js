@@ -92,6 +92,47 @@ export function useStrategyAction(fundId) {
     });
 }
 
+// ===== 定投计划 =====
+export function useDcaPlans(fundId) {
+    return useQuery({
+        queryKey: ['dca-plans', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/dca-plans`),
+        enabled: !!fundId,
+    });
+}
+export function useActiveDcaPlan(fundId) {
+    return useQuery({
+        queryKey: ['dca-active', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/dca-plans/active`),
+        enabled: !!fundId,
+    });
+}
+const invalidateDcaPlans = (fundId) => {
+    const qc = useQueryClient();
+    return () => {
+        qc.invalidateQueries({queryKey: ['dca-plans', fundId]});
+        qc.invalidateQueries({queryKey: ['dca-active', fundId]});
+    };
+};
+export function useCreateDcaPlan(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
+    return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/dca-plans`, body), onSuccess});
+}
+export function useUpdateDcaPlan(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
+    return useMutation({
+        mutationFn: ({id, body}) => put(`/api/dca-plans/${id}`, body),
+        onSuccess,
+    });
+}
+export function useDcaPlanAction(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
+    return useMutation({
+        mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
+        onSuccess,
+    });
+}
+
 // ===== 信号 =====
 export function useSignalsToday(fundId) {
     return useQuery({

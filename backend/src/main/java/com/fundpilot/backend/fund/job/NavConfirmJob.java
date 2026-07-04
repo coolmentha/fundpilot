@@ -7,8 +7,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 净值确认定时任务(issue #15):每晚 21:00 回填当天 PENDING 交易的 nav + 另一侧 + confirmTime,转 CONFIRMED。
- * <p>cron {@code 0 0 21 * * MON-FRI} = 工作日 21:00:00 触发(净值公布后约 20:00-21:00)。
+ * 净值确认定时任务(issue #15):次日凌晨 3:00 回填前一天 PENDING 交易的 nav + 另一侧 + confirmTime,转 CONFIRMED。
+ * <p>cron {@code 0 0 3 * * MON-FRI} = 工作日凌晨 3:00 触发。
+ * 时序:14:55 DcaSuggestionJob 生成 PENDING → 当晚 20:00 DailyNavConfirmJob 落下单日净值 → 次日凌晨 3:00 本 Job 确认。
+ * 凌晨 3 点确认的是昨天及更早的 PENDING 流水(下单日净值已在昨晚落库),当天定投流水尚未生成,不冲突。
  * 依赖 {@code @EnableScheduling}(见 #7 启动类)。
  */
 @Component
@@ -22,7 +24,7 @@ public class NavConfirmJob {
         this.navConfirmService = navConfirmService;
     }
 
-    @Scheduled(cron = "0 0 21 * * MON-FRI")
+    @Scheduled(cron = "0 0 3 * * MON-FRI")
     public void run() {
         log.info("净值确认任务开始");
         int confirmed = navConfirmService.confirmPendingTransactions(null);

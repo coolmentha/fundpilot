@@ -185,3 +185,23 @@ _Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，sig
 `initialMarketValue` ≤ 0 或 `costPerShare` ≤ 0 抛参数校验错。
 _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）；openedAt 用历史净值日期反算份额（金额是当前市值口径，
 历史净值反算会让份额与当前市值对不上——openedAt 只标时间，不影响净值反算）
+
+## 定投计划
+
+**定投计划（DCA Plan）**:
+用户配置一次、系统按周期自动买入的执行机制。**定投是自动执行,不是信号**——直接生成 `source=INVEST` 的 PENDING 交易,
+完全绕开信号引擎（SignalLog）和卖出纪律。止盈交给基金绑定的移动止盈信号独立触发,与定投解耦。
+
+`FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(WEEKLY·周定投 / MONTHLY·月定投) /
+dayOfWeek(1=周一..7=周日) / dayOfMonth(1-28,月定投日,封顶 28 避开月末) / status。状态机 `DRAFT` --activate--> `EFFECTIVE` --retire--> `DRAFT`,
+同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
+
+**DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
+周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
+（判定:planDom..today-1 区间全非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易（amount=计划金额,shares/nav 留空）。
+**幂等**:同日同计划已有 PENDING 交易则跳过（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndStatusAndCreatedDateBetween` 兜底防重跑）。
+
+**NavConfirmJob 时序**:14:55 定投下单(PENDING) → 20:00 DailyNavConfirmJob 拉当日净值 → 次日 03:00 NavConfirmJob 确认昨日 PENDING
+（用下单日净值算 shares）。cron 从 `0 0 21 * *` 改 `0 0 3 * *`——凌晨确认的是"之前生成的"流水,单日定投流水在 14:55 已生成,
+次日 3 点确认时净值已落地。交易日历查询统一用 UTC 0 点 Instant 表当日（对齐 `InstantDateConverter` + `TradingCalendarSyncService` 约定）。
+_Avoid_: 定投走信号引擎（信号是建议,定投是执行,语义不同）;月定投日 > 28（避开月末交易日缺失,强制顺延增加复杂度）

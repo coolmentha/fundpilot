@@ -8,6 +8,7 @@ import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
 import MarketTab from './FundMarketTab.jsx';
 import FundTransactionTab from './FundTransactionTab.jsx';
+import FundDcaTab from './FundDcaTab.jsx';
 
 const {Title, Text} = Typography;
 
@@ -28,6 +29,7 @@ export default function FundDetailPage() {
         {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
         {key: 'signal', label: '交易信号', children: <SignalTab fundId={id}/>},
         {key: 'market', label: '行情指标', children: <MarketTab fundId={id} fundSubType={fund.fundSubType}/>},
+        {key: 'dca', label: '定投计划', children: <FundDcaTab fundId={id}/>},
     ];
 
     return (

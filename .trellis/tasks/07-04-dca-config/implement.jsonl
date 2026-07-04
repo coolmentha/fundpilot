@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端编码规范:Controller 不写逻辑、@RequiredArgsConstructor、ErrorCode 枚举、View DTO"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "DB 迁移规范:V11 建表+加列写法、唯一约束、Flyway 历史不可改"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量基线:测试覆盖、Job cron 规范、事务边界"}
+{"file": "CONTEXT.md", "reason": "领域上下文:定投计划章节需新增,确认与移动止盈/信号引擎的边界"}
+{"file": "backend/src/main/java/com/fundpilot/backend/strategy/service/StrategyConfigService.java", "reason": "DcaPlanService 镜像此类的 CRUD+状态机模式,作为实现参考"}
