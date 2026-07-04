@@ -44,7 +44,7 @@ export default function FundDcaTab({fundId}) {
             message.success('定投计划已更新');
         } else {
             await createPlan.mutateAsync(values);
-            message.success('定投计划已新建（待激活）');
+            message.success('定投计划已新建并激活');
         }
         setModalOpen(false);
     };

@@ -31,7 +31,7 @@ public class DcaPlanController {
     @PostMapping("/api/funds/{fundId}/dca-plans")
     public ApiResponse<Map<String, Long>> create(@PathVariable Long fundId,
                                                  @RequestBody DcaPlanRequest request) {
-        Long id = dcaPlanService.createDraft(fundId, request);
+        Long id = dcaPlanService.create(fundId, request);
         return ApiResponse.ok(Map.of("id", id));
     }
 
