@@ -209,12 +209,12 @@ export default function FundsPage() {
                     <Form.Item name="fundSubType" hidden><Input/></Form.Item>
                     <Form.Item name="benchmarkIndexCode" hidden><Input/></Form.Item>
                     <Form.Item label="基金类型" name="fundCategory"
-                               help="自动识别,可手动调整(决定默认档位和硬约束上限)">
+                               help="自动识别,可手动调整">
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
                     </Form.Item>
                     {!editing && (
                         <Form.Item label="入仓市值（可选）" name="initialMarketValue"
-                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金,等信号建仓">
+                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金">
                             <InputNumber min={0} precision={2} className="full-width" placeholder="已有持仓市值,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                          parser={(v) => v.replace(/,/g, '')}/>
@@ -225,7 +225,7 @@ export default function FundsPage() {
                                message={`将用 T-1 净值反算份额,建仓后基金状态变为"持仓中"`}
                                description={
                                    <div>
-                                       <p>入仓市值 {initialMarketValue.toLocaleString()} 元会作为首笔持仓录入。与计划总仓位(目标投入额)不同——前者是已有持仓,后者是纪律目标。</p>
+                                       <p>入仓市值 {initialMarketValue.toLocaleString()} 元会作为首笔持仓录入。</p>
                                        <p>交易确认后成本单价会自动加权更新,无需手动维护。</p>
                                    </div>
                                }/>

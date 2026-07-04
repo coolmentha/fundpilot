@@ -176,7 +176,30 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
                 fund.getId(), FundTransactionStatus.PENDING)).isEmpty();
     }
 
+    // ===== 日定投 =====
+
+    @Test
+    @Transactional
+    void 日定投_每个交易日都生成() {
+        FundEntity fund = persistFund();
+        activateDaily(fund);
+        // 2026-06-23 周二,任意交易日(日定投不看星期)
+        Instant tuesday = date(2026, 6, 23);
+
+        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), tuesday);
+
+        assertThat(generated).isTrue();
+        assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);
+    }
+
     // ===== 辅助 =====
+
+    private Long activateDaily(FundEntity fund) {
+        Long planId = dcaPlanService.createDraft(fund.getId(),
+                new DcaPlanRequest(true, new BigDecimal("1000"), DcaFrequency.DAILY, null, null));
+        dcaPlanService.activate(planId);
+        return planId;
+    }
 
     private Long activateWeekly(FundEntity fund, int dayOfWeek) {
         Long planId = dcaPlanService.createDraft(fund.getId(),

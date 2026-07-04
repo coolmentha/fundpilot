@@ -192,12 +192,12 @@ _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）�
 用户配置一次、系统按周期自动买入的执行机制。**定投是自动执行,不是信号**——直接生成 `source=INVEST` 的 PENDING 交易,
 完全绕开信号引擎（SignalLog）和卖出纪律。止盈交给基金绑定的移动止盈信号独立触发,与定投解耦。
 
-`FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(WEEKLY·周定投 / MONTHLY·月定投) /
+`FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(DAILY·日定投 / WEEKLY·周定投 / MONTHLY·月定投) /
 dayOfWeek(1=周一..7=周日) / dayOfMonth(1-28,月定投日,封顶 28 避开月末) / status。状态机 `DRAFT` --activate--> `EFFECTIVE` --retire--> `DRAFT`,
 同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
 
 **DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
-周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
+日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
 （判定:planDom..today-1 区间全非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易（amount=计划金额,shares/nav 留空）。
 **幂等**:同日同计划已有 PENDING 交易则跳过（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndStatusAndCreatedDateBetween` 兜底防重跑）。
 
