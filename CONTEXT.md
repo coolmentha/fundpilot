@@ -142,11 +142,12 @@ _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值
 _Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值失真）；已确认基金重复拉取（浪费请求）
 
 **K 线图（Kline Chart）**:
-行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金拉 `benchmarkIndexCode` 的指数 K 线(OHLCV),支持日/周/月 K 切换;
-主图蜡烛 + MA5/10/20/30(可开关),副图成交量(常驻)+ MACD(可切换)。主动/混合基金或指数拉取降级时读本地累计净值画面积图(无工具栏无指标)。
-`KlineService` 把 period→klt(101/102/103)透传;`MarketDataSourceChain` **必须 override `fetchIndexKlineWithPeriod`** 透传 klt(接口 default 会忽略 klt 降级日K,导致日/周/月都一样)。
-push2his 偶发 "Unexpected end of file" 时 `EastmoneyMarketDataSource` 重试一次(Feign 默认 0 重试会直接降级净值)。secid `2.930713`(中证 CSI)经验证可用,失败是瞬时网络抖动非 secid 错误。
-_Avoid_: 在后端算指标(klinecharts 内置,前端只喂 OHLCV);走接口 default 不 override(吞 klt)
+行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(MarketDataFetchService 每日算 VolumeState 时顺便落库,零额外请求)渲染日 K,
+周/月 K 在日 K 上聚合(open=首日、high=max、low=min、close=末日、volume=sum)。主图蜡烛 + MA5/10/20/30(可开关),副图成交量(常驻)+ MACD(可切换)。主动/混合基金或缓存空且实时拉取失败时降级净值面积图。
+**必须读本地缓存**:push2his.eastmoney.com 对按需高频请求 IP-blocks(http 000 "Unexpected end of file"),
+图表按 view/切周期拉会触发限流;改读缓存后图表不再直连 push2his。缓存空(尚未同步)时实时拉作兜底。
+`KlineService` period→klt(101/102/103)仅兜底用;`MarketDataSourceChain` **必须 override `fetchIndexKlineWithPeriod`** 透传 klt(接口 default 会忽略 klt 降级日K)。
+_Avoid_: 图表直连 push2his(触发 IP 限流);在缓存空时直接降级净值(应先实时拉兜底);后端算指标(klinecharts 内置,前端只喂 OHLCV)
 
 ## 盈亏与涨跌
 
