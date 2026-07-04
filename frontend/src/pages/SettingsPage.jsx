@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {App, Button, Card, Select, Space, Tag, Typography} from 'antd';
+import {App, Button, Card, Select, Space, Typography} from 'antd';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
 
 const {Title, Text} = Typography;
@@ -17,7 +17,6 @@ const INDEX_OPTIONS = [
     {value: '0.399005', label: '中证500'},
     {value: '0.399300', label: '中证1000'},
     {value: '1.000016', label: '上证50'},
-    {value: '1.000905', label: '中证500(沪)'},
 ];
 
 export default function SettingsPage() {
@@ -51,14 +50,10 @@ export default function SettingsPage() {
                         value={selected}
                         onChange={setSelected}
                         options={INDEX_OPTIONS}
-                        tagRender={(props) => (
-                            <Tag color="amber" closable={props.closable} onClose={props.onClose}
-                                 style={{marginRight: 3}}>
-                                {props.label}
-                            </Tag>
-                        )}
+                        optionFilterProp="label"
                         style={{width: '100%'}}
                         loading={isLoading}
+                        maxTagCount="responsive"
                     />
                 </div>
                 <Button type="primary" loading={updateConfig.isPending} onClick={save}>保存配置</Button>
