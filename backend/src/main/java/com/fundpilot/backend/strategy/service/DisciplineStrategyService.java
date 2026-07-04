@@ -166,13 +166,15 @@ public class DisciplineStrategyService {
         // 回落幅度 = (peak - current) / peak,正数
         BigDecimal pullback = peak.subtract(currentNav).divide(peak, MATH);
         BigDecimal stopLossPercent = strategy.getStopLossPullbackPercent();
-        if (stopLossPercent == null || stopLossPercent.signum() <= 0) {
+        if (stopLossPercent == null || stopLossPercent.signum() == 0) {
             return null;
         }
-        // 计算应触发的档位:pullback >= n × stopLossPercent,n 从 4 降到 1,取最大 n
+        // stopLossPullbackPercent 约定为负数(如 -0.08 表回落 8%),取绝对值参与计算
+        BigDecimal threshold = stopLossPercent.abs();
+        // 计算应触发的档位:pullback >= n × threshold,n 从 4 降到 1,取最大 n
         int triggerTier = 0;
         for (int n = TRAILING_STOP_TIERS; n >= 1; n--) {
-            if (pullback.compareTo(stopLossPercent.multiply(BigDecimal.valueOf(n), MATH)) >= 0) {
+            if (pullback.compareTo(threshold.multiply(BigDecimal.valueOf(n), MATH)) >= 0) {
                 triggerTier = n;
                 break;
             }

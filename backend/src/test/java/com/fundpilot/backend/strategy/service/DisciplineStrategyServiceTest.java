@@ -113,8 +113,9 @@ class DisciplineStrategyServiceTest {
     @Test
     void 逻辑止损_ETF仅破年线未放量_不触发() {
         FundEntity fund = fund(FundStatus.HOLDING);
+        // currentNav=1.0=holdingPeriodPeakNav,移动止盈无回落不触发;破年线由 priceAboveYearLine=false 控制
         MarketIndicators market = new MarketIndicators(
-                new BigDecimal("0.9"), false, false,
+                new BigDecimal("1.0"), false, false,
                 WeeklyMacdState.GREEN_EXPANDING, VolumeState.NORMAL,
                 BigDecimal.ZERO, false, VolumeState.NORMAL, true); // 跟踪指数未放量
         CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
