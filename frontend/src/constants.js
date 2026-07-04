@@ -29,6 +29,7 @@ export const labels = {
     CONFIRMED: '已确认',
     CANCELLED: '已取消',
     // DcaFrequency
+    DAILY: '日定投',
     WEEKLY: '周定投',
     MONTHLY: '月定投',
     // DcaPlanStatus

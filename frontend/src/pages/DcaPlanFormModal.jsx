@@ -2,6 +2,7 @@ import {useEffect} from 'react';
 import {Form, InputNumber, Modal, Select} from 'antd';
 
 const FREQUENCY_OPTIONS = [
+    {value: 'DAILY', label: '日定投'},
     {value: 'WEEKLY', label: '周定投'},
     {value: 'MONTHLY', label: '月定投'},
 ];
@@ -56,8 +57,8 @@ export default function DcaPlanFormModal({open, editing, onOk, onCancel, confirm
                     </Form.Item>
                 )}
                 <p style={{color: '#888', fontSize: 12}}>
-                    激活后,系统在定投日 14:55 自动生成 INVEST 交易(PENDING),次日凌晨确认份额。
-                    月定投遇节假日顺延到下一个交易日。止盈交给基金绑定的移动止盈信号。
+                    激活后,系统在每个交易日 14:55 自动生成 INVEST 交易(PENDING),次日凌晨确认份额。
+                    日定投每个交易日执行;周定投按所选星期;月定投按所选日期,遇节假日顺延到下一交易日。
                 </p>
             </Form>
         </Modal>

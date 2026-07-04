@@ -17,6 +17,7 @@ const {Text} = Typography;
 const WEEK_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 const scheduleText = (r) => {
+    if (r.frequency === 'DAILY') return '每个交易日';
     if (r.frequency === 'WEEKLY') return WEEK_NAMES[r.dayOfWeek] || '-';
     if (r.frequency === 'MONTHLY') return `每月${r.dayOfMonth}号`;
     return '-';

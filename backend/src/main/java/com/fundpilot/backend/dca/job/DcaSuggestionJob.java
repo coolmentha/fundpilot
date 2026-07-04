@@ -119,6 +119,9 @@ public class DcaSuggestionJob {
     boolean isDcaDay(FundDcaPlanEntity plan, Instant now) {
         ZonedDateTime today = now.atZone(TRADING_ZONE);
         int todayDom = today.getDayOfMonth();
+        if (plan.getFrequency() == DcaFrequency.DAILY) {
+            return true; // run() 已 gating 交易日,每个交易日都投
+        }
         if (plan.getFrequency() == DcaFrequency.WEEKLY) {
             int todayDow = today.getDayOfWeek().getValue(); // 1=周一
             return plan.getDayOfWeek() != null && todayDow == plan.getDayOfWeek();
