@@ -141,20 +141,31 @@ function applyDarkTheme(chart) {
                 upBorderColor: '#EF4444', downBorderColor: '#22C55E',
                 upWickColor: '#EF4444', downWickColor: '#22C55E',
             },
+            priceMark: {
+                show: true,             // 显示最新价标记
+                high: {show: true},
+                low: {show: true},
+                last: {show: true, upColor: '#EF4444', downColor: '#22C55E'},
+            },
         },
         yAxis: {
-            axisLine: {color: '#334155'},
-            tickText: {color: '#94A3B8'},
-            tickLine: {color: '#334155'},
+            show: true,                 // 纵轴刻度固定显示在轴上,非只跟十字线
+            axisLine: {show: true, color: '#334155'},
+            tickLine: {show: true, color: '#334155'},
+            tickText: {show: true, color: '#94A3B8'},
         },
         xAxis: {
-            axisLine: {color: '#334155'},
-            tickText: {color: '#94A3B8'},
-            tickLine: {color: '#334155'},
+            show: true,
+            axisLine: {show: true, color: '#334155'},
+            tickLine: {show: true, color: '#334155'},
+            tickText: {show: true, color: '#94A3B8'},
         },
         crosshair: {
-            horizontal: {line: {color: '#94A3B8'}},
-            vertical: {line: {color: '#94A3B8'}},
+            horizontal: {show: true, line: {color: '#94A3B8'}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
+            vertical: {show: true, line: {color: '#94A3B8'}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
+        },
+        indicator: {
+            lastValueMark: {show: true, text: {show: true}},
         },
     });
 }
