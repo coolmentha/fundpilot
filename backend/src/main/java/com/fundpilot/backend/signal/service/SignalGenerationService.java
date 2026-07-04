@@ -23,8 +23,6 @@ import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
 import com.fundpilot.backend.strategy.service.support.CapitalContext;
 import com.fundpilot.backend.strategy.service.support.MarketIndicators;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
-import com.fundpilot.backend.user.entity.UserConfigEntity;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,7 +66,6 @@ public class SignalGenerationService {
     private final FundPositionService fundPositionService;
     private final MarketIndicatorProvider marketIndicatorProvider;
     private final SignalLogRepository signalLogRepository;
-    private final UserConfigRepository userConfigRepository;
     private final TradingCalendarService tradingCalendarService;
     private final DisciplineStrategyService disciplineStrategyService;
 
@@ -79,19 +76,16 @@ public class SignalGenerationService {
     @Transactional
     public void generateDailySignals(Instant date) {
         List<Long> fundIds = fundStrategyRepository.findEffectiveFundIds();
-        BigDecimal totalInvestableCapital = userConfigRepository.findAll().stream()
-                .map(UserConfigEntity::getTotalInvestableCapital)
-                .findFirst().orElse(BigDecimal.ZERO);
         for (Long fundId : fundIds) {
             try {
-                generateForFund(fundId, date, totalInvestableCapital);
+                generateForFund(fundId, date);
             } catch (RuntimeException ex) {
                 log.error("信号生成失败 fund_id={} date={}: {}", fundId, date, ex.getMessage(), ex);
             }
         }
     }
 
-    private void generateForFund(Long fundId, Instant date, BigDecimal totalInvestableCapital) {
+    private void generateForFund(Long fundId, Instant date) {
         FundEntity fund = fundRepository.findById(fundId).orElse(null);
         if (fund == null) {
             return;
@@ -112,7 +106,7 @@ public class SignalGenerationService {
             result = SignalResult.none(SignalReason.INSUFFICIENT_MARKET_DATA);
         } else {
             MarketIndicators market = toMarketIndicators(snapshotOpt.get());
-            CapitalContext capital = buildCapitalContext(fund, strategy, market, totalInvestableCapital, date);
+            CapitalContext capital = buildCapitalContext(fund, strategy, market, date);
             long tradingDaysSinceLastBuy = computeTradingDaysSinceLastBuy(fund, strategy, date);
             result = disciplineStrategyService.evaluateSignal(fund, strategy, market, capital, dayStart, tradingDaysSinceLastBuy);
         }
@@ -141,8 +135,7 @@ public class SignalGenerationService {
     }
 
     private CapitalContext buildCapitalContext(FundEntity fund, FundStrategyEntity strategy,
-                                                MarketIndicators market, BigDecimal totalInvestableCapital,
-                                                Instant date) {
+                                                MarketIndicators market, Instant date) {
         BigDecimal currentNav = market.currentNav() != null ? market.currentNav() : BigDecimal.ZERO;
         BigDecimal peakNav = fundNavHistoryRepository.findPeakAccumulatedNav(fund.getId()).orElse(currentNav);
         BigDecimal holdingPeakNav = fund.getOpenedAt() != null
@@ -154,15 +147,13 @@ public class SignalGenerationService {
         BigDecimal singlePositionPct = totalEquityAmount.signum() > 0
                 ? holdingAmount.divide(totalEquityAmount, MATH) : BigDecimal.ZERO;
         BigDecimal categoryPositionPct = computeCategoryPositionPct(fund.getFundCategory(), currentNav, totalEquityAmount);
-        BigDecimal totalEquityPct = totalInvestableCapital.signum() > 0
-                ? totalEquityAmount.divide(totalInvestableCapital, MATH) : BigDecimal.ZERO;
         BigDecimal buildShares = sumShares(fundTransactionRepository
                 .findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(fund.getId(), SignalType.BUILD, FundTransactionStatus.CONFIRMED));
         Map<Integer, BigDecimal> tierAddShares = buildTierAddShares(fund.getId());
         Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund, strategy);
 
         return new CapitalContext(peakNav, holdingPeakNav, singlePositionPct, categoryPositionPct,
-                totalEquityPct, totalEquityAmount, fund.getPlannedTotalAmount() != null ? fund.getPlannedTotalAmount() : BigDecimal.ZERO,
+                totalEquityAmount, fund.getPlannedTotalAmount() != null ? fund.getPlannedTotalAmount() : BigDecimal.ZERO,
                 buildShares, tierAddShares, holdingShares, lastBuyConfirmTime);
     }
 

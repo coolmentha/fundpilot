@@ -9,13 +9,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 用户配置 Controller(issue #16):单用户场景,只有一行 UserConfig。
- * <p>GET 取唯一配置;PUT 更新 totalInvestableCapital(无则新建)。
- * 逻辑下沉 {@link UserConfigService},返回 {@link UserConfigView} DTO。
+ * 用户配置 Controller:单用户场景,管理关注指数列表。
+ * <p>GET 取配置(未初始化返默认);PUT 更新关注指数。逻辑下沉 {@link UserConfigService}。
  */
 @RestController
 @RequestMapping("/api/user-config")
@@ -31,9 +29,9 @@ public class UserConfigController {
 
     @PutMapping
     public ApiResponse<UserConfigView> update(@RequestBody UserConfigUpdateRequest request) {
-        return ApiResponse.ok(userConfigService.update(request.totalInvestableCapital(), request.watchedIndices()));
+        return ApiResponse.ok(userConfigService.update(request.watchedIndices()));
     }
 
-    public record UserConfigUpdateRequest(BigDecimal totalInvestableCapital, List<String> watchedIndices) {
+    public record UserConfigUpdateRequest(List<String> watchedIndices) {
     }
 }
