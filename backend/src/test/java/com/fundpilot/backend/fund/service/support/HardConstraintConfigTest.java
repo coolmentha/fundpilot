@@ -42,11 +42,6 @@ class HardConstraintConfigTest {
     }
 
     @Test
-    void totalEquityPositionLimitIsEightyPercent() {
-        assertThat(HardConstraintConfig.TOTAL_EQUITY_POSITION_LIMIT).isEqualByComparingTo(new BigDecimal("0.80"));
-    }
-
-    @Test
     void singleAddRatioLimitIsFiftyPercent() {
         assertThat(HardConstraintConfig.SINGLE_ADD_RATIO_LIMIT).isEqualByComparingTo(new BigDecimal("0.50"));
     }

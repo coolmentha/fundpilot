@@ -98,7 +98,7 @@ public final class BacktestSimulator {
             BigDecimal totalEquityAmount = holdingShares.multiply(nav, MATH);
             CapitalContext capital = new CapitalContext(
                     peakNav, holdingPeriodPeakNav,
-                    MOCK_POSITION_PCT, MOCK_POSITION_PCT, MOCK_POSITION_PCT,
+                    MOCK_POSITION_PCT, MOCK_POSITION_PCT,
                     totalEquityAmount, params.plannedTotalAmount(),
                     buildShares, tierAddShares, holdingShares, lastBuy);
             long tradingDaysSinceLastBuy = lastBuy == null

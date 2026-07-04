@@ -4,8 +4,12 @@ import java.math.BigDecimal;
 
 /**
  * 全局硬约束常量(CONTEXT.md「总仓位硬约束」「7 天内不赎回硬约束」与 issue #5 规格)。
- * <p>硬约束管"主动加仓不能突破上限",与再平衡减仓(管"存量超限被动卖出")是两套机制。
+ * <p>硬约束管"主动加仓不能突破上限"。
  * {@link #TIER_CLEAR_BUFFER} 见 ADR-0003,反弹清空判定侧 0.5% 缓冲带,写死不可调。
+ *
+ * <p>行情工作台转向后移除了:总权益仓位上限 80%({@code TOTAL_EQUITY_POSITION_LIMIT},
+ * 分母 totalInvestableCapital 已删)与再平衡容忍缓冲({@code REBALANCE_TOLERANCE},
+ * 再平衡信号已删)。保留的硬约束:建仓比例、单只仓位、单类仓位、单次加仓比例。
  */
 public final class HardConstraintConfig {
 
@@ -15,17 +19,11 @@ public final class HardConstraintConfig {
     /** 反弹清空缓冲带 0.5%(ADR-0003),只在清空侧加,加档侧精确触发。 */
     public static final BigDecimal TIER_CLEAR_BUFFER = new BigDecimal("0.005");
 
-    /** 单只基金仓位上限 30%(无关类型,CONTEXT.md「再平衡减仓」「计划仓位校验」)。 */
+    /** 单只基金仓位上限 30%(无关类型)。 */
     public static final BigDecimal SINGLE_POSITION_LIMIT = new BigDecimal("0.30");
-
-    /** 再平衡容忍缓冲:持仓市值超过 plannedTotalAmount 的 1.1 倍才触发再平衡。 */
-    public static final BigDecimal REBALANCE_TOLERANCE = new BigDecimal("1.1");
 
     /** 单类基金总仓位上限 30%。 */
     public static final BigDecimal CATEGORY_POSITION_LIMIT = new BigDecimal("0.30");
-
-    /** 总权益仓位上限 80%(分母为 UserConfig.totalInvestableCapital)。 */
-    public static final BigDecimal TOTAL_EQUITY_POSITION_LIMIT = new BigDecimal("0.80");
 
     /** 单次加仓比例上限 50%(防止单次加仓过猛)。 */
     public static final BigDecimal SINGLE_ADD_RATIO_LIMIT = new BigDecimal("0.50");
@@ -40,7 +38,7 @@ public final class HardConstraintConfig {
     }
 
     /**
-     * 单只基金仓位上限 30%(无关类型,CONTEXT.md「再平衡减仓」)。
+     * 单只基金仓位上限 30%(无关类型)。
      * <p>曾是按 fundCategory 区分(宽基/主动/混合 20%、行业 15%),后统一为 30% 无关类型——
      * 单只仓位上限与基金类型无关,简化心智模型。
      */

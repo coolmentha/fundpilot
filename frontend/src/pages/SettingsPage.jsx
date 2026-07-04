@@ -1,38 +1,65 @@
 import {useEffect, useState} from 'react';
-import {App, Button, Card, InputNumber, Space, Typography} from 'antd';
+import {App, Button, Card, Select, Space, Tag, Typography} from 'antd';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
-import {money} from '../constants.js';
 
 const {Title, Text} = Typography;
+
+/**
+ * 常用 A 股指数候选列表(secid → 名称)。用户在设置页多选关注哪些指数,
+ * 行情工作台顶部指数条按此列表展示。
+ */
+const INDEX_OPTIONS = [
+    {value: '1.000001', label: '上证指数'},
+    {value: '0.399001', label: '深证成指'},
+    {value: '1.000300', label: '沪深300'},
+    {value: '0.399006', label: '创业板指'},
+    {value: '1.000688', label: '科创50'},
+    {value: '0.399005', label: '中证500'},
+    {value: '0.399300', label: '中证1000'},
+    {value: '1.000016', label: '上证50'},
+    {value: '1.000905', label: '中证500(沪)'},
+];
 
 export default function SettingsPage() {
     const {message} = App.useApp();
     const {data: config, isLoading} = useUserConfig();
     const updateConfig = useUpdateUserConfig();
-    const [amount, setAmount] = useState(0);
+    const [selected, setSelected] = useState([]);
 
     useEffect(() => {
-        if (config?.totalInvestableCapital != null) {
-            setAmount(Number(config.totalInvestableCapital));
+        if (config?.watchedIndices) {
+            setSelected(config.watchedIndices);
         }
     }, [config]);
 
     const save = async () => {
-        await updateConfig.mutateAsync({totalInvestableCapital: amount});
-        message.success('用户配置已更新');
+        await updateConfig.mutateAsync({watchedIndices: selected});
+        message.success('关注指数已更新');
     };
 
     return (
         <Card title={<Title level={4}>用户配置</Title>} style={{maxWidth: 600}}>
             <Space direction="vertical" className="full-width" size="large">
                 <div>
-                    <Text type="secondary">当前总可投资资金：</Text>
-                    <Text strong>{isLoading ? '加载中…' : money(config?.totalInvestableCapital)}</Text>
-                </div>
-                <div>
-                    <Text type="secondary" style={{display: 'block', marginBottom: 8}}>更新总可投资资金</Text>
-                    <InputNumber value={amount} min={0} precision={2} className="full-width"
-                                 prefix="¥" onChange={(v) => setAmount(Number(v || 0))}/>
+                    <Text type="secondary" style={{display: 'block', marginBottom: 8}}>关注指数</Text>
+                    <Text type="secondary" style={{display: 'block', marginBottom: 12, fontSize: 12}}>
+                        行情工作台顶部指数条按此列表展示实时行情。默认:上证指数、沪深300、创业板指。
+                    </Text>
+                    <Select
+                        mode="multiple"
+                        placeholder="选择关注的大盘指数"
+                        value={selected}
+                        onChange={setSelected}
+                        options={INDEX_OPTIONS}
+                        tagRender={(props) => (
+                            <Tag color="amber" closable={props.closable} onClose={props.onClose}
+                                 style={{marginRight: 3}}>
+                                {props.label}
+                            </Tag>
+                        )}
+                        style={{width: '100%'}}
+                        loading={isLoading}
+                    />
                 </div>
                 <Button type="primary" loading={updateConfig.isPending} onClick={save}>保存配置</Button>
             </Space>

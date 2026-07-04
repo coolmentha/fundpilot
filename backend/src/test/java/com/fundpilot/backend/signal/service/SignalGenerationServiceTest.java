@@ -23,7 +23,6 @@ import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,7 +61,6 @@ class SignalGenerationServiceTest {
     @Mock FundPositionService fundPositionService;
     @Mock MarketIndicatorProvider marketIndicatorProvider;
     @Mock SignalLogRepository signalLogRepository;
-    @Mock UserConfigRepository userConfigRepository;
     @Mock TradingCalendarService tradingCalendarService;
     @Mock DisciplineStrategyService disciplineStrategyService;
 
@@ -72,7 +70,7 @@ class SignalGenerationServiceTest {
     void setUp() {
         service = new SignalGenerationService(fundStrategyRepository, fundRepository,
                 fundNavHistoryRepository, fundTransactionRepository, fundPositionService,
-                marketIndicatorProvider, signalLogRepository, userConfigRepository,
+                marketIndicatorProvider, signalLogRepository,
                 tradingCalendarService, disciplineStrategyService);
     }
 
@@ -124,7 +122,6 @@ class SignalGenerationServiceTest {
         FundStrategyEntity s1 = stubFund(1L, FundStatus.PENDING_HOLDING);
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L, 2L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(marketIndicatorProvider.getIndicators(eq(2L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
@@ -146,7 +143,6 @@ class SignalGenerationServiceTest {
     void generateDailySignals_snapshot缺失落NONE_INSUFFICIENT_MARKET_DATA() {
         stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.empty());
 
         service.generateDailySignals(DATE);
@@ -163,7 +159,6 @@ class SignalGenerationServiceTest {
     void generateDailySignals_重跑软删同日旧行再写新() {
         FundStrategyEntity s1 = stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
                 .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
@@ -182,7 +177,6 @@ class SignalGenerationServiceTest {
         FundStrategyEntity s1 = stubFund(1L, FundStatus.HOLDING);
         s1.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         // 模拟 evaluateSignal 反弹清空副作用:清空 tier1AddedAt
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
@@ -203,7 +197,6 @@ class SignalGenerationServiceTest {
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L, 2L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         // fund1: snapshot 拉取抛异常
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenThrow(new RuntimeException("snap 拉取失败"));
         // fund2: 正常

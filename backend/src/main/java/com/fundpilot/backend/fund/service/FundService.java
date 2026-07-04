@@ -16,9 +16,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.FundTypeClassification;
 import com.fundpilot.backend.fund.service.support.FundTypeClassifier;
-import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
-import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,7 +41,6 @@ public class FundService {
 
     private final FundRepository fundRepository;
     private final FundArchiveService fundArchiveService;
-    private final UserConfigService userConfigService;
     private final FundPnlService fundPnlService;
     private final MarketDataFetchService marketDataFetchService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
@@ -91,7 +88,7 @@ public class FundService {
         fund.setBenchmarkIndexCode(request.benchmarkIndexCode() != null ? request.benchmarkIndexCode()
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
 
-        validatePlannedTotalAmount(fund.getPlannedTotalAmount(), fund.getFundCategory());
+        validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
 
         // 建基金后自动拉历史净值(独立事务,失败降级不阻断建基金)
@@ -196,7 +193,6 @@ public class FundService {
         }
         if (request.plannedTotalAmount() != null) {
             fund.setPlannedTotalAmount(request.plannedTotalAmount());
-            validatePlannedTotalAmount(fund.getPlannedTotalAmount(), fund.getFundCategory());
         }
         return FundView.from(fundRepository.save(fund));
     }
@@ -208,23 +204,12 @@ public class FundService {
     }
 
     /**
-     * 计划仓位校验(CONTEXT.md「计划仓位校验」):plannedTotalAmount ≤ 总可投资金 × 单只仓位上限(30% 无关类型),
-     * 防止填一个根本建不了的死状态;与硬约束互补(意图上限 vs 事实上限)。
-     * plannedTotalAmount 为 null 不校验;fundCategory 为 null 抛 FUND_CATEGORY_REQUIRED
-     * (类型为 null 会阻塞后续默认档位查询,与 singlePositionLimit 无关——后者已统一 30% 无关类型)。
+     * fundCategory 校验:类型为 null 会阻塞后续默认档位查询(宽基/行业/主动/混合 各有默认档位表),
+     * 故建仓/编辑时强制非 null。plannedTotalAmount 上限校验已随总可投资金移除(V9)。
      */
-    private void validatePlannedTotalAmount(BigDecimal plannedTotalAmount, FundCategory fundCategory) {
-        if (plannedTotalAmount == null) {
-            return;
-        }
+    private void validateFundCategory(FundCategory fundCategory) {
         if (fundCategory == null) {
-            throw new BusinessException(ErrorCode.FUND_CATEGORY_REQUIRED, "计划仓位校验需要基金类型");
-        }
-        BigDecimal limit = userConfigService.requireTotalInvestableCapital()
-                .multiply(HardConstraintConfig.singlePositionLimit());
-        if (plannedTotalAmount.compareTo(limit) > 0) {
-            throw new BusinessException(ErrorCode.PLANNED_AMOUNT_EXCEEDS_LIMIT,
-                    "计划总仓位超过单只仓位上限 " + limit.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
+            throw new BusinessException(ErrorCode.FUND_CATEGORY_REQUIRED, "基金类型不能为空(阻塞默认档位查询)");
         }
     }
 

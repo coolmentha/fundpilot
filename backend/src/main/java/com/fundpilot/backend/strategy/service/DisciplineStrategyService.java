@@ -197,8 +197,10 @@ public class DisciplineStrategyService {
     }
 
     /**
-     * 步骤 5-SELL:逻辑止损 > 移动止盈 > 再平衡。命中即返回,否则 null(继续 ADD 判定)。
+     * 步骤 5-SELL:逻辑止损 > 移动止盈。命中即返回,否则 null(继续 ADD 判定)。
      * SELL 信号最多一类(CONTEXT.md「SELL 信号优先级」)。
+     *
+     * <p>行情工作台转向后移除了再平衡减仓(原第三优先级,依赖已删除的 totalInvestableCapital)。
      */
     private SignalResult decideSell(FundEntity fund, FundStrategyEntity strategy,
                                     MarketIndicators market, CapitalContext capital,
@@ -210,15 +212,7 @@ public class DisciplineStrategyService {
         }
         // 2. 移动止盈
         SignalResult trailingStop = checkTrailingStop(fund, strategy, market, capital, warnings);
-        if (trailingStop != null) {
-            return trailingStop;
-        }
-        // 3. 再平衡减仓
-        SignalResult rebalance = checkRebalance(fund, market, capital, warnings);
-        if (rebalance != null) {
-            return rebalance;
-        }
-        return null;
+        return trailingStop;
     }
 
     /**
@@ -316,39 +310,6 @@ public class DisciplineStrategyService {
         return new SignalResult(SignalType.SELL, sellTier, null, measure, SignalReason.TRAILING_STOP, warnings, List.of());
     }
 
-    /**
-     * 再平衡减仓:满仓(总权益≥80%)且单只基金持仓市值超出 plannedTotalAmount 的 1.1 倍时触发。
-     * 卖出金额 = 持仓市值 - 计划总仓位(超出的全部卖掉)。
-     * 遵守 MIN_HOLD_DAYS(循环 D 处理降级);不清档位。
-     */
-    private SignalResult checkRebalance(FundEntity fund, MarketIndicators market,
-                                        CapitalContext capital, List<SignalWarningValue> warnings) {
-        // 条件1:总权益仓位 ≥ 80%(满仓)
-        BigDecimal totalEquityPct = capital.totalEquityPct();
-        if (totalEquityPct == null || totalEquityPct.compareTo(HardConstraintConfig.TOTAL_EQUITY_POSITION_LIMIT) < 0) {
-            return null;
-        }
-        // 条件2:持仓市值 > plannedTotalAmount × 1.1(超过容忍线)
-        BigDecimal plannedTotalAmount = capital.plannedTotalAmount();
-        if (plannedTotalAmount == null || plannedTotalAmount.signum() <= 0) {
-            return null;
-        }
-        BigDecimal currentNav = market.currentNav();
-        if (currentNav == null || currentNav.signum() <= 0) {
-            return null;
-        }
-        BigDecimal holdingAmount = capital.holdingShares().multiply(currentNav, MATH);
-        BigDecimal tolerance = plannedTotalAmount.multiply(HardConstraintConfig.REBALANCE_TOLERANCE, MATH);
-        if (holdingAmount.compareTo(tolerance) <= 0) {
-            return null; // 未超容忍线
-        }
-        // 卖出金额 = 持仓市值 - 计划总仓位;份额 = 金额 / 当前净值
-        BigDecimal sellAmount = holdingAmount.subtract(plannedTotalAmount);
-        BigDecimal shares = sellAmount.divide(currentNav, MATH);
-        Measure measure = new Measure(shares, MeasureUnit.SHARE);
-        return new SignalResult(SignalType.SELL, null, null, measure, SignalReason.REBALANCE, warnings, List.of());
-    }
-
     // ---- 步骤 6-8: warnings / 硬约束 / MIN_HOLD_DAYS ----
 
     /** 调节系数:年线 × MACD × 成交量,clamp(0.3, 1.5)。 */
@@ -407,10 +368,10 @@ public class DisciplineStrategyService {
                 ? tierRatio(strategy, result.triggerTier()) : BigDecimal.ZERO;
         BigDecimal singleAddRatio = addRatio; // 本次加仓比例(建仓时 singleAddRatio=0)
         java.util.List<com.fundpilot.backend.fund.service.support.Breach> breaches =
-                com.fundpilot.backend.fund.service.support.HardConstraintChecker.check5(
+                com.fundpilot.backend.fund.service.support.HardConstraintChecker.check4(
                         buildRatio,
                         capital.singlePositionPct(), capital.categoryPositionPct(),
-                        capital.totalEquityPct(), singleAddRatio);
+                        singleAddRatio);
         if (breaches.isEmpty()) {
             return result;
         }
