@@ -28,6 +28,12 @@ export const labels = {
     PENDING: '待确认',
     CONFIRMED: '已确认',
     CANCELLED: '已取消',
+    // DcaFrequency
+    WEEKLY: '周定投',
+    MONTHLY: '月定投',
+    // DcaPlanStatus
+    DRAFT: '草稿',
+    EFFECTIVE: '已生效',
     // Backtest passed(非后端枚举,前端回测结果展示用)
     PASSED: '通过',
     FAILED: '未通过',
@@ -164,6 +170,7 @@ export const errorTitles = {
     STRATEGY_NOT_FOUND: '策略不存在',
     TRANSACTION_NOT_FOUND: '交易不存在',
     SIGNAL_LOG_NOT_FOUND: '信号不存在',
+    DCA_PLAN_NOT_FOUND: '定投计划不存在',
     ENTITY_NOT_FOUND: '记录不存在',
     MISSING_FUND_IDENTITY: '缺少基金身份信息',
     // 输入校验

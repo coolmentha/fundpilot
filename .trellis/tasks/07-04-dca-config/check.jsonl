@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "校验 Controller/Service/Entity 分层、ErrorCode、View DTO 是否符合规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量基线:Job 幂等性、测试覆盖、事务边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ErrorCode 枚举:定投计划相关错误码是否符合约定"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范:定投 tab 组件结构、hook 用法"}
+{"file": "CONTEXT.md", "reason": "验证定投计划章节与移动止盈/信号引擎边界清晰"}
