@@ -65,13 +65,9 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUpUserConfig() {
-        // FundService.create → validatePlannedTotalAmount → requireTotalInvestableCapital 依赖 user_config 已初始化;
-        // CI 全新库无此行会抛 USER_CONFIG_NOT_INITIALIZED。每个测试前清空+插入唯一可控资金值(对齐 FundServiceTest)。
-        // @Transactional 测试方法下随事务回滚;非事务测试方法下 repository.save 自动提交(后者需 Service 独立事务读到)。
+        // 清空本地 DB 残留的 user_config,确保测试隔离。
+        // 计划仓位校验已随 totalInvestableCapital 移除(V9),不再需要预先初始化资金配置。
         userConfigRepository.deleteAll();
-        UserConfigEntity config = new UserConfigEntity();
-        config.setTotalInvestableCapital(new BigDecimal("100000"));
-        userConfigRepository.save(config);
     }
 
     @Test

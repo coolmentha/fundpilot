@@ -356,51 +356,7 @@ class DisciplineStrategyServiceTest {
         assertThat(result.signalType()).isNotEqualTo(SignalType.SELL);
     }
 
-    @Test
-    void 再平衡_满仓且持仓超plannedTotalAmount容忍线_返回SELL_REBALANCE() {
-        FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        // 满仓:totalEquityPct=0.85(≥0.80);
-        // plannedTotalAmount=1000,holdingShares=1200→市值1200>1100(1000×1.1容忍线);
-        // 卖出金额=1200-1000=200;份额=200/1.0=200
-        CapitalContext capital = capitalForRebalance(new BigDecimal("0.85"), new BigDecimal("1000"),
-                new BigDecimal("1200"));
-
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
-
-        assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.reason()).isEqualTo(SignalReason.REBALANCE);
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("200"));
-    }
-
-    @Test
-    void 再平衡_未满仓_不触发() {
-        FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.SECTOR);
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        // 满仓条件不满足:totalEquityPct=0.70 < 0.80
-        CapitalContext capital = capitalForRebalance(new BigDecimal("0.70"), new BigDecimal("1000"),
-                new BigDecimal("2000"));
-
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
-
-        assertThat(result.signalType()).as("reason=%s", result.reason()).isNotEqualTo(SignalType.SELL);
-    }
-
-    @Test
-    void 再平衡_满仓但未超容忍线_不触发() {
-        FundEntity fund = fund(FundStatus.HOLDING);
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.0"));
-        // 满仓但未超容忍线:totalEquityPct=0.85,holdingShares=1050→市值1050,≤1000×1.1=1100
-        CapitalContext capital = capitalForRebalance(new BigDecimal("0.85"), new BigDecimal("1000"),
-                new BigDecimal("1050"));
-
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
-
-        assertThat(result.signalType()).as("reason=%s", result.reason()).isNotEqualTo(SignalType.SELL);
-    }
+    // ---- 再平衡测试已随 totalInvestableCapital 移除(V9),rebalance 机制不再存在 ----
 
     @Test
     void SELL优先级_逻辑止损与移动止盈同时满足_返回逻辑止损() {
@@ -467,7 +423,7 @@ class DisciplineStrategyServiceTest {
                 BigDecimal.ZERO, false, VolumeState.NORMAL, false);
         CapitalContext capital = new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("0.91"),
-                new BigDecimal("0.35"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("0.35"), BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), new BigDecimal("100"), Instant.now());
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
@@ -487,7 +443,7 @@ class DisciplineStrategyServiceTest {
                 BigDecimal.ZERO, false, VolumeState.NORMAL, false);
         CapitalContext capital = new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("0.91"),
-                new BigDecimal("0.10"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("0.10"), BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), new BigDecimal("100"), Instant.now());
 
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
@@ -565,14 +521,14 @@ class DisciplineStrategyServiceTest {
     private CapitalContext capital() {
         return new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("1.0"),
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), BigDecimal.ZERO, Instant.now());
     }
 
     private CapitalContext capitalWithPeakNav(BigDecimal peakNav, BigDecimal plannedTotal) {
         return new CapitalContext(
                 peakNav, peakNav,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 plannedTotal, BigDecimal.ZERO, Map.of(), BigDecimal.ZERO, Instant.now());
     }
 
@@ -601,7 +557,7 @@ class DisciplineStrategyServiceTest {
     private CapitalContext capitalWithHoldingShares(BigDecimal holdingShares) {
         return new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("1.0"),
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), holdingShares, Instant.now());
     }
 
@@ -610,22 +566,14 @@ class DisciplineStrategyServiceTest {
                                                              Map<Integer, BigDecimal> tierAddShares) {
         return new CapitalContext(
                 peakNav, holdingPeak,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 plannedTotal, buildShares, tierAddShares, new BigDecimal("100"), Instant.now());
     }
 
     private CapitalContext capitalWithPosition(BigDecimal singlePositionPct, BigDecimal totalEquityAmount) {
         return new CapitalContext(
                 new BigDecimal("1.0"), new BigDecimal("1.0"),
-                singlePositionPct, BigDecimal.ZERO, BigDecimal.ZERO, totalEquityAmount,
+                singlePositionPct, BigDecimal.ZERO, totalEquityAmount,
                 new BigDecimal("1000"), BigDecimal.ZERO, Map.of(), new BigDecimal("100"), Instant.now());
-    }
-
-    private CapitalContext capitalForRebalance(BigDecimal totalEquityPct, BigDecimal plannedTotalAmount,
-                                               BigDecimal holdingShares) {
-        return new CapitalContext(
-                new BigDecimal("1.0"), new BigDecimal("1.0"),
-                BigDecimal.ZERO, BigDecimal.ZERO, totalEquityPct, BigDecimal.ZERO,
-                plannedTotalAmount, BigDecimal.ZERO, Map.of(), holdingShares, Instant.now());
     }
 }
