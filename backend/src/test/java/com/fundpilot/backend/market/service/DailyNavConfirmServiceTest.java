@@ -51,17 +51,18 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     @Test
     @Transactional
     void 未确认基金_fundgz判定jzrq今天_拉pingzhongdata落库当日累计净值() {
-        FundEntity fund = persistFund("161725");
+        String fundCode = uniqueCode();
+        FundEntity fund = persistFund(fundCode);
         // 已落库净值最近一期 = 昨天(未确认今天)
         Instant yesterday = ZonedDateTime.now(ZoneOffset.UTC).minusDays(1)
                 .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
         persistNav(fund, yesterday, "1.0000");
         // fundgz 判定:jzrq = 今天(已公布)
         Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
-        when(fundEstimateService.fetchEstimate("161725")).thenReturn(Optional.of(
+        when(fundEstimateService.fetchEstimate(fundCode)).thenReturn(Optional.of(
                 new FundEstimateSnapshot(new BigDecimal("0.01"), "today 15:00", today.toString())));
         // pingzhongdata 返回含今日的累计净值序列
-        when(marketDataSource.fetchNavHistory("161725")).thenReturn(List.of(
+        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
                 new FundNavSnapshot(yesterday, new BigDecimal("1.0000"), new BigDecimal("1.0000")),
                 new FundNavSnapshot(today, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
 
@@ -76,27 +77,29 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     @Test
     @Transactional
     void 已确认基金_最近navDate今天_跳过不重复拉取() {
-        FundEntity fund = persistFund("161726");
+        String fundCode = uniqueCode();
+        FundEntity fund = persistFund(fundCode);
         // 已落库今日净值(已确认)
         Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
         persistNav(fund, today, "1.0200");
 
         dailyNavConfirmService.confirmTodayNav();
 
-        // 已确认,不调 fundgz / pingzhongdata
-        verify(fundEstimateService, never()).fetchEstimate(anyString());
-        verify(marketDataSource, never()).fetchNavHistory(anyString());
+        // 已确认的本基金不再调 fundgz / pingzhongdata;完整测试库中可能存在其他未确认基金
+        verify(fundEstimateService, never()).fetchEstimate(fundCode);
+        verify(marketDataSource, never()).fetchNavHistory(fundCode);
     }
 
     @Test
     @Transactional
     void 未确认基金_fundgz判定jzrq非今天_跳过_净值未公布() {
-        FundEntity fund = persistFund("161727");
+        String fundCode = uniqueCode();
+        FundEntity fund = persistFund(fundCode);
         Instant yesterday = ZonedDateTime.now(ZoneOffset.UTC).minusDays(1)
                 .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
         persistNav(fund, yesterday, "1.0000");
         // fundgz 判定:jzrq = 昨天(今日净值还没公布)
-        when(fundEstimateService.fetchEstimate("161727")).thenReturn(Optional.of(
+        when(fundEstimateService.fetchEstimate(fundCode)).thenReturn(Optional.of(
                 new FundEstimateSnapshot(new BigDecimal("0.01"), "today 15:00", yesterday.toString())));
 
         dailyNavConfirmService.confirmTodayNav();
@@ -119,5 +122,9 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         entity.setNav(new BigDecimal(nav));
         entity.setAccumulatedNav(new BigDecimal(nav));
         fundNavHistoryRepository.save(entity);
+    }
+
+    private String uniqueCode() {
+        return "T" + System.nanoTime();
     }
 }

@@ -17,8 +17,8 @@ import java.time.ZoneId;
  * <p>交易时段(A 股 9:30-11:30、13:00-15:00,Asia/Shanghai 时区)每 30 秒刷新一次缓存,
  * 非交易时段(含周末/节假日/盘前/盘后)休眠不刷新,前端继续读最后一次缓存数据。
  *
- * <p>_refreshIndex 与 _refreshFundEstimates 错峰执行:指数/板块/资金每 30s,
- * 基金估值因 N 只 × 2 req/s 限流单独 60s 一轮。
+ * <p>读接口只读内存缓存;盘中实时性由本任务保证。当前持仓基金数量较少,基金估值也按 30s 刷新,
+ * 避免 /api/funds 与 /api/portfolio/summary 在盘中看到过旧估值。
  * JobMetricsAspect 自动给本任务加监控指标。
  */
 @Component
@@ -34,8 +34,6 @@ public class MarketRealtimeRefreshJob {
 
     private final MarketRealtimeCache cache;
     private final TradingCalendarRepository tradingCalendarRepository;
-    /** 估值刷新节流:两次刷新之间至少间隔一个完整周期(60s),避免与指数刷新争用限流桶。 */
-    private volatile long lastEstimateRefreshEpoch = 0;
 
     public MarketRealtimeRefreshJob(MarketRealtimeCache cache,
                                     TradingCalendarRepository tradingCalendarRepository) {
@@ -47,21 +45,13 @@ public class MarketRealtimeRefreshJob {
      * 交易时段每 30 秒触发一次,内部判断是否真的在交易时段。
      * cron 用 9-14 点放宽覆盖,精细时段(13:00-15:00)由 {@link #isTradingHours()} 二次过滤。
      */
-    @Scheduled(cron = "*/30 * 9-14 * * MON-FRI")
+    @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshRealtime() {
         if (!isTradingHours()) {
             return;
         }
         try {
-            // 估值每两轮刷一次(60s),指数/板块/资金每轮刷(30s)
-            long now = System.currentTimeMillis();
-            boolean refreshEstimates = (now - lastEstimateRefreshEpoch) >= 60_000L;
-            if (refreshEstimates) {
-                cache.refreshAll();
-                lastEstimateRefreshEpoch = now;
-            } else {
-                cache.refreshRealtimeWithoutEstimates();
-            }
+            cache.refreshAll();
         } catch (RuntimeException e) {
             log.warn("行情缓存刷新周期异常: {}", e.getMessage());
         }

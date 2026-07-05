@@ -33,8 +33,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * issue #37 验收:建基金后自动拉历史净值。
- * <p>{@link FundService#create} save 基金后调 {@code MarketDataFetchService.fetchOneFund}。
- * 落库行为由 {@code MarketDataFetchServiceTest} 覆盖,本测试验证编排:调用了拉取 + 降级不阻断。
+ * <p>{@link FundService#create} save 基金后发布事件,事务提交后异步调 {@code MarketDataFetchService.fetchOneFund}。
+ * 落库行为由 {@code MarketDataFetchServiceTest} 覆盖,本测试验证编排:触发拉取 + 降级不阻断。
  * 用 @MockitoBean 替换 MarketDataFetchService,verify 调用而非真实落库(避免 REQUIRES_NEW 事务可见性问题)。
  *
  * <p>ADR-0012 初始持仓录入:initialMarketValue 有值时同步确认建仓交易 + 状态流转,用 doAnswer 模拟
@@ -71,18 +71,16 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
-    void create_建基金后调用fetchOneFund拉取净值() {
+    void create_建基金后异步调用fetchOneFund拉取净值() {
         FundView view = fundService.create(new FundCreateRequest(
                 "161725", "测试基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
 
         assertThat(view.id()).isNotNull();
-        // save 后调用了 fetchOneFund 拉取历史净值
-        verify(marketDataFetchService).fetchOneFund(view.id());
+        // save 提交后异步调用 fetchOneFund 拉取历史净值,不阻塞 create 返回
+        verify(marketDataFetchService, timeout(2000)).fetchOneFund(view.id());
     }
 
     @Test
-    @Transactional
     void create_净值拉取失败_基金仍创建成功() {
         // fetchOneFund 抛异常,模拟拉不到净值
         doThrow(new RuntimeException("东方财富不可达")).when(marketDataFetchService).fetchOneFund(anyLong());
@@ -93,6 +91,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         // 拉取失败降级:基金仍创建成功
         assertThat(view.id()).isNotNull();
         assertThat(fundRepository.existsById(view.id())).isTrue();
+        verify(marketDataFetchService, timeout(2000)).fetchOneFund(view.id());
     }
 
     @Test

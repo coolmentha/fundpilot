@@ -10,7 +10,7 @@ import com.fundpilot.backend.fund.service.support.DailyChangeResult;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
-import com.fundpilot.backend.market.service.FundEstimateService;
+import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +21,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -41,7 +42,7 @@ public class FundPnlService {
     private final FundPositionService fundPositionService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
-    private final FundEstimateService fundEstimateService;
+    private final MarketRealtimeCache marketRealtimeCache;
 
     /**
      * 聚合单基金的涨跌与盈亏(三态,issue #38)。
@@ -52,15 +53,24 @@ public class FundPnlService {
      * @return 六字段(均可为 null,除 isEstimated)封装的 Pnl
      */
     public Pnl computeForFund(Long fundId) {
+        FundEntity fund = fundRepository.findById(fundId).orElse(null);
+        return fund == null ? emptyPnl() : computeForFund(fund);
+    }
+
+    /**
+     * 聚合单基金的涨跌与盈亏。调用方已有基金实体时走本重载,避免重复查 fund 表。
+     */
+    public Pnl computeForFund(FundEntity fund) {
+        Long fundId = fund.getId();
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
         BigDecimal latestNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
         boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
 
-        // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)按需拉 fundgz 估值
+        // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)只读实时缓存,不在 GET 请求里打外部接口
         Optional<FundEstimateSnapshot> estimate = todayNavConfirmed
                 ? Optional.empty()  // 盘后不需要估值
-                : fetchEstimate(fundId);
+                : getCachedEstimate(fund.getFundCode());
         DailyChangeResult changeResult = DailyChangeResolver.resolve(
                 Instant.now(), todayNavConfirmed, latestNav, previousNav, estimate);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
@@ -69,9 +79,7 @@ public class FundPnlService {
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
-        BigDecimal costPerShare = holdingShares != null
-                ? fundRepository.findById(fundId).map(FundEntity::getCostPerShare).orElse(null)
-                : null;
+        BigDecimal costPerShare = holdingShares != null ? fund.getCostPerShare() : null;
 
         // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
         // 非估计态:dailyChangePct = (latest-previous)/previous,基准是 previousNav
@@ -86,11 +94,13 @@ public class FundPnlService {
         return new Pnl(dailyChangePct, isEstimated, holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
 
-    /** 拉取 fundgz 盘中估值(基金实体查 code);失败降级返 empty。 */
-    private Optional<FundEstimateSnapshot> fetchEstimate(Long fundId) {
-        return fundRepository.findById(fundId)
-                .map(FundEntity::getFundCode)
-                .flatMap(fundEstimateService::fetchEstimate);
+    /** 从实时缓存读取 fundgz 盘中估值;缓存未命中降级返 empty。 */
+    private Optional<FundEstimateSnapshot> getCachedEstimate(String fundCode) {
+        if (fundCode == null || fundCode.isBlank()) {
+            return Optional.empty();
+        }
+        Map<String, FundEstimateSnapshot> estimates = marketRealtimeCache.getEstimates(List.of(fundCode));
+        return Optional.ofNullable(estimates.get(fundCode));
     }
 
     /** 当日净值是否已落库:最近一期 navDate 是否 = 今天(UTC)。 */
@@ -125,12 +135,16 @@ public class FundPnlService {
         List<BigDecimal> dailyPnls = new ArrayList<>();
         List<BigDecimal> totalPnls = new ArrayList<>();
         for (FundEntity fund : holdingFunds) {
-            Pnl pnl = computeForFund(fund.getId());
+            Pnl pnl = computeForFund(fund);
             changePcts.add(pnl.dailyChangePct());
             dailyPnls.add(pnl.dailyPnl());
             totalPnls.add(pnl.totalPnl());
         }
         return FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+    }
+
+    private Pnl emptyPnl() {
+        return new Pnl(null, false, null, null, null, null);
     }
 
     /**

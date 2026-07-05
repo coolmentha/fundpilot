@@ -10,7 +10,7 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
-import com.fundpilot.backend.market.service.FundEstimateService;
+import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,11 +21,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.Optional;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
 /**
@@ -35,9 +35,9 @@ import static org.mockito.Mockito.when;
  */
 class FundPnlServiceTest extends AbstractIntegrationTest {
 
-    /** issue #38:mock FundEstimateService 返 empty,让三态降级到落库净值算(隔离网络,恢复原数值断言)。 */
+    /** issue #38:mock 实时行情缓存为空,让三态降级到落库净值算(隔离网络,恢复原数值断言)。 */
     @MockitoBean
-    FundEstimateService fundEstimateService;
+    MarketRealtimeCache marketRealtimeCache;
 
     @Autowired FundPnlService fundPnlService;
     @Autowired FundRepository fundRepository;
@@ -46,7 +46,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        when(fundEstimateService.fetchEstimate(anyString())).thenReturn(Optional.empty());
+        when(marketRealtimeCache.getEstimates(anyList())).thenReturn(Map.of());
         // 清理可能残留的旧数据
         fundTransactionRepository.deleteAll();
         fundNavHistoryRepository.deleteAll();

@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 /**
  * 行情实时数据内存缓存(行情工作台核心)。
  *
- * <p>解决「前端 5-10s 高频轮询 vs 东方财富 2 req/s 限流」的矛盾:本服务以 30-60s 周期
+ * <p>解决「前端 5-10s 高频轮询 vs 东方财富 2 req/s 限流」的矛盾:本服务以 30s 周期
  * 从东方财富拉数据填入 volatile 字段,前端轮询只读内存不触外部请求。
  *
  * <p>四类缓存:
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  *   <li>{@link #indexCache} 指数实时行情(用户关注列表,30s 刷新)</li>
  *   <li>{@link #sectorCache} 行业板块涨跌 + 主力资金(30s 刷新)</li>
  *   <li>{@link #moneyFlowCache} 北向资金(30s 刷新)</li>
- *   <li>{@link #estimateCache} 基金盘中估值(60s 刷新,N 只基金逐个拉)</li>
+ *   <li>{@link #estimateCache} 基金盘中估值(交易时段 30s 刷新,N 只基金逐个拉)</li>
  * </ul>
  *
  * <p>降级策略:任一刷新失败保留旧缓存 + 记 warn(参考 {@link FundEstimateService} 的 catch RuntimeException 模式),
@@ -75,9 +75,9 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 批量读基金估值(缺失的实时拉取,受 2 req/s 限流分批进行)。
+     * 批量读基金估值缓存,不在请求链路实时拉取。
      * @param fundCodes 基金代码列表
-     * @return code → 估值快照;拉取失败的 code 不出现在 map 中
+     * @return code → 估值快照;缓存未命中的 code 不出现在 map 中
      */
     public Map<String, FundEstimateSnapshot> getEstimates(List<String> fundCodes) {
         if (fundCodes == null || fundCodes.isEmpty()) {
@@ -102,8 +102,7 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 仅刷新指数/板块/资金三类(不含基金估值)——估值刷新慢(N 只 × 2 req/s),
-     * 由 Job 每 60s 调一次全量,中间 30s 周期只刷快数据,避免争用限流桶。
+     * 仅刷新指数/板块/资金三类(不含基金估值)。
      */
     @Transactional(readOnly = true)
     public void refreshRealtimeWithoutEstimates() {
@@ -124,21 +123,21 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 应用启动时立即刷新一次指数/板块/资金缓存。
+     * 应用启动时立即刷新一次全部实时缓存。
      *
      * <p>修复 bug:定时 Job({@link com.fundpilot.backend.market.job.MarketRealtimeRefreshJob})
      * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
      * {@code indexCache} 初始空,工作台显示「暂无关注指数」直到用户重新配置触发
      * {@link WatchedIndicesChangedEvent}。启动时刷一次,盘后/周末也能展示收盘数据
-     * (东方财富盘后返回收盘值)。不含基金估值(慢且盘后无意义,由 60s 周期维护)。
+     * (东方财富盘后返回收盘值);基金估值也预热一次,避免盘中部署后首次列表缺失估值。
      *
      * <p>刷新失败不阻塞启动:记 warn,前端显示空态直到下次定时刷新。
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         try {
-            refreshRealtimeWithoutEstimates();
-            log.info("行情缓存启动刷新完成(指数/板块/资金)");
+            refreshAll();
+            log.info("行情缓存启动刷新完成(指数/板块/资金/基金估值)");
         } catch (RuntimeException e) {
             log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新: {}", e.getMessage());
         }
@@ -180,9 +179,8 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 刷新基金估值:遍历所有非清仓基金,逐个拉 fundgz,失败降级跳过。
-     * <p>N 只基金 × 2 req/s 限流 = N/2 秒一轮,故刷新周期设 60s(指数/板块/资金 30s)。
-     * 估值是盘中短时态数据,60s 滞后可接受(前端 5-10s 轮询时最多看 60s 前的估值)。
+     * 刷新基金估值:遍历所有持仓基金,逐个拉 fundgz,失败降级跳过。
+     * <p>盘中估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
      */
     private void refreshFundEstimates() {
         try {
