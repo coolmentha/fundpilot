@@ -266,7 +266,10 @@ public final class EastmoneyJsParser {
                 return null;
             }
             BigDecimal northboundNet = decimalFromText(parts[5]);
-            if (northboundNet == null) {
+            if (northboundNet == null || northboundNet.compareTo(BigDecimal.ZERO) == 0) {
+                // 0 视为无效:非交易时段(周末/盘前/盘后)东方财富 kamt.rtmin 返 0 占位,
+                // 显示「北向净流入 0」会误导用户以为当日无资金动向。返 null 让前端显示
+                // 「暂无资金流向数据」。交易时段真实北向恰好 0 极罕见,当无数据优于显示 0。
                 return null;
             }
             // 时间:当日 UTC 日期 + "HH:MM"(北向资金是 A 股盘中数据,用 UTC 当日即可,前端按本地时区展示)

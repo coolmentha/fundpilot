@@ -114,4 +114,16 @@ class EastmoneyJsParserRealtimeTest {
         assertThat(EastmoneyJsParser.parseNorthbound(null)).isNull();
         assertThat(EastmoneyJsParser.parseNorthbound("{\"data\":{\"s2n\":[]}}")).isNull();
     }
+
+    @Test
+    void parseNorthbound_净流入为0_视为非交易时段占位_返回null() {
+        // 周末/盘后东方财富 kamt.rtmin 返 0 占位,显示 0 误导,应返 null
+        String raw = """
+                {"rc":0,"data":{"s2n":[
+                  "9:30,0.00,5200000.00,0.00,5200000.00,0.00",
+                  "15:00,0.00,5200000.00,0.00,5200000.00,0.00"
+                ]}}
+                """;
+        assertThat(EastmoneyJsParser.parseNorthbound(raw)).isNull();
+    }
 }
