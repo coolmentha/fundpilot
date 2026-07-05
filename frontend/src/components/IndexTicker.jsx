@@ -1,7 +1,9 @@
 import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
+import {Link} from 'react-router-dom';
 import {useRealtimeIndices} from '../api/hooks.js';
 import {signedPercent, pnlColor} from '../constants.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 /**
  * 大盘指数条:横向展示用户关注的指数实时行情。
@@ -9,7 +11,7 @@ import {signedPercent, pnlColor} from '../constants.js';
  * 数据 5 秒轮询(见 useRealtimeIndices)。
  */
 export default function IndexTicker() {
-    const {data: indices, isLoading} = useRealtimeIndices();
+    const {data: indices, isLoading, isError, refetch} = useRealtimeIndices();
 
     if (isLoading) {
         return (
@@ -23,10 +25,19 @@ export default function IndexTicker() {
         );
     }
 
+    if (isError) {
+        return (
+            <div className="index-ticker empty">
+                <QueryErrorState onRetry={refetch} description="指数行情加载失败"/>
+            </div>
+        );
+    }
+
     if (!indices || indices.length === 0) {
         return (
             <div className="index-ticker empty">
-                <span className="muted">暂无关注指数,请在「用户配置」添加</span>
+                <span className="muted">暂无关注指数</span>
+                <Link to="/settings" className="empty-cta">去配置</Link>
             </div>
         );
     }

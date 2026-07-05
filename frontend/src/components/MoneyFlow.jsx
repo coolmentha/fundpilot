@@ -2,6 +2,7 @@ import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {useMoneyFlow} from '../api/hooks.js';
 import {signedCompactMoney, pnlColor, datetime} from '../constants.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 /**
  * 资金流向:展示北向资金净流入。本期只含北向一项(全市场主力汇总接口不稳定)。
@@ -9,7 +10,7 @@ import {signedCompactMoney, pnlColor, datetime} from '../constants.js';
  * 数据 30 秒轮询(见 useMoneyFlow)。
  */
 export default function MoneyFlow() {
-    const {data: flow, isLoading} = useMoneyFlow();
+    const {data: flow, isLoading, isError, refetch} = useMoneyFlow();
 
     if (isLoading) {
         return (
@@ -17,6 +18,10 @@ export default function MoneyFlow() {
                 <Skeleton active paragraph={{rows: 1}} title={{width: 80}}/>
             </div>
         );
+    }
+
+    if (isError) {
+        return <div className="money-flow empty"><QueryErrorState onRetry={refetch} description="资金流向加载失败"/></div>;
     }
 
     if (!flow) {
