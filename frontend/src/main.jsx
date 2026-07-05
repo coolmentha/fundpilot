@@ -1,7 +1,7 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {BrowserRouter} from 'react-router-dom';
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {QueryClient, QueryClientProvider, QueryCache} from '@tanstack/react-query';
 import {App as AntdApp, ConfigProvider, theme} from 'antd';
 import 'antd/dist/reset.css';
 import './styles.css';
@@ -27,7 +27,7 @@ const BUSINESS_ERROR_CODES = new Set([
     'SIGNAL_LOG_NOT_FOUND', 'MISSING_FUND_IDENTITY', 'ENTITY_NOT_FOUND',
 ]);
 
-function showGlobalError(err) {
+function showGlobalError(err, opts = {}) {
     const isApiError = err instanceof ApiError;
     const code = isApiError ? err.code : null;
     const detail = err?.message || '操作失败';
@@ -36,8 +36,11 @@ function showGlobalError(err) {
     const type = isBusiness ? 'error' : 'warning';
     const n = globalNotification;
     if (!n) return; // 上下文未就绪,降级不展示(极少触发)
-    n[type]({
-        message: title,
+    n.open({
+        // key 去重:同一 query 反复失败(轮询)只更新不刷屏;mutation 不传 key,每次独立提示。
+        ...(opts.key ? {key: opts.key} : {}),
+        type,
+        title,   // antd v6:notification 用 title(v5 的 message 已废弃)
         description: detail,
         // 业务错误 6s 够看清数字后自动消失;系统/数据源异常 4s。
         duration: isBusiness ? 6 : 4,
@@ -54,6 +57,14 @@ function AppInit() {
     globalNotification = notification;
     // queryClient 在组件内创建,确保 onError 闭包能引用 showGlobalError。
     const [queryClient] = React.useState(() => new QueryClient({
+        // 全局查询错误处理:仅「初次加载失败」(无缓存数据)弹通知,后台 refetch/轮询失败静默
+        // (react-query 保留 stale 数据,用户仍看到旧内容,反复弹会刷屏)。key=queryHash 去重。
+        queryCache: new QueryCache({
+            onError: (error, query) => {
+                if (query.state.data !== undefined) return; // 有 stale 数据,静默
+                showGlobalError(error, {key: query.queryHash});
+            },
+        }),
         defaultOptions: {
             queries: {retry: 1, refetchOnWindowFocus: false, staleTime: 30_000},
             mutations: {

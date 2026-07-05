@@ -161,7 +161,17 @@ export default function KlineChart({fundId, fundSubType}) {
                             <span key={p}
                                   className={`kline-ma-tag${maSelected.has(p) ? ' active' : ''}`}
                                   style={maSelected.has(p) ? {color: LINE_COLORS[MA_PERIODS.indexOf(p) % LINE_COLORS.length]} : null}
-                                  onClick={() => toggleMa(p)}>{p}</span>
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-pressed={maSelected.has(p)}
+                                  aria-label={`MA${p} 均线${maSelected.has(p) ? '已显示' : '已隐藏'},点击切换`}
+                                  onClick={() => toggleMa(p)}
+                                  onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault();
+                                          toggleMa(p);
+                                      }
+                                  }}>{p}</span>
                         ))}
                     </span>
                     <Segmented size="small" value={sub} onChange={setSub}
