@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查:lint、测试要求、覆盖率"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "数据库规范校验:迁移命名V13/V14、列类型、索引、软删约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理校验:ErrorCode枚举使用、降级是否记warn、不抛异常阻断交易"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量检查:组件结构、可访问性、null守卫"}
+{"file": "CONTEXT.md", "reason": "领域术语校验:申购费/赎回费/持有期/FIFO命名一致性"}
+{"file": ".trellis/tasks/07-05-fund-fee-deduction/prd.md", "reason": "验收标准对照:AC1-AC10逐条验证"}
+{"file": ".trellis/tasks/07-05-fund-fee-deduction/design.md", "reason": "设计对照:数据模型、FIFO算法、确认路径统一是否符合设计"}
