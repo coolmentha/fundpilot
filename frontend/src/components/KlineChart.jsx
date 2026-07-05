@@ -20,6 +20,8 @@ import {useFundKline} from '../api/hooks.js';
 const MA_PERIODS = [2, 5, 10, 20, 30, 60, 120, 250];
 /** MA/MACD/DIF/DEA 各线条颜色(暗色主题高对比)。indicator.lines[i] 应用于第 i 条线。 */
 const LINE_COLORS = ['#F59E0B', '#3B82F6', '#A855F7', '#EC4899', '#14B8A6', '#F97316', '#84CC16', '#6366F1'];
+/** klinecharts 主蜡烛 pane 的固定 id(PaneIdConstants.CANDLE)。createIndicator 要 stack 到主 pane 必须显式传此 id。 */
+const CANDLE_PANE_ID = 'candle_pane';
 
 export default function KlineChart({fundId, fundSubType}) {
     const [period, setPeriod] = useState('daily');
@@ -84,8 +86,11 @@ export default function KlineChart({fundId, fundSubType}) {
             // 120ms 覆盖同步 draw + 后续 rAF 帧,然后清 flag 恢复正常错误上报
             setTimeout(() => { maOverridingRef.current = false; }, 120);
         } else {
-            // isStack=true 叠加到主蜡烛 pane;calcParams 覆盖默认 [5,10,30,60]
-            maPaneRef.current = chart.createIndicator({name: 'MA', calcParams: periods}, true);
+            // isStack=true + paneOptions.id='candle_pane' 才能叠加到主蜡烛 pane。
+            // 不传 id 时 getDrawPaneById('') 返 null → 走 else 新建独立 pane(MA 会跑到单独 pane,
+            // 即用户看到的「最上面的图」)。必须显式指定 candle pane id 才 stack。
+            maPaneRef.current = chart.createIndicator(
+                {name: 'MA', calcParams: periods}, true, {id: CANDLE_PANE_ID});
         }
     }, [maSelected, chartType]);
 
