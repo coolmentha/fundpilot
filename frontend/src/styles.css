@@ -131,6 +131,20 @@ body {
 /* ===== 通用卡片 / 表格 ===== */
 .data-card { margin-top: 16px; }
 
+.funds-page .ant-card-body {
+    overflow: hidden;
+}
+
+.funds-page .ant-table-wrapper,
+.funds-page .ant-spin-nested-loading,
+.funds-page .ant-spin-container {
+    max-width: 100%;
+}
+
+.funds-page .ant-table-cell {
+    white-space: nowrap;
+}
+
 .ant-card {
     border-color: var(--color-border);
     border-radius: 8px;
@@ -231,6 +245,25 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     .app-content { padding: 12px 12px 80px; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi-card .ant-statistic-content { font-size: 20px; }
+    .funds-page .ant-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+    }
+    .funds-page .ant-card-head-title,
+    .funds-page .ant-card-extra {
+        width: 100%;
+        padding: 0;
+    }
+    .funds-page .ant-card-extra .ant-space {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+    .funds-page .ant-card-body {
+        padding: 12px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

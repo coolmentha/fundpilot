@@ -103,13 +103,13 @@ export default function FundsPage() {
     };
 
     const columns = [
-        {title: '代码', dataIndex: 'fundCode', width: 110},
-        {title: '名称', dataIndex: 'fundName', width: 200, ellipsis: true},
-        {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '子类', dataIndex: 'fundSubType', width: 100, render: (v) => text(v)},
-        {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
+        {title: '代码', dataIndex: 'fundCode', width: 96},
+        {title: '名称', dataIndex: 'fundName', width: 180, ellipsis: true},
+        {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
+        {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
+        {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
         {
-            title: '今日涨跌/盈亏', width: 130, align: 'right',
+            title: '今日涨跌/盈亏', width: 126, align: 'right',
             render: (_, r) => (
                 <div className="pnl-cell">
                     <div style={{color: pnlColor(r.dailyChangePct)}}>
@@ -121,21 +121,21 @@ export default function FundsPage() {
             ),
         },
         {
-            title: '持仓市值', dataIndex: 'holdingAmount', width: 140, align: 'right',
+            title: '持仓市值', dataIndex: 'holdingAmount', width: 126, align: 'right', responsive: ['sm'],
             render: (v) => v === null || v === undefined ? '-' : money(v),
         },
         {
-            title: '成本单价', dataIndex: 'costPerShare', width: 110, align: 'right',
+            title: '成本单价', dataIndex: 'costPerShare', width: 104, align: 'right', responsive: ['lg'],
             render: (v) => v === null || v === undefined ? '-' : money(v),
         },
         {
-            title: '总盈亏', dataIndex: 'totalPnl', width: 130, align: 'right',
+            title: '总盈亏', dataIndex: 'totalPnl', width: 120, align: 'right', responsive: ['md'],
             render: (v) => <span style={{color: pnlColor(v)}}>{signedMoney(v)}</span>,
         },
-        {title: '跟踪指数', dataIndex: 'benchmarkIndexCode', width: 110, render: (v) => text(v)},
+        {title: '跟踪指数', dataIndex: 'benchmarkIndexCode', width: 104, responsive: ['lg'], render: (v) => text(v)},
         {
-            title: '操作', width: 220, render: (_, row) => (
-                <Space>
+            title: '操作', width: 168, render: (_, row) => (
+                <Space size="small" wrap>
                     <Link to={`/funds/${row.id}`}>详情</Link>
                     <Link to={`/signals?fundId=${row.id}`}>信号</Link>
                     <a onClick={() => openEdit(row)}>编辑</a>
@@ -150,7 +150,7 @@ export default function FundsPage() {
     ];
 
     return (
-        <Space direction="vertical" size={16} className="full-width">
+        <Space direction="vertical" size={16} className="full-width funds-page">
             <Card title={<Title level={4}>基金管理</Title>} extra={
                 <Space>
                     <Button icon={<ReloadOutlined/>} onClick={() => refetch()}>刷新</Button>
@@ -158,7 +158,7 @@ export default function FundsPage() {
                 </Space>
             }>
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={funds} columns={columns}
-                       pagination={false} scroll={{x: 1580}}/>
+                       pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
                    onOk={submit} confirmLoading={saveFund.isPending} destroyOnHidden width={560}>
