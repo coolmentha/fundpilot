@@ -11,6 +11,7 @@ import {
     FundProjectionScreenOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
+import ErrorBoundary from './ErrorBoundary.jsx';
 import {usePendingSignals} from '../api/hooks.js';
 import {useState} from 'react';
 
@@ -118,7 +119,9 @@ export default function Shell() {
                     </div>
                 </Header>
                 <Content className="app-content">
-                    <Outlet/>
+                    <ErrorBoundary>
+                        <Outlet/>
+                    </ErrorBoundary>
                 </Content>
             </Layout>
 
