@@ -191,8 +191,9 @@ function toKlineData(b) {
  * 暗色主题 + A 股红涨绿跌。背景由容器 CSS 控制(#1E293B)。
  * 关键修复:
  * <ul>
- *   <li>candle.tooltip showRule=follow_cross + 浅色字 → 悬停时浮窗显示 OHLCV + MA 数值(暗色背景默认黑字不可见)</li>
- *   <li>indicator.lines/bars 浅色 + tooltip 浅色 → MACD/DIF/DEA 在暗色背景可见(MACD 之前「没显示」的根因)</li>
+ *   <li>candle.tooltip showType=rect + rect.position=pointer + 深色填充 → 悬停时浮动矩形浮窗
+ *       跟随十字线(竖线 snap 到最近 K 线 realX),显示 OHLCV + MA 数值。暗色背景默认白底不可见,必须改深色填充</li>
+ *   <li>indicator.lines/bars 浅色 + tooltip showType=rect → MACD/DIF/DEA + MA 数值进同一浮动浮窗(MACD 之前「没显示」的根因是暗色默认色不可见)</li>
  *   <li>crosshair horizontal/vertical text → 轴标签贴十字线(价格/日期在线上)</li>
  *   <li>candle.type=candle_solid → 实心蜡烛,贴近支付宝/同花顺观感</li>
  * </ul>
@@ -218,9 +219,19 @@ function applyDarkTheme(chart) {
             },
             tooltip: {
                 showRule: 'follow_cross',     // 悬停时浮窗跟随十字光标
-                showType: 'standard',         // 主 pane 左上角 legend:OHLC + MA 数值
+                showType: 'rect',             // 浮动矩形浮窗(非固定左上角 legend),跟随十字线
                 defaultValue: '--',
                 text: {color: '#E2E8F0', size: 11},
+                // rect.position='pointer':浮窗 x 跟随十字线(十字线竖线已 snap 到最近 K 线 realX),
+                // 即「点锁定在某根 K 线上」,浮窗贴着该 K 线显示 OHLC+量+MA。
+                // 暗色主题:默认 rect.color='#FEFEFE'(白)在暗背景不可见,必须改深色填充。
+                rect: {
+                    position: 'pointer',
+                    paddingLeft: 6, paddingRight: 6, paddingTop: 4, paddingBottom: 4,
+                    offsetLeft: 8, offsetRight: 8, offsetTop: 8, offsetBottom: 8,
+                    borderRadius: 4, borderSize: 1,
+                    borderColor: '#475569', color: 'rgba(30,41,59,0.95)',
+                },
             },
         },
         indicator: {
@@ -229,6 +240,7 @@ function applyDarkTheme(chart) {
             bars: [{upColor: '#EF4444', downColor: '#22C55E', noChangeColor: '#64748B'}],
             tooltip: {
                 showRule: 'follow_cross',
+                showType: 'rect',             // MA/MACD 数值也进浮动浮窗(与 candle 同一 rect)
                 showName: true,
                 showParams: true,            // 显示 MA5:xxx / DIF:xxx
                 text: {color: '#E2E8F0', size: 11},
