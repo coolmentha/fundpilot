@@ -14,6 +14,7 @@ import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,6 +121,27 @@ public class MarketRealtimeCache {
     @Transactional(readOnly = true)
     public void onWatchedIndicesChanged(@SuppressWarnings("unused") WatchedIndicesChangedEvent event) {
         refreshIndices();
+    }
+
+    /**
+     * 应用启动时立即刷新一次指数/板块/资金缓存。
+     *
+     * <p>修复 bug:定时 Job({@link com.fundpilot.backend.market.job.MarketRealtimeRefreshJob})
+     * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
+     * {@code indexCache} 初始空,工作台显示「暂无关注指数」直到用户重新配置触发
+     * {@link WatchedIndicesChangedEvent}。启动时刷一次,盘后/周末也能展示收盘数据
+     * (东方财富盘后返回收盘值)。不含基金估值(慢且盘后无意义,由 60s 周期维护)。
+     *
+     * <p>刷新失败不阻塞启动:记 warn,前端显示空态直到下次定时刷新。
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        try {
+            refreshRealtimeWithoutEstimates();
+            log.info("行情缓存启动刷新完成(指数/板块/资金)");
+        } catch (RuntimeException e) {
+            log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新: {}", e.getMessage());
+        }
     }
 
     private void refreshIndices() {
