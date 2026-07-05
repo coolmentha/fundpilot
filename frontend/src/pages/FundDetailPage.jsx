@@ -1,7 +1,7 @@
 import {Card, Descriptions, Skeleton, Space, Tabs, Typography, Button} from 'antd';
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined} from '@ant-design/icons';
-import {useFund} from '../api/hooks.js';
+import {useFund, useFundFeeRates} from '../api/hooks.js';
 import {money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
@@ -20,6 +20,7 @@ export default function FundDetailPage() {
     const {fundId} = useParams();
     const id = Number(fundId);
     const {data: fund, isLoading} = useFund(id);
+    const {data: feeRates} = useFundFeeRates(id);
 
     if (isLoading) return <Card><Skeleton active paragraph={{rows: 6}}/></Card>;
     if (!fund) return <Card><Title level={4}>基金不存在</Title></Card>;
@@ -67,6 +68,11 @@ export default function FundDetailPage() {
                     <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
+                <Descriptions.Item label="参考费率">
+                    {feeRates && feeRates.discountRate != null
+                        ? <span className="num-cell">申购 {(Number(feeRates.discountRate)*100).toFixed(2)}%</span>
+                        : <span className="muted">未爬取</span>}
+                </Descriptions.Item>
             </Descriptions>
             <Tabs defaultActiveKey="transaction" items={items}/>
         </Card>

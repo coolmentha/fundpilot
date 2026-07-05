@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.client;
 
+import com.fundpilot.backend.fund.client.EastmoneyFundFeeClient;
 import feign.Client;
 import feign.RequestInterceptor;
 import feign.Request;
@@ -101,6 +102,20 @@ public class EastmoneyClientConfig {
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
                 .target(EastmoneyPush2Client.class, push2BaseUrl);
+    }
+
+    /**
+     * 注册 {@link EastmoneyFundFeeClient} 为 Spring Bean(fundf10.eastmoney.com 域名,基金费率页)。
+     * 费率页在第五个域名 fundf10,故独立 target;共享同一限流桶(2 req/s)。返回 HTML 由 FundFeeHtmlParser 解析。
+     */
+    @Bean
+    public EastmoneyFundFeeClient eastmoneyFundFeeClient(
+            @Value("${eastmoney.fundf10-base-url:https://fundf10.eastmoney.com}") String fundf10BaseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(EastmoneyFundFeeClient.class, fundf10BaseUrl);
     }
 
     /**

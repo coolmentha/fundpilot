@@ -4,6 +4,7 @@ import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.controller.ManualTransactionRequest;
 import com.fundpilot.backend.fund.service.FundDictSearchService;
+import com.fundpilot.backend.fund.service.FundFeeService;
 import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.fund.service.FundTransactionService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class FundController {
     private final FundService fundService;
     private final FundDictSearchService fundDictSearchService;
     private final FundTransactionService fundTransactionService;
+    private final FundFeeService fundFeeService;
 
     @GetMapping
     public ApiResponse<List<FundView>> list() {
@@ -78,5 +80,11 @@ public class FundController {
     public ApiResponse<Void> archive(@PathVariable Long id) {
         fundService.archive(id);
         return ApiResponse.ok(null);
+    }
+
+    /** 查某基金的参考费率(申购费率 + 赎回费率阶梯 + 销售服务费,从天天基金 jjfl 页爬取缓存)。 */
+    @GetMapping("/{id}/fee-rates")
+    public ApiResponse<FundFeeView> feeRates(@PathVariable Long id) {
+        return ApiResponse.ok(fundFeeService.getFeeView(id));
     }
 }

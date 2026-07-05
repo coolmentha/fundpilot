@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端编码规范:Controller不写逻辑、@RequiredArgsConstructor、ErrorCode枚举、Actuator、数据源降级链"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "数据库规范:Flyway迁移、实体@SQLDelete软删、NUMERIC(19,8)、timestamptz、索引约定(本任务新增3表+2列)"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "目录结构:client/service/entity/repository/controller分层(新增FundFeeClient/Parser/Service/Job、FundLot*实体)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理:ErrorCode枚举(新增INSUFFICIENT_LOTS)、降级策略(费率缺失→fee=0不阻断)"}
+{"file": ".trellis/spec/backend/market-realtime-cache.md", "reason": "缓存模式参考:ApplicationReadyEvent预热+@Scheduled刷新+降级try/catch(FundFeeRefreshJob沿用)"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端编码规范:组件结构、样式约定、API hooks模式"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "hook模式:queryKey命名、enabled守卫、静态数据无refetchInterval(新增useFundFeeRates)"}
+{"file": "CONTEXT.md", "reason": "领域术语:基金净值、累计净值、申购费、赎回费、持有期、A/C类基金等概念定义"}
+{"file": ".trellis/tasks/07-05-fund-fee-deduction/design.md", "reason": "本任务技术设计:数据模型、费率爬取数据流、FIFO算法、确认路径统一、历史迁移"}
+{"file": ".trellis/tasks/07-05-fund-fee-deduction/implement.md", "reason": "本任务执行计划:8阶段有序checklist、验证命令、风险文件"}
