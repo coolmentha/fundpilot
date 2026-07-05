@@ -44,7 +44,9 @@ export default function KlineChart({fundId, fundSubType}) {
     // 1. 创建/销毁 chart(chartType 变化时重建)
     useEffect(() => {
         if (!containerRef.current) return;
-        const chart = init(containerRef.current);
+        // locale='zh-CN':浮窗 legend title 自动中文化(时间/开/高/低/收/成交量)+ 日期中文格式。
+        // 技术指标(MA/MACD/DIF/DEA/VOL)不在 locale key 内,i18n 不翻译,保留英文。
+        const chart = init(containerRef.current, {locale: 'zh-CN'});
         chartRef.current = chart;
         applyDarkTheme(chart);
         if (chartType === 'nav') {
