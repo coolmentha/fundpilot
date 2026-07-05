@@ -62,6 +62,7 @@ export default function FundWatchlist() {
             title: '类型',
             dataIndex: 'fundSubType',
             width: 90,
+            responsive: ['md'],
             render: (v) => v ? <Tag>{text(v)}</Tag> : <span className="muted">-</span>,
         },
         {
@@ -90,6 +91,7 @@ export default function FundWatchlist() {
             dataIndex: 'shares',
             width: 110,
             align: 'right',
+            responsive: ['sm'],
             render: (v) => v ? <span className="num-cell">{compactMoney(v)}</span> : <span className="muted">-</span>,
         },
         {
@@ -117,6 +119,7 @@ export default function FundWatchlist() {
                 loading={fundsLoading}
                 size="small"
                 pagination={false}
+                scroll={{x: 'max-content'}}
                 rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
                 locale={{emptyText: (
                     <span className="muted">

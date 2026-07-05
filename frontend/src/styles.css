@@ -313,9 +313,11 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-width: 0;
 }
 
 .dashboard-section {
+    min-width: 0;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 8px;
@@ -345,6 +347,9 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .index-ticker {
     display: flex;
     gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
     padding-bottom: 4px;
 }
@@ -401,6 +406,14 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 /* —— 基金行情列表 —— */
 .fund-watchlist .row-holding {
     position: relative;
+}
+
+.fund-watchlist,
+.fund-watchlist .ant-table-wrapper,
+.fund-watchlist .ant-spin-nested-loading,
+.fund-watchlist .ant-spin-container {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .fund-watchlist .row-holding::before {
