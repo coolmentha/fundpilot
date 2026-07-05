@@ -1,4 +1,5 @@
 import IndexTicker from '../components/IndexTicker.jsx';
+import PortfolioOverview from '../components/PortfolioOverview.jsx';
 import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import MoneyFlow from '../components/MoneyFlow.jsx';
@@ -8,7 +9,7 @@ import MoneyFlow from '../components/MoneyFlow.jsx';
  *
  * <p>三区结构:
  * <ol>
- *   <li>顶部:大盘指数条(横向滚动卡片,5s 轮询)</li>
+ *   <li>顶部:组合总览 + 大盘指数条</li>
  *   <li>中部:自选基金行情列表(可排序,10s 轮询估值)</li>
  *   <li>底部:行业板块涨跌 + 资金流向(双栏,30s 轮询)</li>
  * </ol>
@@ -19,6 +20,13 @@ import MoneyFlow from '../components/MoneyFlow.jsx';
 export default function MarketDashboardPage() {
     return (
         <div className="market-dashboard">
+            <section className="dashboard-section overview-section" aria-label="组合总览">
+                <div className="section-header">
+                    <h3 className="section-title">总览</h3>
+                </div>
+                <PortfolioOverview/>
+            </section>
+
             <section className="dashboard-section index-section" aria-label="大盘指数">
                 <IndexTicker/>
             </section>

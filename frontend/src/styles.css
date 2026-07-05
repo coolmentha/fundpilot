@@ -371,6 +371,54 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     font-size: 12px;
 }
 
+/* —— 组合总览 —— */
+.portfolio-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.portfolio-overview-card {
+    min-width: 0;
+    padding: 14px 16px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--overview-accent, var(--color-border));
+    border-radius: 6px;
+}
+
+.portfolio-overview-card.primary { --overview-accent: var(--color-warning); }
+.portfolio-overview-card.up { --overview-accent: var(--color-danger); }
+.portfolio-overview-card.down { --overview-accent: var(--color-success); }
+
+.overview-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.overview-value {
+    margin-top: 6px;
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.overview-hint {
+    margin-top: 4px;
+    font-size: 11px;
+}
+
+.portfolio-overview-error {
+    min-height: 92px;
+    display: grid;
+    place-items: center;
+}
+
 /* —— 指数条 —— */
 .index-ticker {
     display: flex;
@@ -602,6 +650,12 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 @media (max-width: 768px) {
+    .portfolio-overview-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .portfolio-overview-card.primary {
+        grid-column: 1 / -1;
+    }
     .sector-row {
         grid-template-columns: 70px 1fr 70px;
     }
@@ -610,6 +664,15 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     }
     .index-card {
         min-width: 140px;
+    }
+}
+
+@media (max-width: 420px) {
+    .portfolio-overview-grid {
+        grid-template-columns: 1fr;
+    }
+    .overview-value {
+        font-size: 22px;
     }
 }
 
