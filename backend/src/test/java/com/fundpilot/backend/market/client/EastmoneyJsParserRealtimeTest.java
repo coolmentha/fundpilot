@@ -10,7 +10,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 行情工作台验收:push2 实时行情三接口解析。
  * <p>样本数据来自 2026-07-04 真实接口验证(见 research/eastmoney-push2-api.md)。
- * f2/f3/f4 价格类字段 ÷100 缩放,f6/f62 金额类字段原值。
+ * f2/f4 价格类字段 ÷100 缩放,f3 涨跌幅 ÷10000 返小数(契约要求小数,前端 ×100 显示),
+ * f6/f62 金额类字段原值。
  */
 class EastmoneyJsParserRealtimeTest {
 
@@ -32,8 +33,8 @@ class EastmoneyJsParserRealtimeTest {
         assertThat(sh.name()).isEqualTo("上证指数");
         // f2=404364 ÷100 = 4043.64
         assertThat(sh.currentPrice()).isEqualByComparingTo(new BigDecimal("4043.64"));
-        // f3=37 ÷100 = 0.37%
-        assertThat(sh.changePct()).isEqualByComparingTo(new BigDecimal("0.37"));
+        // f3=37 ÷10000 = 0.0037(小数,表 +0.37%;前端 signedPercent ×100 显示)
+        assertThat(sh.changePct()).isEqualByComparingTo(new BigDecimal("0.0037"));
         // f4=1474 ÷100 = 14.74
         assertThat(sh.changeAmount()).isEqualByComparingTo(new BigDecimal("14.74"));
         // f6 原值
@@ -62,8 +63,8 @@ class EastmoneyJsParserRealtimeTest {
         SectorSnapshot first = result.get(0);
         assertThat(first.sectorCode()).isEqualTo("BK0420");
         assertThat(first.sectorName()).isEqualTo("航空机场");
-        // f3=-22 ÷100 = -0.22%
-        assertThat(first.changePct()).isEqualByComparingTo(new BigDecimal("-0.22"));
+        // f3=-22 ÷10000 = -0.0022(小数,表 -0.22%)
+        assertThat(first.changePct()).isEqualByComparingTo(new BigDecimal("-0.0022"));
         // f6 原值
         assertThat(first.turnover()).isEqualByComparingTo(new BigDecimal("3858445826.0"));
         // f62 主力净流入原值

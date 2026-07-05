@@ -161,7 +161,7 @@ public final class EastmoneyJsParser {
 
     /**
      * 解析 push2 ulist.np 批量指数实时行情 JSON。
-     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f2(价格 ÷100)、f3(涨跌幅 ÷100)、
+     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f2(价格 ÷100)、f3(涨跌幅 ÷10000,返小数)、
      * f4(涨跌额 ÷100)、f6(成交额 元)、f12(代码)、f14(名称)。
      * f12 只含代码不含市场前缀(如 "000001"),secid 由调用方按请求顺序映射回填。
      *
@@ -192,7 +192,10 @@ public final class EastmoneyJsParser {
                 String code = textOrNull(node, "f12");
                 String secid = code == null ? null : codeToSecid.getOrDefault(code, code);
                 BigDecimal price = scaledDecimal(node, "f2", 100);
-                BigDecimal changePct = scaledDecimal(node, "f3", 100);
+                // f3 涨跌幅:东方财富返百分比值×100(如 37 表 0.37%),÷10000 还原成小数(0.0037)
+                // 契约(IndexRealtimeSnapshot.changePct)要求小数,前端 signedPercent 再 ×100 显示。
+                // 历史 bug:曾 ÷100 返 0.37(百分比),前端 ×100 显示成 37%。
+                BigDecimal changePct = scaledDecimal(node, "f3", 10000);
                 BigDecimal changeAmount = scaledDecimal(node, "f4", 100);
                 BigDecimal turnover = decimalOrNull(node, "f6");
                 result.add(new IndexRealtimeSnapshot(secid, textOrNull(node, "f14"),
@@ -206,7 +209,7 @@ public final class EastmoneyJsParser {
 
     /**
      * 解析 push2 clist 行业板块涨跌 + 资金流向 JSON。
-     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f3(涨跌幅 ÷100)、f6(成交额)、
+     * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f3(涨跌幅 ÷10000,返小数)、f6(成交额)、
      * f12(板块代码)、f14(板块名称)、f62(主力净流入 元,可缺失)。
      *
      * @param rawJson clist 响应文本
@@ -224,10 +227,11 @@ public final class EastmoneyJsParser {
             }
             List<SectorSnapshot> result = new ArrayList<>(diff.size());
             for (com.fasterxml.jackson.databind.JsonNode node : diff) {
+                // f3 涨跌幅 ÷10000 返小数(契约要求小数,见 SectorSnapshot.changePct 注释)
                 result.add(new SectorSnapshot(
                         textOrNull(node, "f12"),
                         textOrNull(node, "f14"),
-                        scaledDecimal(node, "f3", 100),
+                        scaledDecimal(node, "f3", 10000),
                         decimalOrNull(node, "f6"),
                         decimalOrNull(node, "f62")));
             }
@@ -283,7 +287,7 @@ public final class EastmoneyJsParser {
         return child.isMissingNode() || child.isNull() ? null : child.asText();
     }
 
-    /** 取 JSON 节点的数值字段并 ÷scale 还原(如 f3=37 → 0.37)。缺失返 null。 */
+    /** 取 JSON 节点的数值字段并 ÷scale 还原(scale=100:如 f2=404364 → 4043.64;scale=10000:如 f3=37 → 0.0037)。缺失返 null。 */
     private static BigDecimal scaledDecimal(com.fasterxml.jackson.databind.JsonNode node, String field, int scale) {
         com.fasterxml.jackson.databind.JsonNode child = node.path(field);
         if (child.isMissingNode() || child.isNull()) {
