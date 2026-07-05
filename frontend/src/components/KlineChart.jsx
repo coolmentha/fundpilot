@@ -57,16 +57,24 @@ export default function KlineChart({fundId, fundSubType}) {
         };
     }, [chartType]);
 
-    // 2. MA 均线(按勾选周期重建)。createIndicator 返回主蜡烛 pane id;removeIndicator(paneId,'MA') 去掉均线。
+    // 2. MA 均线(按勾选周期更新)。createIndicator 返回主蜡烛 pane id;
+    //    周期变化用 overrideIndicator 原地更新(触发 regenerateFigures),避免 remove+create
+    //    与 klinecharts draw 循环(rAF)竞态——快速勾选时 drawImp 读到已删 figure 报
+    //    "Cannot read properties of undefined (reading '0')"。全取消才 remove。
     useEffect(() => {
         const chart = chartRef.current;
         if (!chart || chartType !== 'kline') return;
         const periods = [...maSelected].sort((a, b) => a - b);
-        if (maPaneRef.current) {
-            chart.removeIndicator(maPaneRef.current, 'MA');
-            maPaneRef.current = null;
+        if (periods.length === 0) {
+            if (maPaneRef.current) {
+                chart.removeIndicator(maPaneRef.current, 'MA');
+                maPaneRef.current = null;
+            }
+            return;
         }
-        if (periods.length > 0) {
+        if (maPaneRef.current) {
+            chart.overrideIndicator({name: 'MA', calcParams: periods}, maPaneRef.current);
+        } else {
             // isStack=true 叠加到主蜡烛 pane;calcParams 覆盖默认 [5,10,30,60]
             maPaneRef.current = chart.createIndicator({name: 'MA', calcParams: periods}, true);
         }
