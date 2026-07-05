@@ -173,6 +173,13 @@ export function useFundTransactions(fundId) {
         enabled: !!fundId,
     });
 }
+export function useFundFeeRates(fundId) {
+    return useQuery({
+        queryKey: ['fund-fee-rates', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/fee-rates`),
+        enabled: !!fundId,
+    });
+}
 export function useCancelTransaction() {
     const qc = useQueryClient();
     return useMutation({

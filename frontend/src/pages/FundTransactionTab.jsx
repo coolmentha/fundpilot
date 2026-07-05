@@ -35,6 +35,8 @@ export default function FundTransactionTab({fundId}) {
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(2)}</span>},
         {title: '净值', dataIndex: 'nav', width: 100, align: 'right',
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
+        {title: '手续费', dataIndex: 'fee', width: 110, align: 'right',
+            render: (v) => v == null ? '-' : <span className="num-cell">{money(v)}</span>},
         {title: '状态', dataIndex: 'status', width: 110, render: (v) => <StatusTag value={v}/>},
         {
             title: '', width: 130, render: (_, r) => r.status === 'PENDING' && (
