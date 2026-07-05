@@ -289,11 +289,27 @@ export function useMoneyFlow() {
     });
 }
 
-/** 基金 K 线/走势图数据(用户主动查看,不轮询)。period: daily/weekly/monthly。 */
+/**
+ * A 股交易时段是否开市(北京时间 工作日 9:30-11:30 / 13:00-15:00)。
+ * <p>仅判断周末,法定节假日(春节/国庆等)未配表 —— 节假日轮询只会多发几次请求,
+ * 后端 K 线接口有缓存兜底,代价可接受。用 UTC 计算 +8 偏移避免依赖运行环境时区。
+ */
+function isChinaMarketOpen(now = new Date()) {
+    const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const bjMin = (utcMin + 8 * 60) % 1440;
+    const bjDay = (now.getUTCDay() + Math.floor((utcMin + 8 * 60) / 1440)) % 7;
+    if (bjDay === 0 || bjDay === 6) return false; // 周末休市
+    return (bjMin >= 570 && bjMin <= 690) || (bjMin >= 780 && bjMin <= 900); // 9:30-11:30, 13:00-15:00
+}
+
+/** 基金 K 线/走势图数据。period: daily/weekly/monthly。盘中(A 股交易时段)每 30s 轮询刷新,非交易时段不轮询。 */
 export function useFundKline(fundId, period = 'daily') {
     return useQuery({
         queryKey: ['funds', fundId, 'kline', period],
         queryFn: () => get(`/api/funds/${fundId}/kline?period=${period}`),
         enabled: !!fundId,
+        // 函数式 refetchInterval:每次轮询后重新求值。交易时段 30s 刷一次,过 15:00 自动停。
+        // react-query structuralSharing 保证数据不变时引用相等,KlineChart effect 不触发、图表不重绘。
+        refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
     });
 }
