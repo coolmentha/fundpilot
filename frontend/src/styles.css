@@ -591,3 +591,24 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     transform: translate(-50%, -50%);
     font-size: 13px;
 }
+
+/* 查询失败紧凑错误态:文案 + 重试按钮,用于卡片/小组件内 */
+.query-error-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 8px;
+    font-size: 13px;
+}
+.query-error-state .ant-btn-link {
+    padding: 0;
+    height: auto;
+    font-size: 13px;
+}
+
+/* 空状态内联 CTA 链接(与 muted 文案同行) */
+.empty-cta {
+    margin-left: 8px;
+    font-size: 13px;
+}

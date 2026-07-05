@@ -2,13 +2,14 @@ import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {useSectorPerformance} from '../api/hooks.js';
 import {signedPercent, compactMoney, signedCompactMoney, pnlColor} from '../constants.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 /**
  * 行业板块涨跌排行:展示板块名称、涨跌幅(进度条)、成交额、主力净流入。
  * 数据 30 秒轮询(见 useSectorPerformance)。最多展示前 10 个板块。
  */
 export default function SectorPerformance() {
-    const {data: sectors, isLoading} = useSectorPerformance();
+    const {data: sectors, isLoading, isError, refetch} = useSectorPerformance();
 
     if (isLoading) {
         return (
@@ -18,6 +19,10 @@ export default function SectorPerformance() {
                 ))}
             </div>
         );
+    }
+
+    if (isError) {
+        return <div className="sector-list empty"><QueryErrorState onRetry={refetch} description="板块数据加载失败"/></div>;
     }
 
     const list = (sectors || []).slice(0, 10);

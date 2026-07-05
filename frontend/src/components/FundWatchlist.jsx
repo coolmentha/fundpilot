@@ -1,8 +1,9 @@
 import {Table, Tag} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
-import {useNavigate} from 'react-router-dom';
+import {Link, useNavigate} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
 import {signedPercent, compactMoney, pnlColor, text} from '../constants.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 /**
  * 自选基金行情列表:展示所有持仓/观察基金的实时涨跌(来自 fundgz 盘中估值)。
@@ -15,7 +16,7 @@ import {signedPercent, compactMoney, pnlColor, text} from '../constants.js';
  */
 export default function FundWatchlist() {
     const navigate = useNavigate();
-    const {data: funds, isLoading: fundsLoading} = useFunds();
+    const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
     const {data: estimates} = useFundEstimates(codes);
 
@@ -100,6 +101,14 @@ export default function FundWatchlist() {
         },
     ];
 
+    if (fundsError) {
+        return (
+            <div className="fund-watchlist">
+                <QueryErrorState onRetry={refetchFunds} description="基金列表加载失败"/>
+            </div>
+        );
+    }
+
     return (
         <div className="fund-watchlist">
             <Table
@@ -109,7 +118,11 @@ export default function FundWatchlist() {
                 size="small"
                 pagination={false}
                 rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
-                locale={{emptyText: '暂无基金,请在「我的基金」添加'}}
+                locale={{emptyText: (
+                    <span className="muted">
+                        暂无基金,<Link to="/funds">去「我的基金」添加</Link>
+                    </span>
+                )}}
             />
         </div>
     );
