@@ -44,7 +44,7 @@ export default function FundWatchlist() {
         {
             title: '代码',
             dataIndex: 'fundCode',
-            width: 100,
+            width: 112,
             render: (v) => <span className="num-cell">{v}</span>,
         },
         {
@@ -52,8 +52,8 @@ export default function FundWatchlist() {
             dataIndex: 'fundName',
             ellipsis: true,
             render: (v, r) => (
-                <span>
-                    {v}
+                <span className="watchlist-name-cell">
+                    <span className="watchlist-name-text" title={v}>{v}</span>
                     {r.status === 'HOLDING' && <span className="holding-dot" title="持仓" aria-hidden="true"/>}
                 </span>
             ),
@@ -61,14 +61,14 @@ export default function FundWatchlist() {
         {
             title: '类型',
             dataIndex: 'fundSubType',
-            width: 90,
+            width: 104,
             responsive: ['md'],
             render: (v) => v ? <Tag>{text(v)}</Tag> : <span className="muted">-</span>,
         },
         {
             title: '涨跌幅',
             dataIndex: 'changePct',
-            width: 130,
+            width: 140,
             sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
             defaultSortOrder: 'descend',
             render: (v, r) => {
@@ -89,14 +89,14 @@ export default function FundWatchlist() {
         {
             title: '持仓份额',
             dataIndex: 'shares',
-            width: 110,
+            width: 128,
             align: 'right',
             responsive: ['sm'],
             render: (v) => v ? <span className="num-cell">{compactMoney(v)}</span> : <span className="muted">-</span>,
         },
         {
             title: '操作',
-            width: 80,
+            width: 88,
             render: (_, r) => (
                 <a onClick={() => navigate(`/funds/${r.id}`)}>详情</a>
             ),
@@ -119,7 +119,8 @@ export default function FundWatchlist() {
                 loading={fundsLoading}
                 size="small"
                 pagination={false}
-                scroll={{x: 'max-content'}}
+                tableLayout="fixed"
+                scroll={{x: 920}}
                 rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
                 locale={{emptyText: (
                     <span className="muted">

@@ -28,7 +28,15 @@ body {
 }
 
 /* ===== 布局骨架 ===== */
-.app-shell { min-height: 100vh; }
+.app-shell {
+    min-height: 100vh;
+    width: 100%;
+}
+
+.app-shell > .ant-layout {
+    min-width: 0;
+    width: 100%;
+}
 
 .app-sider {
     border-right: 1px solid var(--color-border);
@@ -86,8 +94,13 @@ body {
 }
 
 .app-content {
-    max-width: 1480px;
+    width: 100%;
+    min-width: 0;
     padding: 24px;
+}
+
+.app-content > * {
+    min-width: 0;
 }
 
 .full-width { width: 100%; }
@@ -313,6 +326,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     flex-direction: column;
     gap: 16px;
+    width: 100%;
     min-width: 0;
 }
 
@@ -329,6 +343,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-bottom: 12px;
 }
 
@@ -412,8 +428,31 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .fund-watchlist .ant-table-wrapper,
 .fund-watchlist .ant-spin-nested-loading,
 .fund-watchlist .ant-spin-container {
+    width: 100%;
     min-width: 0;
     max-width: 100%;
+}
+
+.fund-watchlist .ant-table {
+    min-width: 0;
+}
+
+.fund-watchlist .ant-table-cell {
+    vertical-align: middle;
+}
+
+.fund-watchlist .watchlist-name-cell {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.fund-watchlist .watchlist-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .fund-watchlist .row-holding::before {
