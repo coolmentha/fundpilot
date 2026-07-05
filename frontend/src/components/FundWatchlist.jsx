@@ -34,8 +34,7 @@ export default function FundWatchlist() {
             changePct,
             isEstimated,
             estimateTime: est?.estimateTime,
-            // ETF/INDEX 类有成交额字段(暂用 placeholder,后端尚未返回成交额;展示持仓份额代替)
-            shares: f.shares,
+            holdingShares: f.holdingShares,
             status: f.status,
         };
     });
@@ -54,7 +53,6 @@ export default function FundWatchlist() {
             render: (v, r) => (
                 <span className="watchlist-name-cell">
                     <span className="watchlist-name-text" title={v}>{v}</span>
-                    {r.status === 'HOLDING' && <span className="holding-dot" title="持仓" aria-hidden="true"/>}
                 </span>
             ),
         },
@@ -88,7 +86,7 @@ export default function FundWatchlist() {
         },
         {
             title: '持仓份额',
-            dataIndex: 'shares',
+            dataIndex: 'holdingShares',
             width: 128,
             align: 'right',
             responsive: ['sm'],

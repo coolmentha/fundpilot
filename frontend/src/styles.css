@@ -478,16 +478,6 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     white-space: nowrap;
 }
 
-.holding-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-warning);
-    margin-left: 6px;
-    vertical-align: middle;
-}
-
 .estimate-tag {
     display: inline-block;
     margin-left: 4px;

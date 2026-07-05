@@ -1,6 +1,7 @@
 package com.fundpilot.backend.admin.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
+import com.fundpilot.backend.fund.service.FundDictBackfillService;
 import com.fundpilot.backend.fund.service.FundDictSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,10 +20,12 @@ import java.util.Map;
 public class AdminFundDictController {
 
     private final FundDictSyncService fundDictSyncService;
+    private final FundDictBackfillService fundDictBackfillService;
 
     @PostMapping("/sync")
     public ApiResponse<Map<String, Object>> sync() {
         int upserted = fundDictSyncService.syncAll();
-        return ApiResponse.ok(Map.of("status", "synced", "upserted", upserted));
+        int backfilled = fundDictBackfillService.backfillAll();
+        return ApiResponse.ok(Map.of("status", "synced", "upserted", upserted, "backfilled", backfilled));
     }
 }
