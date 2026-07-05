@@ -31,6 +31,8 @@ export default function KlineChart({fundId, fundSubType}) {
     const chartRef = useRef(null);
     const maPaneRef = useRef(null);
     const subPaneRef = useRef(null);
+    /** MA override 进行中标记:供 window error handler 判断是否静默 klinecharts draw 竞态。 */
+    const maOverridingRef = useRef(false);
 
     const {data: kline, isLoading} = useFundKline(fundId, period);
     const chartType = kline?.chartType || 'kline';
@@ -58,9 +60,13 @@ export default function KlineChart({fundId, fundSubType}) {
     }, [chartType]);
 
     // 2. MA 均线(按勾选周期更新)。createIndicator 返回主蜡烛 pane id;
-    //    周期变化用 overrideIndicator 原地更新(触发 regenerateFigures),避免 remove+create
-    //    与 klinecharts draw 循环(rAF)竞态——快速勾选时 drawImp 读到已删 figure 报
-    //    "Cannot read properties of undefined (reading '0')"。全取消才 remove。
+    //    周期变化用 overrideIndicator 原地更新(触发 regenerateFigures),避免 remove+create 频繁增删。
+    //
+    //    已知 klinecharts v9 库缺陷:overrideIndicator 异步重算 result(Promise.all(calcIndicator)),
+    //    但 figure 再生会同步触发 draw(_listener→updateMain→drawImp),此时 result 尚未重算,
+    //    drawImp 读到 undefined 报 "Cannot read properties of undefined (reading '0')"。
+    //    非致命(下一帧 result 就绪后自恢复)、用户不可见(仅控制台)。MA override 期间用
+    //    maOverridingRef 标记,window error handler(见 effect 1.5)静默该特定错误。
     useEffect(() => {
         const chart = chartRef.current;
         if (!chart || chartType !== 'kline') return;
@@ -73,12 +79,32 @@ export default function KlineChart({fundId, fundSubType}) {
             return;
         }
         if (maPaneRef.current) {
+            maOverridingRef.current = true;
             chart.overrideIndicator({name: 'MA', calcParams: periods}, maPaneRef.current);
+            // 120ms 覆盖同步 draw + 后续 rAF 帧,然后清 flag 恢复正常错误上报
+            setTimeout(() => { maOverridingRef.current = false; }, 120);
         } else {
             // isStack=true 叠加到主蜡烛 pane;calcParams 覆盖默认 [5,10,30,60]
             maPaneRef.current = chart.createIndicator({name: 'MA', calcParams: periods}, true);
         }
     }, [maSelected, chartType]);
+
+    // 1.5 静默 klinecharts v9 MA override 期间的 draw 竞态错误。
+    //    用 window.onerror 返回 true(经实测 addEventListener preventDefault 不足以抑制,
+    //    window.onerror return true 才行)。仅当 maOverridingRef 为真且消息匹配时抑制,
+    //    其余错误照常上报。flag 在 override 后 120ms 清除(覆盖同步 draw + 后续 rAF 帧)。
+    useEffect(() => {
+        const prev = window.onerror;
+        window.onerror = (msg, src, line, col, err) => {
+            if (maOverridingRef.current
+                    && typeof msg === 'string'
+                    && msg.includes("Cannot read properties of undefined (reading '0')")) {
+                return true; // 抑制上报,图表下一帧 result 就绪后自恢复
+            }
+            return prev ? prev(msg, src, line, col, err) : false;
+        };
+        return () => { window.onerror = prev; };
+    }, []);
 
     // 3. 副图指标切换(仅 kline)。removeIndicator(paneId) 整块移除副 pane,再按需新建。
     useEffect(() => {
