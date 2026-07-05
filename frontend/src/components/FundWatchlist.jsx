@@ -120,7 +120,6 @@ export default function FundWatchlist() {
                 size="small"
                 pagination={false}
                 tableLayout="fixed"
-                scroll={{x: 920}}
                 rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
                 locale={{emptyText: (
                     <span className="muted">

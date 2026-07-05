@@ -72,6 +72,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    height: 64px;
+    line-height: normal;
     padding: 0 24px;
     background: rgba(15, 23, 42, 0.85);
     backdrop-filter: blur(12px);
@@ -81,16 +83,26 @@ body {
     z-index: 10;
 }
 
+.app-header > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+}
+
 .app-header .page-title {
     margin: 0;
     font-family: 'Fira Code', monospace;
     font-size: 15px;
     font-weight: 600;
+    line-height: 1.25;
 }
 
 .app-header .page-subtitle {
     color: var(--color-muted);
     font-size: 13px;
+    line-height: 1.25;
 }
 
 .app-content {
@@ -421,7 +433,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 /* —— 基金行情列表 —— */
 .fund-watchlist .row-holding {
-    position: relative;
+    box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
 .fund-watchlist,
@@ -434,7 +446,18 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .fund-watchlist .ant-table {
+    width: 100%;
     min-width: 0;
+}
+
+.fund-watchlist .ant-table-content {
+    overflow-x: auto;
+}
+
+.fund-watchlist .ant-table-content > table {
+    width: 100% !important;
+    min-width: 760px;
+    table-layout: fixed !important;
 }
 
 .fund-watchlist .ant-table-cell {
@@ -453,16 +476,6 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.fund-watchlist .row-holding::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: var(--color-warning);
 }
 
 .holding-dot {
