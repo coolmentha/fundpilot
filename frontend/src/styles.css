@@ -545,6 +545,36 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     gap: 4px;
 }
 
+.kline-ma-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.kline-ma-tag {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    color: #64748B;
+    background: rgba(51, 65, 85, 0.4);
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.kline-ma-tag:hover {
+    background: rgba(71, 85, 105, 0.6);
+}
+
+.kline-ma-tag.active {
+    background: rgba(71, 85, 105, 0.5);
+    border-color: currentColor;
+    font-weight: 600;
+}
+
 .kline-benchmark {
     font-size: 12px;
 }

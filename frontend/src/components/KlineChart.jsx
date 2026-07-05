@@ -1,24 +1,30 @@
 import {useEffect, useRef, useState} from 'react';
 import {init, dispose} from 'klinecharts';
-import {Segmented, Switch, Empty} from 'antd';
+import {Segmented, Empty} from 'antd';
 import {useFundKline} from '../api/hooks.js';
 
 /**
- * 基金 K 线/走势图组件(klinecharts v9)。
+ * 基金 K 线/走势图组件(klinecharts v9.8.12)。
  *
  * <p>按后端返回的 chartType 分派:
  * <ul>
- *   <li>{@code kline}:蜡烛图 + MA5/10/20/30 均线(可开关)+ 成交量副图 + MACD 副图(可切换)。
- *       支持日/周/月 K 切换。A 股惯例红涨绿跌,暗色主题。模仿支付宝基金 K 线。</li>
+ *   <li>{@code kline}:蜡烛图 + MA2/5/10/20/30/60/120/250 均线(可勾选显示)+ 成交量/MACD 副图(可切换)。
+ *       支持日/周/月 K 切换。A 股惯例红涨绿跌,暗色主题。模仿支付宝/同花顺 K 线:
+ *       十字光标轴标签贴线、悬停浮窗显示 OHLCV+MA/MACD 数值。</li>
  *   <li>{@code nav}:累计净值面积图(主动/混合基金或指数 K 线拉取降级),无工具栏无指标。</li>
  * </ul>
  *
  * <p>生命周期:chartType 变化重建 chart;period 变化重新拉数 applyNewData;
- * MA 开关 / 副图指标切换用 create/removeIndicator(不重建)。
+ * MA 勾选 / 副图指标切换用 create/removeIndicator(不重建)。
  */
+const MA_PERIODS = [2, 5, 10, 20, 30, 60, 120, 250];
+/** MA/MACD/DIF/DEA 各线条颜色(暗色主题高对比)。indicator.lines[i] 应用于第 i 条线。 */
+const LINE_COLORS = ['#F59E0B', '#3B82F6', '#A855F7', '#EC4899', '#14B8A6', '#F97316', '#84CC16', '#6366F1'];
+
 export default function KlineChart({fundId, fundSubType}) {
     const [period, setPeriod] = useState('daily');
-    const [maOn, setMaOn] = useState(true);
+    /** 选中的 MA 周期集合(默认 5/10/20/30)。空集则不画均线。 */
+    const [maSelected, setMaSelected] = useState(() => new Set([5, 10, 20, 30]));
     const [sub, setSub] = useState('VOL'); // 'VOL' | 'MACD' | 'NONE'
 
     const containerRef = useRef(null);
@@ -38,10 +44,8 @@ export default function KlineChart({fundId, fundSubType}) {
         chartRef.current = chart;
         applyDarkTheme(chart);
         if (chartType === 'nav') {
-            // 净值面积图:用 area 类型画 close 曲线
             chart.setStyles({candle: {type: 'area', bar: {upColor: '#F59E0B', downColor: '#F59E0B'}}});
         }
-        // kline 模式:主蜡烛图由 init 默认创建,MA/副图由下方 effect 按状态补
         const resize = () => chart.resize();
         window.addEventListener('resize', resize);
         return () => {
@@ -53,30 +57,32 @@ export default function KlineChart({fundId, fundSubType}) {
         };
     }, [chartType]);
 
-    // 2. MA 均线开关(仅 kline)
+    // 2. MA 均线(按勾选周期重建)。createIndicator 返回主蜡烛 pane id;removeIndicator(paneId,'MA') 去掉均线。
     useEffect(() => {
         const chart = chartRef.current;
         if (!chart || chartType !== 'kline') return;
-        if (maOn) {
-            // isStack=true 叠加到主蜡烛 pane
-            maPaneRef.current = chart.createIndicator('MA', true);
-        } else if (maPaneRef.current) {
+        const periods = [...maSelected].sort((a, b) => a - b);
+        if (maPaneRef.current) {
             chart.removeIndicator(maPaneRef.current, 'MA');
             maPaneRef.current = null;
         }
-    }, [maOn, chartType]);
+        if (periods.length > 0) {
+            // isStack=true 叠加到主蜡烛 pane;calcParams 覆盖默认 [5,10,30,60]
+            maPaneRef.current = chart.createIndicator({name: 'MA', calcParams: periods}, true);
+        }
+    }, [maSelected, chartType]);
 
-    // 3. 副图指标切换(仅 kline)
+    // 3. 副图指标切换(仅 kline)。removeIndicator(paneId) 整块移除副 pane,再按需新建。
     useEffect(() => {
         const chart = chartRef.current;
         if (!chart || chartType !== 'kline') return;
-        // 移除旧副图 pane
         if (subPaneRef.current) {
             chart.removeIndicator(subPaneRef.current);
             subPaneRef.current = null;
         }
         if (sub !== 'NONE') {
-            subPaneRef.current = chart.createIndicator(sub);
+            // isStack=false 新建独立副 pane;minHeight 防 MACD 被压扁不显示
+            subPaneRef.current = chart.createIndicator(sub, false, {minHeight: 120});
         }
     }, [sub, chartType]);
 
@@ -93,15 +99,29 @@ export default function KlineChart({fundId, fundSubType}) {
 
     const height = chartType === 'kline' ? (sub === 'NONE' ? 420 : 520) : 360;
 
+    const toggleMa = (p) => {
+        setMaSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(p)) next.delete(p);
+            else next.add(p);
+            return next;
+        });
+    };
+
     return (
         <div className="kline-chart-wrap">
             {showToolbar && (
                 <div className="kline-toolbar">
                     <Segmented size="small" value={period} onChange={setPeriod}
                                options={[{label: '日K', value: 'daily'}, {label: '周K', value: 'weekly'}, {label: '月K', value: 'monthly'}]}/>
-                    <span className="kline-toolbar-group">
+                    <span className="kline-ma-group">
                         <span className="muted" style={{fontSize: 12}}>MA</span>
-                        <Switch size="small" checked={maOn} onChange={setMaOn}/>
+                        {MA_PERIODS.map((p) => (
+                            <span key={p}
+                                  className={`kline-ma-tag${maSelected.has(p) ? ' active' : ''}`}
+                                  style={maSelected.has(p) ? {color: LINE_COLORS[MA_PERIODS.indexOf(p) % LINE_COLORS.length]} : null}
+                                  onClick={() => toggleMa(p)}>{p}</span>
+                        ))}
                     </span>
                     <Segmented size="small" value={sub} onChange={setSub}
                                options={[{label: '成交量', value: 'VOL'}, {label: 'MACD', value: 'MACD'}, {label: '无', value: 'NONE'}]}/>
@@ -128,28 +148,57 @@ function toKlineData(b) {
     };
 }
 
-/** 暗色主题 + A 股红涨绿跌。背景由容器 CSS 控制(#1E293B)。 */
+/**
+ * 暗色主题 + A 股红涨绿跌。背景由容器 CSS 控制(#1E293B)。
+ * 关键修复:
+ * <ul>
+ *   <li>candle.tooltip showRule=follow_cross + 浅色字 → 悬停时浮窗显示 OHLCV + MA 数值(暗色背景默认黑字不可见)</li>
+ *   <li>indicator.lines/bars 浅色 + tooltip 浅色 → MACD/DIF/DEA 在暗色背景可见(MACD 之前「没显示」的根因)</li>
+ *   <li>crosshair horizontal/vertical text → 轴标签贴十字线(价格/日期在线上)</li>
+ *   <li>candle.type=candle_solid → 实心蜡烛,贴近支付宝/同花顺观感</li>
+ * </ul>
+ */
 function applyDarkTheme(chart) {
     chart.setStyles({
         grid: {
-            horizontal: {color: 'rgba(51,65,85,0.5)'},
-            vertical: {color: 'rgba(51,65,85,0.5)'},
+            horizontal: {color: 'rgba(51,65,85,0.4)'},
+            vertical: {color: 'rgba(51,65,85,0.4)'},
         },
         candle: {
+            type: 'candle_solid',
             bar: {
                 upColor: '#EF4444', downColor: '#22C55E',
                 upBorderColor: '#EF4444', downBorderColor: '#22C55E',
                 upWickColor: '#EF4444', downWickColor: '#22C55E',
             },
             priceMark: {
-                show: true,             // 显示最新价标记
-                high: {show: true},
-                low: {show: true},
-                last: {show: true, upColor: '#EF4444', downColor: '#22C55E'},
+                show: true,
+                high: {show: true, color: '#94A3B8'},
+                low: {show: true, color: '#94A3B8'},
+                last: {show: true, upColor: '#EF4444', downColor: '#22C55E', noChangeColor: '#94A3B8'},
+            },
+            tooltip: {
+                showRule: 'follow_cross',     // 悬停时浮窗跟随十字光标
+                showType: 'standard',         // 主 pane 左上角 legend:OHLC + MA 数值
+                defaultValue: '--',
+                text: {color: '#E2E8F0', size: 11},
             },
         },
+        indicator: {
+            // 多线条配色:MA 各周期 + MACD 的 DIF/DEA 复用前两条
+            lines: LINE_COLORS.map((c) => ({color: c, size: 1})),
+            bars: [{upColor: '#EF4444', downColor: '#22C55E', noChangeColor: '#64748B'}],
+            tooltip: {
+                showRule: 'follow_cross',
+                showName: true,
+                showParams: true,            // 显示 MA5:xxx / DIF:xxx
+                text: {color: '#E2E8F0', size: 11},
+            },
+            lastValueMark: {show: true, text: {show: true, color: '#E2E8F0'}},
+        },
         yAxis: {
-            show: true,                 // 纵轴刻度固定显示在轴上,非只跟十字线
+            show: true,
+            position: 'right',
             axisLine: {show: true, color: '#334155'},
             tickLine: {show: true, color: '#334155'},
             tickText: {show: true, color: '#94A3B8'},
@@ -161,11 +210,11 @@ function applyDarkTheme(chart) {
             tickText: {show: true, color: '#94A3B8'},
         },
         crosshair: {
-            horizontal: {show: true, line: {color: '#94A3B8'}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
-            vertical: {show: true, line: {color: '#94A3B8'}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
+            show: true,
+            // 横纵轴标签贴十字线:horizontal text 显 y 轴价格、vertical text 显 x 轴日期
+            horizontal: {show: true, line: {color: '#94A3B8', dashedValue: [4, 2]}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
+            vertical: {show: true, line: {color: '#94A3B8', dashedValue: [4, 2]}, text: {show: true, color: '#1E293B', backgroundColor: '#94A3B8'}},
         },
-        indicator: {
-            lastValueMark: {show: true, text: {show: true}},
-        },
+        separator: {show: true, color: '#334155'},
     });
 }
