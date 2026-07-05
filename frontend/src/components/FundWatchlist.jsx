@@ -2,7 +2,7 @@ import {Table, Tag} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link, useNavigate} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
-import {signedPercent, compactMoney, pnlColor, text} from '../constants.js';
+import {signedMoney, signedPercent, compactMoney, pnlColor, text} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -35,6 +35,7 @@ export default function FundWatchlist() {
             isEstimated,
             estimateTime: est?.estimateTime,
             holdingShares: f.holdingShares,
+            dailyPnl: f.dailyPnl,
             status: f.status,
         };
     });
@@ -90,7 +91,19 @@ export default function FundWatchlist() {
             width: 128,
             align: 'right',
             responsive: ['sm'],
-            render: (v) => v ? <span className="num-cell">{compactMoney(v)}</span> : <span className="muted">-</span>,
+            render: (v) => v !== null && v !== undefined
+                ? <span className="num-cell">{compactMoney(v)}</span>
+                : <span className="muted">-</span>,
+        },
+        {
+            title: '当日收益',
+            dataIndex: 'dailyPnl',
+            width: 132,
+            align: 'right',
+            responsive: ['sm'],
+            render: (v) => v !== null && v !== undefined
+                ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
+                : <span className="muted">-</span>,
         },
         {
             title: '操作',
