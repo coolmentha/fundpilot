@@ -43,6 +43,14 @@ public class MarketDataSourceChain implements MarketDataSource {
         return tryEach("fetchIndexKline", indexCode, source -> source.fetchIndexKline(indexCode, range));
     }
 
+    @Override
+    public IndexKline fetchIndexKlineWithPeriod(String indexCode, String klt, String lmt) {
+        // 必须 override:接口 default 会忽略 klt 降级为日K(恒 101),导致日/周/月 K 都一样。
+        // 透传 klt 到各 source 的 fetchIndexKlineWithPeriod。
+        return tryEach("fetchIndexKlineWithPeriod", indexCode,
+                source -> source.fetchIndexKlineWithPeriod(indexCode, klt, lmt));
+    }
+
     /**
      * 按顺序尝试每个数据源;首个成功即返回,失败则记日志继续下一个。
      * 全部失败抛 {@link ErrorCode#MARKET_DATA_ALL_SOURCES_FAILED}。
@@ -53,6 +61,10 @@ public class MarketDataSourceChain implements MarketDataSource {
             MarketDataSource source = sources.get(i);
             try {
                 return fn.apply(source);
+            } catch (UnsupportedOperationException ex) {
+                // 该源不支持此操作(如 CsindexMarketDataSource 不做净值/字典)——非真实失败,
+                // 静默跳过回退下一源,不记 warn 日志,避免链首专用源污染日志。
+                continue;
             } catch (Exception ex) {
                 log.warn("数据源[{}] {} 失败 code={}: {}", source.getClass().getSimpleName(), operation, code, ex.getMessage());
                 failures.add(ex);

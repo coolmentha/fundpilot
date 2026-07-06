@@ -9,8 +9,10 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
 import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.market.entity.IndexKlineEntity;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
+import com.fundpilot.backend.market.repository.IndexKlineRepository;
 import com.fundpilot.backend.market.service.support.*;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -46,6 +48,7 @@ public class MarketDataFetchService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final MarketDataSource marketDataSource;
     private final MarketIndicatorSnapshotService snapshotService;
+    private final IndexKlineRepository indexKlineRepository;
 
     /**
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
@@ -141,6 +144,9 @@ public class MarketDataFetchService {
                         .orElse(fund.getBenchmarkIndexCode());
                 IndexKline kline = marketDataSource.fetchIndexKline(secid, INDEX_KLINE_RANGE);
                 VolumeStateCalculator.calculate(kline).ifPresent(template::setVolumeState);
+                // 顺便把已拉的日 K 落 index_kline 缓存(零额外请求),供 KlineService 渲染日/周/月 K,
+                // 避免图表按需拉 push2his 触发 IP 限流。按 index_code+trade_date 去重只插缺失。
+                upsertIndexKline(fund.getBenchmarkIndexCode(), kline);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());
             }
@@ -169,6 +175,34 @@ public class MarketDataFetchService {
                 .toList();
         if (!toInsert.isEmpty()) {
             fundNavHistoryRepository.saveAll(toInsert);
+        }
+    }
+
+    /**
+     * 指数日 K 落 index_kline 缓存:按 indexCode+tradeDate 去重,只插不存在的(对齐 upsertNavHistory 模式)。
+     * <p>复用 {@link #fetchAndBuildSnapshot} 已拉的 {@link IndexKline}(算 VolumeState 用),零额外外部请求。
+     * 缓存供 {@code KlineService} 渲染日/周/月 K,避免图表按需拉 push2his 触发 IP 限流。
+     */
+    private void upsertIndexKline(String indexCode, IndexKline kline) {
+        if (indexCode == null || indexCode.isBlank()) return;
+        Set<Instant> existing = new HashSet<>(indexKlineRepository.findTradeDatesByIndexCode(indexCode));
+        List<IndexKlineEntity> toInsert = kline.bars().stream()
+                .filter(b -> !existing.contains(b.date()))
+                .map(b -> {
+                    IndexKlineEntity entity = new IndexKlineEntity();
+                    entity.setIndexCode(indexCode);
+                    entity.setTradeDate(b.date());
+                    entity.setOpen(b.open());
+                    entity.setHigh(b.high());
+                    entity.setLow(b.low());
+                    entity.setClose(b.close());
+                    entity.setVolume(b.volume());
+                    return entity;
+                })
+                .toList();
+        if (!toInsert.isEmpty()) {
+            indexKlineRepository.saveAll(toInsert);
+            log.debug("指数 K 线缓存写入 indexCode={} 新增 {} 条(已有 {} 条)", indexCode, toInsert.size(), existing.size());
         }
     }
 }

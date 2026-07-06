@@ -44,8 +44,6 @@ public class FundEntity extends AbstractEntity {
     @Column(length = 32)
     private FundStatus status = FundStatus.PENDING_HOLDING;
 
-    private BigDecimal plannedTotalAmount;
-
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
     private FundSubType fundSubType;

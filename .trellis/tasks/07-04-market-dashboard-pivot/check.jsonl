@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端质量检查规范：lint、typecheck、测试要求"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端质量检查规范：组件结构、样式约定、可访问性要求"}
+{"file": "CONTEXT.md", "reason": "领域术语校验：行情数据源、盘中估值、今日涨跌等概念命名一致性"}
+{"file": ".trellis/tasks/07-04-market-dashboard-pivot/design-technical.md", "reason": "后端技术设计对照：类命名、字段、方法签名、SQL、限流策略是否符合设计"}
+{"file": ".trellis/tasks/07-04-market-dashboard-pivot/prd.md", "reason": "验收标准对照：R1-R8 需求与 Acceptance Criteria"}
+{"file": ".trellis/tasks/07-04-market-dashboard-pivot/design.md", "reason": "设计对照：配色、涨跌色约定、无障碍要求、图表库选型"}

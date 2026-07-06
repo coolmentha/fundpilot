@@ -50,4 +50,12 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      * 软删行由 @SQLRestriction 自动过滤。
      */
     FundTransactionEntity findTopByFundEntity_IdOrderByConfirmTimeDesc(Long fundId);
+
+    /**
+     * 幂等去重:查某定投计划在某时间区间内是否已生成 PENDING 交易(DcaSuggestionJob 用)。
+     */
+    boolean existsByDcaPlanIdAndStatusAndCreatedDateBetween(Long dcaPlanId,
+                                                             com.fundpilot.backend.fund.enums.FundTransactionStatus status,
+                                                             java.time.Instant start,
+                                                             java.time.Instant end);
 }

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端编码规范总入口:Controller 不写逻辑、@RequiredArgsConstructor、ErrorCode 枚举、Actuator、数据源降级链、全局 Instant、View DTO、魔法值枚举化"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "DB 迁移规范:V10 DROP COLUMN 写法、Flyway 历史不可改、列命名约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ErrorCode 枚举:删除 BUILD/ADD 相关错误码时需对照,保留 @Deprecated 枚举值的反序列化约定"}
+{"file": ".trellis/spec/backend/market-realtime-cache.md", "reason": "行情缓存规范:本次不动行情侧,但确认信号引擎改动不影响 MarketRealtimeCache"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量基线:测试覆盖、日志规范、事务边界——重构后需满足"}
+{"file": "CONTEXT.md", "reason": "领域上下文:金字塔加仓/计划仓位校验/再平衡/硬约束章节需清理,是改动的权威语义来源"}

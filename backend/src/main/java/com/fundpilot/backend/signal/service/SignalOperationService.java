@@ -6,17 +6,14 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
-import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
-import com.fundpilot.backend.fund.service.support.HardConstraintConfig;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
-import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -29,18 +26,19 @@ import java.time.Instant;
 
 /**
  * 信号操作确认服务(issue #14):用户回应 SignalLog 的统一入口。
- * <p>
- * 读 SignalLog 的 {@code signalType + triggerTier + reason} 分派到不同推进动作,
- * 写 {@link FundTransactionEntity}(nav=null、status=PENDING)+ 推进 {@code tierNAddedAt} / {@link FundStatus}。
+ * <p>读 SignalLog 的 {@code signalType + reason} 分派到不同推进动作,
+ * 写 {@link FundTransactionEntity}(nav=null、status=PENDING)+ 推进 {@link FundStatus}。
+ *
+ * <p>金字塔加仓退场后,只处理 SELL 信号确认(BUILD/ADD 信号不再产生,但存量 SignalLog 的 BUILD/ADD
+ * 确认仍兼容——走简化路径:只写交易,不再推进 tierNAddedAt)。
  *
  * <h3>分派表</h3>
  * <table>
  *   <tr><th>SignalLog</th><th>推进动作</th></tr>
  *   <tr><td>BUILD</td><td>写 INCREASE 交易(amount=actualAmount);FundStatus→HOLDING;openedAt=now</td></tr>
- *   <tr><td>ADD tierN</td><td>写 INCREASE 交易;tierNAddedAt=now</td></tr>
- *   <tr><td>SELL TRAILING_STOP tierN</td><td>写 DECREASE 交易(shares=actualShares);清 tierNAddedAt;N=4 且持仓归零→CLEARED(清全部 tier + CLEARED)</td></tr>
- *   <tr><td>SELL LOGIC_BROKEN</td><td>写 DECREASE 交易;清全部 tier1~4AddedAt;FundStatus→CLEARED(一次清空)</td></tr>
- *   <tr><td>SELL REBALANCE</td><td>写 DECREASE 交易;不清档位(持仓还在);不改 FundStatus</td></tr>
+ *   <tr><td>ADD tierN</td><td>写 INCREASE 交易(存量兼容,不再推进 tierNAddedAt)</td></tr>
+ *   <tr><td>SELL TRAILING_STOP</td><td>写 DECREASE 交易(shares=actualShares);持仓归零→CLEARED</td></tr>
+ *   <tr><td>SELL LOGIC_BROKEN</td><td>写 DECREASE 交易;FundStatus→CLEARED(一次清空)</td></tr>
  * </table>
  *
  * <h3>偏离说明</h3>
@@ -74,23 +72,21 @@ public class SignalOperationService {
         SignalLogEntity signalLog = signalLogRepository.findById(signalLogId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SIGNAL_LOG_NOT_FOUND, "SignalLog #" + signalLogId + " 不存在"));
         FundEntity fund = signalLog.getFundEntity();
-        FundStrategyEntity strategy = signalLog.getFundStrategyEntity();
         SignalType type = signalLog.getSignalType();
-        Integer tier = signalLog.getTriggerTier();
         SignalReason reason = signalLog.getReason();
         Instant now = Instant.now();
 
         FundTransactionEntity tx = switch (type) {
             case BUILD -> handleBuild(signalLog, fund, request, now);
-            case ADD -> handleAdd(signalLog, fund, strategy, tier, request, now);
-            case SELL -> handleSell(signalLog, fund, strategy, tier, reason, request, now);
+            case ADD -> handleAdd(signalLog, fund, request, now);
+            case SELL -> handleSell(fund, reason, request, now);
             case NONE -> throw new BusinessException(ErrorCode.INVALID_SIGNAL_TYPE,
                     "NONE 信号无需确认操作");
         };
         return fundTransactionRepository.save(tx);
     }
 
-    /** BUILD:写 INCREASE(amount);FundStatus→HOLDING;openedAt=now。 */
+    /** BUILD:写 INCREASE(amount);FundStatus→HOLDING;openedAt=now(存量兼容,新策略不再产 BUILD)。 */
     private FundTransactionEntity handleBuild(SignalLogEntity signalLog, FundEntity fund,
                                               ConfirmOperationRequest request, Instant now) {
         BigDecimal amount = requireAmount(request);
@@ -100,82 +96,44 @@ public class SignalOperationService {
         return newTransaction(fund, signalLog, FundTransactionSource.INCREASE, amount, null, now);
     }
 
-    /** ADD tierN:写 INCREASE(amount);tierNAddedAt=now。 */
+    /** ADD:写 INCREASE(amount)(存量兼容,新策略不再产 ADD,不再推进 tierNAddedAt)。 */
     private FundTransactionEntity handleAdd(SignalLogEntity signalLog, FundEntity fund,
-                                           FundStrategyEntity strategy, Integer tier,
                                            ConfirmOperationRequest request, Instant now) {
-        if (tier == null) {
-            throw new BusinessException(ErrorCode.MISSING_TRIGGER_TIER, "ADD 信号缺少 triggerTier");
-        }
         BigDecimal amount = requireAmount(request);
-        setTierAddedAt(strategy, tier, now);
-        fundStrategyRepository.save(strategy);
         return newTransaction(fund, signalLog, FundTransactionSource.INCREASE, amount, null, now);
     }
 
     /**
      * SELL:按 reason 分派。
      * <ul>
-     *   <li>TRAILING_STOP tierN:清 tierNAddedAt;N=4 且持仓归零→清全部 + CLEARED</li>
-     *   <li>LOGIC_BROKEN:清全部 tier1~4AddedAt;CLEARED(一次清空)</li>
-     *   <li>REBALANCE:不清档位、不改 FundStatus</li>
+     *   <li>TRAILING_STOP:写 DECREASE 交易;持仓归零→CLEARED</li>
+     *   <li>LOGIC_BROKEN:写 DECREASE 交易;CLEARED(一次清空)</li>
      * </ul>
      */
-    private FundTransactionEntity handleSell(SignalLogEntity signalLog, FundEntity fund,
-                                             FundStrategyEntity strategy, Integer tier, SignalReason reason,
+    private FundTransactionEntity handleSell(FundEntity fund, SignalReason reason,
                                              ConfirmOperationRequest request, Instant now) {
         BigDecimal shares = requireShares(request);
-        FundTransactionEntity tx = newTransaction(fund, signalLog, FundTransactionSource.DECREASE, null, shares, now);
+        FundTransactionEntity tx = newTransaction(fund, null, FundTransactionSource.DECREASE, null, shares, now);
 
         if (reason == SignalReason.TRAILING_STOP) {
-            if (tier == null) {
-                throw new BusinessException(ErrorCode.MISSING_TRIGGER_TIER, "TRAILING_STOP 信号缺少 triggerTier");
-            }
-            setTierAddedAt(strategy, tier, null);
-            if (tier == HardConstraintConfig.TIER_COUNT) {
-                clearAllTiers(strategy);
-                clearIfHoldingExhausted(fund, strategy, now);
-            }
-            fundStrategyRepository.save(strategy);
+            clearIfHoldingExhausted(fund, now);
         } else if (reason == SignalReason.LOGIC_BROKEN) {
-            clearAllTiers(strategy);
             fund.setStatus(FundStatus.CLEARED);
             fundRepository.save(fund);
-            fundStrategyRepository.save(strategy);
-        } else if (reason == SignalReason.REBALANCE) {
-            // 不清档位(持仓还在)、不改 FundStatus
-            log.debug("REBALANCE 卖出 fund_id={} shares={}", fund.getId(), shares);
         } else {
             throw new BusinessException(ErrorCode.UNSUPPORTED_SELL_REASON, "不支持的 SELL reason: " + reason);
         }
         return tx;
     }
 
-    /** TRAILING_STOP N=4 后聚合判断:若持仓份额归零(建仓+四档全平)→ CLEARED。 */
-    private void clearIfHoldingExhausted(FundEntity fund, FundStrategyEntity strategy, Instant now) {
+    /** 移动止盈后聚合判断:若持仓份额归零 → CLEARED。 */
+    private void clearIfHoldingExhausted(FundEntity fund, Instant now) {
         BigDecimal holdingShares = fundPositionService.getHoldingShares(fund.getId());
         if (holdingShares.signum() <= 0) {
             fund.setStatus(FundStatus.CLEARED);
             fundRepository.save(fund);
-            log.info("TRAILING_STOP tier4 持仓归零 fund_id={} → CLEARED", fund.getId());
+            log.info("TRAILING_STOP 持仓归零 fund_id={} → CLEARED", fund.getId());
         }
-    }
-
-    private static void setTierAddedAt(FundStrategyEntity strategy, int tier, Instant value) {
-        switch (tier) {
-            case 1 -> strategy.setTier1AddedAt(value);
-            case 2 -> strategy.setTier2AddedAt(value);
-            case 3 -> strategy.setTier3AddedAt(value);
-            case 4 -> strategy.setTier4AddedAt(value);
-            default -> throw new BusinessException(ErrorCode.INVALID_TRIGGER_TIER, "triggerTier 超出 1~4: " + tier);
-        }
-    }
-
-    private static void clearAllTiers(FundStrategyEntity strategy) {
-        strategy.setTier1AddedAt(null);
-        strategy.setTier2AddedAt(null);
-        strategy.setTier3AddedAt(null);
-        strategy.setTier4AddedAt(null);
     }
 
     private static BigDecimal requireAmount(ConfirmOperationRequest request) {
@@ -201,7 +159,7 @@ public class SignalOperationService {
         tx.setAmount(amount);
         tx.setShares(shares);
         tx.setNav(null); // nav 等 NavConfirmJob 回填(#15)
-        tx.setStatus(FundTransactionStatus.PENDING);
+        tx.setStatus(com.fundpilot.backend.fund.enums.FundTransactionStatus.PENDING);
         tx.setSignalLogEntity(signalLog);
         return tx;
     }

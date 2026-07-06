@@ -28,6 +28,13 @@ export const labels = {
     PENDING: '待确认',
     CONFIRMED: '已确认',
     CANCELLED: '已取消',
+    // DcaFrequency
+    DAILY: '日定投',
+    WEEKLY: '周定投',
+    MONTHLY: '月定投',
+    // DcaPlanStatus
+    DRAFT: '草稿',
+    EFFECTIVE: '已生效',
     // Backtest passed(非后端枚举,前端回测结果展示用)
     PASSED: '通过',
     FAILED: '未通过',
@@ -127,6 +134,26 @@ export const fundCategoryOptions = [
     {value: 'MIXED', label: '混合'},
 ];
 
+// 大数缩写(成交额/资金流向用):亿/万。null/0/负 → 原样返回。
+export const compactMoney = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    if (!isFinite(n)) return '-';
+    const abs = Math.abs(n);
+    if (abs >= 1e8) return `${(n / 1e8).toFixed(2)}亿`;
+    if (abs >= 1e4) return `${(n / 1e4).toFixed(2)}万`;
+    return n.toFixed(2);
+};
+
+// 带正负号的大数缩写(资金流向净额用)。
+export const signedCompactMoney = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    const formatted = compactMoney(n);
+    if (formatted === '-') return '-';
+    return n > 0 ? `+${formatted}` : formatted;
+};
+
 // FundTransactionSource 下拉选项(issue #18 手动录入)
 export const fundSourceOptions = [
     {value: 'INCREASE', label: '加仓'},
@@ -144,11 +171,10 @@ export const errorTitles = {
     STRATEGY_NOT_FOUND: '策略不存在',
     TRANSACTION_NOT_FOUND: '交易不存在',
     SIGNAL_LOG_NOT_FOUND: '信号不存在',
-    USER_CONFIG_NOT_INITIALIZED: '未配置总可投资金',
+    DCA_PLAN_NOT_FOUND: '定投计划不存在',
     ENTITY_NOT_FOUND: '记录不存在',
     MISSING_FUND_IDENTITY: '缺少基金身份信息',
     // 输入校验
-    PLANNED_AMOUNT_EXCEEDS_LIMIT: '计划仓位超限',
     FUND_CATEGORY_REQUIRED: '缺少基金类型',
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
     // 交易/信号状态非法

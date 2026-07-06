@@ -9,8 +9,12 @@ import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
+/**
+ * 策略参数实体(卖出纪律专用)。
+ * <p>金字塔加仓机制移除后,本实体只保留移动止盈阈值(stopLossPullbackPercent)与版本状态机(status)。
+ * 逻辑止损不再需要可配参数(ETF 看跟踪指数放量下跌,ACTIVE 看破年线+MACD,均为硬编码规则)。
+ */
 @Entity
 @Table(name = "fund_strategy")
 @SQLDelete(sql = "UPDATE fund_strategy SET deleted_date = now() WHERE id = ? AND version = ?")
@@ -25,31 +29,6 @@ public class FundStrategyEntity extends AbstractEntity {
     @Column(length = 32)
     private StrategyParamStatus status;
 
-    private BigDecimal tier1Drawdown;
-
-    private BigDecimal tier2Drawdown;
-
-    private BigDecimal tier3Drawdown;
-
-    private BigDecimal tier4Drawdown;
-
-    private BigDecimal tier1Ratio;
-
-    private BigDecimal tier2Ratio;
-
-    private BigDecimal tier3Ratio;
-
-    private BigDecimal tier4Ratio;
-
-    private BigDecimal weeklyCoolDownThreshold;
-
+    /** 移动止盈回落幅度:从持有期高点回落 n×本阈值触发卖 holdingShares×(n/4)。 */
     private BigDecimal stopLossPullbackPercent;
-
-    private Instant tier1AddedAt;
-
-    private Instant tier2AddedAt;
-
-    private Instant tier3AddedAt;
-
-    private Instant tier4AddedAt;
 }

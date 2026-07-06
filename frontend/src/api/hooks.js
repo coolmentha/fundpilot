@@ -71,13 +71,6 @@ export function useActiveStrategy(fundId) {
         enabled: !!fundId,
     });
 }
-export function useBacktests(strategyId) {
-    return useQuery({
-        queryKey: ['backtests', strategyId],
-        queryFn: () => get(`/api/strategies/${strategyId}/backtests`),
-        enabled: !!strategyId,
-    });
-}
 const invalidateStrategies = (fundId) => {
     const qc = useQueryClient();
     return () => {
@@ -103,11 +96,44 @@ export function useStrategyAction(fundId) {
         onSuccess,
     });
 }
-/** 自动寻优(issue #30):从默认基准网格搜索最优参数,样本外验证通过则落库草稿+calibrate。 */
-export function useOptimizeStrategy(fundId) {
-    const onSuccess = invalidateStrategies(fundId);
+
+// ===== 定投计划 =====
+export function useDcaPlans(fundId) {
+    return useQuery({
+        queryKey: ['dca-plans', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/dca-plans`),
+        enabled: !!fundId,
+    });
+}
+export function useActiveDcaPlan(fundId) {
+    return useQuery({
+        queryKey: ['dca-active', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/dca-plans/active`),
+        enabled: !!fundId,
+    });
+}
+const invalidateDcaPlans = (fundId) => {
+    const qc = useQueryClient();
+    return () => {
+        qc.invalidateQueries({queryKey: ['dca-plans', fundId]});
+        qc.invalidateQueries({queryKey: ['dca-active', fundId]});
+    };
+};
+export function useCreateDcaPlan(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
+    return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/dca-plans`, body), onSuccess});
+}
+export function useUpdateDcaPlan(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
     return useMutation({
-        mutationFn: () => post(`/api/funds/${fundId}/strategies/optimize`),
+        mutationFn: ({id, body}) => put(`/api/dca-plans/${id}`, body),
+        onSuccess,
+    });
+}
+export function useDcaPlanAction(fundId) {
+    const onSuccess = invalidateDcaPlans(fundId);
+    return useMutation({
+        mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
         onSuccess,
     });
 }
@@ -152,6 +178,13 @@ export function useFundTransactions(fundId) {
         enabled: !!fundId,
     });
 }
+export function useFundFeeRates(fundId) {
+    return useQuery({
+        queryKey: ['fund-fee-rates', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/fee-rates`),
+        enabled: !!fundId,
+    });
+}
 export function useCancelTransaction() {
     const qc = useQueryClient();
     return useMutation({
@@ -188,7 +221,12 @@ export function useUpdateUserConfig() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => put('/api/user-config', body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['user-config']}),
+        // 配置更新后既刷配置页,也强制失效指数行情查询——后端已发事件即时刷缓存,
+        // 前端必须重取才能立刻看到新关注指数,否则要等下一轮 5s 轮询。
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['user-config']});
+            qc.invalidateQueries({queryKey: ['market', 'indices']});
+        },
     });
 }
 
@@ -214,5 +252,76 @@ export function useAdminAction() {
             return post(path);
         },
         onSuccess: () => qc.invalidateQueries(),
+    });
+}
+
+// ===== 行情实时(行情工作台) =====
+// 前端高频轮询后端内存缓存,不直接击穿到东方财富。
+// 交易时段内刷新;react-query refetchInterval 常驻轮询,非交易时段数据不变也无副作用。
+
+/** 用户关注指数的实时行情,5 秒轮询。 */
+export function useRealtimeIndices() {
+    return useQuery({
+        queryKey: ['market', 'indices'],
+        queryFn: () => get('/api/market/indices/realtime'),
+        refetchInterval: 5_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 批量基金盘中估值,10 秒轮询。codes 为空时不启用。 */
+export function useFundEstimates(codes) {
+    const codeStr = (codes || []).filter(Boolean).join(',');
+    return useQuery({
+        queryKey: ['market', 'estimates', codeStr],
+        queryFn: () => get(`/api/market/funds/estimates?codes=${encodeURIComponent(codeStr)}`),
+        enabled: !!codeStr,
+        refetchInterval: 10_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 行业板块涨跌排行,30 秒轮询。 */
+export function useSectorPerformance() {
+    return useQuery({
+        queryKey: ['market', 'sectors'],
+        queryFn: () => get('/api/market/sectors'),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/** 北向资金净流入,30 秒轮询。 */
+export function useMoneyFlow() {
+    return useQuery({
+        queryKey: ['market', 'money-flow'],
+        queryFn: () => get('/api/market/money-flow'),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
+/**
+ * A 股交易时段是否开市(北京时间 工作日 9:30-11:30 / 13:00-15:00)。
+ * <p>仅判断周末,法定节假日(春节/国庆等)未配表 —— 节假日轮询只会多发几次请求,
+ * 后端 K 线接口有缓存兜底,代价可接受。用 UTC 计算 +8 偏移避免依赖运行环境时区。
+ */
+function isChinaMarketOpen(now = new Date()) {
+    const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const bjMin = (utcMin + 8 * 60) % 1440;
+    const bjDay = (now.getUTCDay() + Math.floor((utcMin + 8 * 60) / 1440)) % 7;
+    if (bjDay === 0 || bjDay === 6) return false; // 周末休市
+    return (bjMin >= 570 && bjMin <= 690) || (bjMin >= 780 && bjMin <= 900); // 9:30-11:30, 13:00-15:00
+}
+
+/** 基金 K 线/走势图数据。period: daily/weekly/monthly。盘中(A 股交易时段)每 30s 轮询刷新,非交易时段不轮询。 */
+export function useFundKline(fundId, period = 'daily') {
+    return useQuery({
+        queryKey: ['funds', fundId, 'kline', period],
+        queryFn: () => get(`/api/funds/${fundId}/kline?period=${period}`),
+        enabled: !!fundId,
+        // 函数式 refetchInterval:每次轮询后重新求值。交易时段 30s 刷一次,过 15:00 自动停。
+        // react-query structuralSharing 保证数据不变时引用相等,KlineChart effect 不触发、图表不重绘。
+        refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
     });
 }

@@ -1,13 +1,14 @@
 import {Card, Descriptions, Skeleton, Space, Tabs, Typography, Button} from 'antd';
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined} from '@ant-design/icons';
-import {useFund} from '../api/hooks.js';
+import {useFund, useFundFeeRates} from '../api/hooks.js';
 import {money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
 import MarketTab from './FundMarketTab.jsx';
 import FundTransactionTab from './FundTransactionTab.jsx';
+import FundDcaTab from './FundDcaTab.jsx';
 
 const {Title, Text} = Typography;
 
@@ -19,6 +20,7 @@ export default function FundDetailPage() {
     const {fundId} = useParams();
     const id = Number(fundId);
     const {data: fund, isLoading} = useFund(id);
+    const {data: feeRates} = useFundFeeRates(id);
 
     if (isLoading) return <Card><Skeleton active paragraph={{rows: 6}}/></Card>;
     if (!fund) return <Card><Title level={4}>基金不存在</Title></Card>;
@@ -27,7 +29,8 @@ export default function FundDetailPage() {
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
         {key: 'signal', label: '交易信号', children: <SignalTab fundId={id}/>},
-        {key: 'market', label: '行情指标', children: <MarketTab fundId={id}/>},
+        {key: 'market', label: '行情指标', children: <MarketTab fundId={id} fundSubType={fund.fundSubType}/>},
+        {key: 'dca', label: '定投计划', children: <FundDcaTab fundId={id}/>},
     ];
 
     return (
@@ -47,9 +50,6 @@ export default function FundDetailPage() {
                         {fund.costPerShare === null || fund.costPerShare === undefined ? '-' : money(fund.costPerShare)}
                     </span>
                 </Descriptions.Item>
-                <Descriptions.Item label="计划仓位">
-                    <span className="num-cell">{money(fund.plannedTotalAmount)}</span>
-                </Descriptions.Item>
                 <Descriptions.Item label="今日涨跌">
                     <span style={{color: pnlColor(fund.dailyChangePct)}}>
                         {signedPercent(fund.dailyChangePct)}
@@ -68,6 +68,11 @@ export default function FundDetailPage() {
                     <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
+                <Descriptions.Item label="参考费率">
+                    {feeRates && feeRates.discountRate != null
+                        ? <span className="num-cell">申购 {(Number(feeRates.discountRate)*100).toFixed(2)}%</span>
+                        : <span className="muted">未爬取</span>}
+                </Descriptions.Item>
             </Descriptions>
             <Tabs defaultActiveKey="transaction" items={items}/>
         </Card>

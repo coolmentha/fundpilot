@@ -8,6 +8,7 @@
     "@ant-design/icons": "^6.2.5",
     "@tanstack/react-query": "^5.101.1",
     "antd": "^6.4.4",
+    "klinecharts": "^9.8.12",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.0"

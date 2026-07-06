@@ -1,23 +1,22 @@
 import {useState} from 'react';
-import {Alert, App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
-import {PlayCircleOutlined, PlusOutlined, ThunderboltOutlined} from '@ant-design/icons';
+import {App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
+import {PlusOutlined} from '@ant-design/icons';
 import {
     useActiveStrategy,
-    useBacktests,
     useCreateStrategy,
-    useOptimizeStrategy,
     useStrategies,
     useStrategyAction,
     useUpdateStrategy,
 } from '../api/hooks.js';
-import {percent, text} from '../constants.js';
+import {percent} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyFormModal from './StrategyFormModal.jsx';
 
 const {Text} = Typography;
 
 /**
- * 基金详情 · 策略 tab。逻辑迁移自 StrategiesPage，去掉外壳 Card 与返回链接（由父 Tabs 承载）。
+ * 基金详情 · 策略 tab。金字塔退场后只管理移动止盈参数(stopLossPullbackPercent)。
+ * 回测/寻优/校准已移除——移动止盈阈值无需回测验证,直接新建→激活即可生效。
  */
 export default function StrategyTab({fundId}) {
     const {message} = App.useApp();
@@ -26,12 +25,9 @@ export default function StrategyTab({fundId}) {
     const createStrategy = useCreateStrategy(fundId);
     const updateStrategy = useUpdateStrategy(fundId);
     const strategyAction = useStrategyAction(fundId);
-    const optimizeStrategy = useOptimizeStrategy(fundId);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [backtestStrategyId, setBacktestStrategyId] = useState(null);
-    const {data: backtests} = useBacktests(backtestStrategyId);
 
     const onOk = async (values) => {
         if (editing) {
@@ -39,7 +35,7 @@ export default function StrategyTab({fundId}) {
             message.success('策略参数已更新');
         } else {
             await createStrategy.mutateAsync(values);
-            message.success('策略已新建（待校准）');
+            message.success('策略已新建（待激活）');
         }
         setModalOpen(false);
     };
@@ -47,32 +43,16 @@ export default function StrategyTab({fundId}) {
         await strategyAction.mutateAsync({id: strategyId, action});
         message.success(`操作完成：${action}`);
     };
-    const onOptimize = async () => {
-        const {id} = await optimizeStrategy.mutateAsync();
-        // 寻优完成(不承诺"已通过"——落库走全窗口 calibrate,可能 CALIBRATION_FAILED,见 ADR-0007)
-        message.success('寻优完成');
-        // 自动展开新策略回测历史,让用户立即看到全窗口回测结果
-        setBacktestStrategyId(id);
-    };
 
-    const tierColumns = [
-        {title: '状态', dataIndex: 'status', width: 100, render: (v) => <StatusTag value={v}/>},
-        {title: '一档', width: 100, render: (_, r) => `${percent(r.tier1Drawdown)} / ${percent(r.tier1Ratio)}`},
-        {title: '二档', width: 100, render: (_, r) => `${percent(r.tier2Drawdown)} / ${percent(r.tier2Ratio)}`},
-        {title: '三档', width: 100, render: (_, r) => `${percent(r.tier3Drawdown)} / ${percent(r.tier3Ratio)}`},
-        {title: '四档', width: 100, render: (_, r) => `${percent(r.tier4Drawdown)} / ${percent(r.tier4Ratio)}`},
-        {title: '周冷静', dataIndex: 'weeklyCoolDownThreshold', width: 90, render: percent},
-        {title: '止盈回落', dataIndex: 'stopLossPullbackPercent', width: 90, render: percent},
+    const columns = [
+        {title: '状态', dataIndex: 'status', width: 140, render: (v) => <StatusTag value={v}/>},
+        {title: '止盈回落', dataIndex: 'stopLossPullbackPercent', width: 140, render: percent},
         {
-            title: '操作', width: 280, render: (_, r) => (
+            title: '操作', width: 240, render: (_, r) => (
                 <Space wrap size="small">
-                    {(r.status === 'PENDING_CALIBRATION' || r.status === 'CALIBRATION_FAILED') &&
+                    {r.status !== 'EFFECTIVE' &&
                         <Button size="small" onClick={() => { setEditing(r); setModalOpen(true); }}>编辑</Button>}
-                    {(r.status === 'PENDING_CALIBRATION' || r.status === 'CALIBRATION_FAILED') &&
-                        <Popconfirm title="校准并自动回测？" onConfirm={() => doAction(r.id, 'calibrate')}>
-                            <Button size="small" type="primary">校准</Button>
-                        </Popconfirm>}
-                    {r.status === 'CALIBRATED' &&
+                    {r.status !== 'EFFECTIVE' &&
                         <Popconfirm title="激活此策略？" onConfirm={() => doAction(r.id, 'activate')}>
                             <Button size="small" type="primary">激活</Button>
                         </Popconfirm>}
@@ -80,20 +60,9 @@ export default function StrategyTab({fundId}) {
                         <Popconfirm title="停用此策略？" onConfirm={() => doAction(r.id, 'retire')}>
                             <Button size="small">停用</Button>
                         </Popconfirm>}
-                    <Button size="small" icon={<PlayCircleOutlined/>}
-                            onClick={() => setBacktestStrategyId(r.id)}>回测</Button>
                 </Space>
             ),
         },
-    ];
-
-    const backtestColumns = [
-        {title: '通过', dataIndex: 'passed', width: 80, render: (v) => <StatusTag value={v ? 'PASSED' : 'FAILED'}/>},
-        {title: '策略收益', dataIndex: 'strategyReturn', width: 110, align: 'right', render: percent},
-        {title: '策略回撤', dataIndex: 'strategyMaxDrawdown', width: 110, align: 'right', render: percent},
-        {title: '沪深300收益', dataIndex: 'benchmarkHs300Return', width: 120, align: 'right', render: percent},
-        {title: '全仓收益', dataIndex: 'benchmarkAllInReturn', width: 110, align: 'right', render: percent},
-        {title: '定投收益', dataIndex: 'benchmarkDcaReturn', width: 110, align: 'right', render: percent},
     ];
 
     return (
@@ -102,32 +71,16 @@ export default function StrategyTab({fundId}) {
                 <Card className="data-card" size="small" title="当前生效策略">
                     <Space wrap>
                         <StatusTag value={active.status}/>
-                        <Text>一档 {percent(active.tier1Drawdown)}</Text>
-                        <Text>二档 {percent(active.tier2Drawdown)}</Text>
-                        <Text>三档 {percent(active.tier3Drawdown)}</Text>
-                        <Text>四档 {percent(active.tier4Drawdown)}</Text>
+                        <Text>止盈回落 {percent(active.stopLossPullbackPercent)}</Text>
                     </Space>
                 </Card>
             )}
-            <div style={{display: 'flex', justifyContent: 'flex-end', gap: 8}}>
-                <Popconfirm title="自动网格搜索最优参数？可能耗时数秒"
-                            onConfirm={onOptimize}>
-                    <Button icon={<ThunderboltOutlined/>} loading={optimizeStrategy.isPending}>自动寻优</Button>
-                </Popconfirm>
+            <div style={{display: 'flex', justifyContent: 'flex-end'}}>
                 <Button type="primary" icon={<PlusOutlined/>}
                         onClick={() => { setEditing(null); setModalOpen(true); }}>新建策略</Button>
             </div>
             <Table rowKey="id" size="small" loading={isLoading} dataSource={strategies}
-                   columns={tierColumns} pagination={false} scroll={{x: 1100}}/>
-            {backtestStrategyId && (
-                <Card title={`回测历史 #${backtestStrategyId}`} extra={
-                    <Button size="small" onClick={() => setBacktestStrategyId(null)}>关闭</Button>}>
-                    <Alert type="info" showIcon style={{marginBottom: 12}}
-                           message="历史表现不代表未来收益,样本外验证降低但无法消除过拟合风险"/>
-                    <Table rowKey="id" size="small" dataSource={backtests} columns={backtestColumns}
-                           pagination={false} scroll={{x: 800}}/>
-                </Card>
-            )}
+                   columns={columns} pagination={false}/>
             <StrategyFormModal open={modalOpen} editing={editing} onOk={onOk}
                                onCancel={() => setModalOpen(false)}
                                confirmLoading={createStrategy.isPending || updateStrategy.isPending}/>

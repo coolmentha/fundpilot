@@ -9,37 +9,29 @@ import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundStrategyActivationRepository;
 import com.fundpilot.backend.strategy.controller.FundStrategyView;
-import com.fundpilot.backend.strategy.controller.StrategyBacktestView;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
-import com.fundpilot.backend.strategy.entity.StrategyBacktestEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
-import com.fundpilot.backend.strategy.repository.StrategyBacktestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * 策略参数配置服务(issue #10):CRUD + 状态机管理。
+ * 策略参数配置服务:CRUD + 状态机管理。
  *
- * <h3>状态机</h3>
+ * <p>金字塔加仓退场 + 回测/寻优移除后,状态机简化为:
  * <pre>
- * PENDING_CALIBRATION --calibrate(回测 passed=true)--> CALIBRATED --activate--> EFFECTIVE
- *        |  ^                                              |
- *        |  +--updateDraft(改参数后回退)---------------------+
+ * PENDING_CALIBRATION --activate--> EFFECTIVE
  *        |
- *        +--calibrate(passed=false)--> CALIBRATION_FAILED --calibrate--> (重测, 通过则 CALIBRATED)
- *                                            |
- *                                            +--updateDraft(改参数后回退 PENDING_CALIBRATION)
+ *        +--updateDraft(改参数,任意非 EFFECTIVE 态可改)
  * </pre>
- * <p>语义:PENDING_CALIBRATION=待校准(参数可改),CALIBRATION_FAILED=未通过(回测不达标,参数可改重测),
- * CALIBRATED=已通过(回测达标,可激活),EFFECTIVE=已生效。
+ * 不再有 calibrate/CALIBRATED/CALIBRATION_FAILED 流转——回测本身是金字塔寻优配套,金字塔没了回测无意义。
+ * PENDING_CALIBRATION 作为"草稿"态(枚举名保留供存量数据兼容),createDraft 后可直接 activate 生效。
  * 同基金同时最多一份 EFFECTIVE(数据库 {@code uq_fund_strategy_effective} 兜底)。
- * activate 新版本时旧 EFFECTIVE 自动回退 CALIBRATED;CLEARED→PENDING_HOLDING 时全员回退 PENDING_CALIBRATION。
+ * activate 新版本时旧 EFFECTIVE 自动回退 PENDING_CALIBRATION;CLEARED→PENDING_HOLDING 时全员回退 PENDING_CALIBRATION。
  */
 @Service
 @RequiredArgsConstructor
@@ -47,8 +39,6 @@ public class StrategyConfigService {
 
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
-    private final StrategyBacktestService strategyBacktestService;
-    private final StrategyBacktestRepository strategyBacktestRepository;
     private final FundStrategyActivationRepository fundStrategyActivationRepository;
 
     /**
@@ -66,22 +56,16 @@ public class StrategyConfigService {
     }
 
     /**
-     * 更新草稿参数——仅 PENDING_CALIBRATION / CALIBRATION_FAILED 可改,否则抛 {@link IllegalStateTransitionException}。
-     * CALIBRATION_FAILED 改参数后回退 PENDING_CALIBRATION(旧回测基于旧参数,已失效)。
+     * 更新草稿参数——仅 PENDING_CALIBRATION 可改(CALIBRATED/CALIBRATION_FAILED 为存量兼容枚举,按 PENDING 对待),
+     * EFFECTIVE 不可改(需先 retire)。否则抛 {@link IllegalStateTransitionException}。
      */
     @Transactional
     public void updateDraft(Long strategyId, StrategyConfigRequest request) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
-        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION
-                && strategy.getStatus() != StrategyParamStatus.CALIBRATION_FAILED) {
-            throw new IllegalStateTransitionException(
-                    strategy.getStatus().name(), "待校准/未通过(可改参数)");
+        if (strategy.getStatus() == StrategyParamStatus.EFFECTIVE) {
+            throw new IllegalStateTransitionException(strategy.getStatus().name(), "草稿(非生效态,可改参数)");
         }
         applyRequest(strategy, request);
-        // 未通过态改参数→回退待校准,旧回测失效,需重新校准
-        if (strategy.getStatus() == StrategyParamStatus.CALIBRATION_FAILED) {
-            strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
-        }
         fundStrategyRepository.save(strategy);
     }
 
@@ -113,63 +97,22 @@ public class StrategyConfigService {
         return findActive(fundId).map(FundStrategyView::from);
     }
 
-    /** 查某策略的历史回测列表(倒序)。 */
-    @Transactional(readOnly = true)
-    public List<StrategyBacktestView> listBacktests(Long strategyId) {
-        return strategyBacktestRepository.findByFundStrategyEntity_IdOrderByCreatedDateDesc(strategyId)
-                .stream().map(StrategyBacktestView::from).toList();
-    }
-
     /**
-     * 校准:PENDING_CALIBRATION / CALIBRATION_FAILED 上跑过去一年回测(基金成立不满一年自动降级起始日),
-     * 落 {@link StrategyBacktestEntity};回测通过(passed=true)推进到 CALIBRATED(已通过),未通过则置 CALIBRATION_FAILED(未通过)。
-     * 非 PENDING_CALIBRATION / CALIBRATION_FAILED 抛 {@link IllegalStateTransitionException}。
-     */
-    @Transactional
-    public void calibrate(Long strategyId) {
-        FundStrategyEntity strategy = requireStrategy(strategyId);
-        if (strategy.getStatus() != StrategyParamStatus.PENDING_CALIBRATION
-                && strategy.getStatus() != StrategyParamStatus.CALIBRATION_FAILED) {
-            throw new IllegalStateTransitionException(strategy.getStatus().name(), "待校准/未通过");
-        }
-        // 固定窗口「过去一年」,#11 实现内部对基金成立不满一年自动降级起始日期
-        Instant end = Instant.now();
-        Instant start = end.minus(BacktestWindow.BACKTEST_WINDOW_DAYS, ChronoUnit.DAYS);
-        StrategyBacktestEntity backtest = strategyBacktestService.run(strategyId, new BacktestWindow(start, end));
-        // 通过→已通过(可激活);未通过→未通过(可编辑改参数后重测)
-        strategy.setStatus(backtest.isPassed()
-                ? StrategyParamStatus.CALIBRATED
-                : StrategyParamStatus.CALIBRATION_FAILED);
-        fundStrategyRepository.save(strategy);
-    }
-
-    /**
-     * 查某策略版本最近一次回测结果。
-     */
-    @Transactional(readOnly = true)
-    public Optional<StrategyBacktestEntity> getBacktestResult(Long strategyId) {
-        return strategyBacktestRepository.findTopByFundStrategyEntity_IdOrderByCreatedDateDesc(strategyId);
-    }
-
-    /**
-     * 激活:CALIBRATED → EFFECTIVE。
-     * <p>校验该版本存在 {@code passed=true} 回测,否则抛 {@link BusinessException}(NO_VALID_BACKTEST)。
-     * 同基金旧 EFFECTIVE 自动回退 CALIBRATED;写一行激活表并回填上一任 deactivatedAt。
+     * 激活:PENDING_CALIBRATION → EFFECTIVE。
+     * <p>金字塔退场后不再要求回测校验——移动止盈阈值无需回测验证。
+     * 同基金旧 EFFECTIVE 自动回退 PENDING_CALIBRATION;写一行激活表并回填上一任 deactivatedAt。
      */
     @Transactional
     public void activate(Long strategyId) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
-        if (strategy.getStatus() != StrategyParamStatus.CALIBRATED) {
-            throw new IllegalStateTransitionException(strategy.getStatus().name(), "EFFECTIVE");
-        }
-        if (!strategyBacktestRepository.existsByFundStrategyEntity_IdAndPassedTrue(strategyId)) {
-            throw new BusinessException(ErrorCode.NO_VALID_BACKTEST, "策略 " + strategyId + " 无 passed=true 的回测,不可激活");
+        if (strategy.getStatus() == StrategyParamStatus.EFFECTIVE) {
+            return; // 已生效,幂等
         }
         // 回退同基金旧 EFFECTIVE
         Long fundId = strategy.getFundEntity().getId();
         fundStrategyRepository.findByFundEntity_IdAndStatus(fundId, StrategyParamStatus.EFFECTIVE)
                 .ifPresent(old -> {
-                    old.setStatus(StrategyParamStatus.CALIBRATED);
+                    old.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
                     fundStrategyRepository.save(old);
                     // 回填旧任期 deactivatedAt
                     fundStrategyActivationRepository
@@ -190,16 +133,16 @@ public class StrategyConfigService {
     }
 
     /**
-     * 主动停用:EFFECTIVE → CALIBRATED,回填激活表 deactivatedAt。
+     * 主动停用:EFFECTIVE → PENDING_CALIBRATION,回填激活表 deactivatedAt。
      * 非 EFFECTIVE 状态抛 {@link IllegalStateTransitionException}。
      */
     @Transactional
     public void retire(Long strategyId) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
         if (strategy.getStatus() != StrategyParamStatus.EFFECTIVE) {
-            throw new IllegalStateTransitionException(strategy.getStatus().name(), "CALIBRATED(停用)");
+            throw new IllegalStateTransitionException(strategy.getStatus().name(), "PENDING_CALIBRATION(停用)");
         }
-        strategy.setStatus(StrategyParamStatus.CALIBRATED);
+        strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
         fundStrategyRepository.save(strategy);
         fundStrategyActivationRepository
                 .findByFundStrategyEntity_IdAndDeactivatedAtIsNull(strategyId)
@@ -212,7 +155,6 @@ public class StrategyConfigService {
     /**
      * 清仓分水岭(CONTEXT.md):FundEntity.status 从 CLEARED → PENDING_HOLDING 时,
      * 该基金所有策略版本统一回退 PENDING_CALIBRATION,激活表所有未停用任期 deactivatedAt 回填。
-     * <p>清仓是分水岭,旧校准和旧回测都不可信。
      */
     @Transactional
     public void onFundClearedToPendingHolding(Long fundId) {
@@ -236,15 +178,6 @@ public class StrategyConfigService {
     }
 
     private void applyRequest(FundStrategyEntity strategy, StrategyConfigRequest request) {
-        strategy.setTier1Drawdown(request.tier1Drawdown());
-        strategy.setTier2Drawdown(request.tier2Drawdown());
-        strategy.setTier3Drawdown(request.tier3Drawdown());
-        strategy.setTier4Drawdown(request.tier4Drawdown());
-        strategy.setTier1Ratio(request.tier1Ratio());
-        strategy.setTier2Ratio(request.tier2Ratio());
-        strategy.setTier3Ratio(request.tier3Ratio());
-        strategy.setTier4Ratio(request.tier4Ratio());
-        strategy.setWeeklyCoolDownThreshold(request.weeklyCoolDownThreshold());
         strategy.setStopLossPullbackPercent(request.stopLossPullbackPercent());
     }
 }

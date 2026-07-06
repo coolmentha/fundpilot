@@ -31,8 +31,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * SignalOperationService 集成测试(issue #14):@SpringBootTest + 真实 PostgreSQL,
- * 验证 5 类信号确认分派 + 写 FundTransaction + 推进 tierNAddedAt/FundStatus。
- * <p>用 @SpringBootTest 而非 @DataJpaTest:项目约定(@DataJpaTest 关 Flyway 导致 validate 失败,见 AbstractIntegrationTest)。
+ * 验证信号确认分派 + 写 FundTransaction + 推进 FundStatus。
+ * <p>金字塔加仓退场后:无 tier 清空;SELL TRAILING_STOP 持仓归零→CLEARED;SELL LOGIC_BROKEN 一次清空→CLEARED。
+ * BUILD/ADD 仍兼容处理(存量 SignalLog),只写交易不再推进 tierNAddedAt。
  */
 @Transactional
 class SignalOperationServiceTest extends AbstractIntegrationTest {
@@ -53,20 +54,12 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
         fund.setStatus(FundStatus.PENDING_HOLDING);
-        fund.setPlannedTotalAmount(new BigDecimal("100000"));
         entityManager.persist(fund);
 
         strategy = new FundStrategyEntity();
         strategy.setFundEntity(fund);
         strategy.setStatus(StrategyParamStatus.EFFECTIVE);
-        strategy.setTier1Drawdown(new BigDecimal("-0.08"));
-        strategy.setTier2Drawdown(new BigDecimal("-0.16"));
-        strategy.setTier3Drawdown(new BigDecimal("-0.25"));
-        strategy.setTier4Drawdown(new BigDecimal("-0.35"));
-        strategy.setTier1Ratio(new BigDecimal("0.30"));
-        strategy.setTier2Ratio(new BigDecimal("0.30"));
-        strategy.setTier3Ratio(new BigDecimal("0.20"));
-        strategy.setTier4Ratio(new BigDecimal("0.20"));
+        strategy.setStopLossPullbackPercent(new BigDecimal("0.08"));
         entityManager.persist(strategy);
     }
 
@@ -105,27 +98,22 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void confirmOperation_ADD推进对应档位tierNAddedAt() {
+    void confirmOperation_ADD写INCREASE交易_不再推进档位() {
         fund.setStatus(FundStatus.HOLDING);
-        strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
         SignalLogEntity signal = persistSignal(SignalType.ADD, 2, SignalReason.ADD);
         entityManager.flush();
 
-        service.confirmOperation(signal.getId(),
+        FundTransactionEntity tx = service.confirmOperation(signal.getId(),
                 new ConfirmOperationRequest(signal.getId(), new BigDecimal("3000"), null));
 
-        entityManager.flush();
-        entityManager.clear();
-        FundStrategyEntity reloaded = entityManager.find(FundStrategyEntity.class, strategy.getId());
-        assertThat(reloaded.getTier1AddedAt()).isNotNull(); // tier1 保留
-        assertThat(reloaded.getTier2AddedAt()).isNotNull(); // tier2 新写入
+        // ADD 存量兼容:只写 INCREASE 交易,不再推进 tierNAddedAt(金字塔退场)
+        assertThat(tx.getSource()).isEqualTo(FundTransactionSource.INCREASE);
+        assertThat(tx.getAmount()).isEqualByComparingTo("3000");
     }
 
     @Test
-    void confirmOperation_TRAILING_STOP清对应档位且非第四档不改变FundStatus() {
+    void confirmOperation_TRAILING_STOP写DECREASE交易() {
         fund.setStatus(FundStatus.HOLDING);
-        strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
-        strategy.setTier2AddedAt(Instant.parse("2026-06-10T00:00:00Z"));
         SignalLogEntity signal = persistSignal(SignalType.SELL, 2, SignalReason.TRAILING_STOP);
         entityManager.flush();
 
@@ -136,22 +124,11 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         assertThat(tx.getShares()).isEqualByComparingTo("500");
         assertThat(tx.getAmount()).isNull();
         assertThat(tx.getNav()).isNull();
-
-        entityManager.flush();
-        entityManager.clear();
-        FundStrategyEntity reloaded = entityManager.find(FundStrategyEntity.class, strategy.getId());
-        assertThat(reloaded.getTier1AddedAt()).isNotNull(); // tier1 保留
-        assertThat(reloaded.getTier2AddedAt()).isNull();    // tier2 已清
-        FundEntity reloadedFund = entityManager.find(FundEntity.class, fund.getId());
-        assertThat(reloadedFund.getStatus()).isEqualTo(FundStatus.HOLDING); // 未清空
     }
 
     @Test
-    void confirmOperation_LOGIC_BROKEN一次清空全部档位并CLEARED() {
+    void confirmOperation_LOGIC_BROKEN一次清空并CLEARED() {
         fund.setStatus(FundStatus.HOLDING);
-        strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
-        strategy.setTier2AddedAt(Instant.parse("2026-06-10T00:00:00Z"));
-        strategy.setTier3AddedAt(Instant.parse("2026-06-15T00:00:00Z"));
         SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
         entityManager.flush();
 
@@ -160,30 +137,20 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
         entityManager.flush();
         entityManager.clear();
-        FundStrategyEntity reloaded = entityManager.find(FundStrategyEntity.class, strategy.getId());
-        assertThat(reloaded.getTier1AddedAt()).isNull();
-        assertThat(reloaded.getTier2AddedAt()).isNull();
-        assertThat(reloaded.getTier3AddedAt()).isNull();
         FundEntity reloadedFund = entityManager.find(FundEntity.class, fund.getId());
         assertThat(reloadedFund.getStatus()).isEqualTo(FundStatus.CLEARED);
     }
 
     @Test
-    void confirmOperation_REBALANCE不清档位不改FundStatus() {
+    void confirmOperation_不支持的SELL原因抛BusinessException() {
         fund.setStatus(FundStatus.HOLDING);
-        strategy.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
+        // REBALANCE 随再平衡机制移除,handleSell 不支持该 reason
         SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.REBALANCE);
         entityManager.flush();
 
-        service.confirmOperation(signal.getId(),
-                new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("200")));
-
-        entityManager.flush();
-        entityManager.clear();
-        FundStrategyEntity reloaded = entityManager.find(FundStrategyEntity.class, strategy.getId());
-        assertThat(reloaded.getTier1AddedAt()).isNotNull(); // 档位保留
-        FundEntity reloadedFund = entityManager.find(FundEntity.class, fund.getId());
-        assertThat(reloadedFund.getStatus()).isEqualTo(FundStatus.HOLDING); // 状态不变
+        assertThatThrownBy(() -> service.confirmOperation(signal.getId(),
+                new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("200"))))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
