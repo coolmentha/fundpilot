@@ -88,10 +88,10 @@ public class FundPnlService {
         // 估计态:dailyChangePct = fundgz.gszzl,基准是 latestNav(最新已公布净值)
         BigDecimal dailyPnlBaseNav = isEstimated ? latestNav : previousNav;
         BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
-        // 持仓市值 = 份额 × 最新净值(不做盘中估算修正)
-        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, latestNav);
-        // 总盈亏 = 份额 × (最新净值 - 成本单价),不乘涨跌幅(净值就是净值)
-        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, latestNav, costPerShare);
+        // 估算态下 latestNav 是 T-1 已公布净值,需要先推算盘中估算净值,再计算收益类字段。
+        BigDecimal pnlNav = isEstimated ? estimatedAccumulatedNav(latestNav, dailyChangePct) : latestNav;
+        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, pnlNav);
+        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, pnlNav, costPerShare);
 
         return new Pnl(dailyChangePct, isEstimated, holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
@@ -124,6 +124,14 @@ public class FundPnlService {
         return holdingShares.multiply(latestNav, MathContext.DECIMAL64);
     }
 
+    /** 盘中估算累计净值 = 最新已公布累计净值 × (1 + 今日估算涨跌幅)。 */
+    private BigDecimal estimatedAccumulatedNav(BigDecimal latestNav, BigDecimal dailyChangePct) {
+        if (latestNav == null || dailyChangePct == null) {
+            return null;
+        }
+        return latestNav.multiply(BigDecimal.ONE.add(dailyChangePct, MathContext.DECIMAL64), MathContext.DECIMAL64);
+    }
+
     /**
      * 聚合所有持仓基金的组合盈亏(issue #18 概览页盈亏 KPI)。
      * <p>遍历 HOLDING 基金,对每只调 {@link #computeForFund},收集三指标列表后调
@@ -142,9 +150,11 @@ public class FundPnlService {
             changePcts.add(pnl.dailyChangePct());
             dailyPnls.add(pnl.dailyPnl());
             totalPnls.add(pnl.totalPnl());
+            // 组合只要包含任一盘中估算基金,前端就需要整体标记为估算态。
             isEstimated = isEstimated || pnl.isEstimated();
         }
         PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        // summarize 是纯数值聚合,估算态来自服务层的三态判定,因此在这里回填。
         return new PortfolioSummary(summary.dailyPnlTotal(), summary.risingFundCount(), summary.fallingFundCount(),
                 summary.profitableFundCount(), summary.losingFundCount(), isEstimated);
     }
