@@ -4,7 +4,6 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
-import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -23,7 +22,6 @@ import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,10 +42,12 @@ import static org.mockito.Mockito.*;
 
 /**
  * SignalGenerationService 单元测试(issue #13):Mockito 纯单元测试,验证编排逻辑——
- * 遍历 EFFECTIVE 基金、snapshot 缺失降级、重跑覆盖、反弹清空写回 strategy、单只异常隔离。
+ * 遍历 EFFECTIVE 基金、snapshot 缺失降级、重跑覆盖、单只异常隔离。
  * <p>
- * DisciplineStrategyService 被 mock,聚焦"编排落库"而非"引擎决策"(引擎决策由 #12 的 30 个单测覆盖)。
+ * DisciplineStrategyService 被 mock,聚焦"编排落库"而非"引擎决策"(引擎决策由 #12 单测覆盖)。
  * FundEntity/FundStrategyEntity 用真实对象( setId 区分,避免 {@code @EqualsAndHashCode(of="id")} 误匹配)。
+ * <p>金字塔退场后 buildCapitalContext 仅查 peakNav/holdingPeakNav/holdingShares/lastBuyConfirmTime,
+ * 不再查 BUILD/ADD tier 加仓份额。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -62,7 +62,6 @@ class SignalGenerationServiceTest {
     @Mock FundPositionService fundPositionService;
     @Mock MarketIndicatorProvider marketIndicatorProvider;
     @Mock SignalLogRepository signalLogRepository;
-    @Mock UserConfigRepository userConfigRepository;
     @Mock TradingCalendarService tradingCalendarService;
     @Mock DisciplineStrategyService disciplineStrategyService;
 
@@ -72,7 +71,7 @@ class SignalGenerationServiceTest {
     void setUp() {
         service = new SignalGenerationService(fundStrategyRepository, fundRepository,
                 fundNavHistoryRepository, fundTransactionRepository, fundPositionService,
-                marketIndicatorProvider, signalLogRepository, userConfigRepository,
+                marketIndicatorProvider, signalLogRepository,
                 tradingCalendarService, disciplineStrategyService);
     }
 
@@ -82,7 +81,6 @@ class SignalGenerationServiceTest {
         fund.setId(id);
         fund.setStatus(status);
         fund.setFundCategory(FundCategory.BROAD_BASE);
-        fund.setPlannedTotalAmount(new BigDecimal("10000"));
         fund.setOpenedAt(null); // openedAt=null → 走 peakNav 分支,避免 findPeakAccumulatedNavSince
         FundStrategyEntity strategy = new FundStrategyEntity();
         strategy.setId(id); // 区分 strategy,避免 @EqualsAndHashCode(of="id") 误匹配
@@ -93,13 +91,7 @@ class SignalGenerationServiceTest {
                 .thenReturn(Optional.of(strategy));
         when(fundNavHistoryRepository.findPeakAccumulatedNav(id)).thenReturn(Optional.of(new BigDecimal("1.0")));
         when(fundPositionService.getHoldingShares(id)).thenReturn(BigDecimal.ZERO);
-        when(fundNavHistoryRepository.findTop5ByFundEntity_IdOrderByNavDateDesc(id)).thenReturn(List.of());
-        when(fundTransactionRepository.findByFundEntity_IdAndSignalLogEntity_SignalTypeAndSignalLogEntity_TriggerTierAndStatus(
-                eq(id), eq(SignalType.ADD), anyInt(), eq(FundTransactionStatus.CONFIRMED))).thenReturn(List.of());
-        when(fundTransactionRepository.findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
-                eq(id), eq(SignalType.BUILD), eq(FundTransactionStatus.CONFIRMED))).thenReturn(List.of());
-        // 285ca31 起 SignalGenerationService 调 findTopByFundEntity_IdOrderByConfirmTimeDesc 算
-        // computeLastBuyConfirmTime;返回 null 会抛 IllegalArgumentException 被外层 catch 吞,save 永不执行
+        // computeLastBuyConfirmTime 需最近一笔 CONFIRMED 交易;返回 null 会抛 IllegalArgumentException 被外层 catch 吞,save 永不执行
         FundTransactionEntity confirmTx = new FundTransactionEntity();
         confirmTx.setConfirmTime(DATE.minus(10, java.time.temporal.ChronoUnit.DAYS));
         when(fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(id)).thenReturn(confirmTx);
@@ -120,25 +112,24 @@ class SignalGenerationServiceTest {
     }
 
     @Test
-    void generateDailySignals_两只基金分别落BUILD和NONE信号() {
-        FundStrategyEntity s1 = stubFund(1L, FundStatus.PENDING_HOLDING);
+    void generateDailySignals_两只基金分别落SELL和NONE信号() {
+        FundStrategyEntity s1 = stubFund(1L, FundStatus.HOLDING);
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L, 2L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(marketIndicatorProvider.getIndicators(eq(2L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
-                .thenReturn(new SignalResult(SignalType.BUILD, null, BigDecimal.ONE, null, SignalReason.BUILD, List.of(), List.of()));
+                .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
         when(disciplineStrategyService.evaluateSignal(eq(s2.getFundEntity()), eq(s2), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
+                .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
 
         service.generateDailySignals(DATE);
 
         ArgumentCaptor<SignalLogEntity> captor = ArgumentCaptor.forClass(SignalLogEntity.class);
         verify(signalLogRepository, times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).extracting(SignalLogEntity::getSignalType)
-                .containsExactlyInAnyOrder(SignalType.BUILD, SignalType.NONE);
-        // 两只基金的 strategy 都写回(反弹清空副作用随信号生成一起落库)
+                .containsExactlyInAnyOrder(SignalType.NONE, SignalType.NONE);
+        // 两只基金的 strategy 都写回(副作用随信号生成一起落库)
         verify(fundStrategyRepository, times(2)).save(any(FundStrategyEntity.class));
     }
 
@@ -146,7 +137,6 @@ class SignalGenerationServiceTest {
     void generateDailySignals_snapshot缺失落NONE_INSUFFICIENT_MARKET_DATA() {
         stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.empty());
 
         service.generateDailySignals(DATE);
@@ -163,10 +153,9 @@ class SignalGenerationServiceTest {
     void generateDailySignals_重跑软删同日旧行再写新() {
         FundStrategyEntity s1 = stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
+                .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
         SignalLogEntity stale = new SignalLogEntity();
         when(signalLogRepository.findByFundEntity_IdAndSignalDateBetween(eq(1L), any(), any()))
                 .thenReturn(List.of(stale));
@@ -178,38 +167,16 @@ class SignalGenerationServiceTest {
     }
 
     @Test
-    void generateDailySignals_反弹清空写回strategy的tier1AddedAt() {
-        FundStrategyEntity s1 = stubFund(1L, FundStatus.HOLDING);
-        s1.setTier1AddedAt(Instant.parse("2026-06-01T00:00:00Z"));
-        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
-        when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
-        // 模拟 evaluateSignal 反弹清空副作用:清空 tier1AddedAt
-        when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
-                .thenAnswer(inv -> {
-                    s1.setTier1AddedAt(null);
-                    return SignalResult.none(SignalReason.NO_TIER_TO_SELL);
-                });
-
-        service.generateDailySignals(DATE);
-
-        ArgumentCaptor<FundStrategyEntity> captor = ArgumentCaptor.forClass(FundStrategyEntity.class);
-        verify(fundStrategyRepository).save(captor.capture());
-        assertThat(captor.getValue().getTier1AddedAt()).isNull(); // 反弹清空已随信号生成写回
-    }
-
-    @Test
     void generateDailySignals_单只基金异常不影响其他基金() {
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L, 2L));
-        when(userConfigRepository.findAll()).thenReturn(List.of());
         // fund1: snapshot 拉取抛异常
         when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE))).thenThrow(new RuntimeException("snap 拉取失败"));
         // fund2: 正常
         when(marketIndicatorProvider.getIndicators(eq(2L), eq(DATE))).thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
         when(disciplineStrategyService.evaluateSignal(eq(s2.getFundEntity()), eq(s2), any(), any(), any(), anyLong()))
-                .thenReturn(SignalResult.none(SignalReason.NO_TIER_TO_SELL));
+                .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
 
         service.generateDailySignals(DATE);
 

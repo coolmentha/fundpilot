@@ -1,8 +1,8 @@
-import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Empty} from 'antd';
+import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Empty, Skeleton} from 'antd';
 import {Link, useNavigate} from 'react-router-dom';
-import {ThunderboltOutlined, FundOutlined, WalletOutlined, PieChartOutlined,
+import {ThunderboltOutlined, FundOutlined, WalletOutlined,
     RiseOutlined, FallOutlined, SmileOutlined, FrownOutlined} from '@ant-design/icons';
-import {useFunds, usePendingSignals, useUserConfig, usePortfolioSummary} from '../api/hooks.js';
+import {useFunds, usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
 import {datetime, money, text, signedMoney, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -11,15 +11,11 @@ const {Title} = Typography;
 
 export default function DashboardPage() {
     const navigate = useNavigate();
-    const {data: funds} = useFunds();
-    const {data: pending} = usePendingSignals();
-    const {data: config} = useUserConfig();
-    const {data: summary} = usePortfolioSummary();
+    const {data: funds, isLoading: fundsLoading} = useFunds();
+    const {data: pending, isLoading: pendingLoading} = usePendingSignals();
+    const {data: summary, isLoading: summaryLoading} = usePortfolioSummary();
 
     const holdingFunds = (funds || []).filter((f) => f.status === 'HOLDING');
-    const plannedTotal = holdingFunds.reduce((s, f) => s + Number(f.plannedTotalAmount || 0), 0);
-    const capital = Number(config?.totalInvestableCapital || 0);
-    const usageRatio = capital > 0 ? plannedTotal / capital : 0;
     const pendingCount = pending?.length ?? 0;
     const dailyPnlTotal = summary?.dailyPnlTotal;
 
@@ -45,8 +41,6 @@ export default function DashboardPage() {
         {title: '代码', dataIndex: 'fundCode', width: 110},
         {title: '名称', dataIndex: 'fundName', ellipsis: true},
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '计划仓位', dataIndex: 'plannedTotalAmount', width: 140, align: 'right',
-            render: (v) => <span className="num-cell">{money(v)}</span>},
         {
             title: '', width: 90, render: (_, r) => (
                 <Link to={`/funds/${r.id}`}>详情</Link>
@@ -56,7 +50,10 @@ export default function DashboardPage() {
 
     return (
         <Space direction="vertical" size={16} className="full-width">
-            {/* KPI 概览 */}
+            {/* KPI 概览(行情工作台转向后移除总可投资金/计划仓位占比卡片) */}
+            {summaryLoading && !summary ? (
+                <Card><Skeleton active paragraph={{rows: 2}}/></Card>
+            ) : (
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
                     <Card className="kpi-card kpi-amber" onClick={() => navigate('/confirm')}
@@ -71,21 +68,8 @@ export default function DashboardPage() {
                                    value={holdingFunds.length} prefix={<FundOutlined/>}/>
                     </Card>
                 </Col>
-                <Col xs={12} md={6}>
-                    <Card className="kpi-card kpi-blue">
-                        <Statistic title={<span className="kpi-label">总可投资金</span>}
-                                   value={capital} prefix={<WalletOutlined/>}
-                                   formatter={(v) => money(v)}/>
-                    </Card>
-                </Col>
-                <Col xs={12} md={6}>
-                    <Card className="kpi-card kpi-violet">
-                        <Statistic title={<span className="kpi-label">计划仓位占比</span>}
-                                   value={usageRatio * 100} precision={1} suffix="%"
-                                   prefix={<PieChartOutlined/>}/>
-                    </Card>
-                </Col>
             </Row>
+            )}
 
             {/* 盈亏视角 KPI(issue #18 概览页) */}
             <Row gutter={[16, 16]}>
@@ -126,7 +110,7 @@ export default function DashboardPage() {
             {/* 待确认信号 */}
             <Card title={<Title level={4}>待确认操作</Title>}
                   extra={pendingCount > 0 ? <Link to="/confirm">全部 →</Link> : null}>
-                <Table rowKey="id" size="small" dataSource={pending || []} columns={pendingColumns}
+                <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pending || []} columns={pendingColumns}
                        pagination={false} scroll={{x: 760}}
                        locale={{emptyText: <EmptyState description="暂无待确认信号"/>}}/>
             </Card>
@@ -134,7 +118,7 @@ export default function DashboardPage() {
             {/* 持仓基金 */}
             <Card title={<Title level={4}>持仓基金</Title>}
                   extra={<Link to="/funds">全部基金 →</Link>}>
-                <Table rowKey="id" size="small" dataSource={holdingFunds} columns={holdingColumns}
+                <Table rowKey="id" size="small" loading={fundsLoading} dataSource={holdingFunds} columns={holdingColumns}
                        pagination={false} scroll={{x: 600}}
                        locale={{emptyText: <EmptyState description="暂无持仓基金"/>}}/>
             </Card>

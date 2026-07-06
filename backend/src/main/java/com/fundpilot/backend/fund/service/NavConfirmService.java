@@ -48,6 +48,7 @@ public class NavConfirmService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
     private final FundPositionService fundPositionService;
+    private final TransactionConfirmSupport transactionConfirmSupport;
 
     /**
      * 回填指定日期的 PENDING 交易。null 时用今天 UTC。
@@ -85,54 +86,25 @@ public class NavConfirmService {
                     log.warn("INCREASE 交易 amount 为空跳过 tx_id={}", tx.getId());
                     return false;
                 }
-                tx.setShares(tx.getAmount().divide(navValue, MATH));
             }
             case DECREASE, TRANSFER_OUT -> {
                 if (tx.getShares() == null) {
                     log.warn("DECREASE 交易 shares 为空跳过 tx_id={}", tx.getId());
                     return false;
                 }
-                tx.setAmount(tx.getShares().multiply(navValue, MATH));
             }
         }
         tx.setNav(navValue);
         tx.setConfirmTime(Instant.now());
         tx.setStatus(FundTransactionStatus.CONFIRMED);
+        // 扣手续费 + 建/消耗 lot + 更新成本单价(统一走 TransactionConfirmSupport)
+        switch (source) {
+            case INCREASE, TRANSFER_IN, INVEST -> transactionConfirmSupport.onBuyConfirmed(tx, navValue);
+            case DECREASE, TRANSFER_OUT -> transactionConfirmSupport.onSellConfirmed(tx, navValue);
+        }
         fundTransactionRepository.save(tx);
-
-        // ADR-0013:买入类交易确认后加权更新 costPerShare
-        updateCostPerShare(tx, source);
         return true;
     }
 
-    /**
-     * INCREASE/TRANSFER_IN/INVEST 确认后加权更新 FundEntity.costPerShare。
-     * 卖出类不触发。
-     */
-    private void updateCostPerShare(FundTransactionEntity tx, FundTransactionSource source) {
-        if (source != FundTransactionSource.INCREASE
-                && source != FundTransactionSource.TRANSFER_IN
-                && source != FundTransactionSource.INVEST) {
-            return;
-        }
-        Long fundId = tx.getFundEntity().getId();
-        BigDecimal totalAfter = fundPositionService.getHoldingShares(fundId);
-        BigDecimal oldShares = totalAfter.subtract(tx.getShares());
-        BigDecimal oldCostPerShare = tx.getFundEntity().getCostPerShare();
-
-        BigDecimal newCostPerShare;
-        if (oldCostPerShare == null || oldShares.signum() <= 0) {
-            newCostPerShare = tx.getAmount().divide(tx.getShares(), MATH);
-        } else {
-            BigDecimal numerator = oldCostPerShare.multiply(oldShares).add(tx.getAmount());
-            BigDecimal denominator = oldShares.add(tx.getShares());
-            newCostPerShare = numerator.divide(denominator, MATH);
-        }
-
-        FundEntity fund = tx.getFundEntity();
-        fund.setCostPerShare(newCostPerShare);
-        fundRepository.save(fund);
-        log.info("costPerShare 加权更新 fund={} oldShares={} oldCost={} newShares={} amount={} newCost={}",
-                fundId, oldShares, oldCostPerShare, tx.getShares(), tx.getAmount(), newCostPerShare);
-    }
+    // updateCostPerShare 已移至 TransactionConfirmSupport(统一扣费 + lot + 成本更新)
 }

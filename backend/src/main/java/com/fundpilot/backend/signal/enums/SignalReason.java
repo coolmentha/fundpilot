@@ -17,7 +17,8 @@ public enum SignalReason implements EnumValue {
     LOGIC_BROKEN("逻辑止损"),
     NO_TIER_TO_SELL("无可卖档位"),
     TRAILING_STOP("移动止盈"),
-    REBALANCE("再平衡减仓"),
+    /** @deprecated 行情工作台转向后再平衡机制已移除,不再产生新信号。保留枚举值供存量 SignalLog 反序列化。 */
+    @Deprecated REBALANCE("再平衡减仓"),
     HARD_CONSTRAINT_BREACH("硬约束违反"),
     MIN_HOLD_DAYS_NOT_MET("持有期不足"),
     INSUFFICIENT_MARKET_DATA("行情数据不足");

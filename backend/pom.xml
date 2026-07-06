@@ -155,6 +155,13 @@
             <artifactId>bucket4j-core</artifactId>
             <version>8.10.1</version>
         </dependency>
+        <!-- Jsoup:解析天天基金 jjfl_<code>.html 费率页 HTML(申购费率/赎回费率阶梯/销售服务费)。
+             项目内首个 HTML 解析场景,正则对多表+strike标签+|分隔结构脆弱,故引入 Jsoup。 -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.3</version>
+        </dependency>
     </dependencies>
 
     <build>

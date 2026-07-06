@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.client;
 
+import com.fundpilot.backend.fund.client.EastmoneyFundFeeClient;
 import feign.Client;
 import feign.RequestInterceptor;
 import feign.Request;
@@ -89,16 +90,66 @@ public class EastmoneyClientConfig {
     }
 
     /**
-     * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
-     * <p>降级顺序:东方财富(主,聚合 fund+push2his 两域名) → 同花顺(兜底);
-     * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
-     *
-     * @param eastmoney 东方财富数据源(主,聚合净值/字典/K线)
-     * @param thsClient 同花顺数据源(兜底)
+     * 注册 {@link EastmoneyPush2Client} 为 Spring Bean(push2.eastmoney.com 域名,实时行情)。
+     * 实时行情(指数/板块/北向资金)在第四个域名 push2(注意非 push2his 历史数据),故独立 target;
+     * 共享同一限流桶。
      */
     @Bean
-    public MarketDataSource marketDataSource(EastmoneyMarketDataSource eastmoney, ThsClient thsClient) {
-        return new MarketDataSourceChain(java.util.List.of(eastmoney, thsClient));
+    public EastmoneyPush2Client eastmoneyPush2Client(
+            @Value("${eastmoney.push2-base-url:https://push2.eastmoney.com}") String push2BaseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(EastmoneyPush2Client.class, push2BaseUrl);
+    }
+
+    /**
+     * 注册 {@link EastmoneyFundFeeClient} 为 Spring Bean(fundf10.eastmoney.com 域名,基金费率页)。
+     * 费率页在第五个域名 fundf10,故独立 target;共享同一限流桶(2 req/s)。返回 HTML 由 FundFeeHtmlParser 解析。
+     */
+    @Bean
+    public EastmoneyFundFeeClient eastmoneyFundFeeClient(
+            @Value("${eastmoney.fundf10-base-url:https://fundf10.eastmoney.com}") String fundf10BaseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(EastmoneyFundFeeClient.class, fundf10BaseUrl);
+    }
+
+    /**
+     * 注册 {@link CsindexClient} 为 Spring Bean(www.csindex.com.cn 域名,中证指数公司官方接口)。
+     * <p>借鉴 akshare {@code stock_zh_index_hist_csindex}:中证公司是 CSI 主题指数(930xxx)的发布方,
+     * 其接口不封 IP、不要求 Referer,可替代被 VPS IP 限流的 push2his 拉指数日 K。
+     * 仅加浏览器 User-Agent(实测无需 Referer/Cookie);不限流(中证公司无已知限速)。
+     */
+    @Bean
+    public CsindexClient csindexClient(
+            @Value("${csindex.base-url:https://www.csindex.com.cn}") String csindexBaseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(CsindexClient.class, csindexBaseUrl);
+    }
+
+    /**
+     * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
+     * <p>降级顺序:中证指数公司(K 线主源,覆盖 CSI + 沪市中证编制指数,绕开 push2his IP 限流)
+     * → 东方财富(净值/字典主源 + 深交所指数 K 线兜底) → 同花顺(末位兜底);
+     * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
+     * <p>csindex 仅实现指数 K 线,净值/字典抛 {@link UnsupportedOperationException},
+     * {@code MarketDataSourceChain#tryEach} 静默跳过该异常直接回退东方财富,不污染日志。
+     *
+     * @param csindex   中证指数公司数据源(K 线主源)
+     * @param eastmoney 东方财富数据源(净值/字典主源,K 线兜底)
+     * @param thsClient 同花顺数据源(末位兜底)
+     */
+    @Bean
+    public MarketDataSource marketDataSource(CsindexMarketDataSource csindex,
+                                             EastmoneyMarketDataSource eastmoney,
+                                             ThsClient thsClient) {
+        return new MarketDataSourceChain(java.util.List.of(csindex, eastmoney, thsClient));
     }
 
     private EastmoneyClientConfig() {

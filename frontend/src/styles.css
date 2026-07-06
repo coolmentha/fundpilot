@@ -274,3 +274,341 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     border-radius: 3px;
     vertical-align: middle;
 }
+
+/* ===== 行情工作台 ===== */
+.market-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.dashboard-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+.section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.section-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.section-hint {
+    font-size: 12px;
+}
+
+/* —— 指数条 —— */
+.index-ticker {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.index-ticker.empty {
+    padding: 24px;
+    justify-content: center;
+}
+
+.index-card {
+    flex: 0 0 auto;
+    min-width: 160px;
+    padding: 12px 16px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--card-accent, var(--color-border));
+    border-radius: 6px;
+    transition: border-color 0.2s;
+}
+
+.index-card.skeleton {
+    min-width: 180px;
+}
+
+.index-name {
+    font-size: 12px;
+    color: var(--color-muted);
+    margin-bottom: 4px;
+}
+
+.index-price {
+    font-family: 'Fira Code', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+    line-height: 1.2;
+}
+
+.index-change {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.index-amount {
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+/* —— 基金行情列表 —— */
+.fund-watchlist .row-holding {
+    position: relative;
+}
+
+.fund-watchlist .row-holding::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--color-warning);
+}
+
+.holding-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-warning);
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.estimate-tag {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 14px;
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    vertical-align: middle;
+}
+
+/* —— 底部双栏 —— */
+.bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.bottom-card {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 12px 16px;
+}
+
+/* —— 板块涨跌 —— */
+.sector-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sector-list.empty {
+    padding: 16px;
+    justify-content: center;
+    align-items: center;
+}
+
+.sector-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 80px 80px;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.sector-name {
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sector-bar-wrap {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.sector-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.sector-pct, .sector-flow {
+    font-family: 'Fira Code', monospace;
+    text-align: right;
+    font-size: 12px;
+}
+
+/* —— 资金流向 —— */
+.money-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.money-flow.empty {
+    padding: 16px;
+    align-items: center;
+}
+
+.flow-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+}
+
+.flow-row.primary {
+    border-bottom: 1px solid var(--color-border);
+}
+
+.flow-label {
+    font-size: 13px;
+    color: var(--color-muted);
+}
+
+.flow-value {
+    font-family: 'Fira Code', monospace;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.flow-time {
+    font-size: 11px;
+}
+
+.flow-hint {
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* —— 响应式 —— */
+@media (max-width: 1024px) {
+    .bottom-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .sector-row {
+        grid-template-columns: 70px 1fr 70px;
+    }
+    .sector-flow {
+        display: none;
+    }
+    .index-card {
+        min-width: 140px;
+    }
+}
+
+/* ===== K 线图 ===== */
+.kline-chart-wrap {
+    position: relative;
+}
+
+.kline-toolbar {
+    display: flex;
+    align: flex-start;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.kline-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kline-ma-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.kline-ma-tag {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    color: #64748B;
+    background: rgba(51, 65, 85, 0.4);
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.kline-ma-tag:hover {
+    background: rgba(71, 85, 105, 0.6);
+}
+
+.kline-ma-tag.active {
+    background: rgba(71, 85, 105, 0.5);
+    border-color: currentColor;
+    font-weight: 600;
+}
+
+.kline-benchmark {
+    font-size: 12px;
+}
+
+.kline-container {
+    width: 100%;
+    min-height: 360px;
+}
+
+.kline-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+}
+
+/* 查询失败紧凑错误态:文案 + 重试按钮,用于卡片/小组件内 */
+.query-error-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 8px;
+    font-size: 13px;
+}
+.query-error-state .ant-btn-link {
+    padding: 0;
+    height: auto;
+    font-size: 13px;
+}
+
+/* 空状态内联 CTA 链接(与 muted 文案同行) */
+.empty-cta {
+    margin-left: 8px;
+    font-size: 13px;
+}

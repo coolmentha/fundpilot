@@ -47,4 +47,13 @@ public class FundTransactionEntity extends AbstractEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "related_fund_transaction_id")
     private FundTransactionEntity relatedFundTransactionEntity;
+
+    /** 定投计划 ID(可空):定投 Job 自动生成的交易填此字段标记来源,用于幂等去重;手动交易为 null。 */
+    private Long dcaPlanId;
+
+    /** 本次交易手续费金额(买入=申购费,卖出=赎回费)。可空(历史数据 + 费率缺失降级时为 null)。 */
+    private BigDecimal fee;
+
+    /** 加权费率(fee / 金额,小数)。可空。 */
+    private BigDecimal feeRate;
 }

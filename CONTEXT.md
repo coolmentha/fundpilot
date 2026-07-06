@@ -15,105 +15,35 @@ _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 **两个不同维度**——信号描述"系统建议什么策略动作"，来源描述"账目份额怎么动"。一只基金的交易来源沿用现有五值不收敛。
 _Avoid_: BUY / SELL（语义已被 SignalType 占用，避免歧义）
 
-## 仓位结构
-
-**建仓首笔比例（BUILD_RATIO）**:
-建仓信号建议金额 = `plannedTotalAmount × 0.10`。这是框架固定纪律，不是可调参数，落代码常量。与四档加仓比例（15/20/25/30 =
-90%）构成 100% 计划总仓位的数学闭环。
-_Avoid_: 首笔比例做成 `FundStrategyEntity` 可调字段（会破坏闭环）
-
-**四档加仓比例（TierRatio）**:
-四档加仓占 `plannedTotalAmount` 的百分比，四档之和 ≤ 90%。四类基金共用同一组金字塔比例（一档 15% / 二档 20% / 三档 25% / 四档
-30%），差异化体现在回撤阈值上，不在比例上。
-_Avoid_: 固定金额（tier1~4Amount 字段已废弃）
-
-**计划仓位校验（plannedTotalAmount 校验）**:
-`plannedTotalAmount` 是该基金目标投入总额（金字塔加仓分母，纪律意图），与硬约束的"实际持仓占比上限"是两个维度。但为防止用户填一个
-根本建不了的死状态，建仓时校验 `plannedTotalAmount ≤ totalInvestableCapital × singlePositionLimit`（单只 30%、
-无关类型）。超限报错不让填。硬约束在信号生成时仍照常卡实际持仓占比——两者互补：计划仓位校验管"意图上限"，硬约束管"事实上限"。
-_Avoid_: 把 plannedTotalAmount 当硬约束本身（它是分母不是上限）；完全不校验（会让用户填了 100 万、总资金才 50 万，建仓永远被卡）
-
-## 策略寻优
-
-**寻优（Optimize）**:
-与「校准（Calibrate）」正交的动作——校准是"验证给定参数是否达标"，寻优是"从默认基准出发自动生成候选参数"。寻优产物（最优参数草稿）再走一次标准 calibrate 验证落库，形成"寻优→校准"链条，不新增状态机分支。
-_Avoid_: 自动校准（与现有 calibrate 动作重叠，混淆状态机）；参数搜索（偏实现术语）
-
-**风险调整收益（Risk-Adjusted Return）**:
-口径 = 策略收益 / 策略最大回撤（类 Calmar），既是寻优 train 集的择优标尺，也是 test 集 passed 判定的回撤维度——策略 Calmar 须 ≥ dca Calmar（接受超额回撤，但单位回撤换的收益不劣于定投）。train 侧在候选间排序选最高，test 侧与 dca 比较定通过；同源口径，择优标尺与验证标尺闭环。规避过拟合到激进参数。
-_Avoid_: 收益回撤比（偏实现术语）；纯收益率最大化（可能选出回撤极大的激进参数）；绝对回撤约束（策略回撤 ≤ dca 回撤，惩罚用合理风险换合理收益的策略，见 ADR-0010）
-
-**样本外验证（Out-of-Sample Validation）**:
-寻优防过拟合的机制。1 年回测窗口内按时间 0.7:0.3 切分——前 70%（train 集）网格搜索按风险调整收益选 top-k 候选（ADR-0011），后 30%（test 集）在 passed 候选中按 test Calmar 择优落库。无 passed 候选才算寻优失败，不落库报错。test 集从"布尔门槛"升级为"连续择优标尺"——train 单点冠军可能是噪声产物，top-k 给 test 集多个候选，降低选到过拟合参数的概率。
-_Avoid_: 前推验证（暗示滚动多窗口，本项目是单次切分）；2 年窗口（已否决，会破坏现有回测记录可比性）
-
-**寻优落库的状态分离**:
-寻优在 test 集（后 0.3 年）达标即成功，但落库走标准 calibrate（1 年全窗口回测）。两者窗口不同，可能出现"寻优成功但全窗口未通过（CALIBRATION_FAILED）"——这是职责分离的正常结果，非 bug。test 集达标说明参数有泛化能力，全窗口未通过说明这段历史整体难做，用户据此判断是否采纳。前端提示"寻优完成"不承诺"已通过"。
-（详见 ADR-0007）
-
-**寻优搜索基准**:
-以 `DefaultTierTable` 默认值为基准，独立于该基金现有策略版本。非搜索维度（4 档比例 15/20/25/30）用默认表；搜索维度从默认值出发扰动。寻优是"从出厂默认重新调"，不继承历史调参（避免传递过去的过拟合）。
-
-**寻优搜索维度**:
-3 维网格搜索——`tier1Drawdown`（回撤起点）、`tier4Drawdown`（回撤终点）、`stopLossPullbackPercent`（止盈回落）。中间两档（tier2/tier3）按默认表相对位置内插，保留 `DefaultTierTable` 结构先验。4 档加仓比例、`weeklyCoolDownThreshold` 用默认值不搜。范围以该基金 `fundCategory` 默认值为中心 ±固定 pp，每维 4 档（共 64 组，加 tier1>tier4 递增约束过滤）。
-
 ## 回撤基准
 
 **前高（peakNav）**:
-基金历史最高累计净值，是加仓档位判定的基准。**不存字段，实时派生**——`max(fund_nav_history.accumulated_nav)`，配
+基金历史最高累计净值，逻辑止损回撤判定的参考。**不存字段，实时派生**——`max(fund_nav_history.accumulated_nav)`，配
 `(fund_id, nav_date)` 索引毫秒级返回。净值修正、补录历史、job 异常都不会导致失真。
 _Avoid_: 在 `FundEntity` 上存 `peakNav` 字段（派生值落库会失真，见 ADR-0001）
 
 **持有期高点（holdingPeriodPeakNav）**:
-我建仓后该基金出现的最高累计净值，是移动止盈判定的基准。**不存字段，实时派生**——
+建仓后该基金出现的最高累计净值，是移动止盈判定的基准。**不存字段，实时派生**——
 `max(fund_nav_history.accumulated_nav) WHERE nav_date >= fund.openedAt`。`FundStatus = HOLDING` 时才有意义；
 `CLEARED → PENDING_HOLDING` 时因字段不存在，自然无需清理。
 _Avoid_: 在 `FundEntity` 上存 `holdingPeriodPeakNav` 字段（同前高，派生值落库会失真）
 
-**回撤基准的职责划分**:
-加仓档位用前高（市场便宜了多少），移动止盈用持有期高点（我赚的钱回吐了多少）。两个高点正交——前者服务买入纪律，后者服务卖出纪律。建仓信号不直接看回撤，看择时指标（60
-日新高 / 年线 / MACD）。
-_Avoid_: 加仓档位用持有期高点算（会让建仓时机决定加仓深度，破坏框架语义）
-
 ## 卖出纪律
 
 **移动止盈（Trailing Take-Profit）**:
-从 `holdingPeriodPeakNav` 回落触发的**分档减仓**
-信号。买卖镜像对称——四档加仓正序进、四档止盈倒序出（深档先卖）。最深档（四档加仓）回落最浅时先平，回落进一步扩大才平更浅档，最后一档清掉建仓 +
-一档加仓后归零，`FundStatus → CLEARED`。
-_Avoid_: 一次性全清（trailing stop 的常见做法，但与"分档加仓"的对称性破坏）
+从 `holdingPeriodPeakNav` 回落触发的**分档减仓**信号。回落 n×`stopLossPullbackPercent` 触发卖 `holdingShares × (n/4)`：
+回落 1×阈值卖 1/4、2×卖 1/2、3×卖 3/4、4×全卖。不依赖金字塔档位状态（已解耦，ADR-0015）——份额基数是当前持仓 `holdingShares`，
+回落越深卖越多。4×阈值全卖后若持仓归零，`FundStatus → CLEARED`。
+_Avoid_: 一次性全清（失去渐进止盈语义）；按金字塔各档加仓份额卖（金字塔已退场）
 
 **移动止盈触发阈值（stopLossPullbackPercent）**:
-**每档分档减仓的回落间隔**，不是单次触发阈值。档位序号 × 此值 = 该档触发所需的总回落。默认 8% 时：回落 8%/16%/24%/32%
-分别触发卖四档/三档/二档/一档+建仓。用户调一个值控制全部 4 档节奏。
-_Avoid_: "单次触发阈值"的旧解读（B 选项确认前的版本，已废弃）
-
-**分档卖出份额（A1 规则）**:
-每档触发卖出的份额 = 该档加仓时实际入账的份额，即
-`FundTransaction WHERE signalLog.signalType=ADD AND signalLog.triggerTier=N AND status=CONFIRMED` 那条交易的 `shares`
-。买卖完全对称，自动吸收用户加仓时的 override（实际买多少就卖多少）。第四档触发时还要把建仓那条 `signalLog.signalType=BUILD`
-的 `shares` 一起卖，归零进入 `CLEARED`。
-_Avoid_: 按比例卖（30%/25%/20%/15% × 当前总份额）——会和实际入账份额对不上
-
-**空档轮空（B1 规则）**:
-用户跳过的档位（`tierNAddedAt` 永远是 null）在止盈时跳过，不跨档触发更浅档。引擎从"应触发档位"往浅档找第一个 `tierNAddedAt`
-不为 null 的档；都找不到 → `signalType=NONE, reason=NO_TIER_TO_SELL`。卖出成功后 `tierNAddedAt` 清回 null，标记该档已平。
-_Avoid_: 跳档触发更浅档（节奏被打乱，用户搞不清下次触发点）
-
-**反弹清空（方案B 加仓状态机）**:
-净值反弹使档位变浅时，清空所有比当前档更深的已加标记（`tierNAddedAt` 置 null）。清空只动字段不动交易——已买入份额不变，只影响下次该档触发判定。当前回撤
-`< tier1Drawdown` 时清空全部四档标记，下轮从一档重新开始。SignalLog 的 `warnings` 里记 `TIER_CLEARED` 提示用户哪些档被清空了。
-_Avoid_: 清空动作单独产生 SignalLog 行（它是状态机自动行为不是策略建议，只在 warnings 里留痕）
-
-**反弹清空缓冲带（TIER_CLEAR_BUFFER = 0.5%）**:
-清空判定**比框架阈值浅 0.5% 才触发**——加档侧保持精确（`drawdown >= tierNDrawdown` 即加），只在清空侧加缓冲。逐档检查：若
-`drawdown < tierNDrawdown - 0.005` 则该档被"真正"脱离，清空它及更深的档。**偏离框架原文**
-（框架是精确边界清空），加缓冲为防止边界震荡导致"加-清-加"频繁抖动。详见 ADR-0003。
-_Avoid_: 两侧都加缓冲（Z2-c，会延迟加档信号）；加档侧加缓冲（Z2-b，违背"越跌越买"精神）
+`FundStrategyEntity` 上唯一可配的策略参数。回落 n×此值 = 第 n 档触发。默认 -0.08（回落 8%）：回落 8%/16%/24%/32%
+分别触发卖 1/4、1/2、3/4、全部。用户调一个值控制全部 4 档节奏。
+_Avoid_: 把阈值做成多档可配（一个值控制全档节奏更简洁）
 
 **逻辑破坏止损（Logic-Broken Stop-Loss）**:
-趋势死亡型止损，和移动止盈完全不同——不分档、一次清空。触发后 `tier1~4AddedAt` 全清，`FundStatus → CLEARED`，**突破 7 天内不赎回硬约束
-**。两类基金判定条件不同（按 `fundSubType` 分派）。
+趋势死亡型止损，和移动止盈完全不同——不分档、一次清空全部持仓。触发后 `FundStatus → CLEARED`，**突破 7 天内不赎回硬约束**
+（豁免 MIN_HOLD_DAYS）。两类基金判定条件不同（按 `fundSubType` 分派）。
 _Avoid_: 用基本面突变（基金经理变更等）判定——本期无公告数据源，等下一期接公告源再做
 
 **逻辑止损 · ETF/指数/指数增强基金判定**:
@@ -122,43 +52,35 @@ _Avoid_: 用基本面突变（基金经理变更等）判定——本期无公�
 _Avoid_: 用基金自身净值算量能——基金没有成交量
 
 **逻辑止损 · 主动/混合基金判定**:
-三个条件**同时**命中才触发：① 净值跌破年线 ② 周 MACD 绿柱扩大 ③ **单周跌幅 > weeklyCoolDownThreshold**
-。主动基金无跟踪指数、无真实成交量，用单周跌幅作"资金在撤"的代理信号。复用已有字段，不引入新数据源。
+两个条件**同时**命中才触发：① 净值跌破年线 ② 周 MACD 绿柱扩大。主动基金无跟踪指数、无真实成交量，
+原第三条件"单周跌幅 > weeklyCoolDownThreshold"随金字塔加仓移除（`weeklyCoolDownThreshold` 字段已删，V10 迁移）——
+破年线+MACD绿柱扩大已足够表达趋势死亡。
 _Avoid_: 用沪深300 量能代理（反映大盘情绪不反映个股层面）或持仓股聚合量能（数据滞后一季度，实战价值打折）
 
-**再平衡减仓（Rebalance）**:
-存量超限的被动卖出，区别于硬约束（管"主动加仓不能突破上限"）。每日 14:50 同时满足双条件才触发：① 总权益仓位 ≥ 80%（满仓）；② 基金持仓市值 > `plannedTotalAmount × 1.1`（10% 容忍缓冲）。卖出金额 = `持仓市值 - plannedTotalAmount`（超出计划的部分全卖），按最近净值反算为份额。**遵守 7 天内不赎回硬约束**（不豁免）；触发后不清档位（持仓还在）。
-_Avoid_: 用单只 30% 占比触发再平衡（单基金组合永远满 100%，每次必触）；用单类型 30% 触发再平衡（加仓硬约束和再平衡不应共享同一阈值）
-
 **SELL 信号优先级**:
-一只基金每日一行 SignalLog，SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈 > 再平衡**"顺序检查，命中即返回。
-`reason` 三值：`LOGIC_BROKEN` / `TRAILING_STOP` / `REBALANCE`。
+一只基金每日一行 SignalLog，SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈**"顺序检查，命中即返回。
+`reason` 两值：`LOGIC_BROKEN` / `TRAILING_STOP`（`REBALANCE` 已废弃，存量数据可见）。
 _Avoid_: 同日多类型 SELL 信号叠加（违反"一只基金每日一行"的唯一性约束）
 
 **7 天内不赎回硬约束（MIN_HOLD_DAYS）**:
-保护性约束，防止"刚买就卖"的短线反人性操作。起算点取每次买入的 `confirmTime` 的最大值——
-`max(openedAt, tier1AddedAt, tier2AddedAt, tier3AddedAt, tier4AddedAt)`，每次加仓都重置。判定窗口为 **5 个交易日**（不是自然日
-7 天，更贴近市场节奏）。未满窗口时移动止盈和再平衡降级为 `signalType=NONE, reason=MIN_HOLD_DAYS_NOT_MET`；逻辑止损豁免，照常出
-SELL 信号但在 `hardConstraintBreaches` 里记一条 `MIN_HOLD_DAYS_OVERRIDDEN`。手动卖出（不带 `signalLogId`）不经过
-`evaluateSignal`，不卡此约束（前端可提示但不阻止）。
-_Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起算点（加仓后的短线保护就失效了）
+保护性约束，防止"刚买就卖"的短线反人性操作。起算点取最近一次买入确认交易的 `confirmTime`（最近一笔 CONFIRMED 交易），
+每次买入都重置。判定窗口为 **5 个交易日**（不是自然日 7 天，更贴近市场节奏）。未满窗口时移动止盈降级为
+`signalType=NONE, reason=MIN_HOLD_DAYS_NOT_MET`；逻辑止损豁免，照常出 SELL 信号但在 `warnings` 里记
+`MIN_HOLD_DAYS_OVERRIDDEN`。手动卖出（不带 `signalLogId`）不经过 `evaluateSignal`，不卡此约束（前端可提示但不阻止）。
+_Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起算点（后续买入的短线保护就失效了）
 
 **交易日历（TradingCalendar）**:
 `MIN_HOLD_DAYS` 判定 5 个交易日所需的基础数据表，记录每个日期是否为 A 股交易日（含节假日剔除）。一次性灌入未来几年的日历即可（A
 股节假日规则相对固定），或定期从交易所日历同步。本期暂不做自动同步，人工维护。
 
-**单周跌幅冷静（Weekly Cooldown）**:
-加仓信号专属的强提示，看净值下跌速度。算法：取最近 5 个交易日的累计净值（含今日，但 14:50
-信号生成时今日净值未公布，实际是 [T-5, T-1] 区间），算两点跌幅 `(5天前累计净值 - 最近累计净值) / 5天前累计净值`，超过
-`weeklyCoolDownThreshold` 时在加仓信号的 `warnings` 里加 `WEEKLY_COOLDOWN` 强提示。**不阻断加仓**，用户可
-override。主动基金的逻辑止损判定也复用同一算法。
-_Avoid_: 用窗口内最大回撤（A2，会和移动止盈/档位判定语义重叠）；用单位净值 `nav`（分红除权会让跌幅"虚高"，所有回撤类计算统一用累计净值
-`accumulatedNav`）
+## 策略状态机
 
-**冷静数据不足降级**:
-新建仓基金净值历史不足 5 个交易日的，冷静判定降级为 `warnings` 里的 `INSUFFICIENT_DATA_FOR_COOLDOWN`
-提示，不阻断加仓信号生成。透明告知用户而非严苛封死。
-_Avoid_: 数据不足就完全不出加仓信号（D3，违背"建仓后即可看加仓信号"的设计）
+**策略状态机（StrategyParamStatus）**:
+金字塔退场 + 回测/寻优移除后，状态机简化为：`PENDING_CALIBRATION` --activate--> `EFFECTIVE` --retire--> `PENDING_CALIBRATION`。
+不再有 `calibrate` 动作和 `CALIBRATED`/`CALIBRATION_FAILED` 流转——回测本身是金字塔寻优配套，金字塔没了回测无意义，
+移动止盈阈值无需回测验证。`CALIBRATED`/`CALIBRATION_FAILED` 枚举值保留供存量数据兼容。同基金同时最多一份 `EFFECTIVE`
+（数据库 `uq_fund_strategy_effective` 兜底）。`CLEARED → PENDING_HOLDING` 时全员回退 `PENDING_CALIBRATION`。
+`FundStrategyEntity` 只剩 `status` + `stopLossPullbackPercent` 两个业务字段。
 
 ## 开发顺序
 
@@ -203,46 +125,6 @@ fundSubType/fundCategory/benchmarkIndexCode 一次性回填。字典落 `fund_di
 识别并缓存识别结果，搜索返回的候选自带分类，避免运行时重复识别。
 _Avoid_: 搜索框每次按键现拉东方财富字典（撞限流）；进程内缓存（多实例不一致、重启丢失）
 
-## 调节系数
-
-**调节系数表（CoefficientTable）**:
-加仓建议额度的乘数，按框架 §七 原文照抄。三维度独立打分相乘再 clamp(0.3, 1.5)。年线 3 档：年线上方且向上 = 1.0 /
-上方但向下 = 0.7 / 下方且向下 = 0.4。周 MACD 4 档：底背离 = 1.2 / 绿柱缩小 = 1.0 / 红柱缩小 = 0.9 / 绿柱扩大 = 0.6。成交量
-3 档：地量企稳 = 1.2 / 正常 = 1.0 / 放量下跌 = 0.5。最终系数 = 年线 × MACD × 成交量，clamp(0.3, 1.5)。实际加仓额 =
-基础加仓额 × 最终系数。
-_Avoid_: 自定义系数表（无理由偏离框架原文）
-
-**破位观望强提示**:
-加仓信号专属强提示，不阻断信号生成。当"年线下方且向下"（系数 0.4）**且**"放量下跌"（系数 0.5）同时命中时，`warnings` 加
-`BREAKDOWN_WATCH`："趋势破位 + 放量出逃，等恐慌释放完再加"。恢复条件：周 MACD 出现底背离，或绿柱开始缩小，任一满足即解除。
-_Avoid_: 把破位观望做成硬约束（框架明确是强提示，可 override）
-
-## 建仓信号
-
-**建仓触发条件（写死不参数化）**:
-三条件**全部**满足才出 BUILD 信号：① 价格在年线上方 ② 年线向上 ③ **今天累计净值 ≥ 最近 60 个交易日累计净值的最大值**（即"
-今天就是 60 日新高"）。第三条收紧解读为"今天创新高"，非今天创新高是过去的信号，不应在今天出建议。
-_Avoid_: 把"近 60 日创过阶段新高"解读为"过去 60 日内某天创过新高"（会延迟信号）；把建仓条件参数化（框架明确写死）
-
-## 总仓位硬约束
-
-**总可投资金（UserConfig.totalInvestableCapital）**:
-硬约束 #3（总仓位 ≤ 80%）的分母来源，用户整个账户的总可投资金额（含未入场的现金、其他基金等）。本期单用户场景下新增
-`user_config` 表，只一行，用户首次配置时手动填。非某只基金的 `plannedTotalAmount` 加总（那是单基金的纪律意图，不是账户可投资金）。
-_Avoid_: 用 `Σ plannedTotalAmount ÷ 0.8` 反推（语义不对）；本期跳过总仓位硬约束（硬约束是框架核心，不能省）
-
-## 计划仓位校验
-
-**计划总仓位校验（plannedTotalAmount 校验）**:
-建仓/编辑基金时校验 `plannedTotalAmount ≤ 总可投资金 × 单只仓位上限`，防止用户填一个根本建不了的死状态。
-单只上限 30%、无关类型（复用 `HardConstraintConfig.singlePositionLimit`，曾按 fundCategory 区分 20%/15% 已统一）。
-超限抛 `PLANNED_AMOUNT_EXCEEDS_LIMIT`；fundCategory 为 null（兜底识别后仍可能）抛 `FUND_CATEGORY_REQUIRED`
-（类型为 null 会阻塞后续默认档位查询，与 singlePositionLimit 无关——后者已无关类型）；
-`plannedTotalAmount` 为 null 不校验（更新时允许不传，仅改到超限才报错）。与硬约束互补——计划仓位校验管
-"意图上限"（建仓时防死状态），硬约束管"事实上限"（信号生成时卡实际持仓占比），两者不混淆。
-资金未配置走 `USER_CONFIG_NOT_INITIALIZED`（复用 `UserConfigService.requireTotalInvestableCapital` 单一事实源）。
-_Avoid_: 用硬约束替代计划仓位校验（硬约束在信号生成时才卡，建仓时填死状态会到信号阶段才报错，体验差）
-
 ## 行情数据缓存
 
 **表级缓存（MarketIndicatorSnapshot）**:
@@ -258,6 +140,25 @@ _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值
 **当晚净值确认（Daily Nav Confirm）**:
 让三态今日涨跌「盘后实际值」生效的机制。场外基金当日净值收盘后约 20:00 才公布（14:50 定时任务拉到的是 T-1 昨日净值）。每晚 20:00-23:00 每分钟轮询所有基金，查 fund_nav_history 最近 navDate ≠ 今天（未确认）→ fundgz 判 jzrq 是否 = 今天（轻量判定已公布）→ 是则调 pingzhongdata 拿累计净值落库。已确认跳过（天然停止条件，全部确认后空跑）。用 fundgz 判定 + pingzhongdata 落库双接口，保证落累计净值而非单位净值。
 _Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值失真）；已确认基金重复拉取（浪费请求）
+
+**K 线图（Kline Chart）**:
+行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(MarketDataFetchService 每日算 VolumeState 时顺便落库,零额外请求)渲染日 K,
+周/月 K 在日 K 上聚合(open=首日、high=max、low=min、close=末日、volume=sum)。主图蜡烛 + MA5/10/20/30(可开关),副图成交量(常驻)+ MACD(可切换)。主动/混合基金或缓存空且实时拉取失败时降级净值面积图。
+**必须读本地缓存**:push2his.eastmoney.com 对按需高频请求 IP-blocks(http 000 "Unexpected end of file"),
+图表按 view/切周期拉会触发限流;改读缓存后图表不再直连 push2his。缓存空(尚未同步)时实时拉作兜底。
+`KlineService` period→klt(101/102/103)仅兜底用;`MarketDataSourceChain` **必须 override `fetchIndexKlineWithPeriod`** 透传 klt(接口 default 会忽略 klt 降级日K)。
+
+**指数 K 线数据源(中证指数公司 csindex.com.cn)**:
+借鉴 akshare `stock_zh_index_hist_csindex`,指数日 K 主源改为中证指数公司官方接口
+`www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=...&endDate=...`(返回 OHLCV JSON,不封 IP、不要求 Referer)。
+`CsindexMarketDataSource` 置于 `MarketDataSourceChain` 链首 [csindex, eastmoney, ths]:CSI 主题指数(930xxx,如 930713 中证人工智能)
+与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。
+csindex 仅提供日 K,周/月 K 在源内聚合(`CsindexJsParser.aggregate`,语义同 KlineService)。secid "2.930713"/"1.000300" 剥前缀取裸代码调 csindex。
+深交所指数(399xxx)csindex 返空 data → 抛异常让链回退 eastmoney。csindex 不支持基金净值/字典,抛 `UnsupportedOperationException`,
+`MarketDataSourceChain.tryEach` 对该异常静默跳过(不污染日志),直接回退 eastmoney。详见 ADR-0017。
+_Avoid_: 指数 K 线仍走 push2his(VPS IP 被限流,http 000 永久失败,缓存无法填充陷入死循环);把 csindex 用于基金净值(它只发指数)
+
+_Avoid_: 图表直连 push2his(触发 IP 限流);在缓存空时直接降级净值(应先实时拉兜底);后端算指标(klinecharts 内置,前端只喂 OHLCV)
 
 ## 盈亏与涨跌
 
@@ -303,3 +204,24 @@ _Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，sig
 `initialMarketValue` ≤ 0 或 `costPerShare` ≤ 0 抛参数校验错。
 _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）；openedAt 用历史净值日期反算份额（金额是当前市值口径，
 历史净值反算会让份额与当前市值对不上——openedAt 只标时间，不影响净值反算）
+
+## 定投计划
+
+**定投计划（DCA Plan）**:
+用户配置一次、系统按周期自动买入的执行机制。**定投是自动执行,不是信号**——直接生成 `source=INVEST` 的 PENDING 交易,
+完全绕开信号引擎（SignalLog）和卖出纪律。止盈交给基金绑定的移动止盈信号独立触发,与定投解耦。
+
+`FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(DAILY·日定投 / WEEKLY·周定投 / MONTHLY·月定投) /
+dayOfWeek(1=周一..7=周日) / dayOfMonth(1-28,月定投日,封顶 28 避开月末) / status。**新建即激活**:create 直接落 EFFECTIVE
+(同基金已有 EFFECTIVE 则回退 DRAFT)。状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE,
+同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
+
+**DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
+日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
+（判定:planDom..today-1 区间全非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易（amount=计划金额,shares/nav 留空）。
+**幂等**:同日同计划已有 PENDING 交易则跳过（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndStatusAndCreatedDateBetween` 兜底防重跑）。
+
+**NavConfirmJob 时序**:14:55 定投下单(PENDING) → 20:00 DailyNavConfirmJob 拉当日净值 → 次日 03:00 NavConfirmJob 确认昨日 PENDING
+（用下单日净值算 shares）。cron 从 `0 0 21 * *` 改 `0 0 3 * *`——凌晨确认的是"之前生成的"流水,单日定投流水在 14:55 已生成,
+次日 3 点确认时净值已落地。交易日历查询统一用 UTC 0 点 Instant 表当日（对齐 `InstantDateConverter` + `TradingCalendarSyncService` 约定）。
+_Avoid_: 定投走信号引擎（信号是建议,定投是执行,语义不同）;月定投日 > 28（避开月末交易日缺失,强制顺延增加复杂度）

@@ -19,4 +19,16 @@ public interface MarketDataSource {
 
     /** 指数日 K(用于算沪深 300 基准收益/回撤 + 跟踪指数量能)。 */
     IndexKline fetchIndexKline(String indexCode, String range);
+
+    /**
+     * 指数指定周期 K 线(行情工作台 K 线图切换日/周/月用)。
+     *
+     * @param indexCode secid 格式(如 "1.000300")
+     * @param klt       K 线周期:101=日、102=周、103=月
+     * @param lmt       K 线根数上限(如 "400")
+     */
+    default IndexKline fetchIndexKlineWithPeriod(String indexCode, String klt, String lmt) {
+        // 默认实现:不支持周期的数据源降级为日 K(range 占位 "6")
+        return fetchIndexKline(indexCode, "6");
+    }
 }
