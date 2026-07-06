@@ -13,13 +13,15 @@ import java.math.BigDecimal;
  * @param fallingFundCount    下跌基金数
  * @param profitableFundCount 盈利基金数
  * @param losingFundCount     亏损基金数
+ * @param isEstimated         是否包含盘中 fundgz 估算值
  */
 public record PortfolioSummaryView(
         BigDecimal dailyPnlTotal,
         int risingFundCount,
         int fallingFundCount,
         int profitableFundCount,
-        int losingFundCount) {
+        int losingFundCount,
+        boolean isEstimated) {
 
     /** 从聚合结果映射到视图 DTO。 */
     public static PortfolioSummaryView from(PortfolioSummary summary) {
@@ -28,6 +30,7 @@ public record PortfolioSummaryView(
                 summary.risingFundCount(),
                 summary.fallingFundCount(),
                 summary.profitableFundCount(),
-                summary.losingFundCount());
+                summary.losingFundCount(),
+                summary.isEstimated());
     }
 }

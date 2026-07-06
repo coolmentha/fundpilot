@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -43,6 +44,7 @@ public class FundPnlService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
     private final MarketRealtimeCache marketRealtimeCache;
+    private final Clock clock;
 
     /**
      * 聚合单基金的涨跌与盈亏(三态,issue #38)。
@@ -72,7 +74,7 @@ public class FundPnlService {
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode());
         DailyChangeResult changeResult = DailyChangeResolver.resolve(
-                Instant.now(), todayNavConfirmed, latestNav, previousNav, estimate);
+                clock.instant(), todayNavConfirmed, latestNav, previousNav, estimate);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
 
@@ -108,7 +110,7 @@ public class FundPnlService {
         if (latestTwo.isEmpty()) {
             return false;
         }
-        Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ZonedDateTime.now(clock).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant latestDate = latestTwo.get(0).getNavDate();
         // navDate 落库为 UTC 0 点,与 today 对齐比较
         return !latestDate.isBefore(today);
@@ -134,13 +136,17 @@ public class FundPnlService {
         List<BigDecimal> changePcts = new ArrayList<>();
         List<BigDecimal> dailyPnls = new ArrayList<>();
         List<BigDecimal> totalPnls = new ArrayList<>();
+        boolean isEstimated = false;
         for (FundEntity fund : holdingFunds) {
             Pnl pnl = computeForFund(fund);
             changePcts.add(pnl.dailyChangePct());
             dailyPnls.add(pnl.dailyPnl());
             totalPnls.add(pnl.totalPnl());
+            isEstimated = isEstimated || pnl.isEstimated();
         }
-        return FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        return new PortfolioSummary(summary.dailyPnlTotal(), summary.risingFundCount(), summary.fallingFundCount(),
+                summary.profitableFundCount(), summary.losingFundCount(), isEstimated);
     }
 
     private Pnl emptyPnl() {
