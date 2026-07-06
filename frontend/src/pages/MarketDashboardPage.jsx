@@ -49,7 +49,7 @@ export default function MarketDashboardPage() {
                     </div>
                     <div className="bottom-card">
                         <div className="section-header">
-                            <h3 className="section-title">资金流向</h3>
+                            <h3 className="section-title">主力资金流向</h3>
                         </div>
                         <MoneyFlow/>
                     </div>

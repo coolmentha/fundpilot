@@ -1,21 +1,20 @@
 import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
-import {useMoneyFlow} from '../api/hooks.js';
-import {signedCompactMoney, pnlColor, datetime} from '../constants.js';
+import {useSectorPerformance} from '../api/hooks.js';
+import {signedCompactMoney, pnlColor} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
- * 资金流向:展示北向资金净流入。本期只含北向一项(全市场主力汇总接口不稳定)。
- * 板块级主力资金在 SectorPerformance 组件中随板块展示。
- * 数据 30 秒轮询(见 useMoneyFlow)。
+ * 资金流向:复用行业板块数据,按主力净流入排序展示。
+ * 左侧行业板块按涨跌幅排序,本组件提供资金视角,避免依赖已失效的北向实时净流入。
  */
 export default function MoneyFlow() {
-    const {data: flow, isLoading, isError, refetch} = useMoneyFlow();
+    const {data: sectors, isLoading, isError, refetch} = useSectorPerformance();
 
     if (isLoading) {
         return (
             <div className="money-flow">
-                <Skeleton active paragraph={{rows: 1}} title={{width: 80}}/>
+                <Skeleton active paragraph={{rows: 4}} title={{width: 80}}/>
             </div>
         );
     }
@@ -24,30 +23,36 @@ export default function MoneyFlow() {
         return <div className="money-flow empty"><QueryErrorState onRetry={refetch} description="资金流向加载失败"/></div>;
     }
 
-    if (!flow) {
+    const ranked = (sectors || [])
+        .filter((s) => s.mainforceNet !== null && s.mainforceNet !== undefined)
+        .sort((a, b) => Math.abs(Number(b.mainforceNet) || 0) - Math.abs(Number(a.mainforceNet) || 0))
+        .slice(0, 8);
+
+    if (ranked.length === 0) {
         return <div className="money-flow empty"><span className="muted">暂无资金流向数据</span></div>;
     }
 
-    const net = Number(flow.northboundNet);
-    const color = pnlColor(net);
-    const isUp = net > 0;
-    const isDown = net < 0;
-
     return (
-        <div className="money-flow" role="region" aria-label="资金流向">
-            <div className="flow-row primary">
-                <div className="flow-label">北向资金净流入</div>
-                <div className="flow-value" style={{color}}>
-                    {isUp && <ArrowUpOutlined/>}
-                    {isDown && <ArrowDownOutlined/>}
-                    <span style={{marginLeft: 4}}>{signedCompactMoney(flow.northboundNet)}</span>
-                </div>
-            </div>
-            {flow.snapshotTime && (
-                <div className="flow-time muted">数据时间: {datetime(flow.snapshotTime)}</div>
-            )}
+        <div className="money-flow" role="list" aria-label="行业主力资金流向">
+            {ranked.map((s, idx) => {
+                const net = Number(s.mainforceNet) || 0;
+                const color = pnlColor(net);
+                const isUp = net > 0;
+                const isDown = net < 0;
+                return (
+                    <div className={`flow-row ${idx === 0 ? 'primary' : ''}`} key={s.sectorCode || s.sectorName}
+                         role="listitem">
+                        <div className="flow-label">{s.sectorName || '-'}</div>
+                        <div className="flow-value" style={{color}}>
+                            {isUp && <ArrowUpOutlined/>}
+                            {isDown && <ArrowDownOutlined/>}
+                            <span style={{marginLeft: 4}}>{signedCompactMoney(s.mainforceNet)}</span>
+                        </div>
+                    </div>
+                );
+            })}
             <div className="flow-hint muted">
-                板块级主力资金见左侧「行业板块涨跌」
+                按主力净流入绝对值排序
             </div>
         </div>
     );

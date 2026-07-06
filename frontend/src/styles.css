@@ -615,7 +615,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    padding: 8px 0;
+    gap: 12px;
+    padding: 6px 0;
 }
 
 .flow-row.primary {
@@ -625,16 +626,16 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .flow-label {
     font-size: 13px;
     color: var(--color-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .flow-value {
     font-family: 'Fira Code', monospace;
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 600;
-}
-
-.flow-time {
-    font-size: 11px;
+    white-space: nowrap;
 }
 
 .flow-hint {
