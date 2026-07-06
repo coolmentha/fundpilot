@@ -2,10 +2,15 @@ import {useQuery, useMutation, useQueryClient} from '@tanstack/react-query';
 import {get, post, put, del} from './client.js';
 
 const invalidateFunds = (qc) => qc.invalidateQueries({queryKey: ['funds']});
+const realtimeQueryOptions = {
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+};
 
 // ===== 基金 =====
 export function useFunds() {
-    return useQuery({queryKey: ['funds'], queryFn: () => get('/api/funds')});
+    return useQuery({queryKey: ['funds'], queryFn: () => get('/api/funds'), ...realtimeQueryOptions});
 }
 
 export function useFund(id) {
@@ -126,7 +131,7 @@ export function usePendingSignals() {
     return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending')});
 }
 export function usePortfolioSummary() {
-    return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary')});
+    return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary'), ...realtimeQueryOptions});
 }
 export function useConfirmOperation(fundId) {
     const qc = useQueryClient();

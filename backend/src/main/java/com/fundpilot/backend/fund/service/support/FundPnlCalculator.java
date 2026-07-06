@@ -123,6 +123,6 @@ public final class FundPnlCalculator {
                 else if (sign < 0) losing++;
             }
         }
-        return new PortfolioSummary(dailyPnlTotal, rising, falling, profitable, losing);
+        return new PortfolioSummary(dailyPnlTotal, rising, falling, profitable, losing, false);
     }
 }

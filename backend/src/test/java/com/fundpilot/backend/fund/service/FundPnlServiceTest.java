@@ -10,6 +10,7 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
+import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.FundEstimateService;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +40,9 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @MockitoBean
     FundEstimateService fundEstimateService;
 
+    @MockitoBean
+    Clock clock;
+
     @Autowired FundPnlService fundPnlService;
     @Autowired FundRepository fundRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
@@ -45,6 +51,9 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         when(fundEstimateService.fetchEstimate(anyString())).thenReturn(Optional.empty());
+        when(clock.instant()).thenReturn(Instant.parse("2026-07-06T03:30:00Z"));
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.withZone(ZoneOffset.UTC)).thenReturn(clock);
         // 清理可能残留的旧数据
         fundTransactionRepository.deleteAll();
         fundNavHistoryRepository.deleteAll();
@@ -133,6 +142,25 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         assertThat(summary.fallingFundCount()).isEqualTo(1);  // 基金B 下跌
         assertThat(summary.profitableFundCount()).isEqualTo(1); // 基金A 盈利
         assertThat(summary.losingFundCount()).isEqualTo(1);    // 基金B 亏损
+    }
+
+    @Test
+    @Transactional
+    void 组合聚合_盘中估值可用_使用fundgz涨跌幅并标记估算() {
+        FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
+        navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
+        navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
+        txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
+        fund.setCostPerShare(new BigDecimal("1.80"));
+        fundRepository.save(fund);
+        when(fundEstimateService.fetchEstimate("008585")).thenReturn(Optional.of(
+                new FundEstimateSnapshot(new BigDecimal("0.0035"), "2026-07-06 11:30", "2026-07-03")));
+
+        PortfolioSummary summary = fundPnlService.computePortfolioSummary();
+
+        assertThat(summary.dailyPnlTotal()).isCloseTo(new BigDecimal("6.4869"), within(new BigDecimal("0.01")));
+        assertThat(summary.risingFundCount()).isEqualTo(1);
+        assertThat(summary.isEstimated()).isTrue();
     }
 
     private FundEntity persistHoldingFund() {
