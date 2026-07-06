@@ -106,16 +106,19 @@ public final class FundPnlCalculator {
         BigDecimal dailyPnlTotal = BigDecimal.ZERO;
         int rising = 0, falling = 0, profitable = 0, losing = 0;
         for (int i = 0; i < dailyPnls.size(); i++) {
+            // 今日盈亏合计允许单项缺失:缺失项按 0 处理,避免一只基金数据不完整拖垮组合 KPI。
             BigDecimal dailyPnl = dailyPnls.get(i);
             if (dailyPnl != null) {
                 dailyPnlTotal = dailyPnlTotal.add(dailyPnl, MATH);
             }
+            // changePcts/totalPnls 可能短于 dailyPnls;越界视作该基金该指标未知。
             BigDecimal changePct = i < dailyChangePcts.size() ? dailyChangePcts.get(i) : null;
             if (changePct != null) {
                 int sign = changePct.signum();
                 if (sign > 0) rising++;
                 else if (sign < 0) falling++;
             }
+            // 总盈亏计数独立于今日涨跌:今日上涨但整体亏损时,两个维度都要各自计数。
             BigDecimal totalPnl = i < totalPnls.size() ? totalPnls.get(i) : null;
             if (totalPnl != null) {
                 int sign = totalPnl.signum();

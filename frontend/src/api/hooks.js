@@ -14,7 +14,12 @@ export function useFunds() {
 }
 
 export function useFund(id) {
-    return useQuery({queryKey: ['funds', id], queryFn: () => get(`/api/funds/${id}`), enabled: !!id});
+    return useQuery({
+        queryKey: ['funds', id],
+        queryFn: () => get(`/api/funds/${id}`),
+        enabled: !!id,
+        ...realtimeQueryOptions,
+    });
 }
 
 /** 基金字典搜索(ADR-0005):搜索框自动补全候选列表。 */
@@ -118,6 +123,7 @@ export function useSignalsToday(fundId) {
         queryKey: ['signals-today', fundId],
         queryFn: () => get(`/api/funds/${fundId}/signals/today`),
         enabled: !!fundId,
+        ...realtimeQueryOptions,
     });
 }
 export function useSignalsRange(fundId, from, to) {
@@ -128,7 +134,7 @@ export function useSignalsRange(fundId, from, to) {
     });
 }
 export function usePendingSignals() {
-    return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending')});
+    return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending'), ...realtimeQueryOptions});
 }
 export function usePortfolioSummary() {
     return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary'), ...realtimeQueryOptions});

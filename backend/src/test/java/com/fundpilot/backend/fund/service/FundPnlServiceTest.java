@@ -161,6 +161,10 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         assertThat(summary.dailyPnlTotal()).isCloseTo(new BigDecimal("6.4869"), within(new BigDecimal("0.01")));
         assertThat(summary.risingFundCount()).isEqualTo(1);
         assertThat(summary.isEstimated()).isTrue();
+
+        FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
+        assertThat(pnl.holdingAmount()).isCloseTo(new BigDecimal("1859.8869"), within(new BigDecimal("0.01")));
+        assertThat(pnl.totalPnl()).isCloseTo(new BigDecimal("59.8869"), within(new BigDecimal("0.01")));
     }
 
     private FundEntity persistHoldingFund() {
