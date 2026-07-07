@@ -28,7 +28,15 @@ body {
 }
 
 /* ===== 布局骨架 ===== */
-.app-shell { min-height: 100vh; }
+.app-shell {
+    min-height: 100vh;
+    width: 100%;
+}
+
+.app-shell > .ant-layout {
+    min-width: 0;
+    width: 100%;
+}
 
 .app-sider {
     border-right: 1px solid var(--color-border);
@@ -64,6 +72,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    height: 64px;
+    line-height: normal;
     padding: 0 24px;
     background: rgba(15, 23, 42, 0.85);
     backdrop-filter: blur(12px);
@@ -73,21 +83,36 @@ body {
     z-index: 10;
 }
 
+.app-header > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+}
+
 .app-header .page-title {
     margin: 0;
     font-family: 'Fira Code', monospace;
     font-size: 15px;
     font-weight: 600;
+    line-height: 1.25;
 }
 
 .app-header .page-subtitle {
     color: var(--color-muted);
     font-size: 13px;
+    line-height: 1.25;
 }
 
 .app-content {
-    max-width: 1480px;
+    width: 100%;
+    min-width: 0;
     padding: 24px;
+}
+
+.app-content > * {
+    min-width: 0;
 }
 
 .full-width { width: 100%; }
@@ -130,6 +155,20 @@ body {
 
 /* ===== 通用卡片 / 表格 ===== */
 .data-card { margin-top: 16px; }
+
+.funds-page .ant-card-body {
+    overflow: hidden;
+}
+
+.funds-page .ant-table-wrapper,
+.funds-page .ant-spin-nested-loading,
+.funds-page .ant-spin-container {
+    max-width: 100%;
+}
+
+.funds-page .ant-table-cell {
+    white-space: nowrap;
+}
 
 .ant-card {
     border-color: var(--color-border);
@@ -231,6 +270,25 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     .app-content { padding: 12px 12px 80px; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi-card .ant-statistic-content { font-size: 20px; }
+    .funds-page .ant-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+    }
+    .funds-page .ant-card-head-title,
+    .funds-page .ant-card-extra {
+        width: 100%;
+        padding: 0;
+    }
+    .funds-page .ant-card-extra .ant-space {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+    .funds-page .ant-card-body {
+        padding: 12px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -280,9 +338,12 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     flex-direction: column;
     gap: 16px;
+    width: 100%;
+    min-width: 0;
 }
 
 .dashboard-section {
+    min-width: 0;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 8px;
@@ -294,6 +355,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-bottom: 12px;
 }
 
@@ -308,10 +371,61 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     font-size: 12px;
 }
 
+/* —— 组合总览 —— */
+.portfolio-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.portfolio-overview-card {
+    min-width: 0;
+    padding: 14px 16px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--overview-accent, var(--color-border));
+    border-radius: 6px;
+}
+
+.portfolio-overview-card.primary { --overview-accent: var(--color-warning); }
+.portfolio-overview-card.up { --overview-accent: var(--color-danger); }
+.portfolio-overview-card.down { --overview-accent: var(--color-success); }
+
+.overview-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.overview-value {
+    margin-top: 6px;
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.overview-hint {
+    margin-top: 4px;
+    font-size: 11px;
+}
+
+.portfolio-overview-error {
+    min-height: 92px;
+    display: grid;
+    place-items: center;
+}
+
 /* —— 指数条 —— */
 .index-ticker {
     display: flex;
     gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
     padding-bottom: 4px;
 }
@@ -367,27 +481,49 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 /* —— 基金行情列表 —— */
 .fund-watchlist .row-holding {
-    position: relative;
+    box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
-.fund-watchlist .row-holding::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: var(--color-warning);
+.fund-watchlist,
+.fund-watchlist .ant-table-wrapper,
+.fund-watchlist .ant-spin-nested-loading,
+.fund-watchlist .ant-spin-container {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 
-.holding-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-warning);
-    margin-left: 6px;
+.fund-watchlist .ant-table {
+    width: 100%;
+    min-width: 0;
+}
+
+.fund-watchlist .ant-table-content {
+    overflow-x: auto;
+}
+
+.fund-watchlist .ant-table-content > table {
+    width: 100% !important;
+    min-width: 900px;
+    table-layout: fixed !important;
+}
+
+.fund-watchlist .ant-table-cell {
     vertical-align: middle;
+}
+
+.fund-watchlist .watchlist-name-cell {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.fund-watchlist .watchlist-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .estimate-tag {
@@ -467,7 +603,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .money-flow {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .money-flow.empty {
@@ -475,35 +611,140 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     align-items: center;
 }
 
-.flow-row {
+.flow-summary {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    align-items: baseline;
-    padding: 8px 0;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.flow-row.primary {
-    border-bottom: 1px solid var(--color-border);
+.flow-summary-label {
+    font-size: 12px;
+    color: var(--color-muted);
+    margin-bottom: 4px;
+}
+
+.flow-summary-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Fira Code', monospace;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.flow-summary-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.flow-leader {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    padding: 0 2px;
+    font-size: 12px;
+}
+
+.flow-leader-label {
+    color: var(--color-muted);
+}
+
+.flow-leader-name {
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.flow-leader-value {
+    font-family: 'Fira Code', monospace;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.flow-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.flow-column {
+    min-width: 0;
+}
+
+.flow-column-title {
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--color-muted);
+}
+
+.flow-row {
+    padding: 6px 0;
+}
+
+.flow-row.empty-row {
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.flow-row-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
 }
 
 .flow-label {
     font-size: 13px;
-    color: var(--color-muted);
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .flow-value {
     font-family: 'Fira Code', monospace;
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
 }
 
-.flow-time {
-    font-size: 11px;
+.flow-value span {
+    margin-left: 4px;
 }
 
-.flow-hint {
-    font-size: 11px;
-    margin-top: 4px;
+.flow-meter {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.flow-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+}
+
+.flow-meter.in span {
+    background: #cf1322;
+}
+
+.flow-meter.out span {
+    background: #3f8600;
 }
 
 /* —— 响应式 —— */
@@ -514,14 +755,32 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 @media (max-width: 768px) {
+    .portfolio-overview-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .portfolio-overview-card.primary {
+        grid-column: 1 / -1;
+    }
     .sector-row {
         grid-template-columns: 70px 1fr 70px;
     }
     .sector-flow {
         display: none;
     }
+    .flow-columns {
+        grid-template-columns: 1fr;
+    }
     .index-card {
         min-width: 140px;
+    }
+}
+
+@media (max-width: 420px) {
+    .portfolio-overview-grid {
+        grid-template-columns: 1fr;
+    }
+    .overview-value {
+        font-size: 22px;
     }
 }
 

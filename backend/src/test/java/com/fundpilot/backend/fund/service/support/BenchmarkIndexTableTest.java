@@ -44,6 +44,15 @@ class BenchmarkIndexTableTest {
     }
 
     @Test
+    void 持仓主题指数关键词_能命中对应指数代码() {
+        assertThat(BenchmarkIndexTable.lookup("南方中证机器人ETF发起联接C")).contains("H30590.CSI");
+        assertThat(BenchmarkIndexTable.lookup("华夏中证5G通信主题ETF联接C")).contains("931079.CSI");
+        assertThat(BenchmarkIndexTable.lookup("华夏中证细分有色金属产业主题ETF联接C")).contains("000811.CSI");
+        assertThat(BenchmarkIndexTable.lookup("南方中证新能源ETF联接C")).contains("399808.SZ");
+        assertThat(BenchmarkIndexTable.lookup("天弘国证绿色电力指数发起C")).contains("399438.SZ");
+    }
+
+    @Test
     void 未命中关键词_返回_empty() {
         assertThat(BenchmarkIndexTable.lookup("中欧医疗健康混合A")).isEmpty();
         assertThat(BenchmarkIndexTable.lookup("兴全合宜混合")).isEmpty();

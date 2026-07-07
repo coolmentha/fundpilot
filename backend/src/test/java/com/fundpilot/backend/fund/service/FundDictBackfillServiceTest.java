@@ -72,6 +72,26 @@ class FundDictBackfillServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void backfillAll_已有_fundSubType_但_benchmark为空_会补回benchmark() {
+        FundEntity missingBenchmark = persistNullSubTypeFund("020608", "南方中证机器人ETF发起联接C");
+        missingBenchmark.setFundSubType(FundSubType.ETF);
+        missingBenchmark.setBenchmarkIndexCode("");
+        fundRepository.save(missingBenchmark);
+
+        when(marketDataSource.fetchFundDict()).thenReturn(List.of(
+                new FundDictEntry("020608", "南方中证机器人ETF发起联接C", "指数型")
+        ));
+
+        int updated = fundDictBackfillService.backfillAll();
+
+        assertThat(updated).isEqualTo(1);
+        FundEntity reloaded = fundRepository.findById(missingBenchmark.getId()).orElseThrow();
+        assertThat(reloaded.getFundSubType()).isEqualTo(FundSubType.ETF);
+        assertThat(reloaded.getBenchmarkIndexCode()).isEqualTo("H30590.CSI");
+    }
+
+    @Test
+    @Transactional
     void backfillAll_字典无匹配_fundCode_跳过不报错() {
         persistNullSubTypeFund("999999", "未知基金");
 

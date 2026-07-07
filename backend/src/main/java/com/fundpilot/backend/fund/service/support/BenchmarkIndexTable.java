@@ -50,9 +50,19 @@ public final class BenchmarkIndexTable {
         table.put("创业板", "399006.SZ");
         // 行业主题指数(.CSI → secid 2.,已逐一核实东方财富可拉 K 线)
         table.put("科创创业50", "931643.CSI");
+        table.put("中证机器人", "H30590.CSI");
+        table.put("机器人", "H30590.CSI");
+        table.put("中证5G通信主题", "931079.CSI");
+        table.put("5G通信", "931079.CSI");
+        table.put("细分有色金属", "000811.CSI");
+        table.put("有色金属", "000811.CSI");
         table.put("人工智能", "930713.CSI");
         table.put("半导体", "931865.CSI");
         table.put("新能源车", "930997.CSI");
+        table.put("中证新能源", "399808.SZ");
+        table.put("新能源", "399808.SZ");
+        table.put("国证绿色电力", "399438.SZ");
+        table.put("绿色电力", "399438.SZ");
         table.put("光伏", "931151.CSI");
         table.put("白酒", "930622.CSI");
         table.put("家电", "930697.CSI");

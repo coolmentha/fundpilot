@@ -30,7 +30,7 @@ GET /api/funds/{fundId}/kline?period=daily|weekly|monthly → KlineView
 public List<IndexRealtimeSnapshot> getIndices();        // 读 volatile 字段
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
-public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes);
+public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/板块/资金
 ```
@@ -38,7 +38,7 @@ public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/板�
 ### 定时任务(`MarketRealtimeRefreshJob`)
 
 ```java
-@Scheduled(cron = "*/30 * 9-14 * * MON-FRI")
+@Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
 public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 ```
 
@@ -53,7 +53,7 @@ public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 | 指数实时 | 30s | 5s | 单请求批量,快 |
 | 板块涨跌 | 30s | 30s | 单请求 |
 | 北向资金 | 30s | 30s | 单请求 |
-| 基金估值 | **60s** | 10s | N 只基金逐个拉,受 2 req/s 限流 |
+| 基金估值 | **30s** | 10s | 盘中实时性优先,后台逐只刷新并保留旧缓存 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
 N 个前端客户端共享同一份缓存。

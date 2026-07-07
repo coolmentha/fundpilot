@@ -2,7 +2,7 @@ import {Table, Tag} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link, useNavigate} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
-import {signedPercent, compactMoney, pnlColor, text} from '../constants.js';
+import {signedMoney, signedPercent, compactMoney, pnlColor, text} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -34,8 +34,8 @@ export default function FundWatchlist() {
             changePct,
             isEstimated,
             estimateTime: est?.estimateTime,
-            // ETF/INDEX 类有成交额字段(暂用 placeholder,后端尚未返回成交额;展示持仓份额代替)
-            shares: f.shares,
+            holdingShares: f.holdingShares,
+            dailyPnl: f.dailyPnl,
             status: f.status,
         };
     });
@@ -44,7 +44,7 @@ export default function FundWatchlist() {
         {
             title: '代码',
             dataIndex: 'fundCode',
-            width: 100,
+            width: 112,
             render: (v) => <span className="num-cell">{v}</span>,
         },
         {
@@ -52,22 +52,22 @@ export default function FundWatchlist() {
             dataIndex: 'fundName',
             ellipsis: true,
             render: (v, r) => (
-                <span>
-                    {v}
-                    {r.status === 'HOLDING' && <span className="holding-dot" title="持仓" aria-hidden="true"/>}
+                <span className="watchlist-name-cell">
+                    <span className="watchlist-name-text" title={v}>{v}</span>
                 </span>
             ),
         },
         {
             title: '类型',
             dataIndex: 'fundSubType',
-            width: 90,
+            width: 104,
+            responsive: ['md'],
             render: (v) => v ? <Tag>{text(v)}</Tag> : <span className="muted">-</span>,
         },
         {
             title: '涨跌幅',
             dataIndex: 'changePct',
-            width: 130,
+            width: 140,
             sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
             defaultSortOrder: 'descend',
             render: (v, r) => {
@@ -87,14 +87,27 @@ export default function FundWatchlist() {
         },
         {
             title: '持仓份额',
-            dataIndex: 'shares',
-            width: 110,
+            dataIndex: 'holdingShares',
+            width: 128,
             align: 'right',
-            render: (v) => v ? <span className="num-cell">{compactMoney(v)}</span> : <span className="muted">-</span>,
+            responsive: ['sm'],
+            render: (v) => v !== null && v !== undefined
+                ? <span className="num-cell">{compactMoney(v)}</span>
+                : <span className="muted">-</span>,
+        },
+        {
+            title: '当日收益',
+            dataIndex: 'dailyPnl',
+            width: 132,
+            align: 'right',
+            responsive: ['sm'],
+            render: (v) => v !== null && v !== undefined
+                ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
+                : <span className="muted">-</span>,
         },
         {
             title: '操作',
-            width: 80,
+            width: 88,
             render: (_, r) => (
                 <a onClick={() => navigate(`/funds/${r.id}`)}>详情</a>
             ),
@@ -117,6 +130,7 @@ export default function FundWatchlist() {
                 loading={fundsLoading}
                 size="small"
                 pagination={false}
+                tableLayout="fixed"
                 rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
                 locale={{emptyText: (
                     <span className="muted">

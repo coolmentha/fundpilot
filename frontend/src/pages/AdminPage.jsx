@@ -53,7 +53,7 @@ export default function AdminPage() {
                     </Card>
                     <Card size="small" title="基金字典同步" extra={
                         <Popconfirm title="拉取全量基金字典并更新本地缓存？" onConfirm={() =>
-                            run('sync-dict', (r) => `字典同步完成，更新 ${r?.upserted ?? 0} 条`)}>
+                            run('sync-dict', (r) => `字典同步完成，更新 ${r?.upserted ?? 0} 条，回填 ${r?.backfilled ?? 0} 只基金`)}>
                             <Button icon={<DatabaseOutlined/>}
                                     loading={adminAction.isPending}>同步字典</Button>
                         </Popconfirm>

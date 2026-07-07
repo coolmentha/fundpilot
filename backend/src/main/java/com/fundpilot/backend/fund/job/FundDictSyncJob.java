@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.job;
 
+import com.fundpilot.backend.fund.service.FundDictBackfillService;
 import com.fundpilot.backend.fund.service.FundDictSyncService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,13 +14,17 @@ import org.springframework.stereotype.Component;
 public class FundDictSyncJob {
 
     private final FundDictSyncService fundDictSyncService;
+    private final FundDictBackfillService fundDictBackfillService;
 
-    public FundDictSyncJob(FundDictSyncService fundDictSyncService) {
+    public FundDictSyncJob(FundDictSyncService fundDictSyncService,
+                           FundDictBackfillService fundDictBackfillService) {
         this.fundDictSyncService = fundDictSyncService;
+        this.fundDictBackfillService = fundDictBackfillService;
     }
 
     @Scheduled(cron = "0 0 3 * * *")
     public void syncDaily() {
         fundDictSyncService.syncAll();
+        fundDictBackfillService.backfillAll();
     }
 }

@@ -11,6 +11,7 @@ import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.fund.event.FundCreatedEvent;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
@@ -19,6 +20,7 @@ import com.fundpilot.backend.fund.service.support.FundTypeClassifier;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,13 +47,14 @@ public class FundService {
     private final MarketDataFetchService marketDataFetchService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundTransactionRepository fundTransactionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     public List<FundView> list() {
         return fundRepository.findAll().stream()
-                .map(fund -> FundView.from(fund, fundPnlService.computeForFund(fund.getId())))
+                .map(fund -> FundView.from(fund, fundPnlService.computeForFund(fund)))
                 .toList();
     }
 
@@ -90,16 +93,16 @@ public class FundService {
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
 
-        // 建基金后自动拉历史净值(独立事务,失败降级不阻断建基金)
-        try {
-            marketDataFetchService.fetchOneFund(saved.getId());
-        } catch (RuntimeException ex) {
-            log.warn("建基金 {} 后拉取历史净值失败,降级(可稍后手动 refresh 补): {}", saved.getId(), ex.getMessage());
-        }
-
         // initialMarketValue 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
         if (request.initialMarketValue() != null && request.initialMarketValue().signum() > 0) {
+            try {
+                marketDataFetchService.fetchOneFund(saved.getId());
+            } catch (RuntimeException ex) {
+                log.warn("建基金 {} 后拉取历史净值失败,降级(可稍后手动 refresh 补): {}", saved.getId(), ex.getMessage());
+            }
             openWithExistingPosition(saved, request.initialMarketValue(), request.costPerShare(), request.openedAt());
+        } else {
+            eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));
         }
 
         return FundView.from(saved);

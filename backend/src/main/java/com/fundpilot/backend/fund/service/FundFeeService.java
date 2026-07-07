@@ -109,17 +109,13 @@ public class FundFeeService {
 
     /**
      * 查指定基金费率视图(含原费率,供前端展示)。
+     * <p>缓存缺失时按基金代码即时爬取一次并落库,避免详情页长期显示"未爬取"。
      */
     public FundFeeView getFeeView(Long fundId) {
         return fundRepository.findById(fundId)
                 .map(FundEntity::getFundCode)
-                .map(fundFeeRepository::findByFundCode)
-                .flatMap(opt -> opt)
-                .map(entity -> new FundFeeView(
-                        entity.getPurchaseRate(),
-                        entity.getDiscountRate(),
-                        entity.getSalesServiceFee(),
-                        parseLadderJson(entity.getRedemptionLadder())))
+                .map(this::getOrFetchFeeEntity)
+                .map(this::toView)
                 .orElse(null);
     }
 
@@ -143,6 +139,22 @@ public class FundFeeService {
     private FundFeeSnapshot toSnapshot(FundFeeEntity entity) {
         List<RedemptionTier> ladder = parseLadderJson(entity.getRedemptionLadder());
         return new FundFeeSnapshot(entity.getDiscountRate(), ladder, entity.getSalesServiceFee());
+    }
+
+    private FundFeeEntity getOrFetchFeeEntity(String fundCode) {
+        return fundFeeRepository.findByFundCode(fundCode)
+                .orElseGet(() -> {
+                    fetchAndSave(fundCode);
+                    return fundFeeRepository.findByFundCode(fundCode).orElse(null);
+                });
+    }
+
+    private FundFeeView toView(FundFeeEntity entity) {
+        return new FundFeeView(
+                entity.getPurchaseRate(),
+                entity.getDiscountRate(),
+                entity.getSalesServiceFee(),
+                parseLadderJson(entity.getRedemptionLadder()));
     }
 
     private List<RedemptionTier> parseLadderJson(String json) {

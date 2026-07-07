@@ -36,14 +36,15 @@ function showGlobalError(err, opts = {}) {
     const type = isBusiness ? 'error' : 'warning';
     const n = globalNotification;
     if (!n) return; // 上下文未就绪,降级不展示(极少触发)
+    const notificationKey = opts.key || (!isBusiness && isApiError ? 'system-api-error' : undefined);
     n.open({
         // key 去重:同一 query 反复失败(轮询)只更新不刷屏;mutation 不传 key,每次独立提示。
-        ...(opts.key ? {key: opts.key} : {}),
+        ...(notificationKey ? {key: notificationKey} : {}),
         type,
         title,   // antd v6:notification 用 title(v5 的 message 已废弃)
         description: detail,
         // 业务错误 6s 够看清数字后自动消失;系统/数据源异常 4s。
-        duration: isBusiness ? 6 : 4,
+        duration: isBusiness ? 6 : 3,
         placement: 'topRight',
         // role=alert 供读屏 announced(ui-ux-pro-max §Accessibility)。
         // antd notification 默认带 role,这里显式再强化语义。
@@ -62,7 +63,7 @@ function AppInit() {
         queryCache: new QueryCache({
             onError: (error, query) => {
                 if (query.state.data !== undefined) return; // 有 stale 数据,静默
-                showGlobalError(error, {key: query.queryHash});
+                showGlobalError(error);
             },
         }),
         defaultOptions: {
