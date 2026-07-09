@@ -59,8 +59,12 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     }
 
     private void persistNavToday(BigDecimal accumulatedNav) {
+        persistNavToday(fund, accumulatedNav);
+    }
+
+    private void persistNavToday(FundEntity target, BigDecimal accumulatedNav) {
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
-        nav.setFundEntity(fund);
+        nav.setFundEntity(target);
         nav.setNavDate(today);
         nav.setNav(accumulatedNav);
         nav.setAccumulatedNav(accumulatedNav);
@@ -115,6 +119,77 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         FundTransactionEntity reloaded = entityManager.find(FundTransactionEntity.class, tx.getId());
         assertThat(reloaded.getStatus()).isEqualTo(FundTransactionStatus.PENDING); // 保留
         assertThat(reloaded.getNav()).isNull();
+    }
+
+    @Test
+    void confirmPendingTransactions_转换两腿当日净值均有_批量联动确认() {
+        // task 07-08:转出腿确认后回填转入 amount 并递归确认转入腿
+        FundEntity fundB = new FundEntity();
+        fundB.setFundCode("161725");
+        fundB.setFundName("招商白酒");
+        fundB.setFundCategory(FundCategory.SECTOR);
+        fundB.setStatus(FundStatus.HOLDING);
+        entityManager.persist(fundB);
+        persistNavToday(new BigDecimal("1.25"));
+        persistNavToday(fundB, new BigDecimal("2.00"));
+
+        FundTransactionEntity out = persistTx(FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
+        FundTransactionEntity in = new FundTransactionEntity();
+        in.setFundEntity(fundB);
+        in.setSource(FundTransactionSource.TRANSFER_IN);
+        in.setStatus(FundTransactionStatus.PENDING);
+        entityManager.persist(in);
+        out.setRelatedFundTransactionEntity(in);
+        in.setRelatedFundTransactionEntity(out);
+        entityManager.flush();
+
+        int confirmed = navConfirmService.confirmPendingTransactions(today);
+
+        // 转出腿计入计数;转入腿递归确认但守卫使其不再计入外层循环(已被改为 CONFIRMED)
+        assertThat(confirmed).isGreaterThanOrEqualTo(1);
+        entityManager.flush();
+        entityManager.clear();
+        FundTransactionEntity reloadedOut = entityManager.find(FundTransactionEntity.class, out.getId());
+        FundTransactionEntity reloadedIn = entityManager.find(FundTransactionEntity.class, in.getId());
+        assertThat(reloadedOut.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(reloadedOut.getAmount()).isEqualByComparingTo("625"); // 500 × 1.25,无 lot 降级不扣赎回费
+        assertThat(reloadedIn.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(reloadedIn.getAmount()).isEqualByComparingTo("625"); // 转出净金额回填
+        // 转入 shares = 625 / 2.00 = 312.5(无 fund_fee 降级 fee=0)
+        assertThat(reloadedIn.getShares()).isEqualByComparingTo("312.5");
+    }
+
+    @Test
+    void confirmPendingTransactions_仅转出基金有净值_转出确认转入留PENDING_金额已回填() {
+        // B 当日无净值:转出确认,转入腿 amount 已回填但留 PENDING 次日续
+        FundEntity fundB = new FundEntity();
+        fundB.setFundCode("161725");
+        fundB.setFundName("招商白酒");
+        fundB.setFundCategory(FundCategory.SECTOR);
+        fundB.setStatus(FundStatus.HOLDING);
+        entityManager.persist(fundB);
+        persistNavToday(new BigDecimal("1.25"));
+        // 不给 fundB persistNavToday
+
+        FundTransactionEntity out = persistTx(FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
+        FundTransactionEntity in = new FundTransactionEntity();
+        in.setFundEntity(fundB);
+        in.setSource(FundTransactionSource.TRANSFER_IN);
+        in.setStatus(FundTransactionStatus.PENDING);
+        entityManager.persist(in);
+        out.setRelatedFundTransactionEntity(in);
+        in.setRelatedFundTransactionEntity(out);
+        entityManager.flush();
+
+        navConfirmService.confirmPendingTransactions(today);
+
+        entityManager.flush();
+        entityManager.clear();
+        FundTransactionEntity reloadedOut = entityManager.find(FundTransactionEntity.class, out.getId());
+        FundTransactionEntity reloadedIn = entityManager.find(FundTransactionEntity.class, in.getId());
+        assertThat(reloadedOut.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(reloadedIn.getStatus()).isEqualTo(FundTransactionStatus.PENDING); // B 无净值,留 PENDING
+        assertThat(reloadedIn.getAmount()).isEqualByComparingTo("625"); // 转出净金额已回填,次日续
     }
 
     @Test

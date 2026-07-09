@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.controller.ManualTransactionRequest;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
@@ -39,6 +40,11 @@ public class FundTransactionService {
     /**
      * 手动录入一笔交易(issue #18 手动交易)。绕过信号(signalLog=null),status=PENDING,
      * 由 NavConfirmJob 当晚净值确认后回填另一侧并转 CONFIRMED。手动卖出不卡 7 天硬约束。
+     *
+     * <p>基金转换(task 07-08):{@code source=TRANSFER_OUT} 且 {@code targetFundId} 非空时,
+     * 创建转出(A, TRANSFER_OUT, shares)+ 转入(B, TRANSFER_IN, amount/shares 均空,待确认时回填)两条交易,
+     * 双向 set relatedFundTransactionEntity 互指。返回转出腿(触发腿)。
+     * {@code targetFundId} 为空走原纯转出逻辑(单条记录)。
      */
     @Transactional
     public FundTransactionView createManual(Long fundId, ManualTransactionRequest request) {
@@ -74,6 +80,33 @@ public class FundTransactionService {
         tx.setNav(null);
         tx.setStatus(FundTransactionStatus.PENDING);
         tx.setSignalLogEntity(null);
+
+        // 基金转换:TRANSFER_OUT + targetFundId -> 建转入腿并双向互指。返回转出腿。
+        if (request.source() == FundTransactionSource.TRANSFER_OUT && request.targetFundId() != null) {
+            if (request.targetFundId().equals(fundId)) {
+                throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
+                        "转入基金不能与转出基金相同");
+            }
+            FundEntity targetFund = fundRepository.findById(request.targetFundId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND,
+                            "转入基金 #" + request.targetFundId() + " 不存在"));
+            FundTransactionEntity txOut = fundTransactionRepository.save(tx);
+
+            FundTransactionEntity txIn = new FundTransactionEntity();
+            txIn.setFundEntity(targetFund);
+            txIn.setSource(FundTransactionSource.TRANSFER_IN);
+            txIn.setAmount(null);   // 待确认时由转出净金额回填
+            txIn.setShares(null);   // 待确认时算
+            txIn.setNav(null);
+            txIn.setStatus(FundTransactionStatus.PENDING);
+            txIn.setSignalLogEntity(null);
+            txIn.setRelatedFundTransactionEntity(txOut);
+            txOut.setRelatedFundTransactionEntity(txIn);
+            fundTransactionRepository.save(txIn);
+            // txOut 已在上方 save,互指关系更新后需再 save 一次
+            fundTransactionRepository.save(txOut);
+            return FundTransactionView.from(txOut);
+        }
         return FundTransactionView.from(fundTransactionRepository.save(tx));
     }
 }

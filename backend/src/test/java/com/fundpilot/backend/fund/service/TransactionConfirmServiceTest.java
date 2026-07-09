@@ -95,12 +95,48 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void confirm_转换交易_两条腿联动确认() {
-        FundEntity fund = persistFund();
-        navHistory(fund, "1.26");
-        // 转入 1000 元 + 转出 500 份,互指 relatedTransaction
-        FundTransactionEntity tin = persistPendingTx(fund, FundTransactionSource.TRANSFER_IN, new BigDecimal("1000"), null);
-        FundTransactionEntity tout = persistPendingTx(fund, FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
+    void confirm_转换交易_两条腿联动确认_转入amount由转出净金额回填() {
+        // task 07-08:转换模式,转入腿 amount=null,确认时由转出净金额回填。
+        // fundA 转出 500 份,净值 1.26,无 lot 降级不扣赎回费 -> 转出净金额 630 -> 转入 amount=630
+        FundEntity fundA = persistFund("510300", "沪深300ETF");
+        FundEntity fundB = persistFund("161725", "招商白酒");
+        navHistory(fundA, "1.26");
+        navHistory(fundB, "2.00");
+        FundTransactionEntity tout = persistPendingTx(fundA, FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
+        FundTransactionEntity tin = persistPendingTx(fundB, FundTransactionSource.TRANSFER_IN, null, null);
+        tin.setRelatedFundTransactionEntity(tout);
+        tout.setRelatedFundTransactionEntity(tin);
+        fundTransactionRepository.save(tin);
+        fundTransactionRepository.save(tout);
+
+        List<FundTransactionEntity> confirmed = transactionConfirmService.confirm(tout.getId());
+
+        // 两条腿都确认
+        assertThat(confirmed).hasSize(2);
+        assertThat(confirmed).extracting(FundTransactionEntity::getStatus)
+                .containsOnly(FundTransactionStatus.CONFIRMED);
+        // 转出腿:amount = 500 × 1.26 = 630(无 lot 降级,不扣赎回费)
+        FundTransactionEntity reloadedTout = fundTransactionRepository.findById(tout.getId()).orElseThrow();
+        assertThat(reloadedTout.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(reloadedTout.getAmount()).isEqualByComparingTo("630");
+        // 转入腿:amount 由转出净金额回填 = 630;shares = (630 - 申购费) / 2.00
+        // 无 fund_fee 记录 -> discountRate=0 降级 -> fee=0 -> shares = 630/2.00 = 315
+        FundTransactionEntity reloadedTin = fundTransactionRepository.findById(tin.getId()).orElseThrow();
+        assertThat(reloadedTin.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(reloadedTin.getAmount()).isEqualByComparingTo("630");
+        assertThat(reloadedTin.getShares()).isEqualByComparingTo("315");
+    }
+
+    @Test
+    @Transactional
+    void confirm_转换交易_从转入腿发起确认_仍按转出先顺序计算() {
+        // 用户从转入腿点确认,也应先算转出得净金额再算转入份额
+        FundEntity fundA = persistFund("510300", "沪深300ETF");
+        FundEntity fundB = persistFund("161725", "招商白酒");
+        navHistory(fundA, "1.26");
+        navHistory(fundB, "2.00");
+        FundTransactionEntity tout = persistPendingTx(fundA, FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
+        FundTransactionEntity tin = persistPendingTx(fundB, FundTransactionSource.TRANSFER_IN, null, null);
         tin.setRelatedFundTransactionEntity(tout);
         tout.setRelatedFundTransactionEntity(tin);
         fundTransactionRepository.save(tin);
@@ -108,19 +144,20 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
         List<FundTransactionEntity> confirmed = transactionConfirmService.confirm(tin.getId());
 
-        // 两条腿都确认
         assertThat(confirmed).hasSize(2);
-        assertThat(confirmed).extracting(FundTransactionEntity::getStatus)
-                .containsOnly(FundTransactionStatus.CONFIRMED);
-        FundTransactionEntity reloadedTout = fundTransactionRepository.findById(tout.getId()).orElseThrow();
-        assertThat(reloadedTout.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
-        assertThat(reloadedTout.getAmount()).isEqualByComparingTo("630"); // 500 × 1.26
+        FundTransactionEntity reloadedTin = fundTransactionRepository.findById(tin.getId()).orElseThrow();
+        assertThat(reloadedTin.getAmount()).isEqualByComparingTo("630"); // 转出净金额回填
+        assertThat(reloadedTin.getShares()).isEqualByComparingTo("315");
     }
 
     private FundEntity persistFund() {
+        return persistFund("510300", "沪深300ETF");
+    }
+
+    private FundEntity persistFund(String code, String name) {
         FundEntity fund = new FundEntity();
-        fund.setFundCode("510300");
-        fund.setFundName("沪深300ETF");
+        fund.setFundCode(code);
+        fund.setFundName(name);
         fund.setStatus(FundStatus.HOLDING);
         return fundRepository.save(fund);
     }

@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space} from 'antd';
 import {PlusOutlined} from '@ant-design/icons';
-import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction} from '../api/hooks.js';
+import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -18,6 +18,7 @@ const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT']);
  */
 export default function FundTransactionTab({fundId}) {
     const {data: transactions, isLoading} = useFundTransactions(fundId);
+    const {data: funds} = useFunds();
     const cancelTx = useCancelTransaction();
     const confirmTx = useConfirmTransaction();
     const createManual = useCreateManualTransaction(fundId);
@@ -25,6 +26,7 @@ export default function FundTransactionTab({fundId}) {
     const [form] = Form.useForm();
     const source = Form.useWatch('source', form);
     const isSell = source && SELL_SOURCES.has(source);
+    const isTransferOut = source === 'TRANSFER_OUT';
 
     const columns = [
         {title: '日期', dataIndex: 'createdDate', width: 170, render: datetime},
@@ -61,6 +63,10 @@ export default function FundTransactionTab({fundId}) {
         } else {
             body.amount = values.amount;
         }
+        // 基金转换(task 07-08):转出时选了转入基金,带 targetFundId 让后端建两条互指交易
+        if (values.source === 'TRANSFER_OUT' && values.targetFundId) {
+            body.targetFundId = values.targetFundId;
+        }
         await createManual.mutateAsync(body);
         setOpen(false);
         form.resetFields();
@@ -87,6 +93,15 @@ export default function FundTransactionTab({fundId}) {
                     ) : (
                         <Form.Item label="金额(元)" name="amount" rules={[{required: true, message: '买入类需填金额'}]}>
                             <InputNumber className="full-width" step={100} precision={2} prefix="¥"/>
+                        </Form.Item>
+                    )}
+                    {isTransferOut && (
+                        <Form.Item label="转入基金" name="targetFundId"
+                                   extra="选填:选了即基金转换(转出A份额->转入B份额),确认时自动算份额与手续费;不选为纯转出单条记录">
+                            <Select allowClear showSearch optionFilterProp="label"
+                                    placeholder="选择转入基金(留空为纯转出)"
+                                    options={(funds ?? []).filter(f => f.id !== fundId)
+                                        .map(f => ({value: f.id, label: `${f.fundName}(${f.fundCode})`}))}/>
                         </Form.Item>
                     )}
                     {isSell && (

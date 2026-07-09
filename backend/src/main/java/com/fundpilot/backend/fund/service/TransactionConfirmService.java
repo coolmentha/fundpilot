@@ -64,16 +64,43 @@ public class TransactionConfirmService {
         }
 
         List<FundTransactionEntity> confirmed = new ArrayList<>();
-        confirmOne(tx, confirmed);
-
-        // 转换交易:relatedTransaction 两条腿一起确认
         FundTransactionEntity related = tx.getRelatedFundTransactionEntity();
-        if (related != null && related.getStatus() == FundTransactionStatus.PENDING) {
-            confirmOne(related, confirmed);
+        // 基金转换(task 07-08):(TRANSFER_OUT, TRANSFER_IN) 互指两腿,先确认转出得净金额,
+        // 回填转入 amount,再确认转入算 shares/fee。用户从任一腿发起确认均按此顺序。
+        if (isConversionPair(tx, related)) {
+            FundTransactionEntity outLeg = tx.getSource() == FundTransactionSource.TRANSFER_OUT ? tx : related;
+            FundTransactionEntity inLeg = outLeg == tx ? related : tx;
+            confirmOne(outLeg, confirmed);
+            if (inLeg.getStatus() == FundTransactionStatus.PENDING) {
+                inLeg.setAmount(outLeg.getAmount());  // 转出净金额 = 转入本金
+                confirmOne(inLeg, confirmed);
+            }
+        } else {
+            confirmOne(tx, confirmed);
+            // 非 conversion 的 relatedTransaction(预留场景):沿用级联确认
+            if (related != null && related.getStatus() == FundTransactionStatus.PENDING) {
+                confirmOne(related, confirmed);
+            }
         }
 
         log.info("手动确认完成 tx_id={} confirmed={}", transactionId, confirmed.size());
         return confirmed;
+    }
+
+    /** 是否为基金转换互指对(TRANSFER_OUT <-> TRANSFER_IN)。 */
+    private boolean isConversionPair(FundTransactionEntity a, FundTransactionEntity b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (a.getSource() == FundTransactionSource.TRANSFER_OUT
+                && b.getSource() == FundTransactionSource.TRANSFER_IN) {
+            return true;
+        }
+        if (a.getSource() == FundTransactionSource.TRANSFER_IN
+                && b.getSource() == FundTransactionSource.TRANSFER_OUT) {
+            return true;
+        }
+        return false;
     }
 
     private void confirmOne(FundTransactionEntity tx, List<FundTransactionEntity> confirmed) {

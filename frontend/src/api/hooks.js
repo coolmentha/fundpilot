@@ -215,7 +215,11 @@ export function useCreateManualTransaction(fundId) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => post(`/api/funds/${fundId}/transactions`, body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['fund-transactions', fundId]}),
+        onSuccess: () => {
+            // 转换模式会在另一只基金建转入腿,需刷新全部基金摘要;非转换也刷新当前基金流水
+            qc.invalidateQueries({queryKey: ['fund-transactions', fundId]});
+            qc.invalidateQueries({queryKey: ['funds']});
+        },
     });
 }
 

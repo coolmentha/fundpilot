@@ -75,7 +75,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void createManual_买入类写amount_份额null_状态PENDING_无关联信号() {
         FundEntity fund = persistFund();
         ManualTransactionRequest req = new ManualTransactionRequest(
-                FundTransactionSource.INCREASE, new BigDecimal("1000"), null);
+                FundTransactionSource.INCREASE, new BigDecimal("1000"), null, null);
 
         FundTransactionView view = fundTransactionService.createManual(fund.getId(), req);
 
@@ -91,7 +91,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void createManual_卖出类写shares_金额null() {
         FundEntity fund = persistFund();
         ManualTransactionRequest req = new ManualTransactionRequest(
-                FundTransactionSource.DECREASE, null, new BigDecimal("500"));
+                FundTransactionSource.DECREASE, null, new BigDecimal("500"), null);
 
         FundTransactionView view = fundTransactionService.createManual(fund.getId(), req);
 
@@ -107,7 +107,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void createManual_买入类amount为null_抛异常() {
         FundEntity fund = persistFund();
         ManualTransactionRequest req = new ManualTransactionRequest(
-                FundTransactionSource.INCREASE, null, null);
+                FundTransactionSource.INCREASE, null, null, null);
 
         assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(), req))
                 .isInstanceOf(BusinessException.class)
@@ -119,7 +119,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void createManual_卖出类shares为null_抛异常() {
         FundEntity fund = persistFund();
         ManualTransactionRequest req = new ManualTransactionRequest(
-                FundTransactionSource.DECREASE, null, null);
+                FundTransactionSource.DECREASE, null, null, null);
 
         assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(), req))
                 .isInstanceOf(BusinessException.class)
@@ -132,18 +132,90 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         FundEntity fund = persistFund();
         // INVEST 定投:买入方向,写 amount
         FundTransactionView invest = fundTransactionService.createManual(fund.getId(),
-                new ManualTransactionRequest(FundTransactionSource.INVEST, new BigDecimal("500"), null));
+                new ManualTransactionRequest(FundTransactionSource.INVEST, new BigDecimal("500"), null, null));
         assertThat(invest.amount()).isEqualByComparingTo("500");
         assertThat(invest.shares()).isNull();
         // TRANSFER_IN 转入:买入方向
         FundTransactionView tin = fundTransactionService.createManual(fund.getId(),
-                new ManualTransactionRequest(FundTransactionSource.TRANSFER_IN, new BigDecimal("800"), null));
+                new ManualTransactionRequest(FundTransactionSource.TRANSFER_IN, new BigDecimal("800"), null, null));
         assertThat(tin.amount()).isEqualByComparingTo("800");
         // TRANSFER_OUT 转出:卖出方向,写 shares
         FundTransactionView tout = fundTransactionService.createManual(fund.getId(),
-                new ManualTransactionRequest(FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300")));
+                new ManualTransactionRequest(FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), null));
         assertThat(tout.shares()).isEqualByComparingTo("300");
         assertThat(tout.amount()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void createManual_转换模式_targetFundId非空_建两条互指交易() {
+        // task 07-08:TRANSFER_OUT + targetFundId -> 转出(A)+转入(B)两条互指,转入 amount/shares 均空待确认回填
+        FundEntity fundA = persistFund();
+        FundEntity fundB = new FundEntity();
+        fundB.setFundCode("161725");
+        fundB.setFundName("招商白酒");
+        fundB.setStatus(FundStatus.HOLDING);
+        fundRepository.save(fundB);
+
+        ManualTransactionRequest req = new ManualTransactionRequest(
+                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), fundB.getId());
+
+        FundTransactionView view = fundTransactionService.createManual(fundA.getId(), req);
+
+        // 返回转出腿
+        assertThat(view.source()).isEqualTo(FundTransactionSource.TRANSFER_OUT);
+        assertThat(view.shares()).isEqualByComparingTo("300");
+        assertThat(view.amount()).isNull();
+        assertThat(view.status()).isEqualTo(FundTransactionStatus.PENDING);
+        // 转入腿存在且互指
+        FundTransactionEntity txOut = fundTransactionRepository.findById(view.id()).orElseThrow();
+        FundTransactionEntity txIn = txOut.getRelatedFundTransactionEntity();
+        assertThat(txIn).isNotNull();
+        assertThat(txIn.getSource()).isEqualTo(FundTransactionSource.TRANSFER_IN);
+        assertThat(txIn.getFundEntity().getId()).isEqualTo(fundB.getId());
+        assertThat(txIn.getAmount()).isNull();   // 待确认回填
+        assertThat(txIn.getShares()).isNull();
+        assertThat(txIn.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        // 双向互指
+        assertThat(txIn.getRelatedFundTransactionEntity().getId()).isEqualTo(txOut.getId());
+    }
+
+    @Test
+    @Transactional
+    void createManual_转换模式_targetFundId等于自身_抛异常() {
+        FundEntity fund = persistFund();
+        ManualTransactionRequest req = new ManualTransactionRequest(
+                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), fund.getId());
+
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
+    }
+
+    @Test
+    @Transactional
+    void createManual_转换模式_targetFundId不存在_抛异常() {
+        FundEntity fund = persistFund();
+        ManualTransactionRequest req = new ManualTransactionRequest(
+                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), 999999L);
+
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.FUND_NOT_FOUND.name());
+    }
+
+    @Test
+    @Transactional
+    void createManual_纯转出_targetFundId为空_仅单条记录不互指() {
+        // 兼容:targetFundId 为空走原纯转出逻辑,无 relatedTransaction
+        FundEntity fund = persistFund();
+        ManualTransactionRequest req = new ManualTransactionRequest(
+                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), null);
+
+        FundTransactionView view = fundTransactionService.createManual(fund.getId(), req);
+
+        FundTransactionEntity tx = fundTransactionRepository.findById(view.id()).orElseThrow();
+        assertThat(tx.getRelatedFundTransactionEntity()).isNull();
     }
 
     private FundEntity persistFund() {
