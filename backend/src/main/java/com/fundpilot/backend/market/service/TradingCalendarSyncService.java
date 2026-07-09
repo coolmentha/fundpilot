@@ -1,8 +1,7 @@
 package com.fundpilot.backend.market.service;
 
-import com.fundpilot.backend.market.client.EastmoneyKlineClient;
-import com.fundpilot.backend.market.client.EastmoneyJsParser;
-import com.fundpilot.backend.market.client.IndexKline;
+import com.fundpilot.backend.market.client.SinaTradingCalendarClient;
+import com.fundpilot.backend.market.client.SinaTradingCalendarParser;
 import com.fundpilot.backend.market.entity.TradingCalendarEntity;
 import com.fundpilot.backend.market.repository.TradingCalendarRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,40 +11,47 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
- * 交易日历同步:从东方财富上证指数日K线提取交易日,写入 trading_calendar。
- * <p>上证指数(secid=1.000001)只在交易日发布 K 线,周末节假日自动跳过——天然交易日历。
- * 只 INSERT 新日期,不覆盖已有(true/false 不变),支持幂等多次同步。
+ * 交易日历同步(task 07-09 换源):从新浪财经交易日历接口提取交易日,写入 trading_calendar。
+ * <p>新浪 {@code klc_td_sh.txt} 返回 KLC 自定义编码,由 {@link SinaTradingCalendarParser} 用 GraalVM JS
+ * 跑 {@code hk_js_decode} 解码为交易日列表(1990-12-19 ~ 当年底)。
+ *
+ * <p>换源原因(原从上证指数 K 线推断的 6 个问题):
+ * <ol>
+ *   <li>非交易日与未同步不可区分(K 线推断只插 true 行,缺记录语义混淆)</li>
+ *   <li>无法前瞻(K 线只有过去;新浪覆盖到当年底,可前瞻)</li>
+ *   <li>今天是否交易日有鸡生蛋问题(K 线 15:00 后才出;新浪列表已含未来交易日)</li>
+ *   <li>原同步无 @Scheduled 只能手动触发(本期加 {@code TradingCalendarSyncJob} 自动同步)</li>
+ *   <li>把数据源可用性当事实(push2his 限流抽风即污染;新浪交易日历是独立数据源)</li>
+ * </ol>
+ *
+ * <p>数据形态不变:只 INSERT 新日期(tradingDay=true),已有日期不动,幂等。
+ * 调休补班周末(如 2024-09-29 周日上班)新浪正确判为非交易日--股市调休补班但休市。
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TradingCalendarSyncService {
 
-    /** 上证指数 secid。 */
-    private static final String SH_COMPOSITE = "1.000001";
-    /** 拉足够多 K 线(覆盖全部历史+未来数年)。 */
-    private static final String LMT = "10000";
-
-    private final EastmoneyKlineClient eastmoneyKlineClient;
+    private final SinaTradingCalendarClient sinaTradingCalendarClient;
     private final TradingCalendarRepository tradingCalendarRepository;
 
     /**
-     * 从东方财富同步交易日历。幂等——只 INSERT 新日期,已有日期不动。
+     * 从新浪同步交易日历。幂等--只 INSERT 新日期,已有日期不动。
      *
      * @return 本次新增的交易日条数
      */
     @Transactional
     public int sync() {
         Set<Instant> existing = loadExistingDates();
-        String raw = eastmoneyKlineClient.fetchKlineRaw(SH_COMPOSITE, LMT);
-        IndexKline kline = EastmoneyJsParser.parseIndexKline(raw);
+        String raw = sinaTradingCalendarClient.fetchTradingCalendarRaw();
+        List<Instant> tradingDays = SinaTradingCalendarParser.parse(raw);
 
         int added = 0;
-        for (IndexKline.Bar bar : kline.bars()) {
-            Instant date = bar.date();
+        for (Instant date : tradingDays) {
             if (existing.contains(date)) {
                 continue;
             }
@@ -57,8 +63,8 @@ public class TradingCalendarSyncService {
             added++;
         }
 
-        log.info("交易日历同步完成:本次新增 {} 条(已有 {} 条,K线总数 {} 条)",
-                added, existing.size() - added, kline.bars().size());
+        log.info("交易日历同步完成(新浪源):本次新增 {} 条(已有 {} 条,新浪返回 {} 条)",
+                added, existing.size() - added, tradingDays.size());
         return added;
     }
 
