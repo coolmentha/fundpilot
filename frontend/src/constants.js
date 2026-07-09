@@ -44,6 +44,8 @@ export const labels = {
     TRANSFER_IN: '转入',
     TRANSFER_OUT: '转出',
     INVEST: '定投',
+    ADJUST_IN: '调增',
+    ADJUST_OUT: '调减',
     // WeeklyMacdState
     DIVERGENCE_BOTTOM: '底背离',
     GREEN_SHRINKING: '绿柱缩小',
@@ -161,6 +163,8 @@ export const fundSourceOptions = [
     {value: 'TRANSFER_IN', label: '转入'},
     {value: 'TRANSFER_OUT', label: '转出'},
     {value: 'INVEST', label: '定投'},
+    {value: 'ADJUST_IN', label: '调增'},
+    {value: 'ADJUST_OUT', label: '调减'},
 ];
 
 // 后端 ErrorCode → 友好标题映射(报错弹窗用)。枚举值需与后端 ErrorCode.name() 一致。

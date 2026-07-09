@@ -102,6 +102,9 @@ public class NavConfirmService {
                     return false;
                 }
             }
+            // ADJUST 录入即 CONFIRMED,不会被 findByStatus(PENDING) 查到;覆盖枚举防 switch 漏分支
+            case ADJUST_IN, ADJUST_OUT -> {
+            }
         }
         tx.setNav(navValue);
         tx.setConfirmTime(Instant.now());
@@ -110,6 +113,9 @@ public class NavConfirmService {
         switch (source) {
             case INCREASE, TRANSFER_IN, INVEST -> transactionConfirmSupport.onBuyConfirmed(tx, navValue);
             case DECREASE, TRANSFER_OUT -> transactionConfirmSupport.onSellConfirmed(tx, navValue);
+            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达批量确认)
+            case ADJUST_IN, ADJUST_OUT -> {
+            }
         }
         fundTransactionRepository.save(tx);
 

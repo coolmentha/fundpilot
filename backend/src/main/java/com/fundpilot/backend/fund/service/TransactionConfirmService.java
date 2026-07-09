@@ -119,6 +119,9 @@ public class TransactionConfirmService {
                             "卖出类确认需有 shares,tx_id=" + tx.getId());
                 }
             }
+            // ADJUST 录入即 CONFIRMED,不会触达确认流程;此处仅覆盖枚举以防 switch 漏分支
+            case ADJUST_IN, ADJUST_OUT -> {
+            }
         }
         tx.setNav(navValue);
         tx.setConfirmTime(Instant.now());
@@ -127,6 +130,9 @@ public class TransactionConfirmService {
         switch (source) {
             case INCREASE, TRANSFER_IN, INVEST -> transactionConfirmSupport.onBuyConfirmed(tx, navValue);
             case DECREASE, TRANSFER_OUT -> transactionConfirmSupport.onSellConfirmed(tx, navValue);
+            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达此处)
+            case ADJUST_IN, ADJUST_OUT -> {
+            }
         }
         fundTransactionRepository.save(tx);
         confirmed.add(tx);

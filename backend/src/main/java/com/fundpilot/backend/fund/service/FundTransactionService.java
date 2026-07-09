@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -50,6 +51,29 @@ public class FundTransactionService {
     public FundTransactionView createManual(Long fundId, ManualTransactionRequest request) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+
+        // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费/不建 lot,只改持仓份额。
+        // amount/fee/feeRate/nav 均空,金额实时算(份额×当前净值)。
+        if (request.source() == FundTransactionSource.ADJUST_IN
+                || request.source() == FundTransactionSource.ADJUST_OUT) {
+            if (request.shares() == null || request.shares().signum() <= 0) {
+                throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
+                        request.source() + " 需填正数份额(shares)");
+            }
+            FundTransactionEntity tx = new FundTransactionEntity();
+            tx.setFundEntity(fund);
+            tx.setSource(request.source());
+            tx.setShares(request.shares());
+            tx.setAmount(null);
+            tx.setNav(null);
+            tx.setFee(null);
+            tx.setFeeRate(null);
+            tx.setStatus(FundTransactionStatus.CONFIRMED);
+            tx.setConfirmTime(Instant.now());
+            tx.setSignalLogEntity(null);
+            return FundTransactionView.from(fundTransactionRepository.save(tx));
+        }
+
         BigDecimal amount;
         BigDecimal shares;
         switch (request.source()) {

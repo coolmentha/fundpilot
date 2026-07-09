@@ -100,11 +100,11 @@ public class FundPositionService {
         return sum;
     }
 
-    /** source → direction 映射:加仓类 +1,减仓类 -1。 */
+    /** source → direction 映射:加仓类 +1,减仓类 -1,调增 +1,调减 -1。 */
     private BigDecimal direction(FundTransactionSource source) {
         return switch (source) {
-            case INCREASE, TRANSFER_IN, INVEST -> BigDecimal.ONE;
-            case DECREASE, TRANSFER_OUT -> BigDecimal.ONE.negate();
+            case INCREASE, TRANSFER_IN, INVEST, ADJUST_IN -> BigDecimal.ONE;
+            case DECREASE, TRANSFER_OUT, ADJUST_OUT -> BigDecimal.ONE.negate();
         };
     }
 }

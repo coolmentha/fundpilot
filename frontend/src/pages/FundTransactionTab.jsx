@@ -8,8 +8,9 @@ import EmptyState from '../components/EmptyState.jsx';
 
 const {Title} = Typography;
 
-// 买入类写金额,卖出类写份额(与后端 createManual 方向一致)
-const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT']);
+// 买入类写金额,卖出类+调整类写份额(与后端 createManual 方向一致)
+const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT', 'ADJUST_IN', 'ADJUST_OUT']);
+const ADJUST_SOURCES = new Set(['ADJUST_IN', 'ADJUST_OUT']);
 
 /**
  * 基金详情 · 交易流水 tab(issue #18 交易合并到基金详情 + 手动录入)。
@@ -26,6 +27,7 @@ export default function FundTransactionTab({fundId}) {
     const [form] = Form.useForm();
     const source = Form.useWatch('source', form);
     const isSell = source && SELL_SOURCES.has(source);
+    const isAdjust = source && ADJUST_SOURCES.has(source);
     const isTransferOut = source === 'TRANSFER_OUT';
 
     const columns = [
@@ -104,9 +106,13 @@ export default function FundTransactionTab({fundId}) {
                                         .map(f => ({value: f.id, label: `${f.fundName}(${f.fundCode})`}))}/>
                         </Form.Item>
                     )}
-                    {isSell && (
+                    {isSell && !isAdjust && (
                         <Alert type="info" showIcon
                                message="手动卖出不卡 7 天硬约束,可自行减仓;份额对应的金额等当晚净值确认后回填。"/>
+                    )}
+                    {isAdjust && (
+                        <Alert type="info" showIcon
+                               message="调整交易录入即生效,直接增减持仓份额;不算净值/手续费/不建 lot,用于账面与真实对不上的修正。"/>
                     )}
                 </Form>
             </Modal>

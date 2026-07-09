@@ -32,6 +32,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     @Autowired FundTransactionService fundTransactionService;
     @Autowired FundRepository fundRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
+    @Autowired FundPositionService fundPositionService;
 
     @Test
     @Transactional
@@ -216,6 +217,56 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
 
         FundTransactionEntity tx = fundTransactionRepository.findById(view.id()).orElseThrow();
         assertThat(tx.getRelatedFundTransactionEntity()).isNull();
+    }
+
+    @Test
+    @Transactional
+    void createManual_调增录入即CONFIRMED_持仓增加_不建lot不算费() {
+        // task 07-09:ADJUST_IN 录入即 CONFIRMED,amount/fee/nav 均空,持仓份额立即增加
+        FundEntity fund = persistFund();
+        assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("0");
+
+        ManualTransactionRequest req = new ManualTransactionRequest(
+                FundTransactionSource.ADJUST_IN, null, new BigDecimal("100"), null);
+
+        FundTransactionView view = fundTransactionService.createManual(fund.getId(), req);
+
+        assertThat(view.source()).isEqualTo(FundTransactionSource.ADJUST_IN);
+        assertThat(view.shares()).isEqualByComparingTo("100");
+        assertThat(view.amount()).isNull();
+        assertThat(view.status()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(view.confirmTime()).isNotNull();
+        // 持仓立即 +100
+        assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("100");
+    }
+
+    @Test
+    @Transactional
+    void createManual_调减录入即CONFIRMED_持仓减少() {
+        FundEntity fund = persistFund();
+        // 先调增 200,再调减 50 -> 持仓 150
+        fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null, new BigDecimal("200"), null));
+        fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null, new BigDecimal("50"), null));
+
+        assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("150");
+    }
+
+    @Test
+    @Transactional
+    void createManual_调整份额为空或非正_抛异常() {
+        FundEntity fund = persistFund();
+        // null 份额
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
+        // 零份额
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null, BigDecimal.ZERO, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
     }
 
     private FundEntity persistFund() {

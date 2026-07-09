@@ -7,7 +7,9 @@ public enum FundTransactionSource implements EnumValue {
     DECREASE("减仓"),
     TRANSFER_IN("转入"),
     TRANSFER_OUT("转出"),
-    INVEST("定投");
+    INVEST("定投"),
+    ADJUST_IN("调增"),
+    ADJUST_OUT("调减");
 
     private final String label;
 
