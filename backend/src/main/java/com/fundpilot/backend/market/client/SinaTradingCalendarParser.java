@@ -61,8 +61,16 @@ public final class SinaTradingCalendarParser {
                 throw new IllegalStateException("新浪交易日历解码结果为空");
             }
             for (long i = 0; i < size; i++) {
-                String iso = result.getArrayElement(i).asString();
-                dates.add(Instant.parse(iso));
+                Value element = result.getArrayElement(i);
+                // GraalVM JS 会把 ISO 8601 字符串("1990-12-19T00:00:00.000Z")自动识别为 JS Date 对象,
+                // 不能直接 asString()。用类型判断兼容:String 直取,Date 取 asInstant()。
+                Instant date;
+                if (element.isString()) {
+                    date = Instant.parse(element.asString());
+                } else {
+                    date = element.asInstant();
+                }
+                dates.add(date);
             }
         }
 
