@@ -1,42 +1,108 @@
-import {useEffect} from 'react';
-import {Form, InputNumber, Modal} from 'antd';
+import {useEffect, useMemo, useRef} from 'react';
+import {Button, Descriptions, Form, InputNumber, Modal, Space, Tag} from 'antd';
+import {UndoOutlined} from '@ant-design/icons';
+import {labels} from '../constants.js';
 
-// 金字塔退场后,策略参数只剩移动止盈回落幅度(回落 n×本阈值卖 holdingShares×n/4)。
 const FIELDS = [
-    {key: 'stopLossPullbackPercent', label: '移动止盈回落', placeholder: -0.08},
+    {key: 'profitActivationPercent', label: '止盈启动收益率', min: 0.01, max: 100},
+    {key: 'stopLossPullbackPercent', label: '高点回撤确认', min: 0.01, max: 99.99},
+    {key: 'profitHarvestPercent', label: '浮盈收割比例', min: 0.01, max: 100},
+    {key: 'minimumHoldingPercent', label: '最低保留仓位', min: 0, max: 99.99},
+    {key: 'maxSingleSellPercent', label: '单次最大卖出', min: 0.01, max: 100},
 ];
 
-export default function StrategyFormModal({open, editing, onOk, onCancel, confirmLoading}) {
+const toPercentValues = (source) => {
+    if (!source) return null;
+    const values = {};
+    FIELDS.forEach(({key}) => {
+        values[key] = Number(source[key]) * 100;
+    });
+    values.cooldownTradingDays = source.cooldownTradingDays;
+    return values;
+};
+
+const toPayload = (values) => {
+    const payload = {};
+    FIELDS.forEach(({key}) => {
+        payload[key] = Number(values[key]) / 100;
+    });
+    payload.cooldownTradingDays = values.cooldownTradingDays;
+    return payload;
+};
+
+export default function StrategyFormModal({open, editing, recommendation, onOk, onCancel, confirmLoading}) {
     const [form] = Form.useForm();
+    const initialized = useRef(false);
+
     useEffect(() => {
-        if (open) {
-            const values = {};
-            FIELDS.forEach((f) => {
-                values[f.key] = editing?.[f.key] ?? f.placeholder;
-            });
-            form.setFieldsValue(values);
+        if (!open) {
+            initialized.current = false;
+            form.resetFields();
+            return;
         }
-    }, [open, editing, form]);
+        const source = editing || recommendation;
+        if (!initialized.current && source) {
+            form.setFieldsValue(toPercentValues(source));
+            initialized.current = true;
+        }
+    }, [open, editing, recommendation, form]);
+
+    const current = Form.useWatch([], form);
+    const recommendedFormValues = useMemo(() => toPercentValues(recommendation), [recommendation]);
+    const customized = useMemo(() => {
+        if (!current || !recommendedFormValues) return false;
+        return [...FIELDS.map(({key}) => key), 'cooldownTradingDays']
+            .some((key) => Number(current[key]) !== Number(recommendedFormValues[key]));
+    }, [current, recommendedFormValues]);
 
     const handleOk = async () => {
         const values = await form.validateFields();
-        onOk(values);
+        onOk(toPayload(values));
+    };
+
+    const restoreRecommendation = () => {
+        if (recommendedFormValues) form.setFieldsValue(recommendedFormValues);
     };
 
     return (
-        <Modal title={editing ? '编辑策略参数' : '新建策略参数'} open={open} onCancel={onCancel}
-               onOk={handleOk} confirmLoading={confirmLoading} destroyOnHidden width={520}>
+        <Modal title={editing ? '编辑定投止盈策略' : '新建定投止盈策略'} open={open} onCancel={onCancel}
+               onOk={handleOk} confirmLoading={confirmLoading} destroyOnHidden width={640}
+               styles={{body: {maxHeight: 'calc(100vh - 230px)', overflowY: 'auto', paddingRight: 4}}}>
             <Form form={form} layout="vertical">
-                <p style={{color: '#888', fontSize: 12}}>
-                    移动止盈回落填负数（如 -0.08 表示从持有期高点回落 8% 触发卖 1/4,16% 卖 1/2,以此类推）。
-                </p>
-                {FIELDS.map((f) => (
-                    <Form.Item key={f.key} label={f.label} name={f.key}
-                               rules={[{required: true, message: '请填写'}]}>
-                        <InputNumber step={0.01} precision={4} className="full-width"
-                                     placeholder={String(f.placeholder)}/>
+                <Space className="full-width" style={{justifyContent: 'space-between', marginBottom: 12}}>
+                    <Space>
+                        <Tag color="blue">{labels[recommendation?.fundCategory] || '-'}</Tag>
+                        <Tag color={customized ? 'gold' : 'green'}>{customized ? '已自定义' : '类型推荐'}</Tag>
+                    </Space>
+                    <Button icon={<UndoOutlined/>} onClick={restoreRecommendation}
+                            disabled={!recommendation}>恢复推荐值</Button>
+                </Space>
+                <div className="strategy-form-grid">
+                    {FIELDS.map((field) => (
+                        <Form.Item key={field.key} label={field.label} name={field.key}
+                                   rules={[
+                                       {required: true, message: '请填写'},
+                                       {type: 'number', min: field.min, max: field.max,
+                                           message: `请输入 ${field.min}% - ${field.max}%`},
+                                   ]}>
+                            <InputNumber min={field.min} max={field.max} step={0.5} precision={2}
+                                         addonAfter="%" className="full-width"/>
+                        </Form.Item>
+                    ))}
+                    <Form.Item label="止盈后冷静期" name="cooldownTradingDays"
+                               rules={[{required: true, message: '请填写'}, {
+                                   type: 'number', min: 0, max: 250, message: '请输入 0 - 250 个交易日',
+                               }]}>
+                        <InputNumber min={0} max={250} step={1} precision={0}
+                                     addonAfter="交易日" className="full-width"/>
                     </Form.Item>
-                ))}
+                </div>
+                <Descriptions size="small" column={2} bordered>
+                    <Descriptions.Item label="启动">整体收益达到 {current?.profitActivationPercent ?? '-'}%</Descriptions.Item>
+                    <Descriptions.Item label="确认">周期高点回撤 {current?.stopLossPullbackPercent ?? '-'}%</Descriptions.Item>
+                    <Descriptions.Item label="收割">浮盈的 {current?.profitHarvestPercent ?? '-'}%</Descriptions.Item>
+                    <Descriptions.Item label="保留">至少保留 {current?.minimumHoldingPercent ?? '-'}% 仓位</Descriptions.Item>
+                </Descriptions>
             </Form>
         </Modal>
     );

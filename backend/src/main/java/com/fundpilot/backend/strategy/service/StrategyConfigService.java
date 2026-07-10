@@ -6,9 +6,11 @@ import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundStrategyActivationEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
+import com.fundpilot.backend.fund.enums.TakeProfitPhase;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundStrategyActivationRepository;
 import com.fundpilot.backend.strategy.controller.FundStrategyView;
+import com.fundpilot.backend.strategy.controller.StrategyRecommendationView;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,6 +43,7 @@ public class StrategyConfigService {
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
     private final FundStrategyActivationRepository fundStrategyActivationRepository;
+    private final TakeProfitPresetService takeProfitPresetService;
 
     /**
      * 新建策略草稿,状态 PENDING_CALIBRATION。
@@ -51,7 +55,7 @@ public class StrategyConfigService {
         FundStrategyEntity strategy = new FundStrategyEntity();
         strategy.setFundEntity(fund);
         strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
-        applyRequest(strategy, request);
+        applyRequest(strategy, resolveRequest(fund, request));
         return fundStrategyRepository.save(strategy).getId();
     }
 
@@ -65,7 +69,7 @@ public class StrategyConfigService {
         if (strategy.getStatus() == StrategyParamStatus.EFFECTIVE) {
             throw new IllegalStateTransitionException(strategy.getStatus().name(), "草稿(非生效态,可改参数)");
         }
-        applyRequest(strategy, request);
+        applyRequest(strategy, resolveRequest(strategy.getFundEntity(), request));
         fundStrategyRepository.save(strategy);
     }
 
@@ -97,6 +101,13 @@ public class StrategyConfigService {
         return findActive(fundId).map(FundStrategyView::from);
     }
 
+    @Transactional(readOnly = true)
+    public StrategyRecommendationView recommendation(Long fundId) {
+        FundEntity fund = fundRepository.findById(fundId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+        return StrategyRecommendationView.from(takeProfitPresetService.recommend(fund.getFundCategory()));
+    }
+
     /**
      * 激活:PENDING_CALIBRATION → EFFECTIVE。
      * <p>金字塔退场后不再要求回测校验——移动止盈阈值无需回测验证。
@@ -113,6 +124,7 @@ public class StrategyConfigService {
         fundStrategyRepository.findByFundEntity_IdAndStatus(fundId, StrategyParamStatus.EFFECTIVE)
                 .ifPresent(old -> {
                     old.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
+                    clearRuntimeState(old);
                     fundStrategyRepository.save(old);
                     // 回填旧任期 deactivatedAt
                     fundStrategyActivationRepository
@@ -124,6 +136,7 @@ public class StrategyConfigService {
                 });
         // 新版本置 EFFECTIVE + 写激活表
         strategy.setStatus(StrategyParamStatus.EFFECTIVE);
+        initializeRuntimeState(strategy);
         fundStrategyRepository.save(strategy);
         FundStrategyActivationEntity activation = new FundStrategyActivationEntity();
         activation.setFundEntity(strategy.getFundEntity());
@@ -143,6 +156,7 @@ public class StrategyConfigService {
             throw new IllegalStateTransitionException(strategy.getStatus().name(), "PENDING_CALIBRATION(停用)");
         }
         strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
+        clearRuntimeState(strategy);
         fundStrategyRepository.save(strategy);
         fundStrategyActivationRepository
                 .findByFundStrategyEntity_IdAndDeactivatedAtIsNull(strategyId)
@@ -161,6 +175,7 @@ public class StrategyConfigService {
         List<FundStrategyEntity> allVersions = fundStrategyRepository.findByFundEntity_Id(fundId);
         for (FundStrategyEntity strategy : allVersions) {
             strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
+            clearRuntimeState(strategy);
             fundStrategyRepository.save(strategy);
         }
         List<FundStrategyActivationEntity> activeActivations =
@@ -177,7 +192,60 @@ public class StrategyConfigService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "FundStrategy #" + strategyId + " 不存在"));
     }
 
+    private StrategyConfigRequest resolveRequest(FundEntity fund, StrategyConfigRequest request) {
+        TakeProfitPreset preset = takeProfitPresetService.recommend(fund.getFundCategory());
+        StrategyConfigRequest resolved = takeProfitPresetService.fillMissing(request, preset);
+        validateRequest(resolved);
+        return resolved;
+    }
+
     private void applyRequest(FundStrategyEntity strategy, StrategyConfigRequest request) {
+        TakeProfitPreset preset = takeProfitPresetService.recommend(strategy.getFundEntity().getFundCategory());
+        strategy.setProfitActivationPercent(request.profitActivationPercent());
         strategy.setStopLossPullbackPercent(request.stopLossPullbackPercent());
+        strategy.setProfitHarvestPercent(request.profitHarvestPercent());
+        strategy.setMinimumHoldingPercent(request.minimumHoldingPercent());
+        strategy.setMaxSingleSellPercent(request.maxSingleSellPercent());
+        strategy.setCooldownTradingDays(request.cooldownTradingDays());
+        strategy.setPresetFundCategory(preset.fundCategory());
+        strategy.setPresetVersion(preset.presetVersion());
+        strategy.setCustomized(takeProfitPresetService.isCustomized(request, preset));
+    }
+
+    private static void validateRequest(StrategyConfigRequest request) {
+        requireRange("止盈启动收益率", request.profitActivationPercent(), false, true);
+        requireRange("高点回撤比例", request.stopLossPullbackPercent(), false, false);
+        requireRange("浮盈收割比例", request.profitHarvestPercent(), false, true);
+        requireRange("最低保留仓位", request.minimumHoldingPercent(), true, false);
+        requireRange("单次最大卖出比例", request.maxSingleSellPercent(), false, true);
+        if (request.cooldownTradingDays() == null
+                || request.cooldownTradingDays() < 0
+                || request.cooldownTradingDays() > 250) {
+            throw ErrorCode.STRATEGY_PARAM_INVALID.toException("冷静期交易日必须在 0 到 250 之间");
+        }
+    }
+
+    private static void requireRange(String name, BigDecimal value, boolean allowZero, boolean allowOne) {
+        if (value == null) {
+            throw ErrorCode.STRATEGY_PARAM_INVALID.toException(name + "不能为空");
+        }
+        int zero = value.compareTo(BigDecimal.ZERO);
+        int one = value.compareTo(BigDecimal.ONE);
+        if ((allowZero ? zero < 0 : zero <= 0) || (allowOne ? one > 0 : one >= 0)) {
+            throw ErrorCode.STRATEGY_PARAM_INVALID.toException(name + "取值范围非法: " + value);
+        }
+    }
+
+    private static void initializeRuntimeState(FundStrategyEntity strategy) {
+        clearRuntimeState(strategy);
+        strategy.setTakeProfitPhase(TakeProfitPhase.ACCUMULATING);
+    }
+
+    private static void clearRuntimeState(FundStrategyEntity strategy) {
+        strategy.setTakeProfitPhase(null);
+        strategy.setCycleStartedAt(null);
+        strategy.setCyclePeakNav(null);
+        strategy.setTriggeredSignalId(null);
+        strategy.setCooldownStartedAt(null);
     }
 }

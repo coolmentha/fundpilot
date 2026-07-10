@@ -15,10 +15,15 @@ export const labels = {
     INDEX: '指数',
     INDEX_ENHANCED: '指数增强',
     // StrategyParamStatus
-    PENDING_CALIBRATION: '待校准',
+    PENDING_CALIBRATION: '草稿',
     CALIBRATED: '已通过',
     CALIBRATION_FAILED: '未通过',
     EFFECTIVE: '已生效',
+    // TakeProfitPhase
+    ACCUMULATING: '积累中',
+    ARMED: '已启动',
+    TRIGGERED: '待止盈',
+    COOLDOWN: '冷静期',
     // SignalType
     NONE: '无建议',
     BUILD: '建仓',
@@ -181,6 +186,7 @@ export const errorTitles = {
     // 输入校验
     FUND_CATEGORY_REQUIRED: '缺少基金类型',
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
+    STRATEGY_PARAM_INVALID: '策略参数不合法',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',
     TRANSACTION_ALREADY_CANCELLED: '交易已撤销',

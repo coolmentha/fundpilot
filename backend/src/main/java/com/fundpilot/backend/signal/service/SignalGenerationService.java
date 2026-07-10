@@ -22,9 +22,11 @@ import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import com.fundpilot.backend.strategy.service.support.CapitalContext;
 import com.fundpilot.backend.strategy.service.support.MarketIndicators;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
+import com.fundpilot.backend.strategy.service.support.TakeProfitEvaluation;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +76,7 @@ public class SignalGenerationService {
     private final SignalLogRepository signalLogRepository;
     private final TradingCalendarService tradingCalendarService;
     private final DisciplineStrategyService disciplineStrategyService;
+    private final TakeProfitLifecycleService takeProfitLifecycleService;
 
     /**
      * 生成指定日期的全量信号。每只 EFFECTIVE 基金落一行 SignalLog(含 NONE 兜底)。
@@ -113,19 +116,28 @@ public class SignalGenerationService {
         } else {
             MarketIndicators market = toMarketIndicators(snapshotOpt.get());
             Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund);
-            CapitalContext capital = buildCapitalContext(fund, market, lastBuyConfirmTime);
+            CapitalContext capital = buildCapitalContext(fund, strategy, market, lastBuyConfirmTime, dayStart);
             long tradingDaysSinceLastBuy = computeTradingDaysSinceLastBuy(lastBuyConfirmTime, dayStart);
             result = disciplineStrategyService.evaluateSignal(fund, strategy, market, capital, dayStart, tradingDaysSinceLastBuy);
         }
 
-        // 反弹清空副作用:tierNAddedAt 变更随信号生成一起写回 fund_strategy
-        fundStrategyRepository.save(strategy);
+        // 已有未完成止盈周期时不写新的 NONE 日志，保留原可执行信号供用户回应。
+        if (strategy.getTakeProfitPhase() == com.fundpilot.backend.fund.enums.TakeProfitPhase.TRIGGERED
+                && result.signalType() == com.fundpilot.backend.signal.enums.SignalType.NONE) {
+            fundStrategyRepository.save(strategy);
+            return;
+        }
 
         // 覆盖式落 SignalLog:软删同日旧行 + 写新
         signalLogRepository.findByFundEntity_IdAndSignalDateBetween(fundId, dayStart, dayEnd)
                 .forEach(signalLogRepository::delete);
         SignalLogEntity log = toSignalLogEntity(fund, strategy, result, dayStart);
         signalLogRepository.save(log);
+        if (result.reason() == SignalReason.TRAILING_STOP) {
+            takeProfitLifecycleService.bindTriggeredSignal(strategy, log.getId());
+        } else {
+            fundStrategyRepository.save(strategy);
+        }
     }
 
     private MarketIndicators toMarketIndicators(MarketIndicatorSnapshotEntity snapshot) {
@@ -141,15 +153,25 @@ public class SignalGenerationService {
                 snapshot.getVolumeState() == com.fundpilot.backend.market.enums.VolumeState.HIGH_DROP);
     }
 
-    private CapitalContext buildCapitalContext(FundEntity fund, MarketIndicators market,
-                                               Instant lastBuyConfirmTime) {
+    private CapitalContext buildCapitalContext(FundEntity fund, FundStrategyEntity strategy,
+                                               MarketIndicators market, Instant lastBuyConfirmTime,
+                                               Instant today) {
         BigDecimal currentNav = market.currentNav() != null ? market.currentNav() : BigDecimal.ZERO;
         BigDecimal peakNav = fundNavHistoryRepository.findPeakAccumulatedNav(fund.getId()).orElse(currentNav);
         BigDecimal holdingPeakNav = fund.getOpenedAt() != null
                 ? fundNavHistoryRepository.findPeakAccumulatedNavSince(fund.getId(), fund.getOpenedAt()).orElse(currentNav)
                 : peakNav;
         BigDecimal holdingShares = fundPositionService.getHoldingShares(fund.getId());
-        return new CapitalContext(peakNav, holdingPeakNav, holdingShares, lastBuyConfirmTime);
+        TakeProfitEvaluation takeProfit = takeProfitLifecycleService.prepare(
+                fund, strategy, currentNav, holdingShares, today);
+        return new CapitalContext(
+                peakNav,
+                holdingPeakNav,
+                holdingShares,
+                lastBuyConfirmTime,
+                takeProfit.floatingProfit(),
+                takeProfit.matureRedeemableShares(),
+                takeProfit.evaluationEnabled());
     }
 
     /** 最近一次买入确认时间:只看已确认 INCREASE/TRANSFER_IN/INVEST,卖出和调整不重置持有期。 */

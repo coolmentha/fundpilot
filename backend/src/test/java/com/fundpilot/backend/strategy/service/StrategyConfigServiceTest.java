@@ -4,6 +4,8 @@ import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundStrategyActivationEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.FundCategory;
+import com.fundpilot.backend.fund.enums.TakeProfitPhase;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundStrategyActivationRepository;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
@@ -49,6 +51,7 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
         FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
         assertThat(saved.getStopLossPullbackPercent()).isEqualByComparingTo(new BigDecimal("0.08"));
+        assertThat(saved.isCustomized()).isTrue();
     }
 
     @Test
@@ -112,6 +115,7 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
 
         FundStrategyEntity saved = fundStrategyRepository.findById(strategyId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(StrategyParamStatus.EFFECTIVE);
+        assertThat(saved.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ACCUMULATING);
         // 激活表写了一行,deactivatedAt 为 null
         FundStrategyActivationEntity activation = fundStrategyActivationRepository
                 .findByFundStrategyEntity_IdAndDeactivatedAtIsNull(strategyId).orElseThrow();
@@ -206,6 +210,7 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
         FundEntity fund = new FundEntity();
         fund.setFundCode("161725");
         fund.setFundName("测试基金");
+        fund.setFundCategory(FundCategory.BROAD_BASE);
         return fundRepository.save(fund);
     }
 
@@ -214,6 +219,12 @@ class StrategyConfigServiceTest extends AbstractIntegrationTest {
     }
 
     private static StrategyConfigRequest configRequest(String stopLossPullbackPercent) {
-        return new StrategyConfigRequest(new BigDecimal(stopLossPullbackPercent));
+        return new StrategyConfigRequest(
+                new BigDecimal("0.15"),
+                new BigDecimal(stopLossPullbackPercent),
+                new BigDecimal("0.50"),
+                new BigDecimal("0.50"),
+                new BigDecimal("0.20"),
+                10);
     }
 }

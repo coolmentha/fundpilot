@@ -9,6 +9,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class TransactionConfirmService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
+    private final TakeProfitLifecycleService takeProfitLifecycleService;
 
     /**
      * 手动确认一笔交易。PENDING→CONFIRMED,用最新净值回填另一侧;转换交易两条腿一起确认。
@@ -137,6 +139,7 @@ public class TransactionConfirmService {
             }
         }
         fundTransactionRepository.save(tx);
+        takeProfitLifecycleService.onTransactionConfirmed(tx);
         fundPositionService.reconcileStatus(tx.getFundEntity().getId());
         confirmed.add(tx);
     }

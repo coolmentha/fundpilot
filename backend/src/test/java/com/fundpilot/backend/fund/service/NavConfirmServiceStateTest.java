@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,6 +33,7 @@ class NavConfirmServiceStateTest {
     @Mock private FundNavHistoryRepository fundNavHistoryRepository;
     @Mock private TransactionConfirmSupport transactionConfirmSupport;
     @Mock private FundPositionService fundPositionService;
+    @Mock private TakeProfitLifecycleService takeProfitLifecycleService;
     @InjectMocks private NavConfirmService service;
 
     @Test
@@ -81,6 +83,7 @@ class NavConfirmServiceStateTest {
         assertThat(confirmed).isEqualTo(1);
         assertThat(tx.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
         verify(transactionConfirmSupport).onBuyConfirmed(tx, new BigDecimal("1.25"));
+        verify(takeProfitLifecycleService).onTransactionConfirmed(tx);
     }
 
     private FundEntity fund(Long id) {
