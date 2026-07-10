@@ -18,6 +18,7 @@
 
 ```
 GET /api/market/indices/realtime     → List<IndexRealtimeView>
+GET /api/market/breadth              → MarketBreadthView
 GET /api/market/funds/estimates?codes=xxx,yyy → Map<String, FundEstimateView>
 GET /api/market/sectors              → List<SectorView>
 GET /api/market/money-flow           → MoneyFlowView
@@ -28,11 +29,12 @@ GET /api/funds/{fundId}/kline?period=daily|weekly|monthly → KlineView
 
 ```java
 public List<IndexRealtimeSnapshot> getIndices();        // 读 volatile 字段
+public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌家数
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
 public void refreshAll();                               // 全量刷新(含估值)
-public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/板块/资金
+public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
 @Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
 ```
 
@@ -66,9 +68,19 @@ N 个前端客户端共享同一份缓存。
 | 价格类 | f2, f4 | ÷100 | f2=404364 → 4043.64 |
 | 百分比类 | f3 | ÷100 | f3=37 → 0.37% |
 | 金额类 | f5, f6, f62, f66, f72, f78, f84 | 原值(元) | f6=1465563104853.7 |
+| 家数类 | f104, f105 | 非负整数原值 | f104=1542 表上涨 1542 只 |
 
 **陷阱**:f2/f3/f4 必须在解析器里 ÷100 还原,f6/f62 等金额字段原值。
 混用会导致指数点位差 100 倍或涨跌幅放大 100 倍。
+
+### 市场宽度契约
+
+- 固定汇总三个市场 secid:`1.000001`(沪市)、`0.399001`(深市)、`0.899050`(北交所)。
+- `f104` 为上涨家数，`f105` 为下跌家数；三者分别求和后写入 `MarketBreadthSnapshot`。
+- 这些字段表示当日有涨跌状态的沪深京股票，不等于全部上市 A 股总数，前端文案使用“大盘涨跌 / 沪深京股票”。
+- 市场宽度与用户 `watchedIndices` 解耦。缓存刷新时将自选 secid 与固定三个 secid 去重合并，一次调用 `fetchIndexRealtimeRaw`，再分别投影到 `indexCache` 与 `breadthCache`。
+- 任一固定市场缺失，或任一 `f104/f105` 缺失、非整数、负数时，解析结果为 null；不得发布部分市场合计，已有 `breadthCache` 保持不变。
+- 前端进度条左红表示上涨、右绿表示下跌，比例分母仅为 `risingCount + fallingCount`，平盘不参与。合计为 0 或接口数据为空时显示空轨道。
 
 ### 交易时段判断契约
 
@@ -103,6 +115,8 @@ N 个前端客户端共享同一份缓存。
 | 单只基金估值拉取失败 | 跳过该只,不影响其他 |
 | 缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
+| 三个市场宽度字段完整 | 汇总 `f104/f105` 并更新 `breadthCache` |
+| 任一市场或家数字段缺失 | 保留旧 `breadthCache`;首次无缓存时接口 data=null |
 | 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
 | 今日净值未落库且估值缓存为空 | 今日涨跌/盈亏返回未知，不回退昨日涨跌 |
 | 任一持仓今日盈亏未知 | 全仓 `dailyPnlTotal` 返回 null，前端显示 `-`，不展示部分合计 |
@@ -115,22 +129,27 @@ N 个前端客户端共享同一份缓存。
 ## Good/Base/Bad Cases
 
 - **Good**:交易时段,前端 5s 轮询指数,后端 30s 刷新缓存,用户看到近实时行情
+- **Good**:一次指数批量请求同时包含自选指数与沪深京固定市场,两个缓存独立投影
+- **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
 - **Good**:14:50 第三批快照完成后才读取快照生成信号
 - **Base**:估值接口暂时失败且缓存为空,今日涨跌显示未知而不是昨日值
 - **Bad**:今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
 - **Bad**:行情抓取和信号生成使用两个同秒 cron,信号可能先读到缺失快照
+- **Bad**:从用户自选指数的 `f104/f105` 相加市场宽度,会因沪深300等成分范围重叠而重复计数
 
 ---
 
 ## Tests Required
 
-- `EastmoneyJsParserRealtimeTest`:7 个测试覆盖三接口解析(正常响应、空响应、字段缺失)
+- `EastmoneyJsParserRealtimeTest`:实时行情解析测试覆盖正常响应、空响应、字段缺失
   - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null、北向资金取 s2n 最后一条
+- `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
 - 缓存层降级测试:mock push2Client 抛异常,验证旧缓存保留(本期未补,留 follow-up)
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
 - `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；同步启动事件不查询基金列表；异步启动事件带 `@Async` 并填充估值缓存。
+- `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
 - `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
 
@@ -183,6 +202,29 @@ public void warmFundEstimatesAfterReady() {
 }
 
 return new DailyChangeResult(null, false); // 不用昨日值冒充今日值
+```
+
+### Wrong:按自选指数汇总市场宽度
+
+```java
+// 错误:自选可能同时含沪深300、上证50、创业板指,成分范围重叠且会随用户配置变化。
+for (IndexRealtimeSnapshot index : indexCache) {
+    rising += index.risingCount();
+}
+```
+
+### Correct:固定市场口径并复用一次请求
+
+```java
+Set<String> requested = new LinkedHashSet<>(watchedSecids);
+requested.addAll(MARKET_BREADTH_SECIDS);
+String raw = push2Client.fetchIndexRealtimeRaw(String.join(",", requested));
+
+indexCache = projectWatchedIndices(raw, watchedSecids);
+MarketBreadthSnapshot breadth = EastmoneyJsParser.parseMarketBreadth(raw, MARKET_BREADTH_SECIDS);
+if (breadth != null) {
+    breadthCache = breadth;
+}
 ```
 
 ---

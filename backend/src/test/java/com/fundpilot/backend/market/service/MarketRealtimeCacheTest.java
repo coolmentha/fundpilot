@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.user.service.UserConfigService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
@@ -21,6 +22,65 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MarketRealtimeCacheTest {
+
+    @Test
+    void refreshRealtimeWithoutEstimates_一次请求同时刷新自选指数和市场宽度() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of("1.000300"));
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn("""
+                {"data":{"diff":[
+                  {"f2":400000,"f3":20,"f4":800,"f6":1000,"f12":"000300","f14":"沪深300"},
+                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f14":"上证指数","f104":1542,"f105":763},
+                  {"f2":120000,"f3":30,"f4":400,"f6":3000,"f12":"399001","f14":"深证成指","f104":2012,"f105":872},
+                  {"f2":150000,"f3":40,"f4":500,"f6":4000,"f12":"899050","f14":"北证50","f104":260,"f105":66}
+                ]}}
+                """);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        verify(push2Client).fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.argThat(secids ->
+                secids.contains("1.000300")
+                        && secids.contains("1.000001")
+                        && secids.contains("0.399001")
+                        && secids.contains("0.899050")));
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000300");
+        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(3814, 1701));
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_残缺市场数据保留旧宽度缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"data":{"diff":[
+                          {"f12":"000001","f104":100,"f105":50},
+                          {"f12":"399001","f104":200,"f105":80},
+                          {"f12":"899050","f104":30,"f105":10}
+                        ]}}
+                        """)
+                .thenReturn("""
+                        {"data":{"diff":[
+                          {"f12":"000001","f104":1,"f105":2},
+                          {"f12":"399001","f104":3,"f105":4}
+                        ]}}
+                        """);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository);
+
+        cache.refreshRealtimeWithoutEstimates();
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(330, 140));
+    }
 
     @Test
     void refreshAll_基金估值覆盖持仓和观察池基金() {

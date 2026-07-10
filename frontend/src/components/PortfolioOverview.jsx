@@ -1,19 +1,20 @@
 import {Skeleton} from 'antd';
-import {ArrowDownOutlined, ArrowUpOutlined, WalletOutlined} from '@ant-design/icons';
-import {usePortfolioSummary} from '../api/hooks.js';
+import {ArrowDownOutlined, ArrowUpOutlined, BarChartOutlined, WalletOutlined} from '@ant-design/icons';
+import {useMarketBreadth, usePortfolioSummary} from '../api/hooks.js';
 import {pnlColor, signedMoney} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
- * 行情工作台总览:展示全仓今日收益与上涨/下跌基金数量。
+ * 行情工作台总览:展示全仓今日收益、基金涨跌数量与沪深京市场宽度。
  */
 export default function PortfolioOverview() {
     const {data: summary, isLoading, isError, refetch} = usePortfolioSummary();
+    const {data: breadth, isError: isBreadthError} = useMarketBreadth();
 
     if (isLoading && !summary) {
         return (
             <div className="portfolio-overview-grid">
-                {[1, 2, 3].map((i) => (
+                {[1, 2, 3, 4].map((i) => (
                     <div className="portfolio-overview-card" key={i}>
                         <Skeleton active paragraph={{rows: 1, width: 96}} title={{width: 80}}/>
                     </div>
@@ -33,9 +34,21 @@ export default function PortfolioOverview() {
     const dailyPnlTotal = summary?.dailyPnlTotal;
     const risingFundCount = summary?.risingFundCount ?? 0;
     const fallingFundCount = summary?.fallingFundCount ?? 0;
+    const risingStockCount = breadth?.risingCount;
+    const fallingStockCount = breadth?.fallingCount;
+    const hasBreadth = Number.isFinite(risingStockCount)
+        && Number.isFinite(fallingStockCount)
+        && risingStockCount >= 0
+        && fallingStockCount >= 0;
+    const breadthTotal = hasBreadth ? risingStockCount + fallingStockCount : 0;
+    const risingPercent = breadthTotal > 0 ? (risingStockCount / breadthTotal) * 100 : 0;
+    const fallingPercent = breadthTotal > 0 ? 100 - risingPercent : 0;
+    const breadthAriaLabel = breadthTotal > 0
+        ? `沪深京股票上涨 ${risingStockCount} 只，占 ${risingPercent.toFixed(1)}%；下跌 ${fallingStockCount} 只，占 ${fallingPercent.toFixed(1)}%`
+        : '沪深京股票涨跌数据暂不可用';
 
     return (
-        <div className="portfolio-overview-grid" role="list" aria-label="组合收益总览">
+        <div className="portfolio-overview-grid" role="list" aria-label="组合收益与市场宽度总览">
             <div className="portfolio-overview-card primary" role="listitem">
                 <div className="overview-label">
                     <WalletOutlined/>
@@ -49,7 +62,7 @@ export default function PortfolioOverview() {
             <div className="portfolio-overview-card up" role="listitem">
                 <div className="overview-label">
                     <ArrowUpOutlined/>
-                    <span>今日上涨</span>
+                    <span>上涨基金</span>
                 </div>
                 <div className="overview-value">{risingFundCount}</div>
                 <div className="overview-hint muted">只</div>
@@ -57,10 +70,37 @@ export default function PortfolioOverview() {
             <div className="portfolio-overview-card down" role="listitem">
                 <div className="overview-label">
                     <ArrowDownOutlined/>
-                    <span>今日下跌</span>
+                    <span>下跌基金</span>
                 </div>
                 <div className="overview-value">{fallingFundCount}</div>
                 <div className="overview-hint muted">只</div>
+            </div>
+            <div className="portfolio-overview-card breadth" role="listitem">
+                <div className="overview-label">
+                    <BarChartOutlined/>
+                    <span>大盘涨跌</span>
+                </div>
+                <div className="market-breadth-summary">
+                    <span className="market-breadth-stat up">
+                        上涨 <strong>{hasBreadth ? risingStockCount : '-'}</strong>
+                        {breadthTotal > 0 && <small>{risingPercent.toFixed(1)}%</small>}
+                    </span>
+                    <span className="market-breadth-stat down">
+                        下跌 <strong>{hasBreadth ? fallingStockCount : '-'}</strong>
+                        {breadthTotal > 0 && <small>{fallingPercent.toFixed(1)}%</small>}
+                    </span>
+                </div>
+                <div className="market-breadth-bar" role="img" aria-label={breadthAriaLabel}>
+                    {breadthTotal > 0 && (
+                        <>
+                            <span className="market-breadth-up" style={{width: `${risingPercent}%`}}/>
+                            <span className="market-breadth-down" style={{width: `${fallingPercent}%`}}/>
+                        </>
+                    )}
+                </div>
+                <div className="overview-hint muted">
+                    {isBreadthError && !breadth ? '行情暂不可用' : '沪深京股票'}
+                </div>
             </div>
         </div>
     );
