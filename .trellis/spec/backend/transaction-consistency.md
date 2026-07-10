@@ -8,6 +8,9 @@
 
 ```java
 int NavConfirmService.confirmPendingTransactions(Instant tradeDayUtc);
+int NavConfirmService.confirmPendingTransactionsForFund(Long fundId);
+int PendingTransactionCompensationService.compensateAll();
+int PendingTransactionCompensationService.compensateFund(Long fundId);
 List<FundTransactionEntity> TransactionConfirmService.confirm(Long transactionId);
 List<FundTransactionEntity> TransactionCancelService.cancel(Long transactionId);
 FundTransactionEntity SignalOperationService.confirmOperation(Long fundId, Long signalLogId, ConfirmOperationRequest request);
@@ -28,6 +31,10 @@ int TradingCalendarSyncService.syncFull();
 - `MarketDataFetchService` 写 snapshot、`SignalQueryService.today` 查当日信号也必须使用同一日期标签，手动入口不能按 JVM UTC 截日。
 - `NavConfirmJob` 次日 03:00 用 `ChinaTradingDate.previousUtcDate(clock.instant())` 传前一业务自然日标签。
 - `NavConfirmService` 优先按每笔 PENDING 交易的 `createdDate` 选择净值日；Job 参数只为历史空时间降级。
+- 手动确认与自动确认都必须按交易 `createdDate` 对应的北京时间自然日取累计净值，禁止使用最新净值替代。
+- 净值历史新增行提交后发布 `FundNavUpdatedEvent`，`AFTER_COMMIT` 监听器按基金推进 PENDING 交易，确认失败不得回滚净值。
+- 应用启动时和每小时第 5 分钟运行待确认补偿；按基金使用独立事务，单只失败不阻断其他基金。
+- `NavConfirmJob`、`DailyNavConfirmJob` 和补偿 Job 的 cron 必须显式声明 `zone = "Asia/Shanghai"`。
 - SignalLog 回应必须校验路径基金归属，并在悲观锁内检查未软删关联交易，保证同一信号只生成一笔交易。
 - `MIN_HOLD_DAYS` 只查最近一笔 CONFIRMED 的 INCREASE/TRANSFER_IN/INVEST；卖出、调整和 PENDING 不得重置持有期。
 - 创建 PENDING 交易不得提前修改基金状态；确认和撤销后统一调用 `reconcileStatus` 按 CONFIRMED 净份额重算。
@@ -52,23 +59,32 @@ int TradingCalendarSyncService.syncFull();
 | 路径 fundId 与 SignalLog 所属基金不一致 | 拒绝回应 | `SIGNAL_FUND_MISMATCH` |
 | SignalLog 已有关联未软删交易 | 拒绝重复回应 | `SIGNAL_ALREADY_RESPONDED` |
 | 日历日期已存在 | 返回 0，不抛异常 | 无 |
+| 手动确认缺少交易发生日净值 | 保持 PENDING，拒绝使用最新净值 | `NAV_HISTORY_EMPTY` |
+| 单只基金补偿失败 | 记录错误并继续其他基金 | 无 |
 
 ## 5. Good / Base / Bad Cases
 
 - Good：A、B 当日净值齐备，一次事务确认两腿并生成 B lot。
 - Good：周一补确认上周五 PENDING 交易时按交易 `createdDate` 使用周五净值。
+- Good：03:00 时周五净值缺失，周五下午历史净值补齐后由提交后事件立即确认，不等待下周一。
+- Good：应用在 cron 后启动，启动补偿扫描确认所有已具备交易日净值的历史 PENDING。
 - Good：同一信号并发回应时锁内只允许第一笔创建交易。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
 - Base：50 份 open lot + 50 份 ADJUST_IN，卖 100 份时仅前 50 份计算赎回费。
 - Base：日历空表日常同步执行全量初始化，非空表只处理最大日期之后。
 - Bad：北京时间 03:00 直接按 JVM UTC 日期减一天，会再偏一天。
 - Bad：所有 PENDING 交易共用 Job 日期，会把周末积压交易按后续净值确认。
+- Bad：手动确认直接读取最新一期净值，会把历史交易按后续交易日价格成交。
+- Bad：在净值写入事务内同步确认，确认异常会把已抓到的净值一起回滚。
 - Bad：创建 PENDING 卖出时提前设 CLEARED，撤单后基金状态与事实持仓不一致。
 - Bad：先 `findAll()` 再 `save()` 日历，多实例会同时判定不存在并撞唯一索引。
 
 ## 6. Tests Required
 
 - `ChinaTradingDateTest` / `NavConfirmJobTest`：覆盖北京时间凌晨与前一自然日标签。
+- `PendingTransactionCompensationJobTest`：覆盖启动补偿、每小时 cron 和上海时区。
+- `PendingTransactionCompensationServiceTest`：覆盖按基金去重、单只失败隔离和继续确认其他基金。
+- `DailyNavConfirmServiceEventTest` / `MarketDataFetchServiceDateTest`：断言新增净值后发布 `FundNavUpdatedEvent`。
 - `NavConfirmServiceStateTest`：覆盖交易自身日期、周末旧交易、缺净值保持 PENDING 和转换两腿原子确认。
 - `SignalOperationServiceUnitTest` / `SignalOperationServiceTest`：覆盖归属、重复回应、SELL 关联和 PENDING 状态。
 - `SignalQueryServiceTest`：已回应信号不再出现在 pending 列表。
@@ -100,6 +116,7 @@ Instant tradeDay = ChinaTradingDate.previousUtcDate(clock.instant());
 Instant txDay = ChinaTradingDate.toUtcDate(tx.getCreatedDate() != null ? tx.getCreatedDate() : tradeDay);
 fundPositionService.reconcileStatus(fundId); // 只在确认/撤销后按事实重算
 repository.insertTradingDayIfAbsent(date); // INSERT ... ON CONFLICT DO NOTHING
+eventPublisher.publishEvent(new FundNavUpdatedEvent(fundId)); // AFTER_COMMIT 再推进交易
 ```
 
 ## Scenario: DCA Take-Profit Lifecycle

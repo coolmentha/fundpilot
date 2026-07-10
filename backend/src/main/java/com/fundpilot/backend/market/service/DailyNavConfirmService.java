@@ -4,12 +4,14 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -41,6 +43,7 @@ public class DailyNavConfirmService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundEstimateService fundEstimateService;
     private final MarketDataSource marketDataSource;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 遍历所有基金,确认当日净值落库。供 {@code DailyNavConfirmJob} 每分钟调用。
@@ -129,6 +132,7 @@ public class DailyNavConfirmService {
                 .toList();
         if (!toInsert.isEmpty()) {
             fundNavHistoryRepository.saveAll(toInsert);
+            eventPublisher.publishEvent(new FundNavUpdatedEvent(fund.getId()));
         }
     }
 }

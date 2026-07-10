@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -108,7 +109,7 @@ public class TransactionConfirmService {
             throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
                     "仅 PENDING 交易可确认,tx_id=" + tx.getId());
         }
-        BigDecimal navValue = latestAccumulatedNav(tx.getFundEntity().getId());
+        BigDecimal navValue = transactionDayAccumulatedNav(tx);
         FundTransactionSource source = tx.getSource();
         switch (source) {
             case INCREASE, TRANSFER_IN, INVEST -> {
@@ -146,17 +147,19 @@ public class TransactionConfirmService {
 
     // updateCostPerShare 已移至 TransactionConfirmSupport(统一扣费 + lot + 成本更新)
 
-    /** 取该基金最新一期累计净值(净值未落库抛 NAV_HISTORY_EMPTY)。 */
-    private BigDecimal latestAccumulatedNav(Long fundId) {
-        List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
-        if (latestTwo.isEmpty()) {
+    /** 取交易发生日累计净值，禁止用最新一期净值替代历史成交净值。 */
+    private BigDecimal transactionDayAccumulatedNav(FundTransactionEntity transaction) {
+        Instant dayStart = TransactionTradeDate.resolve(transaction, Instant.now());
+        List<FundNavHistoryEntity> rows = fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+                transaction.getFundEntity().getId(), dayStart, dayStart.plus(1, ChronoUnit.DAYS));
+        if (rows.isEmpty()) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
-                    "基金 #" + fundId + " 无净值历史,请先拉取行情");
+                    "基金 #" + transaction.getFundEntity().getId() + " 缺少交易日 " + dayStart + " 的净值");
         }
-        BigDecimal nav = latestTwo.get(0).getAccumulatedNav();
+        BigDecimal nav = rows.get(0).getAccumulatedNav();
         if (nav == null || nav.signum() <= 0) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
-                    "基金 #" + fundId + " 最新净值为空或非正,无法确认");
+                    "基金 #" + transaction.getFundEntity().getId() + " 交易日净值为空或非正,无法确认");
         }
         return nav;
     }

@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
 import com.fundpilot.backend.market.client.MarketDataSource;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -52,6 +54,7 @@ public class MarketDataFetchService {
     private final MarketIndicatorSnapshotService snapshotService;
     private final IndexKlineRepository indexKlineRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
@@ -178,6 +181,7 @@ public class MarketDataFetchService {
                 .toList();
         if (!toInsert.isEmpty()) {
             fundNavHistoryRepository.saveAll(toInsert);
+            eventPublisher.publishEvent(new FundNavUpdatedEvent(fund.getId()));
         }
     }
 

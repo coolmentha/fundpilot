@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -55,19 +56,25 @@ public class NavConfirmService {
     public int confirmPendingTransactions(Instant date) {
         Instant fallbackDate = date != null ? date : Instant.now();
         List<FundTransactionEntity> pendings = fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING);
+        return confirmTransactions(pendings, fallbackDate);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int confirmPendingTransactionsForFund(Long fundId) {
+        List<FundTransactionEntity> pendings = fundTransactionRepository
+                .findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.PENDING);
+        return confirmTransactions(pendings, Instant.now());
+    }
+
+    private int confirmTransactions(List<FundTransactionEntity> pendings, Instant fallbackDate) {
         int confirmed = 0;
         for (FundTransactionEntity tx : pendings) {
-            Instant dayStart = tradeDay(tx, fallbackDate);
+            Instant dayStart = TransactionTradeDate.resolve(tx, fallbackDate);
             confirmed += tryConfirm(tx, dayStart, dayStart.plus(1, ChronoUnit.DAYS));
         }
         log.info("净值确认完成 fallback_date={} pending={} confirmed={}",
                 ChinaTradingDate.toUtcDate(fallbackDate), pendings.size(), confirmed);
         return confirmed;
-    }
-
-    private Instant tradeDay(FundTransactionEntity tx, Instant fallbackDate) {
-        Instant source = tx.getCreatedDate() != null ? tx.getCreatedDate() : fallbackDate;
-        return ChinaTradingDate.toUtcDate(source);
     }
 
     /**
