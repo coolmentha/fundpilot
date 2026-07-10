@@ -2,6 +2,7 @@ package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * 手动确认交易集成测试:PENDING → CONFIRMED,取最新净值回填另一侧,转换交易两条腿联动。
+ * 手动确认交易集成测试:PENDING → CONFIRMED,取交易发生日净值回填另一侧,转换交易两条腿联动。
  */
 class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
@@ -36,7 +37,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void confirm_买入交易_用最新净值回填shares() {
+    void confirm_买入交易_用交易发生日净值回填shares() {
         FundEntity fund = persistFund();
         navHistory(fund, "1.26");
         // 买入 1000 元,净值 1.26 → shares = 1000/1.26 ≈ 793.65
@@ -54,7 +55,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void confirm_卖出交易_用最新净值回填amount() {
+    void confirm_卖出交易_用交易发生日净值回填amount() {
         FundEntity fund = persistFund();
         navHistory(fund, "1.26");
         // 卖出 500 份,净值 1.26 → amount = 500 × 1.26 = 630
@@ -165,7 +166,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
     private void navHistory(FundEntity fund, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setFundEntity(fund);
-        entity.setNavDate(Instant.parse("2025-06-27T00:00:00Z"));
+        entity.setNavDate(ChinaTradingDate.toUtcDate(Instant.now()));
         entity.setNav(new BigDecimal(accumulatedNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
         fundNavHistoryRepository.save(entity);

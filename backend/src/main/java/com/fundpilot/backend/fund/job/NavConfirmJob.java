@@ -27,7 +27,7 @@ public class NavConfirmJob {
     private final NavConfirmService navConfirmService;
     private final Clock clock;
 
-    @Scheduled(cron = "0 0 3 * * MON-FRI")
+    @Scheduled(cron = "0 0 3 * * MON-FRI", zone = "Asia/Shanghai")
     public void run() {
         log.info("净值确认任务开始");
         Instant tradeDay = ChinaTradingDate.previousUtcDate(clock.instant());

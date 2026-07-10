@@ -3,12 +3,14 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.repository.IndexKlineRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -32,9 +34,11 @@ class MarketDataFetchServiceDateTest {
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         MarketIndicatorSnapshotService snapshotService = mock(MarketIndicatorSnapshotService.class);
         IndexKlineRepository indexKlineRepository = mock(IndexKlineRepository.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         MarketDataFetchService service = new MarketDataFetchService(
-                fundRepository, navRepository, marketDataSource, snapshotService, indexKlineRepository, clock);
+                fundRepository, navRepository, marketDataSource, snapshotService, indexKlineRepository, clock,
+                eventPublisher);
 
         FundEntity fund = new FundEntity();
         fund.setId(1L);
@@ -51,6 +55,7 @@ class MarketDataFetchServiceDateTest {
         ArgumentCaptor<MarketIndicatorSnapshotEntity> captor =
                 ArgumentCaptor.forClass(MarketIndicatorSnapshotEntity.class);
         verify(snapshotService).upsert(captor.capture());
+        verify(eventPublisher).publishEvent(new FundNavUpdatedEvent(1L));
         assertThat(captor.getValue().getSnapshotDate())
                 .isEqualTo(Instant.parse("2026-07-07T00:00:00Z"));
     }

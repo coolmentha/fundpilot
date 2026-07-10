@@ -19,7 +19,7 @@ public class DailyNavConfirmJob {
         this.dailyNavConfirmService = dailyNavConfirmService;
     }
 
-    @Scheduled(cron = "0 * 20-22 * * MON-FRI")
+    @Scheduled(cron = "0 * 20-22 * * MON-FRI", zone = "Asia/Shanghai")
     public void confirmTodayNav() {
         dailyNavConfirmService.confirmTodayNav();
     }

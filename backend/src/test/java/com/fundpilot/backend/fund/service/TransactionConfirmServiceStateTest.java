@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,11 +46,14 @@ class TransactionConfirmServiceStateTest {
         out.setAmount(new BigDecimal("600"));
         FundTransactionEntity in = tx(11L, fundB, FundTransactionSource.TRANSFER_IN,
                 FundTransactionStatus.PENDING);
+        Instant tradeDay = Instant.parse("2026-07-09T00:00:00Z");
+        in.setCreatedDate(Instant.parse("2026-07-09T06:55:00Z"));
         out.setRelatedFundTransactionEntity(in);
         in.setRelatedFundTransactionEntity(out);
 
         when(fundTransactionRepository.findById(11L)).thenReturn(Optional.of(in));
-        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(2L))
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+                2L, tradeDay, tradeDay.plus(1, ChronoUnit.DAYS)))
                 .thenReturn(List.of(nav(fundB, "2.00")));
 
         List<FundTransactionEntity> confirmed = service.confirm(11L);
@@ -59,6 +64,27 @@ class TransactionConfirmServiceStateTest {
         verify(takeProfitLifecycleService).onTransactionConfirmed(in);
         verify(fundPositionService).reconcileStatus(2L);
         verify(fundPositionService, never()).reconcileStatus(1L);
+    }
+
+    @Test
+    void confirm_历史交易使用发生日净值而非最新净值() {
+        FundEntity fund = fund(1L);
+        FundTransactionEntity tx = tx(20L, fund, FundTransactionSource.INCREASE,
+                FundTransactionStatus.PENDING);
+        tx.setAmount(new BigDecimal("100"));
+        tx.setCreatedDate(Instant.parse("2026-07-09T06:55:00Z"));
+        Instant tradeDay = Instant.parse("2026-07-09T00:00:00Z");
+
+        when(fundTransactionRepository.findById(20L)).thenReturn(Optional.of(tx));
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+                1L, tradeDay, tradeDay.plus(1, ChronoUnit.DAYS)))
+                .thenReturn(List.of(nav(fund, "1.25")));
+
+        service.confirm(20L);
+
+        assertThat(tx.getNav()).isEqualByComparingTo("1.25");
+        verify(transactionConfirmSupport).onBuyConfirmed(tx, new BigDecimal("1.25"));
+        verify(fundNavHistoryRepository, never()).findTop2ByFundEntity_IdOrderByNavDateDesc(1L);
     }
 
     private FundEntity fund(Long id) {
