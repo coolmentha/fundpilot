@@ -36,6 +36,7 @@ public class TransactionConfirmService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
+    private final FundPositionService fundPositionService;
 
     /**
      * 手动确认一笔交易。PENDING→CONFIRMED,用最新净值回填另一侧;转换交易两条腿一起确认。
@@ -136,6 +137,7 @@ public class TransactionConfirmService {
             }
         }
         fundTransactionRepository.save(tx);
+        fundPositionService.reconcileStatus(tx.getFundEntity().getId());
         confirmed.add(tx);
     }
 

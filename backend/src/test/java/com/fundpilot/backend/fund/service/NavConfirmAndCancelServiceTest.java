@@ -106,6 +106,23 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void confirmPendingTransactions_全额卖出确认后基金状态转CLEARED() {
+        persistNavToday(new BigDecimal("2.00"));
+        FundTransactionEntity buy = persistTx(FundTransactionSource.INCREASE, new BigDecimal("2000"), new BigDecimal("1000"));
+        buy.setStatus(FundTransactionStatus.CONFIRMED);
+        FundTransactionEntity sell = persistTx(FundTransactionSource.DECREASE, null, new BigDecimal("1000"));
+        entityManager.flush();
+
+        navConfirmService.confirmPendingTransactions(today);
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entityManager.find(FundTransactionEntity.class, sell.getId()).getStatus())
+                .isEqualTo(FundTransactionStatus.CONFIRMED);
+        assertThat(entityManager.find(FundEntity.class, fund.getId()).getStatus()).isEqualTo(FundStatus.CLEARED);
+    }
+
+    @Test
     void confirmPendingTransactions_当日无净值行的PENDING不动() {
         // 不 persistNavToday —— 当日无净值
         FundTransactionEntity tx = persistTx(FundTransactionSource.INCREASE, new BigDecimal("1000"), null);

@@ -23,6 +23,7 @@ import static org.mockito.Mockito.when;
 class TransactionCancelServiceStateTest {
 
     @Mock private FundTransactionRepository fundTransactionRepository;
+    @Mock private FundPositionService fundPositionService;
     @InjectMocks private TransactionCancelService service;
 
     @Test

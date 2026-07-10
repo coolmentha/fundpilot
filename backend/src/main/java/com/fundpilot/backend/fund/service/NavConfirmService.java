@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
@@ -42,6 +43,7 @@ public class NavConfirmService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
+    private final FundPositionService fundPositionService;
 
     /**
      * 回填指定 UTC 日期的 PENDING 交易。null 时用今天 UTC 0 点。
@@ -49,15 +51,21 @@ public class NavConfirmService {
      */
     @Transactional
     public int confirmPendingTransactions(Instant date) {
-        Instant dayStart = (date != null ? date : Instant.now()).truncatedTo(ChronoUnit.DAYS);
-        Instant dayEnd = dayStart.plus(1, ChronoUnit.DAYS);
+        Instant fallbackDate = date != null ? date : Instant.now();
         List<FundTransactionEntity> pendings = fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING);
         int confirmed = 0;
         for (FundTransactionEntity tx : pendings) {
-            confirmed += tryConfirm(tx, dayStart, dayEnd);
+            Instant dayStart = tradeDay(tx, fallbackDate);
+            confirmed += tryConfirm(tx, dayStart, dayStart.plus(1, ChronoUnit.DAYS));
         }
-        log.info("净值确认完成 date={} pending={} confirmed={}", dayStart, pendings.size(), confirmed);
+        log.info("净值确认完成 fallback_date={} pending={} confirmed={}",
+                ChinaTradingDate.toUtcDate(fallbackDate), pendings.size(), confirmed);
         return confirmed;
+    }
+
+    private Instant tradeDay(FundTransactionEntity tx, Instant fallbackDate) {
+        Instant source = tx.getCreatedDate() != null ? tx.getCreatedDate() : fallbackDate;
+        return ChinaTradingDate.toUtcDate(source);
     }
 
     /**
@@ -163,6 +171,7 @@ public class NavConfirmService {
             }
         }
         fundTransactionRepository.save(tx);
+        fundPositionService.reconcileStatus(tx.getFundEntity().getId());
     }
 
     // updateCostPerShare 已移至 TransactionConfirmSupport(统一扣费 + lot + 成本更新)

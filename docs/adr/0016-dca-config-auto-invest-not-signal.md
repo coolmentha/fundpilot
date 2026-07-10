@@ -29,6 +29,6 @@
   去重仅对定投生成的交易生效。月定投日封顶 28(避开月末交易日缺失),>28 不支持,需用户接受月初定投替代。
 - **时序**:`DcaSuggestionJob` 14:55 下单(PENDING) → `DailyNavConfirmJob` 20:00 拉净值 → `NavConfirmJob` 次日 03:00 确认
   (cron 从 21:00 改 03:00,确认"之前生成的"流水,单日定投流水在 14:55 已生成,次日 3 点确认时净值已落地)。
-- **交易日历约定**:Job 查询 `TradingCalendarService` 统一用 UTC 0 点 Instant 表当日(对齐 `InstantDateConverter` +
-  `TradingCalendarSyncService`),不可用 Asia/Shanghai 午夜(会与 UTC-midnight 存储的日历行错位一天)。
+- **交易日历约定**:Job 查询 `TradingCalendarService` 统一调用 `ChinaTradingDate.toUtcDate(now)`，把北京时间自然日映射成
+  UTC 00:00 DATE 标签；不可直接用 Asia/Shanghai 午夜 Instant（会与 UTC-midnight 存储的日历行错位一天）。
 - **后续**:定投暂不支持按净值估值动态调额(智能定投),本期固定金额;如需可在 `FundDcaPlanEntity` 加策略字段扩展。

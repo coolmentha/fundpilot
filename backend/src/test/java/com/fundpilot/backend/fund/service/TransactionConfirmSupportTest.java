@@ -92,6 +92,23 @@ class TransactionConfirmSupportTest {
                 new BigDecimal("1000").divide(new BigDecimal("1.5"), MATH));
     }
 
+    @Test
+    void onExistingPositionConfirmed_只建立lot不重复扣申购费() {
+        Instant openedAt = Instant.parse("2025-01-01T00:00:00Z");
+        FundTransactionEntity tx = buyTx(new BigDecimal("3000"), openedAt);
+        tx.setShares(new BigDecimal("2000"));
+
+        support.onExistingPositionConfirmed(tx, new BigDecimal("1.20"));
+
+        verifyNoInteractions(fundFeeService);
+        verify(fundLotRepository).save(argThat(lot ->
+                lot.getAcquireTxId().equals(tx.getId())
+                        && lot.getAcquireDate().equals(openedAt)
+                        && lot.getAcquireShares().compareTo(new BigDecimal("2000")) == 0
+                        && lot.getRemainingShares().compareTo(new BigDecimal("2000")) == 0
+                        && lot.getAcquireCostPerShare().compareTo(new BigDecimal("1.20")) == 0));
+    }
+
     // ===== FIFO 赎回费匹配 =====
 
     @Test

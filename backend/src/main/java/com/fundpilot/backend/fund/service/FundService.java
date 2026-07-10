@@ -47,6 +47,7 @@ public class FundService {
     private final MarketDataFetchService marketDataFetchService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundTransactionRepository fundTransactionRepository;
+    private final TransactionConfirmSupport transactionConfirmSupport;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
@@ -155,11 +156,12 @@ public class FundService {
         tx.setAmount(initialMarketValue);
         tx.setShares(initialMarketValue.divide(navValue, MATH));
         tx.setNav(navValue);
-        tx.setConfirmTime(openedAt);
-        tx.setCreatedDate(openedAt);
+        tx.setConfirmTime(effectiveOpenedAt);
+        tx.setCreatedDate(effectiveOpenedAt);
         tx.setStatus(FundTransactionStatus.CONFIRMED);
         tx.setSignalLogEntity(null);
-        fundTransactionRepository.save(tx);
+        FundTransactionEntity savedTx = fundTransactionRepository.save(tx);
+        transactionConfirmSupport.onExistingPositionConfirmed(savedTx, effectiveCostPerShare);
 
         // 状态流转:对齐 handleBuild。openedAt/confirmTime 均用用户填建仓时间(6079ba1:建仓流水用建仓时间)
         fund.setStatus(FundStatus.HOLDING);

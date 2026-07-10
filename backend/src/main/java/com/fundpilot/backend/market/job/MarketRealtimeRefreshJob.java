@@ -1,12 +1,15 @@
 package com.fundpilot.backend.market.job;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.market.repository.TradingCalendarRepository;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -22,6 +25,7 @@ import java.time.ZoneId;
  * JobMetricsAspect 自动给本任务加监控指标。
  */
 @Component
+@RequiredArgsConstructor
 public class MarketRealtimeRefreshJob {
 
     private static final Logger log = LoggerFactory.getLogger(MarketRealtimeRefreshJob.class);
@@ -34,12 +38,7 @@ public class MarketRealtimeRefreshJob {
 
     private final MarketRealtimeCache cache;
     private final TradingCalendarRepository tradingCalendarRepository;
-
-    public MarketRealtimeRefreshJob(MarketRealtimeCache cache,
-                                    TradingCalendarRepository tradingCalendarRepository) {
-        this.cache = cache;
-        this.tradingCalendarRepository = tradingCalendarRepository;
-    }
+    private final Clock clock;
 
     /**
      * 交易时段每 30 秒触发一次,内部判断是否真的在交易时段。
@@ -59,9 +58,9 @@ public class MarketRealtimeRefreshJob {
 
     /** 是否处于 A 股交易时段(9:30-11:30 或 13:00-15:00,上海时区),且当日为交易日。 */
     private boolean isTradingHours() {
-        java.time.ZonedDateTime now = Instant.now().atZone(TRADING_ZONE);
+        java.time.ZonedDateTime now = clock.instant().atZone(TRADING_ZONE);
         // 当日非交易日在 trading_calendar 表中无记录或 tradingDay=false
-        Instant todayUtc = now.toLocalDate().atStartOfDay(TRADING_ZONE).toInstant();
+        Instant todayUtc = ChinaTradingDate.toUtcDate(clock.instant());
         return tradingCalendarRepository.findByCalendarDate(todayUtc)
                 .map(e -> e.isTradingDay())
                 .orElse(false)

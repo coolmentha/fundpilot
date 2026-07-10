@@ -6,7 +6,7 @@
 ## 信号与交易动作
 
 **SignalType（信号类型）**:
-系统每日 14:50 对绑定 `EFFECTIVE` 策略的基金评估后冻进 `SignalLogEntity` 的策略意图，站在**用户视角的策略动作**。四值：
+系统每日 14:50 在第三批行情快照完成后，对绑定 `EFFECTIVE` 策略的基金评估并固化进 `SignalLogEntity`，站在**用户视角的策略动作**。四值：
 `NONE`（无建议）/ `BUILD`（建仓）/ `ADD`（加仓）/ `SELL`（卖出）。
 _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 
@@ -15,6 +15,11 @@ _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 `ADJUST_IN` / `ADJUST_OUT`。与 `SignalType` 是**两个不同维度**——信号描述"系统建议什么策略动作"，来源描述"账目份额怎么动"。
 `ADJUST_IN/ADJUST_OUT` 仅用于账实份额修正，录入即确认，不计算净值、金额或手续费。
 _Avoid_: BUY / SELL（语义已被 SignalType 占用，避免歧义）
+
+**信号回应（Signal Response）**:
+路径 `fundId` 必须与 `signalLogId` 所属基金一致；同一 SignalLog 最多生成一笔未软删交易。回应只创建 PENDING 交易，
+不提前修改 `FundStatus`；交易确认或撤销后再按全部 CONFIRMED 交易的事实净份额统一重算状态。SELL 交易同样保留 `signalLogId`。
+_Avoid_: 仅相信请求路径基金；创建 PENDING 时提前切到 HOLDING/CLEARED；SELL 丢失 SignalLog 关联
 
 ## 回撤基准
 
@@ -59,12 +64,12 @@ _Avoid_: 用基金自身净值算量能——基金没有成交量
 _Avoid_: 用沪深300 量能代理（反映大盘情绪不反映个股层面）或持仓股聚合量能（数据滞后一季度，实战价值打折）
 
 **SELL 信号优先级**:
-一只基金每日一行 SignalLog，SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈**"顺序检查，命中即返回。
+一只基金每日一行 SignalLog，日期按北京时间自然日映射为 UTC 00:00 标签。SELL 信号最多一类。`evaluateSignal` 按"**逻辑止损 > 移动止盈**"顺序检查，命中即返回。
 `reason` 两值：`LOGIC_BROKEN` / `TRAILING_STOP`（`REBALANCE` 已废弃，存量数据可见）。
 _Avoid_: 同日多类型 SELL 信号叠加（违反"一只基金每日一行"的唯一性约束）
 
 **7 天内不赎回硬约束（MIN_HOLD_DAYS）**:
-保护性约束，防止"刚买就卖"的短线反人性操作。起算点取最近一次买入确认交易的 `confirmTime`（最近一笔 CONFIRMED 交易），
+保护性约束，防止"刚买就卖"的短线反人性操作。起算点只取最近一次已确认买入类交易（INCREASE/TRANSFER_IN/INVEST）的 `confirmTime`，
 每次买入都重置。判定窗口为 **5 个交易日**（不是自然日 7 天，更贴近市场节奏）。未满窗口时移动止盈降级为
 `signalType=NONE, reason=MIN_HOLD_DAYS_NOT_MET`；逻辑止损豁免，照常出 SELL 信号但在 `warnings` 里记
 `MIN_HOLD_DAYS_OVERRIDDEN`。手动卖出（不带 `signalLogId`）不经过 `evaluateSignal`，不卡此约束（前端可提示但不阻止）。
@@ -72,7 +77,8 @@ _Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起�
 
 **交易日历（TradingCalendar）**:
 `MIN_HOLD_DAYS` 判定 5 个交易日所需的基础数据表，记录每个日期是否为 A 股交易日（含节假日剔除）。一次性灌入未来几年的日历即可（A
-股节假日规则相对固定）。当前由新浪交易日历源在启动时预热并每日同步，数据库使用原子 insert-if-absent 保证重复和并发同步幂等。
+股节假日规则相对固定）。当前由新浪交易日历源在启动时预热并每日同步：空表全量初始化，非空表只写当前最大日期之后的数据；
+管理入口保留全量补写历史缺口。数据库使用原子 insert-if-absent 保证重复和并发同步幂等。
 
 ## 策略状态机
 
@@ -129,13 +135,13 @@ _Avoid_: 搜索框每次按键现拉东方财富字典（撞限流）；进程�
 ## 行情数据缓存
 
 **表级缓存（MarketIndicatorSnapshot）**:
-不引入 Redis，用 PostgreSQL 的 `market_indicator_snapshot` 表当缓存。每只基金每日 14:50
-拉一次落库，之后所有信号生成、用户查看建议都从这张表读，不再发外部请求。若 14:50 集中拉跑不完，加 `@Scheduled` 分批触发（如
-14:30 / 14:40 / 14:50 三批）。Redis 缓存层留给未来。
+不引入 Redis，用 PostgreSQL 的 `market_indicator_snapshot` 表当缓存。所有未软删基金按 14:30 / 14:40 / 14:50 三批拉取落库，
+之后所有信号生成、用户查看建议都从这张表读，不再发外部请求。14:50 第三批返回后才生成当日信号，不能由两个同秒 cron 竞争顺序。
+Redis 缓存层留给未来。
 _Avoid_: 本期引入 Redis（增加基础设施复杂度）
 
 **盘中估值（Intraday Estimate）**:
-三态今日涨跌「盘中态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。按需实时拉取（查基金列表/详情时拉），不落库——估值是短时态数据，收盘后失效。gszzl 基于单位净值，但涨跌幅是比例，同日不除权时与累计净值涨跌幅一致，直接用作估算涨跌幅无口径问题。拉取失败降级返 empty（今日涨跌降级为落库净值算）。
+三态今日涨跌「盘中态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。后台每 30 秒刷新全部未软删基金（含观察池）的内存缓存，请求链只读缓存，不落库——估值是短时态数据，收盘后失效。gszzl 基于单位净值，但涨跌幅是比例，同日不除权时与累计净值涨跌幅一致，直接用作估算涨跌幅无口径问题。拉取失败保留旧缓存或降级 empty。
 _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值是短时态）；用 gsz 算绝对盈亏（单位净值口径，分红基金失真，用市值×涨跌幅比例规避）
 
 **当晚净值确认（Daily Nav Confirm）**:
@@ -201,7 +207,8 @@ _Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，sig
 `costPerShare` 可选填（成本单价，不填默认 T-1 净值），>0 校验，存入 `FundEntity.costPerShare` 作为初始成本基准。
 交易 `amount` 写 `initialMarketValue`（市值口径）。`openedAt` 用户可填（大致建仓时点，影响移动止盈持仓期高点起算），
 不填用 now，须 ≤ 今天。与手动交易的本质区别：手动交易是已建仓后的资金动作（走 NavConfirmJob 异步确认），
-初始持仓录入是建仓本身（同步确认）。交易来源用 INCREASE（对齐 handleBuild 建仓语义，不用 TRANSFER_IN——建仓是首笔买入非转入）。
+初始持仓录入是建仓本身（同步确认）。交易来源用 INCREASE（对齐 handleBuild 建仓语义，不用 TRANSFER_IN——建仓是首笔买入非转入），
+同步创建一条可供后续 FIFO 赎回的 open lot，但不重复扣申购费。`confirmTime` 与最终 `openedAt` 一致且不得为空。
 无净值历史可反算时抛 `NAV_HISTORY_EMPTY` 不让建（同步确认的硬前提）；openedAt 晚于今天抛 `OPENED_AT_IN_FUTURE`；
 `initialMarketValue` ≤ 0 或 `costPerShare` ≤ 0 抛参数校验错。
 _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）；openedAt 用历史净值日期反算份额（金额是当前市值口径，
@@ -225,5 +232,6 @@ dayOfWeek(1=周一..7=周日) / dayOfMonth(1-28,月定投日,封顶 28 避开月
 
 **NavConfirmJob 时序**:14:55 定投下单(PENDING) → 20:00 DailyNavConfirmJob 拉当日净值 → 次日 03:00 NavConfirmJob 确认昨日 PENDING
 （用下单日净值算 shares）。cron 从 `0 0 21 * *` 改 `0 0 3 * *`——凌晨确认的是"之前生成的"流水,单日定投流水在 14:55 已生成,
-次日 3 点确认时净值已落地。交易日历查询统一用 UTC 0 点 Instant 表当日（对齐 `InstantDateConverter` + `TradingCalendarSyncService` 约定）。
+次日 3 点确认时净值已落地。日期统一按北京时间自然日映射为 UTC 00:00 标签；批量确认优先使用每笔交易的 `createdDate`
+确定净值日，Job 参数只作为旧数据缺失时间时的降级值，避免周末旧交易被下一交易日净值确认。
 _Avoid_: 定投走信号引擎（信号是建议,定投是执行,语义不同）;月定投日 > 28（避开月末交易日缺失,强制顺延增加复杂度）

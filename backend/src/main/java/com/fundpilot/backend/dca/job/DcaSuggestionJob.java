@@ -1,5 +1,6 @@
 package com.fundpilot.backend.dca.job;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.dca.entity.FundDcaPlanEntity;
 import com.fundpilot.backend.dca.enums.DcaFrequency;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
@@ -20,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 
@@ -61,9 +61,7 @@ public class DcaSuggestionJob {
     @Scheduled(cron = "0 55 14 * * MON-FRI")
     public void run() {
         Instant now = Instant.now();
-        // 交易日历约定:UTC 0 点 Instant 表当日(见 InstantDateConverter + TradingCalendarSyncService)。
-        // 先取上海时区当日(交易按上海时间),再转 UTC 0 点查日历。
-        Instant todayUtc = now.atZone(TRADING_ZONE).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant todayUtc = ChinaTradingDate.toUtcDate(now);
         if (!tradingCalendarService.isTradingDay(todayUtc)) {
             return;
         }
@@ -133,8 +131,7 @@ public class DcaSuggestionJob {
             // planDom < todayDom:计划日已过,检查是否因节假日顺延到今天
             // 顺延条件:planDom..today-1 区间全是非交易日(节假日),且今天是该区间后第一个交易日
             for (int d = planDom; d < todayDom; d++) {
-                Instant checkDay = today.toLocalDate().withDayOfMonth(d)
-                        .atStartOfDay(ZoneOffset.UTC).toInstant();
+                Instant checkDay = ChinaTradingDate.toUtcDate(today.withDayOfMonth(d).toInstant());
                 if (tradingCalendarService.isTradingDay(checkDay)) {
                     return false; // planDom..today-1 之间有交易日,说明计划日是交易日已过,不补
                 }

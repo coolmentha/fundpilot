@@ -31,6 +31,7 @@ class NavConfirmServiceStateTest {
     @Mock private FundTransactionRepository fundTransactionRepository;
     @Mock private FundNavHistoryRepository fundNavHistoryRepository;
     @Mock private TransactionConfirmSupport transactionConfirmSupport;
+    @Mock private FundPositionService fundPositionService;
     @InjectMocks private NavConfirmService service;
 
     @Test
@@ -58,6 +59,28 @@ class NavConfirmServiceStateTest {
         assertThat(out.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
         assertThat(in.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
         verify(transactionConfirmSupport, never()).onSellConfirmed(eq(out), any());
+    }
+
+    @Test
+    void confirmPendingTransactions_旧交易使用自身创建日净值而非任务Fallback日期() {
+        Instant friday = Instant.parse("2026-07-10T00:00:00Z");
+        Instant monday = Instant.parse("2026-07-13T00:00:00Z");
+        FundEntity fund = fund(1L);
+        FundTransactionEntity tx = tx(10L, fund, FundTransactionSource.INCREASE);
+        tx.setAmount(new BigDecimal("1000"));
+        tx.setCreatedDate(Instant.parse("2026-07-10T06:55:00Z")); // 北京时间周五 14:55
+
+        when(fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING))
+                .thenReturn(List.of(tx));
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+                1L, friday, friday.plus(1, ChronoUnit.DAYS)))
+                .thenReturn(List.of(nav(fund, "1.25")));
+
+        int confirmed = service.confirmPendingTransactions(monday);
+
+        assertThat(confirmed).isEqualTo(1);
+        assertThat(tx.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
+        verify(transactionConfirmSupport).onBuyConfirmed(tx, new BigDecimal("1.25"));
     }
 
     private FundEntity fund(Long id) {

@@ -25,6 +25,6 @@ public class SignalOperationController {
     public ApiResponse<FundTransactionView> confirmOperation(@PathVariable Long fundId,
                                                               @RequestBody ConfirmOperationRequest request) {
         return ApiResponse.ok(FundTransactionView.from(
-                signalOperationService.confirmOperation(request.signalLogId(), request)));
+                signalOperationService.confirmOperation(fundId, request.signalLogId(), request)));
     }
 }

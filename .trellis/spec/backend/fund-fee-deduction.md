@@ -73,8 +73,7 @@ record PurchaseFeeRate(BigDecimal originalRate, BigDecimal discountRate) {}
 record RedemptionTier(Integer maxDays, BigDecimal rate) {}  // maxDays=null → 末档(≥上一档)
 
 // FundFeeRefreshJob
-@Scheduled(cron = "0 30 6 * * *")  // 06:30 UTC(14:30 北京)每日刷新
-@EventListener(ApplicationReadyEvent.class)  // 启动预热
+@Scheduled(cron = "0 30 2 * * *", zone = "Asia/Shanghai")  // 北京时间 02:30,早于 03:00 交易确认
 ```
 
 ---
@@ -265,3 +264,11 @@ if (tx.isBuy()) {
 **决策**:`getFee` 返回 `FundFeeSnapshot.empty()`(discountRate=0, ladder=空);
 `onBuyConfirmed` / `onSellConfirmed` 用 0 费率继续,记 warn。**不抛异常**。
 这与项目既有「外部数据缺失降级」模式一致(参考 `MarketRealtimeCache` 保留旧缓存 + warn)。
+
+### 启动线程不刷新逐基金费率
+
+**背景**:`refreshHoldingFunds()` 逐基金访问外部 HTML,受 2 req/s 限流。放在 `ApplicationReadyEvent` 会让启动时间随持仓数线性增长。
+
+**决策**:启动时不执行费率爬取；每天北京时间 02:30 定时刷新，必须早于 03:00 `NavConfirmJob`。
+若外部源失败或缓存仍缺失,交易确认沿用零费率降级，详情查询可按需抓取。
+`FundFeeRefreshJobTest` 必须断言该 Job 没有 `@EventListener(ApplicationReadyEvent.class)` 方法，并校验 cron/zone 时序。

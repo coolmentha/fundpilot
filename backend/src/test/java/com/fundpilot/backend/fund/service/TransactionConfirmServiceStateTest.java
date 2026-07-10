@@ -29,6 +29,7 @@ class TransactionConfirmServiceStateTest {
     @Mock private FundTransactionRepository fundTransactionRepository;
     @Mock private FundNavHistoryRepository fundNavHistoryRepository;
     @Mock private TransactionConfirmSupport transactionConfirmSupport;
+    @Mock private FundPositionService fundPositionService;
     @InjectMocks private TransactionConfirmService service;
 
     @Test
@@ -53,6 +54,8 @@ class TransactionConfirmServiceStateTest {
         assertThat(confirmed).containsExactly(in);
         assertThat(out.getAmount()).isEqualByComparingTo("600");
         verify(transactionConfirmSupport, never()).onSellConfirmed(any(), any());
+        verify(fundPositionService).reconcileStatus(2L);
+        verify(fundPositionService, never()).reconcileStatus(1L);
     }
 
     private FundEntity fund(Long id) {

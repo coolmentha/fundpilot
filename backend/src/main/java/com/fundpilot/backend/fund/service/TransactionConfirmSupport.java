@@ -79,6 +79,20 @@ public class TransactionConfirmSupport {
     }
 
     /**
+     * 初始持仓是历史仓位盘点，不重复计算申购费，只建立后续赎回 FIFO 所需的 lot。
+     */
+    public void onExistingPositionConfirmed(FundTransactionEntity tx, BigDecimal acquireCostPerShare) {
+        FundLotEntity lot = new FundLotEntity();
+        lot.setFundEntity(tx.getFundEntity());
+        lot.setAcquireTxId(tx.getId());
+        lot.setAcquireDate(tx.getConfirmTime());
+        lot.setAcquireShares(tx.getShares());
+        lot.setRemainingShares(tx.getShares());
+        lot.setAcquireCostPerShare(acquireCostPerShare);
+        fundLotRepository.save(lot);
+    }
+
+    /**
      * 卖出确认:FIFO 消耗 lot,按持有期查赎回费率,算 amount = shares × nav − fee。
      * <p>调用前需已设 tx.shares / tx.nav / tx.confirmTime;调用后 tx.amount / tx.fee / tx.feeRate 被填。
      *

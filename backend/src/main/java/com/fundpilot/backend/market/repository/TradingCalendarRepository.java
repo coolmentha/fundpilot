@@ -13,6 +13,10 @@ public interface TradingCalendarRepository extends JpaRepository<TradingCalendar
 
     Optional<TradingCalendarEntity> findByCalendarDate(Instant calendarDate);
 
+    /** 当前未软删日历的最大日期,供日常同步只追加后续日期。 */
+    @Query("select max(e.calendarDate) from TradingCalendarEntity e")
+    Optional<Instant> findMaxCalendarDate();
+
     @Modifying
     @Query(value = """
             INSERT INTO trading_calendar

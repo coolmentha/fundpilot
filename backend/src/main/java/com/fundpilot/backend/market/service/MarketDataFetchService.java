@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -49,6 +51,7 @@ public class MarketDataFetchService {
     private final MarketDataSource marketDataSource;
     private final MarketIndicatorSnapshotService snapshotService;
     private final IndexKlineRepository indexKlineRepository;
+    private final Clock clock;
 
     /**
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
@@ -102,7 +105,7 @@ public class MarketDataFetchService {
     private void fetchOne(Long fundId) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
-        Instant today = Instant.now();
+        Instant today = ChinaTradingDate.toUtcDate(clock.instant());
 
         List<FundNavSnapshot> navHistory = marketDataSource.fetchNavHistory(fund.getFundCode());
         if (navHistory == null || navHistory.isEmpty()) {
