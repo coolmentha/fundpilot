@@ -18,6 +18,8 @@ export default function DashboardPage() {
     const holdingFunds = (funds || []).filter((f) => f.status === 'HOLDING');
     const pendingCount = pending?.length ?? 0;
     const dailyPnlTotal = summary?.dailyPnlTotal;
+    const estimateFetchFailedCount = summary?.estimateFetchFailedCount ?? 0;
+    const estimateFetchFailed = estimateFetchFailedCount > 0;
 
     const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
 
@@ -78,7 +80,9 @@ export default function DashboardPage() {
                         <Statistic title={<span className="kpi-label">今日盈亏合计</span>}
                                    value={dailyPnlTotal ?? 0}
                                    prefix={<WalletOutlined/>}
-                                   formatter={() => dailyPnlTotal == null ? '-' : (
+                                   formatter={() => estimateFetchFailed ? (
+                                       <span className="estimate-failure">估值拉取失败</span>
+                                   ) : dailyPnlTotal == null ? '-' : (
                                        <span style={{color: pnlColor(dailyPnlTotal)}}>
                                            {signedMoney(dailyPnlTotal)}
                                            {summary?.isEstimated && <span className="estimate-tag">估</span>}

@@ -172,6 +172,67 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         assertThat(pnl.totalPnl()).isCloseTo(new BigDecimal("59.8869"), within(new BigDecimal("0.01")));
     }
 
+    @Test
+    @Transactional
+    void 组合聚合_估值拉取失败_不使用上一期净值冒充当前值() {
+        FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
+        navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
+        navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
+        txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
+        fund.setCostPerShare(new BigDecimal("1.80"));
+        fundRepository.save(fund);
+        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+
+        FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
+        PortfolioSummary summary = fundPnlService.computePortfolioSummary();
+
+        assertThat(pnl.dailyChangePct()).isNull();
+        assertThat(pnl.dailyPnl()).isNull();
+        assertThat(pnl.holdingAmount()).isNull();
+        assertThat(pnl.totalPnl()).isNull();
+        assertThat(pnl.estimateFetchFailed()).isTrue();
+        assertThat(summary.dailyPnlTotal()).isNull();
+        assertThat(summary.estimateFetchFailedCount()).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
+    void 单基金_当日净值已入库_忽略历史估值失败状态() {
+        FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
+        navHistory(fund, Instant.parse("2026-07-05T00:00:00Z"), "1.80");
+        navHistory(fund, Instant.parse("2026-07-06T00:00:00Z"), "1.89");
+        txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
+        fund.setCostPerShare(new BigDecimal("1.80"));
+        fundRepository.save(fund);
+        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+
+        FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
+
+        assertThat(pnl.dailyChangePct()).isCloseTo(new BigDecimal("0.05"), within(new BigDecimal("0.0001")));
+        assertThat(pnl.dailyPnl()).isCloseTo(new BigDecimal("90"), within(new BigDecimal("0.01")));
+        assertThat(pnl.estimateFetchFailed()).isFalse();
+    }
+
+    @Test
+    @Transactional
+    void 单基金_盘前估值预热失败_也不复用上一期净值计算当前市值() {
+        FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
+        navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
+        navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
+        txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
+        fund.setCostPerShare(new BigDecimal("1.80"));
+        fundRepository.save(fund);
+        when(clock.instant()).thenReturn(Instant.parse("2026-07-06T00:00:00Z"));
+        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+
+        FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
+
+        assertThat(pnl.dailyChangePct()).isZero();
+        assertThat(pnl.holdingAmount()).isNull();
+        assertThat(pnl.totalPnl()).isNull();
+        assertThat(pnl.estimateFetchFailed()).isTrue();
+    }
+
     private FundEntity persistHoldingFund() {
         return persistHoldingFundWithCode("510300", "沪深300ETF");
     }

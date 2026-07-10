@@ -110,7 +110,9 @@ export default function FundsPage() {
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
         {
             title: '今日涨跌/盈亏', width: 126, align: 'right',
-            render: (_, r) => (
+            render: (_, r) => r.estimateFetchFailed ? (
+                <span className="estimate-failure">估值拉取失败</span>
+            ) : (
                 <div className="pnl-cell">
                     <div style={{color: pnlColor(r.dailyChangePct)}}>
                         {signedPercent(r.dailyChangePct)}

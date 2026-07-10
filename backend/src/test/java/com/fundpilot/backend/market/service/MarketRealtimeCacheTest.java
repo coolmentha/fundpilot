@@ -12,6 +12,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +25,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MarketRealtimeCacheTest {
+
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-10T05:30:00Z"), ZoneOffset.UTC);
 
     @Test
     void refreshRealtimeWithoutEstimates_一次请求同时刷新自选指数和市场宽度() {
@@ -39,7 +44,7 @@ class MarketRealtimeCacheTest {
                 ]}}
                 """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository);
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
         cache.refreshRealtimeWithoutEstimates();
 
@@ -74,7 +79,7 @@ class MarketRealtimeCacheTest {
                         ]}}
                         """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository);
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -96,7 +101,7 @@ class MarketRealtimeCacheTest {
         when(estimateService.fetchEstimate("510300")).thenReturn(Optional.empty());
         when(estimateService.fetchEstimate("159825")).thenReturn(Optional.empty());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository);
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
         cache.refreshAll();
 
@@ -113,7 +118,7 @@ class MarketRealtimeCacheTest {
         FundRepository fundRepository = mock(FundRepository.class);
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository);
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
         cache.onApplicationReady();
 
@@ -133,7 +138,7 @@ class MarketRealtimeCacheTest {
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimate("510300")).thenReturn(Optional.of(snapshot));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository);
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
         var method = MarketRealtimeCache.class.getMethod("warmFundEstimatesAfterReady");
 
@@ -141,6 +146,84 @@ class MarketRealtimeCacheTest {
         assertThat(method.isAnnotationPresent(EventListener.class)).isTrue();
         method.invoke(cache);
         assertThat(cache.getEstimates(List.of("510300"))).containsEntry("510300", snapshot);
+    }
+
+    @Test
+    void refreshAll_成功后空响应会删除旧估值并标记失败() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("510300", FundStatus.HOLDING);
+        FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(estimateService.fetchEstimate("510300"))
+                .thenReturn(Optional.of(snapshot))
+                .thenReturn(Optional.empty());
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+
+        cache.refreshAll();
+        cache.refreshAll();
+
+        assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
+        assertThat(cache.hasEstimateFetchFailed("510300")).isTrue();
+    }
+
+    @Test
+    void refreshAll_成功后异常会删除旧估值并标记失败() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("510300", FundStatus.HOLDING);
+        FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(estimateService.fetchEstimate("510300"))
+                .thenReturn(Optional.of(snapshot))
+                .thenThrow(new IllegalStateException("timeout"));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+
+        cache.refreshAll();
+        cache.refreshAll();
+
+        assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
+        assertThat(cache.hasEstimateFetchFailed("510300")).isTrue();
+    }
+
+    @Test
+    void refreshAll_旧日期估值不进入缓存且后续当天估值可恢复() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("510300", FundStatus.HOLDING);
+        FundEstimateSnapshot stale = new FundEstimateSnapshot(
+                new BigDecimal("0.0100"), "2026-07-09 15:00", "2026-07-08");
+        FundEstimateSnapshot current = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(estimateService.fetchEstimate("510300"))
+                .thenReturn(Optional.of(stale))
+                .thenReturn(Optional.of(current));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+
+        cache.refreshAll();
+
+        assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
+        assertThat(cache.hasEstimateFetchFailed("510300")).isTrue();
+
+        cache.refreshAll();
+
+        assertThat(cache.getEstimates(List.of("510300"))).containsEntry("510300", current);
+        assertThat(cache.hasEstimateFetchFailed("510300")).isFalse();
     }
 
     private static FundEntity fund(String code, FundStatus status) {

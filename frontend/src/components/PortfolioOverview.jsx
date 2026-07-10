@@ -32,6 +32,8 @@ export default function PortfolioOverview() {
     }
 
     const dailyPnlTotal = summary?.dailyPnlTotal;
+    const estimateFetchFailedCount = summary?.estimateFetchFailedCount ?? 0;
+    const estimateFetchFailed = estimateFetchFailedCount > 0;
     const risingFundCount = summary?.risingFundCount ?? 0;
     const fallingFundCount = summary?.fallingFundCount ?? 0;
     const risingStockCount = breadth?.risingCount;
@@ -54,10 +56,13 @@ export default function PortfolioOverview() {
                     <WalletOutlined/>
                     <span>全仓收益</span>
                 </div>
-                <div className="overview-value" style={{color: pnlColor(dailyPnlTotal)}}>
-                    {signedMoney(dailyPnlTotal)}
+                <div className={`overview-value${estimateFetchFailed ? ' failure' : ''}`}
+                     style={estimateFetchFailed ? undefined : {color: pnlColor(dailyPnlTotal)}}>
+                    {estimateFetchFailed ? '估值拉取失败' : signedMoney(dailyPnlTotal)}
                 </div>
-                <div className="overview-hint muted">今日合计</div>
+                <div className="overview-hint muted">
+                    {estimateFetchFailed ? `${estimateFetchFailedCount} 只持仓基金` : '今日合计'}
+                </div>
             </div>
             <div className="portfolio-overview-card up" role="listitem">
                 <div className="overview-label">

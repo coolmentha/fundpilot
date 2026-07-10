@@ -10,7 +10,7 @@ import QueryErrorState from './QueryErrorState.jsx';
  *
  * <p>与 FundsPage 的差异:FundsPage 是档案管理(CRUD),本组件是行情看板
  * (实时涨跌排序、点击进详情)。涨跌数据来自 useFundEstimates(盘中估值缓存),
- * 失败时降级显示后端 fund.dailyChangePct(已结算净值涨跌)。
+ * 失败时明确显示失败状态,不回退旧估值或上一交易日数据。
  *
  * <p>支持按涨跌幅排序(默认降序,涨幅大的在前)。
  */
@@ -18,13 +18,15 @@ export default function FundWatchlist() {
     const navigate = useNavigate();
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
-    const {data: estimates} = useFundEstimates(codes);
+    const {data: estimates, isFetched: estimatesFetched} = useFundEstimates(codes);
 
-    // 合并基金档案 + 实时估值。涨跌幅优先取估值(盘中),降级取 dailyChangePct(盘后/失败)。
+    // 合并基金档案 + 实时估值。失败态优先,防止两个轮询接口刷新时序不同导致旧估值回退。
     const rows = (funds || []).map((f) => {
         const est = estimates?.[f.fundCode];
-        const changePct = est?.estimatedChangePct ?? f.dailyChangePct ?? null;
-        const isEstimated = !!est;
+        const estimateFetchFailed = !!f.estimateFetchFailed
+            || (estimatesFetched && f.isEstimated && !est);
+        const changePct = estimateFetchFailed ? null : (est?.estimatedChangePct ?? f.dailyChangePct ?? null);
+        const isEstimated = !estimateFetchFailed && !!est;
         return {
             key: f.id,
             id: f.id,
@@ -33,6 +35,7 @@ export default function FundWatchlist() {
             fundSubType: f.fundSubType,
             changePct,
             isEstimated,
+            estimateFetchFailed,
             estimateTime: est?.estimateTime,
             holdingShares: f.holdingShares,
             dailyPnl: f.dailyPnl,
@@ -71,6 +74,7 @@ export default function FundWatchlist() {
             sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
             defaultSortOrder: 'descend',
             render: (v, r) => {
+                if (r.estimateFetchFailed) return <span className="estimate-failure">估值拉取失败</span>;
                 if (v === null || v === undefined) return <span className="muted">-</span>;
                 const color = pnlColor(v);
                 const isUp = Number(v) > 0;
@@ -101,9 +105,11 @@ export default function FundWatchlist() {
             width: 132,
             align: 'right',
             responsive: ['sm'],
-            render: (v) => v !== null && v !== undefined
-                ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
-                : <span className="muted">-</span>,
+            render: (v, r) => r.estimateFetchFailed
+                ? <span className="estimate-failure">估值拉取失败</span>
+                : v !== null && v !== undefined
+                    ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
+                    : <span className="muted">-</span>,
         },
         {
             title: '操作',

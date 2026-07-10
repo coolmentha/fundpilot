@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyJsParser;
@@ -20,6 +21,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -43,14 +48,15 @@ import java.util.stream.Collectors;
  *   <li>{@link #estimateCache} 基金盘中估值(交易时段 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
  * </ul>
  *
- * <p>降级策略:任一刷新失败保留旧缓存 + 记 warn(参考 {@link FundEstimateService} 的 catch RuntimeException 模式),
- * 不抛异常中断整个刷新周期——前端继续看到旧数据优于无数据。
+ * <p>降级策略:指数/市场宽度/板块/资金刷新失败保留旧缓存。基金估值不同:它是当天短时态数据,
+ * 单只拉取失败、空响应或日期过期时必须立即删除旧估值并标记失败,禁止把旧估值继续作为今日数据。
  */
 @Service
 @RequiredArgsConstructor
 public class MarketRealtimeCache {
 
     private static final Logger log = LoggerFactory.getLogger(MarketRealtimeCache.class);
+    private static final DateTimeFormatter ESTIMATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final List<String> MARKET_BREADTH_SECIDS = List.of(
             "1.000001", // 上证指数：沪市宽度
             "0.399001", // 深证成指：深市宽度
@@ -61,6 +67,7 @@ public class MarketRealtimeCache {
     private final FundEstimateService fundEstimateService;
     private final UserConfigService userConfigService;
     private final FundRepository fundRepository;
+    private final Clock clock;
 
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
     private volatile List<IndexRealtimeSnapshot> indexCache = List.of();
@@ -68,6 +75,7 @@ public class MarketRealtimeCache {
     private volatile List<SectorSnapshot> sectorCache = List.of();
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
+    private final Set<String> estimateFetchFailures = ConcurrentHashMap.newKeySet();
 
     /** 读指数缓存(已按用户关注列表过滤,顺序按请求 secid 顺序)。 */
     public List<IndexRealtimeSnapshot> getIndices() {
@@ -101,6 +109,11 @@ public class MarketRealtimeCache {
         return fundCodes.stream()
                 .filter(estimateCache::containsKey)
                 .collect(Collectors.toMap(Function.identity(), estimateCache::get));
+    }
+
+    /** 当前进程最近一次刷新该基金估值是否失败。 */
+    public boolean hasEstimateFetchFailed(String fundCode) {
+        return fundCode != null && estimateFetchFailures.contains(fundCode);
     }
 
     /**
@@ -219,22 +232,51 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 刷新基金估值:遍历所有未软删基金(含观察池),逐个拉 fundgz,失败降级跳过。
+     * 刷新基金估值:遍历所有未软删基金(含观察池),逐个拉 fundgz。
      * <p>盘中估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
+     * 本轮失败、空响应或非当天数据会失效该基金旧缓存,防止旧估值冒充今日数据。
      */
     private void refreshFundEstimates() {
         try {
             List<FundEntity> funds = fundRepository.findAll();
             for (FundEntity fund : funds) {
+                String fundCode = fund.getFundCode();
                 try {
-                    fundEstimateService.fetchEstimate(fund.getFundCode())
-                            .ifPresent(s -> estimateCache.put(fund.getFundCode(), s));
+                    FundEstimateSnapshot snapshot = fundEstimateService.fetchEstimate(fundCode).orElse(null);
+                    if (isEstimateForToday(snapshot)) {
+                        estimateCache.put(fundCode, snapshot);
+                        estimateFetchFailures.remove(fundCode);
+                    } else {
+                        invalidateEstimate(fundCode);
+                    }
                 } catch (RuntimeException e) {
-                    // 单只失败不影响其他,跳过这只本轮
+                    invalidateEstimate(fundCode);
+                    log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
                 }
             }
         } catch (RuntimeException e) {
             log.warn("基金估值刷新失败: {}", e.getMessage());
         }
+    }
+
+    private boolean isEstimateForToday(FundEstimateSnapshot snapshot) {
+        if (snapshot == null || snapshot.estimatedChangePct() == null || snapshot.estimateTime() == null) {
+            return false;
+        }
+        try {
+            LocalDateTime estimateTime = LocalDateTime.parse(snapshot.estimateTime(), ESTIMATE_TIME_FORMATTER);
+            return ChinaTradingDate.toUtcDate(estimateTime.atZone(ChinaTradingDate.ZONE).toInstant())
+                    .equals(ChinaTradingDate.toUtcDate(clock.instant()));
+        } catch (DateTimeParseException e) {
+            return false;
+        }
+    }
+
+    private void invalidateEstimate(String fundCode) {
+        if (fundCode == null) {
+            return;
+        }
+        estimateCache.remove(fundCode);
+        estimateFetchFailures.add(fundCode);
     }
 }

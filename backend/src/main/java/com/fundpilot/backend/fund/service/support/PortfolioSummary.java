@@ -17,6 +17,7 @@ import java.math.BigDecimal;
  * @param profitableFundCount 盈利基金数(总盈亏 > 0)
  * @param losingFundCount     亏损基金数(总盈亏 < 0)
  * @param isEstimated         是否包含盘中 fundgz 估算值
+ * @param estimateFetchFailedCount 估值拉取失败的持仓基金数(当日净值已确认的不计)
  */
 public record PortfolioSummary(
         BigDecimal dailyPnlTotal,
@@ -24,5 +25,6 @@ public record PortfolioSummary(
         int fallingFundCount,
         int profitableFundCount,
         int losingFundCount,
-        boolean isEstimated) {
+        boolean isEstimated,
+        int estimateFetchFailedCount) {
 }
