@@ -130,6 +130,6 @@ public final class FundPnlCalculator {
             }
         }
         return new PortfolioSummary(dailyPnlComplete ? dailyPnlTotal : null,
-                rising, falling, profitable, losing, false);
+                rising, falling, profitable, losing, false, 0);
     }
 }

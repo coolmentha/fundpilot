@@ -51,10 +51,12 @@ export default function FundDetailPage() {
                     </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日涨跌">
-                    <span style={{color: pnlColor(fund.dailyChangePct)}}>
-                        {signedPercent(fund.dailyChangePct)}
-                        {fund.isEstimated && <span className="estimate-tag">估</span>}
-                    </span>
+                    {fund.estimateFetchFailed
+                        ? <span className="estimate-failure">估值拉取失败</span>
+                        : <span style={{color: pnlColor(fund.dailyChangePct)}}>
+                            {signedPercent(fund.dailyChangePct)}
+                            {fund.isEstimated && <span className="estimate-tag">估</span>}
+                        </span>}
                 </Descriptions.Item>
                 <Descriptions.Item label="持仓市值">
                     <span className="num-cell">
@@ -62,7 +64,9 @@ export default function FundDetailPage() {
                     </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日盈亏">
-                    <span style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</span>
+                    {fund.estimateFetchFailed
+                        ? <span className="estimate-failure">估值拉取失败</span>
+                        : <span style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</span>}
                 </Descriptions.Item>
                 <Descriptions.Item label="总盈亏">
                     <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>

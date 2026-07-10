@@ -29,6 +29,7 @@ import java.time.Instant;
  * @param costPerShare         持仓成本单价(每份成本,ADR-0013;可空——无持仓时为 null)
  * @param dailyChangePct       今日涨跌幅(三态:盘前0/盘中估值/盘后实际,issue #38;可空——无净值历史时为 null)
  * @param isEstimated          是否估算态(true=盘中 fundgz 估算,issue #38)
+ * @param estimateFetchFailed  当日净值未确认且最近一次估值拉取失败
  * @param holdingShares        持仓份额(可空——无持仓时为 null)
  * @param holdingAmount        持仓市值(可空——无持仓或无净值时为 null;估算态用昨日净值推算)
  * @param dailyPnl             今日盈亏(昨日市值×今日涨跌幅,可空——无持仓或无净值时为 null)
@@ -50,6 +51,7 @@ public record FundView(
         BigDecimal costPerShare,
         BigDecimal dailyChangePct,
         boolean isEstimated,
+        boolean estimateFetchFailed,
         BigDecimal holdingShares,
         BigDecimal holdingAmount,
         BigDecimal dailyPnl,
@@ -71,7 +73,7 @@ public record FundView(
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
                 fund.getCostPerShare(),
-                null, false, null, null, null, null,
+                null, false, false, null, null, null, null,
                 fund.getCreatedDate());
     }
 
@@ -92,6 +94,7 @@ public record FundView(
                 fund.getCostPerShare(),
                 pnl.dailyChangePct(),
                 pnl.isEstimated(),
+                pnl.estimateFetchFailed(),
                 pnl.holdingShares(),
                 pnl.holdingAmount(),
                 pnl.dailyPnl(),

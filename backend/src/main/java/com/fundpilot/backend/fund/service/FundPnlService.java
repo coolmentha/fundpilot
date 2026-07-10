@@ -76,6 +76,8 @@ public class FundPnlService {
                 clock.instant(), todayNavConfirmed, latestNav, previousNav, estimate);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
+        boolean estimateFetchFailed = !todayNavConfirmed
+                && marketRealtimeCache.hasEstimateFetchFailed(fund.getFundCode());
 
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
@@ -87,12 +89,16 @@ public class FundPnlService {
         // 估计态:dailyChangePct = fundgz.gszzl,基准是 latestNav(最新已公布净值)
         BigDecimal dailyPnlBaseNav = isEstimated ? latestNav : previousNav;
         BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
-        // 估算态下 latestNav 是 T-1 已公布净值,需要先推算盘中估算净值,再计算收益类字段。
-        BigDecimal pnlNav = isEstimated ? estimatedAccumulatedNav(latestNav, dailyChangePct) : latestNav;
+        // 当日净值已确认时使用实际值;未确认时必须有今日涨跌才能推算当前净值。
+        // 估值失败/缺失时不能拿上一期已公布净值冒充当前市值和总盈亏。
+        BigDecimal pnlNav = todayNavConfirmed
+                ? latestNav
+                : estimateFetchFailed ? null : estimatedAccumulatedNav(latestNav, dailyChangePct);
         BigDecimal holdingAmount = computeHoldingAmount(holdingShares, pnlNav);
         BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, pnlNav, costPerShare);
 
-        return new Pnl(dailyChangePct, isEstimated, holdingShares, holdingAmount, dailyPnl, totalPnl);
+        return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed,
+                holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
 
     /** 从实时缓存读取 fundgz 盘中估值;缓存未命中降级返 empty。 */
@@ -144,6 +150,7 @@ public class FundPnlService {
         List<BigDecimal> dailyPnls = new ArrayList<>();
         List<BigDecimal> totalPnls = new ArrayList<>();
         boolean isEstimated = false;
+        int estimateFetchFailedCount = 0;
         for (FundEntity fund : holdingFunds) {
             Pnl pnl = computeForFund(fund);
             changePcts.add(pnl.dailyChangePct());
@@ -151,15 +158,18 @@ public class FundPnlService {
             totalPnls.add(pnl.totalPnl());
             // 组合只要包含任一盘中估算基金,前端就需要整体标记为估算态。
             isEstimated = isEstimated || pnl.isEstimated();
+            if (pnl.estimateFetchFailed()) {
+                estimateFetchFailedCount++;
+            }
         }
         PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
         // summarize 是纯数值聚合,估算态来自服务层的三态判定,因此在这里回填。
         return new PortfolioSummary(summary.dailyPnlTotal(), summary.risingFundCount(), summary.fallingFundCount(),
-                summary.profitableFundCount(), summary.losingFundCount(), isEstimated);
+                summary.profitableFundCount(), summary.losingFundCount(), isEstimated, estimateFetchFailedCount);
     }
 
     private Pnl emptyPnl() {
-        return new Pnl(null, false, null, null, null, null);
+        return new Pnl(null, false, false, null, null, null, null);
     }
 
     /**
@@ -167,6 +177,7 @@ public class FundPnlService {
      *
      * @param dailyChangePct 今日涨跌幅(三态:盘前0/盘中估值/盘后实际)
      * @param isEstimated    是否估算态(true=盘中 fundgz 估算)
+     * @param estimateFetchFailed 当日净值未确认且最近一次估值拉取失败
      * @param holdingShares  持仓份额
      * @param holdingAmount  持仓市值(份额 × 最近净值;估算态用昨日净值×(1+涨跌幅)推算)
      * @param dailyPnl       今日盈亏(昨日市值 × 今日涨跌幅)
@@ -175,6 +186,7 @@ public class FundPnlService {
     public record Pnl(
             BigDecimal dailyChangePct,
             boolean isEstimated,
+            boolean estimateFetchFailed,
             BigDecimal holdingShares,
             BigDecimal holdingAmount,
             BigDecimal dailyPnl,

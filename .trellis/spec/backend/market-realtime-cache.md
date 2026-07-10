@@ -56,7 +56,7 @@ public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 | 指数实时 | 30s | 5s | 单请求批量,快 |
 | 板块涨跌 | 30s | 30s | 单请求 |
 | 北向资金 | 30s | 30s | 单请求 |
-| 基金估值 | **30s** | 10s | 盘中实时性优先,后台逐只刷新并保留旧缓存 |
+| 基金估值 | **30s** | 10s | 盘中实时性优先,后台逐只刷新;失败立即失效该基金旧估值 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
 N 个前端客户端共享同一份缓存。
@@ -94,7 +94,9 @@ N 个前端客户端共享同一份缓存。
 
 - `refreshFundEstimates()` 遍历 `FundRepository.findAll()`，覆盖全部未软删基金。
 - `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
-- 单只基金拉取失败只跳过本轮该基金，不能中断其他基金，也不能清空旧缓存。
+- 单只基金拉取失败不能中断其他基金，但必须删除该基金旧估值并标记失败。
+- 只接受 `estimateTime` 属于北京时间当天的快照；旧日期、空时间或无法解析的时间都按失败处理。
+- 后续本次成功拉到当天估值时覆盖缓存并清除失败状态。
 - 同步 `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
 - 独立的 `@Async ApplicationReadyEvent` 必须调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 今日净值未落库且估值缓存缺失时，今日涨跌返回未知；禁止用 T-1 对 T-2 冒充今日值。
@@ -111,15 +113,21 @@ N 个前端客户端共享同一份缓存。
 
 | 条件 | 行为 |
 |------|------|
-| 东方财富接口超时/失败 | 保留旧缓存 + 记 warn(不抛异常) |
-| 单只基金估值拉取失败 | 跳过该只,不影响其他 |
-| 缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
+| 指数/市场宽度/板块/资金接口超时或失败 | 保留对应旧缓存 + 记 warn(不抛异常) |
+| 单只基金估值拉取异常/空响应/解析为空 | 删除该基金旧估值,标记 `estimateFetchFailed`,不影响其他基金 |
+| 单只基金 `estimateTime` 非北京时间当天 | 删除该基金旧估值,标记 `estimateFetchFailed` |
+| 失败后重新拉到当天有效估值 | 覆盖估值缓存并清除 `estimateFetchFailed` |
+| 指数/市场宽度/板块/资金缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
+| 基金估值尚未完成首次尝试 | 今日估值未知,不提前声称拉取失败 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
 | 三个市场宽度字段完整 | 汇总 `f104/f105` 并更新 `breadthCache` |
 | 任一市场或家数字段缺失 | 保留旧 `breadthCache`;首次无缓存时接口 data=null |
 | 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
 | 今日净值未落库且估值缓存为空 | 今日涨跌/盈亏返回未知，不回退昨日涨跌 |
-| 任一持仓今日盈亏未知 | 全仓 `dailyPnlTotal` 返回 null，前端显示 `-`，不展示部分合计 |
+| 今日净值未落库且最近一次估值失败 | `FundView.estimateFetchFailed=true`;当前持仓市值/总盈亏也返回未知 |
+| 今日净值已落库但估值曾失败 | 使用实际净值,`estimateFetchFailed=false` |
+| 任一持仓今日盈亏未知 | 全仓 `dailyPnlTotal` 返回 null，不展示部分合计；非估值失败原因可显示 `-` |
+| 持仓基金存在估值失败 | `PortfolioSummaryView.estimateFetchFailedCount` 返回失败持仓数,前端明确显示失败而非普通 `-` |
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
 | 应用启动 | 同步预热指数/板块/资金；基金估值在后台异步预热，不阻塞健康检查 |
@@ -132,8 +140,11 @@ N 个前端客户端共享同一份缓存。
 - **Good**:一次指数批量请求同时包含自选指数与沪深京固定市场,两个缓存独立投影
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
+- **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
 - **Good**:14:50 第三批快照完成后才读取快照生成信号
 - **Base**:估值接口暂时失败且缓存为空,今日涨跌显示未知而不是昨日值
+- **Bad**:fundgz 返回昨日 `gztime`,仍继续作为今日估值使用
+- **Bad**:估值缓存已失效,收益服务仍用上一期已公布净值计算当前持仓市值/总盈亏
 - **Bad**:今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
 - **Bad**:行情抓取和信号生成使用两个同秒 cron,信号可能先读到缺失快照
@@ -146,11 +157,13 @@ N 个前端客户端共享同一份缓存。
 - `EastmoneyJsParserRealtimeTest`:实时行情解析测试覆盖正常响应、空响应、字段缺失
   - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null、北向资金取 s2n 最后一条
 - `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
-- 缓存层降级测试:mock push2Client 抛异常,验证旧缓存保留(本期未补,留 follow-up)
+- 缓存层降级测试:指数/市场宽度等仍验证旧缓存保留；基金估值必须单独验证成功后空响应、异常、旧日期都会删除旧值。
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
 - `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；同步启动事件不查询基金列表；异步启动事件带 `@Async` 并填充估值缓存。
+- `MarketRealtimeCacheTest`:固定 `Clock`,断言估值失败立即删除旧缓存并标记失败,旧日期拒收,后续成功清除失败状态。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
+- `FundPnlServiceTest`:断言估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
 - `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
 
 ---
@@ -202,6 +215,27 @@ public void warmFundEstimatesAfterReady() {
 }
 
 return new DailyChangeResult(null, false); // 不用昨日值冒充今日值
+```
+
+### Wrong:基金估值失败沿用通用旧缓存降级
+
+```java
+fundEstimateService.fetchEstimate(code)
+        .ifPresent(snapshot -> estimateCache.put(code, snapshot));
+// empty/异常时旧 snapshot 仍留在 map,下一轮会继续冒充今日估值。
+```
+
+### Correct:基金估值按本轮结果替换并校验自然日
+
+```java
+FundEstimateSnapshot snapshot = fundEstimateService.fetchEstimate(code).orElse(null);
+if (isEstimateForToday(snapshot)) {
+    estimateCache.put(code, snapshot);
+    estimateFetchFailures.remove(code);
+} else {
+    estimateCache.remove(code);
+    estimateFetchFailures.add(code);
+}
 ```
 
 ### Wrong:按自选指数汇总市场宽度
