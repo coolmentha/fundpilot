@@ -7,7 +7,7 @@
 - [x] 补充解析器与缓存单元测试。
 - [x] 更新 `CONTEXT.md` 和 `.trellis/spec/backend/market-realtime-cache.md` 的市场宽度契约。
 - [x] 运行新增相关后端测试、前端生产构建和 Playwright 桌面/手机布局检查。
-- [ ] 提交、推送后运行完整 CI（含 PostgreSQL service container）并持续检查结果。
+- [x] 提交、推送后运行完整 CI（含 PostgreSQL service container）并持续检查结果。
 
 ## Rollback Points
 
@@ -30,3 +30,4 @@ npm run build
 - `npm run build`:passed；保留项目已有的 bundle size warning。
 - Playwright:1440x1000 与 390x844 均无横向溢出；红段实测 69.2%，与 `3814 / (3814 + 1701)` 一致。
 - `mvn test` 全量尝试:测试编译通过，运行到数据库集成测试时因本机 `localhost:5432` 未启动而失败；Docker Desktop 同样未运行。CI 的 PostgreSQL service container 可提供该环境，推送后需以 CI 结果为准。
+- GitHub CI run `29084424018`:passed；Frontend build 16s，Backend Maven verify 1m44s。
