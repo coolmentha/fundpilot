@@ -54,6 +54,54 @@ class FundPnlServiceDateTest {
         assertThat(pnl.dailyChangePct()).isZero();
     }
 
+    @Test
+    void 北京时间盘后重启_今日净值未落库_使用缓存估值计算今日收益() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository, marketRealtimeCache, clock);
+        FundEntity fund = fund();
+        FundNavHistoryEntity yesterday = nav("2026-07-09T00:00:00Z", "1.20");
+        FundNavHistoryEntity previous = nav("2026-07-08T00:00:00Z", "1.10");
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(yesterday, previous));
+        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of(
+                "510300", new FundEstimateSnapshot(new BigDecimal("0.0123"),
+                        "2026-07-10 15:00", "2026-07-09")));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund);
+
+        assertThat(pnl.isEstimated()).isTrue();
+        assertThat(pnl.dailyChangePct()).isEqualByComparingTo("0.0123");
+        assertThat(pnl.dailyPnl()).isEqualByComparingTo("1.47600");
+    }
+
+    @Test
+    void 北京时间盘后重启_今日净值未落库且估值为空_不回退昨日收益() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository, marketRealtimeCache, clock);
+        FundEntity fund = fund();
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(
+                        nav("2026-07-09T00:00:00Z", "1.20"),
+                        nav("2026-07-08T00:00:00Z", "1.10")));
+        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund);
+
+        assertThat(pnl.dailyChangePct()).isNull();
+        assertThat(pnl.dailyPnl()).isNull();
+    }
+
+    private static FundEntity fund() {
+        FundEntity fund = new FundEntity();
+        fund.setId(1L);
+        fund.setFundCode("510300");
+        return fund;
+    }
+
     private static FundNavHistoryEntity nav(String date, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setNavDate(Instant.parse(date));

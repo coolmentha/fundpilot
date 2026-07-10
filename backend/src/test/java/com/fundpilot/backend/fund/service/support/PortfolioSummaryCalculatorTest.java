@@ -50,15 +50,15 @@ class PortfolioSummaryCalculatorTest {
     }
 
     @Test
-    void 聚合_null指标跳过_不影响其它基金计数() {
-        // 第二只基金无涨跌/盈亏数据(null),但仍计入合计为 0
+    void 聚合_任一今日盈亏未知_全仓今日收益也未知() {
+        // 第二只基金今日盈亏未知时,不能把其按 0 处理后把部分合计标成全仓收益。
         List<BigDecimal> changePcts = list("0.05", null);
         List<BigDecimal> dailyPnls = list("60", null);
         List<BigDecimal> totalPnls = list("300", null);
 
         PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
 
-        assertThat(summary.dailyPnlTotal()).isCloseTo(new BigDecimal("60"), within(new BigDecimal("0.01")));
+        assertThat(summary.dailyPnlTotal()).isNull();
         assertThat(summary.risingFundCount()).isEqualTo(1);
         assertThat(summary.profitableFundCount()).isEqualTo(1);
     }

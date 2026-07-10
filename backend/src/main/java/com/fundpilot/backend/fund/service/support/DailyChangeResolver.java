@@ -16,7 +16,7 @@ import java.util.Optional;
  * <ul>
  *   <li><b>盘前</b>(北京时间 &lt; 9:30)= 0,isEstimated=false(还没开盘,今天没变化)</li>
  *   <li><b>盘中/待公布</b>(≥9:30 且当日净值未落库)= fundgz gszzl,isEstimated=true;
- *       无 fundgz 估值时降级用落库最近两期净值算(T-1 vs T-2),isEstimated=false</li>
+ *       无 fundgz 估值时返回未知,不能用 T-1 vs T-2 冒充今日涨跌</li>
  *   <li><b>盘后</b>(当日净值已落库)= 当日累计净值 / 昨日累计净值 - 1,isEstimated=false</li>
  * </ul>
  *
@@ -60,8 +60,8 @@ public final class DailyChangeResolver {
         if (estimate.isPresent() && estimate.get().estimatedChangePct() != null) {
             return new DailyChangeResult(estimate.get().estimatedChangePct(), true);
         }
-        // 无 fundgz 估值 → 降级用落库最近两期净值算(T-1 vs T-2),非估算
-        return new DailyChangeResult(FundPnlCalculator.dailyChangePct(latestNav, previousNav), false);
+        // 无 fundgz 估值 → 今日数据未知。T-1 vs T-2 是昨日涨跌,不能冒充今日值。
+        return new DailyChangeResult(null, false);
     }
 
     /** 当前时间是否在 A 股开盘前(北京时间 < 9:30)。 */

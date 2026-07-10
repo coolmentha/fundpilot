@@ -93,23 +93,26 @@ public final class FundPnlCalculator {
 
     /**
      * 组合盈亏聚合(issue #18 概览页):汇总一组基金的今日盈亏合计与涨跌/盈亏基金计数。
-     * <p>三个列表按基金一一对应(同一下标为同一只基金的三项指标);null 元素跳过不计。
+     * <p>三个列表按基金一一对应(同一下标为同一只基金的三项指标)。
+     * 任一持仓的今日盈亏缺失时,全仓今日盈亏也返回 null,避免把部分合计冒充全仓值。
      * 上涨/下跌按今日涨跌幅符号,盈利/亏损按总盈亏符号——两维度独立(故事 24)。
      *
      * @param dailyChangePcts 各基金今日涨跌幅(可含 null)
-     * @param dailyPnls        各基金今日盈亏(可含 null,合计时视为 0)
+     * @param dailyPnls        各基金今日盈亏(可含 null；任一 null 时合计为未知)
      * @param totalPnls        各基金总盈亏(可含 null)
      * @return 五指标汇总
      */
     public static PortfolioSummary summarize(
             List<BigDecimal> dailyChangePcts, List<BigDecimal> dailyPnls, List<BigDecimal> totalPnls) {
         BigDecimal dailyPnlTotal = BigDecimal.ZERO;
+        boolean dailyPnlComplete = true;
         int rising = 0, falling = 0, profitable = 0, losing = 0;
         for (int i = 0; i < dailyPnls.size(); i++) {
-            // 今日盈亏合计允许单项缺失:缺失项按 0 处理,避免一只基金数据不完整拖垮组合 KPI。
             BigDecimal dailyPnl = dailyPnls.get(i);
             if (dailyPnl != null) {
                 dailyPnlTotal = dailyPnlTotal.add(dailyPnl, MATH);
+            } else {
+                dailyPnlComplete = false;
             }
             // changePcts/totalPnls 可能短于 dailyPnls;越界视作该基金该指标未知。
             BigDecimal changePct = i < dailyChangePcts.size() ? dailyChangePcts.get(i) : null;
@@ -126,6 +129,7 @@ public final class FundPnlCalculator {
                 else if (sign < 0) losing++;
             }
         }
-        return new PortfolioSummary(dailyPnlTotal, rising, falling, profitable, losing, false);
+        return new PortfolioSummary(dailyPnlComplete ? dailyPnlTotal : null,
+                rising, falling, profitable, losing, false);
     }
 }

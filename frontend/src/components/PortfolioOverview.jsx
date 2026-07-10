@@ -30,7 +30,7 @@ export default function PortfolioOverview() {
         );
     }
 
-    const dailyPnlTotal = summary?.dailyPnlTotal ?? 0;
+    const dailyPnlTotal = summary?.dailyPnlTotal;
     const risingFundCount = summary?.risingFundCount ?? 0;
     const fallingFundCount = summary?.fallingFundCount ?? 0;
 

@@ -63,14 +63,13 @@ class DailyChangeResolverTest {
     }
 
     @Test
-    void 盘中但无fundgz估值_降级用落库净值算_非估算() {
-        // 盘中、当日净值未落库、但 fundgz 拉不到(空)→ 降级用落库最近两期算(T-1 vs T-2),非估算
+    void 盘中但无fundgz估值_今日涨跌未知_不回退昨日值() {
+        // 盘中、当日净值未落库、且 fundgz 拉不到时,不能把 T-1 vs T-2 冒充今日涨跌。
         Instant now = ZonedDateTime.of(2026, 6, 26, 6, 0, 0, 0, ZoneOffset.UTC).toInstant();
         DailyChangeResult result = DailyChangeResolver.resolve(now, false,
                 new BigDecimal("1.00"), new BigDecimal("0.99"), Optional.empty());
 
-        // 降级:用落库净值算 (1.00-0.99)/0.99,非估算
-        assertThat(result.todayChangePct()).isNotNull();
+        assertThat(result.todayChangePct()).isNull();
         assertThat(result.isEstimated()).isFalse();
     }
 }

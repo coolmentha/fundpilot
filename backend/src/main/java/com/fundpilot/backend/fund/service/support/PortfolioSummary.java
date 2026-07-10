@@ -11,7 +11,7 @@ import java.math.BigDecimal;
  * </ul>
  * 一只基金可能今日上涨但整体亏损,两个维度独立计数不混用。
  *
- * @param dailyPnlTotal       今日盈亏合计(所有持仓基金今日盈亏之和,null 视为 0)
+ * @param dailyPnlTotal       今日盈亏合计(所有持仓基金今日盈亏之和；任一持仓缺失时为 null)
  * @param risingFundCount     上涨基金数(今日涨跌幅 > 0)
  * @param fallingFundCount    下跌基金数(今日涨跌幅 < 0)
  * @param profitableFundCount 盈利基金数(总盈亏 > 0)
