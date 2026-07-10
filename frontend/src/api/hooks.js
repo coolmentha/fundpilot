@@ -279,6 +279,16 @@ export function useRealtimeIndices() {
     });
 }
 
+/** 沪深京上涨、下跌股票家数,5 秒轮询。 */
+export function useMarketBreadth() {
+    return useQuery({
+        queryKey: ['market', 'breadth'],
+        queryFn: () => get('/api/market/breadth'),
+        refetchInterval: 5_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
 /** 批量基金盘中估值,10 秒轮询。codes 为空时不启用。 */
 export function useFundEstimates(codes) {
     const codeStr = (codes || []).filter(Boolean).join(',');

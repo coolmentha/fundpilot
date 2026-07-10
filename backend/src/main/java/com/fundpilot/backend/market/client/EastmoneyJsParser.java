@@ -208,6 +208,60 @@ public final class EastmoneyJsParser {
     }
 
     /**
+     * 解析沪深京股票市场上涨、下跌家数。
+     *
+     * <p>调用方传入上证、深证、北证三个固定市场 secid。只有全部市场均存在且
+     * f104(上涨家数)、f105(下跌家数)完整时才返回汇总，避免发布部分市场数据。
+     *
+     * @param rawJson      ulist.np 响应文本
+     * @param marketSecids 必须完整参与汇总的市场 secid
+     * @return 市场宽度快照；响应为空、市场缺失或字段缺失时返回 null
+     */
+    public static MarketBreadthSnapshot parseMarketBreadth(String rawJson, List<String> marketSecids) {
+        if (rawJson == null || rawJson.isBlank() || marketSecids == null || marketSecids.isEmpty()) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
+            com.fasterxml.jackson.databind.JsonNode diff = root.path("data").path("diff");
+            if (!diff.isArray() || diff.isEmpty()) {
+                return null;
+            }
+
+            java.util.Map<String, com.fasterxml.jackson.databind.JsonNode> nodesByCode = new java.util.HashMap<>();
+            for (com.fasterxml.jackson.databind.JsonNode node : diff) {
+                String code = textOrNull(node, "f12");
+                if (code != null) {
+                    nodesByCode.put(code, node);
+                }
+            }
+
+            int risingCount = 0;
+            int fallingCount = 0;
+            for (String secid : marketSecids) {
+                int dot = secid.indexOf('.');
+                if (dot < 0 || dot == secid.length() - 1) {
+                    return null;
+                }
+                com.fasterxml.jackson.databind.JsonNode node = nodesByCode.get(secid.substring(dot + 1));
+                if (node == null) {
+                    return null;
+                }
+                Integer rising = integerOrNull(node, "f104");
+                Integer falling = integerOrNull(node, "f105");
+                if (rising == null || falling == null) {
+                    return null;
+                }
+                risingCount = Math.addExact(risingCount, rising);
+                fallingCount = Math.addExact(fallingCount, falling);
+            }
+            return new MarketBreadthSnapshot(risingCount, fallingCount);
+        } catch (java.io.IOException | ArithmeticException e) {
+            throw new IllegalStateException("市场宽度 JSON 解析失败", e);
+        }
+    }
+
+    /**
      * 解析 push2 clist 行业板块涨跌 + 资金流向 JSON。
      * <p>响应结构 {@code data.diff[]} 数组,每个元素含 f3(涨跌幅 ÷10000,返小数)、f6(成交额)、
      * f12(板块代码)、f14(板块名称)、f62(主力净流入 元,可缺失)。
@@ -306,6 +360,16 @@ public final class EastmoneyJsParser {
             return null;
         }
         return child.decimalValue();
+    }
+
+    /** 取非负整数字段，缺失、非整数或越界时返回 null。 */
+    private static Integer integerOrNull(com.fasterxml.jackson.databind.JsonNode node, String field) {
+        com.fasterxml.jackson.databind.JsonNode child = node.path(field);
+        if (!child.isIntegralNumber() || !child.canConvertToInt()) {
+            return null;
+        }
+        int value = child.intValue();
+        return value >= 0 ? value : null;
     }
 
     /** 从 CSV 文本片段解析 BigDecimal,空或非法返 null。 */

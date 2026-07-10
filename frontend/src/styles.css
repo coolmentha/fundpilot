@@ -374,7 +374,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 /* —— 组合总览 —— */
 .portfolio-overview-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(160px, 1fr));
+    grid-template-columns: minmax(220px, 1.2fr) repeat(2, minmax(140px, 0.8fr)) minmax(300px, 1.6fr);
     gap: 12px;
 }
 
@@ -390,6 +390,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .portfolio-overview-card.primary { --overview-accent: var(--color-warning); }
 .portfolio-overview-card.up { --overview-accent: var(--color-danger); }
 .portfolio-overview-card.down { --overview-accent: var(--color-success); }
+.portfolio-overview-card.breadth { --overview-accent: var(--color-info); }
 
 .overview-label {
     display: flex;
@@ -418,6 +419,58 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: grid;
     place-items: center;
 }
+
+.market-breadth-summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 9px;
+    font-size: 12px;
+}
+
+.market-breadth-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.market-breadth-stat.up { color: var(--color-danger); }
+.market-breadth-stat.down { color: var(--color-success); }
+
+.market-breadth-stat strong {
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+}
+
+.market-breadth-stat small {
+    color: var(--color-muted);
+    font-size: 11px;
+}
+
+.market-breadth-bar {
+    display: flex;
+    width: 100%;
+    height: 10px;
+    margin-top: 8px;
+    overflow: hidden;
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+.market-breadth-up,
+.market-breadth-down {
+    display: block;
+    height: 100%;
+    min-width: 0;
+    transition: width 180ms ease;
+}
+
+.market-breadth-up { background: var(--color-danger); }
+.market-breadth-down { background: var(--color-success); }
 
 /* —— 指数条 —— */
 .index-ticker {
@@ -749,6 +802,13 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 /* —— 响应式 —— */
 @media (max-width: 1024px) {
+    .portfolio-overview-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .portfolio-overview-card.primary,
+    .portfolio-overview-card.breadth {
+        grid-column: 1 / -1;
+    }
     .bottom-grid {
         grid-template-columns: 1fr;
     }
@@ -778,6 +838,16 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 @media (max-width: 420px) {
     .portfolio-overview-grid {
         grid-template-columns: 1fr;
+    }
+    .portfolio-overview-card.primary,
+    .portfolio-overview-card.breadth {
+        grid-column: auto;
+    }
+    .market-breadth-summary {
+        gap: 8px;
+    }
+    .market-breadth-stat {
+        gap: 4px;
     }
     .overview-value {
         font-size: 22px;
