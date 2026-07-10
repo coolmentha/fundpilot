@@ -160,8 +160,8 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void confirmPendingTransactions_仅转出基金有净值_转出确认转入留PENDING_金额已回填() {
-        // B 当日无净值:转出确认,转入腿 amount 已回填但留 PENDING 次日续
+    void confirmPendingTransactions_仅转出基金有净值_两腿都保持PENDING() {
+        // B 当日无净值:转换必须原子确认,两腿都保留 PENDING
         FundEntity fundB = new FundEntity();
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
@@ -187,9 +187,10 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         entityManager.clear();
         FundTransactionEntity reloadedOut = entityManager.find(FundTransactionEntity.class, out.getId());
         FundTransactionEntity reloadedIn = entityManager.find(FundTransactionEntity.class, in.getId());
-        assertThat(reloadedOut.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
-        assertThat(reloadedIn.getStatus()).isEqualTo(FundTransactionStatus.PENDING); // B 无净值,留 PENDING
-        assertThat(reloadedIn.getAmount()).isEqualByComparingTo("625"); // 转出净金额已回填,次日续
+        assertThat(reloadedOut.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        assertThat(reloadedOut.getAmount()).isNull();
+        assertThat(reloadedIn.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        assertThat(reloadedIn.getAmount()).isNull();
     }
 
     @Test

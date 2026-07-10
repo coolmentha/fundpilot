@@ -14,7 +14,7 @@ import java.time.Instant;
 /**
  * A 股交易日历,记录每个日期是否为交易日(含节假日剔除)。
  * {@code MIN_HOLD_DAYS} 判定 5 个交易日窗口时遍历本表跳过非交易日,见 CONTEXT.md「交易日历」。
- * 本期人工维护,不做自动同步。{@code calendarDate} 全局唯一。
+ * 由新浪交易日历源启动预热并每日同步。{@code calendarDate} 全局唯一。
  */
 @Entity
 @Table(name = "trading_calendar")

@@ -2,7 +2,6 @@ package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.client.SinaTradingCalendarClient;
 import com.fundpilot.backend.market.client.SinaTradingCalendarParser;
-import com.fundpilot.backend.market.entity.TradingCalendarEntity;
 import com.fundpilot.backend.market.repository.TradingCalendarRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,9 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 交易日历同步(task 07-09 换源):从新浪财经交易日历接口提取交易日,写入 trading_calendar。
@@ -46,31 +43,16 @@ public class TradingCalendarSyncService {
      */
     @Transactional
     public int sync() {
-        Set<Instant> existing = loadExistingDates();
         String raw = sinaTradingCalendarClient.fetchTradingCalendarRaw();
         List<Instant> tradingDays = SinaTradingCalendarParser.parse(raw);
 
         int added = 0;
         for (Instant date : tradingDays) {
-            if (existing.contains(date)) {
-                continue;
-            }
-            TradingCalendarEntity entity = new TradingCalendarEntity();
-            entity.setCalendarDate(date);
-            entity.setTradingDay(true);
-            tradingCalendarRepository.save(entity);
-            existing.add(date);
-            added++;
+            added += tradingCalendarRepository.insertTradingDayIfAbsent(date);
         }
 
         log.info("交易日历同步完成(新浪源):本次新增 {} 条(已有 {} 条,新浪返回 {} 条)",
-                added, existing.size() - added, tradingDays.size());
+                added, tradingDays.size() - added, tradingDays.size());
         return added;
-    }
-
-    private Set<Instant> loadExistingDates() {
-        Set<Instant> dates = new HashSet<>();
-        tradingCalendarRepository.findAll().forEach(e -> dates.add(e.getCalendarDate()));
-        return dates;
     }
 }

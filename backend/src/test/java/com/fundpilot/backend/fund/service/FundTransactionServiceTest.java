@@ -5,11 +5,14 @@ import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.controller.ManualTransactionRequest;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundLotRedemptionRepository;
+import com.fundpilot.backend.fund.repository.FundLotRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 
@@ -33,6 +37,8 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     @Autowired FundRepository fundRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundPositionService fundPositionService;
+    @Autowired FundLotRepository fundLotRepository;
+    @Autowired FundLotRedemptionRepository fundLotRedemptionRepository;
 
     @Test
     @Transactional
@@ -251,6 +257,28 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
                 new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null, new BigDecimal("50"), null));
 
         assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("150");
+    }
+
+    @Test
+    @Transactional
+    void createManual_调减同步缩减lot且不生成赎回明细() {
+        FundEntity fund = persistFund();
+        FundLotEntity lot = new FundLotEntity();
+        lot.setFundEntity(fund);
+        lot.setAcquireTxId(999L);
+        lot.setAcquireDate(Instant.parse("2026-06-01T00:00:00Z"));
+        lot.setAcquireShares(new BigDecimal("100"));
+        lot.setRemainingShares(new BigDecimal("100"));
+        lot.setAcquireCostPerShare(new BigDecimal("1.20"));
+        lot = fundLotRepository.save(lot);
+
+        FundTransactionView adjustment = fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null,
+                        new BigDecimal("40"), null));
+
+        FundLotEntity reloaded = fundLotRepository.findById(lot.getId()).orElseThrow();
+        assertThat(reloaded.getRemainingShares()).isEqualByComparingTo("60");
+        assertThat(fundLotRedemptionRepository.findBySellTxId(adjustment.id())).isEmpty();
     }
 
     @Test

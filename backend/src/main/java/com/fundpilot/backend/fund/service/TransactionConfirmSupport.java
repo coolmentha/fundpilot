@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundLotRedemptionEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.repository.FundLotRedemptionRepository;
 import com.fundpilot.backend.fund.repository.FundLotRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -105,6 +106,10 @@ public class TransactionConfirmSupport {
             log.warn("卖出确认无 lot 记录 fund={} shares={},降级不扣赎回费", fundId, tx.getShares());
             return;
         }
+        BigDecimal trackedShares = lots.stream()
+                .map(FundLotEntity::getRemainingShares)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal untrackedShares = untrackedSharesBeforeSell(tx, trackedShares);
 
         for (FundLotEntity lot : lots) {
             if (remaining.signum() <= 0) {
@@ -132,8 +137,12 @@ public class TransactionConfirmSupport {
         }
 
         if (remaining.signum() > 0) {
-            throw ErrorCode.INSUFFICIENT_LOTS.toException(
-                    "可用 lot 份额不足,无法卖出 " + tx.getShares() + " 份,缺 " + remaining + " 份");
+            if (remaining.compareTo(untrackedShares) > 0) {
+                throw ErrorCode.INSUFFICIENT_LOTS.toException(
+                        "可用 lot 份额不足,无法卖出 " + tx.getShares() + " 份,缺 " + remaining + " 份");
+            }
+            log.warn("卖出包含未跟踪调整份额 fund={} shares={} untracked={},未跟踪部分按零赎回费处理",
+                    fundId, tx.getShares(), remaining);
         }
 
         BigDecimal grossAmount = tx.getShares().multiply(navValue, MATH);
@@ -145,6 +154,40 @@ public class TransactionConfirmSupport {
         fundLotRedemptionRepository.saveAll(redemptions);
         log.info("卖出确认FIFO fund={} shares={} nav={} gross={} fee={} net={} lots={}",
                 fundId, tx.getShares(), navValue, grossAmount, totalFee, tx.getAmount(), redemptions.size());
+    }
+
+    /** 调整交易确认:ADJUST_OUT 按 FIFO 缩减 open lot,不产生赎回费和赎回明细。 */
+    public void onAdjustConfirmed(FundTransactionEntity tx) {
+        if (tx.getSource() != FundTransactionSource.ADJUST_OUT) {
+            return;
+        }
+        Long fundId = tx.getFundEntity().getId();
+        BigDecimal remaining = tx.getShares();
+        List<FundLotEntity> touchedLots = new ArrayList<>();
+        for (FundLotEntity lot : fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(fundId)) {
+            if (remaining.signum() <= 0) {
+                break;
+            }
+            BigDecimal consume = lot.getRemainingShares().min(remaining);
+            lot.setRemainingShares(lot.getRemainingShares().subtract(consume));
+            touchedLots.add(lot);
+            remaining = remaining.subtract(consume);
+        }
+        if (!touchedLots.isEmpty()) {
+            fundLotRepository.saveAll(touchedLots);
+        }
+        if (remaining.signum() > 0) {
+            log.warn("调减份额超过 open lot fund={} shares={} unmatched={}", fundId, tx.getShares(), remaining);
+        }
+    }
+
+    private BigDecimal untrackedSharesBeforeSell(FundTransactionEntity tx, BigDecimal trackedShares) {
+        BigDecimal holdingAfter = fundPositionService.getHoldingShares(tx.getFundEntity().getId());
+        if (holdingAfter == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal holdingBefore = holdingAfter.add(tx.getShares());
+        return holdingBefore.subtract(trackedShares).max(BigDecimal.ZERO);
     }
 
     /**

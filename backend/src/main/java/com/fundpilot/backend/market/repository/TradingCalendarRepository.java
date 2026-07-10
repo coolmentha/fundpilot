@@ -2,6 +2,7 @@ package com.fundpilot.backend.market.repository;
 
 import com.fundpilot.backend.market.entity.TradingCalendarEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,6 +12,17 @@ import java.util.Optional;
 public interface TradingCalendarRepository extends JpaRepository<TradingCalendarEntity, Long> {
 
     Optional<TradingCalendarEntity> findByCalendarDate(Instant calendarDate);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO trading_calendar
+                (calendar_date, is_trading_day, version, created_date, updated_date)
+            VALUES
+                (CAST(CAST(:calendarDate AS TIMESTAMPTZ) AT TIME ZONE 'UTC' AS DATE),
+                 TRUE, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (calendar_date) WHERE deleted_date IS NULL DO NOTHING
+            """, nativeQuery = true)
+    int insertTradingDayIfAbsent(@Param("calendarDate") Instant calendarDate);
 
     /**
      * 统计 (fromExclusive, toInclusive] 区间(不含 from、含 to)的交易日数,

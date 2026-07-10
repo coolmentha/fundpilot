@@ -11,8 +11,9 @@
 _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 
 **FundTransactionSource（交易来源）**:
-账目层份额变化方向的中性描述，五值：`INCREASE` / `DECREASE` / `TRANSFER_IN` / `TRANSFER_OUT` / `INVEST`。与 `SignalType` 是
-**两个不同维度**——信号描述"系统建议什么策略动作"，来源描述"账目份额怎么动"。一只基金的交易来源沿用现有五值不收敛。
+账目层份额变化方向的中性描述，七值：`INCREASE` / `DECREASE` / `TRANSFER_IN` / `TRANSFER_OUT` / `INVEST` /
+`ADJUST_IN` / `ADJUST_OUT`。与 `SignalType` 是**两个不同维度**——信号描述"系统建议什么策略动作"，来源描述"账目份额怎么动"。
+`ADJUST_IN/ADJUST_OUT` 仅用于账实份额修正，录入即确认，不计算净值、金额或手续费。
 _Avoid_: BUY / SELL（语义已被 SignalType 占用，避免歧义）
 
 ## 回撤基准
@@ -71,7 +72,7 @@ _Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起�
 
 **交易日历（TradingCalendar）**:
 `MIN_HOLD_DAYS` 判定 5 个交易日所需的基础数据表，记录每个日期是否为 A 股交易日（含节假日剔除）。一次性灌入未来几年的日历即可（A
-股节假日规则相对固定），或定期从交易所日历同步。本期暂不做自动同步，人工维护。
+股节假日规则相对固定）。当前由新浪交易日历源在启动时预热并每日同步，数据库使用原子 insert-if-absent 保证重复和并发同步幂等。
 
 ## 策略状态机
 
@@ -186,9 +187,10 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 ## 手动交易
 
 **手动交易（Manual Transaction）**:
-不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 5 类来源：
-加仓（INCREASE）/减仓（DECREASE）/转入（TRANSFER_IN）/转出（TRANSFER_OUT）/定投（INVEST）。买入写 amount、卖出写 shares，
+不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 7 类来源：
+加仓（INCREASE）/减仓（DECREASE）/转入（TRANSFER_IN）/转出（TRANSFER_OUT）/定投（INVEST）/调增（ADJUST_IN）/调减（ADJUST_OUT）。买入写 amount、卖出写 shares，
 走 NavConfirmJob 回填另一侧。与信号触发交易共用同一套账目和持仓聚合。手动卖出不经过 `evaluateSignal`，不卡 7 天硬约束（前端可提示）。
+ADJUST 只修正事实份额：ADJUST_OUT 按 FIFO 缩减 open lot；ADJUST_IN 不建收费 lot，后续卖出未被 lot 覆盖的事实份额按零赎回费降级。
 入口在基金详情页"交易流水" Tab 的"手动录入"按钮。
 _Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，signalLog=null 已是领域模型预留的手动标识）
 

@@ -63,6 +63,7 @@ void             refreshHoldingFunds();          // 遍历 HOLDING 基金刷新
 // TransactionConfirmSupport — 买卖确认核心算费(被 NavConfirmService / TransactionConfirmService 共用)
 void onBuyConfirmed (FundTransactionEntity tx, BigDecimal navValue);
 void onSellConfirmed(FundTransactionEntity tx, BigDecimal navValue);
+void onAdjustConfirmed(FundTransactionEntity tx); // ADJUST_OUT 仅缩减 open lot,不算费/不记赎回明细
 
 // FundFeeHtmlParser — Jsoup 静态解析器
 static PurchaseFeeRate        parsePurchaseRate(String html);     // → (originalRate, discountRate)
@@ -115,7 +116,9 @@ for lot in lots (FIFO):
     remaining    -= consume
 
 if remaining > 0:
-    throw INSUFFICIENT_LOTS   -- 卖出份额超过可用 lot 总和
+    untracked = 卖出前事实持仓 - open lot 总份额
+    remaining <= untracked → 未跟踪 ADJUST_IN 份额按零赎回费降级
+    remaining > untracked  → throw INSUFFICIENT_LOTS
 
 grossAmount = shares × nav
 tx.amount   = grossAmount − totalFee
@@ -163,6 +166,7 @@ tx.feeRate  = grossAmount > 0 ? totalFee ÷ grossAmount : null
 | `redemption_ladder` 为空 / 解析失败 | 降级:`rate=0`,卖出不扣赎回费 | (无,记 warn) |
 | 卖出时 `fund_lot` 无可用记录 | 降级:不扣赎回费,`amount = shares × nav`,记 warn | (无,不阻断) |
 | 卖出份额 > 可用 lot 余额总和 | 抛异常,交易不确认 | `INSUFFICIENT_LOTS` |
+| 卖出份额中的 lot 缺口有事实 ADJUST_IN 份额支撑 | 缺口部分按零赎回费确认,记 warn | (无,正常返回) |
 | jjfl HTML 抓取失败(网络/404) | `fetchAndSave` 返回 null,保留旧 `fund_fee` 记录 | (无,记 warn) |
 | `navValue` 为 null/0 | `ArithmeticException`(divide by zero) | (既有约束,非本任务) |
 

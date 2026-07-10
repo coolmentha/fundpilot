@@ -2,13 +2,11 @@ package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
-import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -17,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,12 +33,8 @@ import java.util.List;
 public class TransactionConfirmService {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionConfirmService.class);
-    private static final MathContext MATH = MathContext.DECIMAL64;
-
     private final FundTransactionRepository fundTransactionRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final FundRepository fundRepository;
-    private final FundPositionService fundPositionService;
     private final TransactionConfirmSupport transactionConfirmSupport;
 
     /**
@@ -65,16 +58,9 @@ public class TransactionConfirmService {
 
         List<FundTransactionEntity> confirmed = new ArrayList<>();
         FundTransactionEntity related = tx.getRelatedFundTransactionEntity();
-        // 基金转换(task 07-08):(TRANSFER_OUT, TRANSFER_IN) 互指两腿,先确认转出得净金额,
-        // 回填转入 amount,再确认转入算 shares/fee。用户从任一腿发起确认均按此顺序。
-        if (isConversionPair(tx, related)) {
-            FundTransactionEntity outLeg = tx.getSource() == FundTransactionSource.TRANSFER_OUT ? tx : related;
-            FundTransactionEntity inLeg = outLeg == tx ? related : tx;
-            confirmOne(outLeg, confirmed);
-            if (inLeg.getStatus() == FundTransactionStatus.PENDING) {
-                inLeg.setAmount(outLeg.getAmount());  // 转出净金额 = 转入本金
-                confirmOne(inLeg, confirmed);
-            }
+        ConversionTransactionPair conversion = ConversionTransactionPair.resolve(tx, related);
+        if (conversion != null) {
+            confirmConversion(conversion, confirmed);
         } else {
             confirmOne(tx, confirmed);
             // 非 conversion 的 relatedTransaction(预留场景):沿用级联确认
@@ -87,23 +73,38 @@ public class TransactionConfirmService {
         return confirmed;
     }
 
-    /** 是否为基金转换互指对(TRANSFER_OUT <-> TRANSFER_IN)。 */
-    private boolean isConversionPair(FundTransactionEntity a, FundTransactionEntity b) {
-        if (a == null || b == null) {
-            return false;
+    private void confirmConversion(ConversionTransactionPair conversion,
+                                   List<FundTransactionEntity> confirmed) {
+        FundTransactionEntity outLeg = conversion.outLeg();
+        FundTransactionEntity inLeg = conversion.inLeg();
+        if (outLeg.getStatus() == FundTransactionStatus.CANCELLED
+                || inLeg.getStatus() == FundTransactionStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CANCELLED,
+                    "基金转换存在已撤销关联腿,不可确认");
         }
-        if (a.getSource() == FundTransactionSource.TRANSFER_OUT
-                && b.getSource() == FundTransactionSource.TRANSFER_IN) {
-            return true;
+        if (outLeg.getStatus() == FundTransactionStatus.PENDING
+                && inLeg.getStatus() == FundTransactionStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
+                    "基金转换转入腿已确认但转出腿仍待确认");
         }
-        if (a.getSource() == FundTransactionSource.TRANSFER_IN
-                && b.getSource() == FundTransactionSource.TRANSFER_OUT) {
-            return true;
+        if (outLeg.getStatus() == FundTransactionStatus.PENDING) {
+            confirmOne(outLeg, confirmed);
         }
-        return false;
+        if (inLeg.getStatus() == FundTransactionStatus.PENDING) {
+            if (outLeg.getStatus() != FundTransactionStatus.CONFIRMED || outLeg.getAmount() == null) {
+                throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
+                        "基金转换转出腿尚未完成,不可确认转入腿");
+            }
+            inLeg.setAmount(outLeg.getAmount());
+            confirmOne(inLeg, confirmed);
+        }
     }
 
     private void confirmOne(FundTransactionEntity tx, List<FundTransactionEntity> confirmed) {
+        if (tx.getStatus() != FundTransactionStatus.PENDING) {
+            throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
+                    "仅 PENDING 交易可确认,tx_id=" + tx.getId());
+        }
         BigDecimal navValue = latestAccumulatedNav(tx.getFundEntity().getId());
         FundTransactionSource source = tx.getSource();
         switch (source) {

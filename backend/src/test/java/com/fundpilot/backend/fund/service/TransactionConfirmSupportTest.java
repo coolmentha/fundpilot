@@ -171,6 +171,41 @@ class TransactionConfirmSupportTest {
     }
 
     @Test
+    void onSellConfirmed_事实持仓含调增份额_部分lot不足按零费率降级() {
+        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+                new FundFeeSnapshot(null,
+                        List.of(new RedemptionTier(null, new BigDecimal("0.01"))), null));
+        FundLotEntity lot = lot(50, Instant.parse("2026-06-30T00:00:00Z"));
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
+        // 调用时卖出交易已标 CONFIRMED，因此事实持仓为卖出后的 0；卖出前为 100，超出 lot 的 50 来自 ADJUST_IN。
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(BigDecimal.ZERO);
+
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
+        support.onSellConfirmed(tx, new BigDecimal("1.6"));
+
+        assertThat(tx.getFee()).isEqualByComparingTo("0.800");
+        assertThat(tx.getAmount()).isEqualByComparingTo("159.200");
+        assertThat(lot.getRemainingShares()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void onAdjustConfirmed_调减按FIFO缩减lot且不生成赎回明细() {
+        FundLotEntity first = lot(80, Instant.parse("2026-05-01T00:00:00Z"));
+        FundLotEntity second = lot(50, Instant.parse("2026-06-01T00:00:00Z"));
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L))
+                .thenReturn(List.of(first, second));
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
+        tx.setSource(FundTransactionSource.ADJUST_OUT);
+
+        support.onAdjustConfirmed(tx);
+
+        assertThat(first.getRemainingShares()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(second.getRemainingShares()).isEqualByComparingTo("30");
+        verify(fundLotRepository).saveAll(List.of(first, second));
+        verifyNoInteractions(fundLotRedemptionRepository);
+    }
+
+    @Test
     void lookupRedemptionRate_持有7天命中第二档() {
         List<RedemptionTier> ladder = List.of(
                 new RedemptionTier(7, new BigDecimal("0.015")),

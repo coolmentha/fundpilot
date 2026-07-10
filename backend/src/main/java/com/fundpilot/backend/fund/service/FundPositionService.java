@@ -24,7 +24,7 @@ import java.util.Optional;
  * <ul>
  *   <li>持仓份额 = Σ shares × direction WHERE status = CONFIRMED</li>
  *   <li>在途份额 = Σ shares × direction WHERE status = PENDING</li>
- *   <li>direction:INCREASE/TRANSFER_IN/INVEST = +1,DECREASE/TRANSFER_OUT = -1</li>
+ *   <li>direction:INCREASE/TRANSFER_IN/INVEST/ADJUST_IN = +1,DECREASE/TRANSFER_OUT/ADJUST_OUT = -1</li>
  *   <li>CANCELLED 不计入持仓也不计入在途</li>
  * </ul>
  *

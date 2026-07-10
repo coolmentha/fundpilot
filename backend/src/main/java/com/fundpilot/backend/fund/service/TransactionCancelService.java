@@ -46,11 +46,19 @@ public class TransactionCancelService {
                     "交易已撤销 #" + transactionId);
         }
 
+        FundTransactionEntity related = tx.getRelatedFundTransactionEntity();
+        ConversionTransactionPair conversion = ConversionTransactionPair.resolve(tx, related);
+        if (conversion != null && related.getStatus() == FundTransactionStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED,
+                    "基金转换关联腿已确认,不可单独撤销 #" + transactionId);
+        }
+        if (conversion != null && related.getStatus() == FundTransactionStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CANCELLED,
+                    "基金转换关联腿已撤销 #" + transactionId);
+        }
+
         List<FundTransactionEntity> cancelled = new ArrayList<>();
         cancelOne(tx, cancelled);
-
-        // 转换交易:relatedTransaction 两条腿一起撤
-        FundTransactionEntity related = tx.getRelatedFundTransactionEntity();
         if (related != null && related.getStatus() == FundTransactionStatus.PENDING) {
             cancelOne(related, cancelled);
         }

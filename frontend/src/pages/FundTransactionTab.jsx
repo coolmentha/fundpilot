@@ -14,7 +14,7 @@ const ADJUST_SOURCES = new Set(['ADJUST_IN', 'ADJUST_OUT']);
 
 /**
  * 基金详情 · 交易流水 tab(issue #18 交易合并到基金详情 + 手动录入)。
- * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持五类来源,
+ * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持七类来源,
  * 买入类填金额、卖出类填份额(份额/金额等净值确认后回填),手动卖出不卡 7 天硬约束。
  */
 export default function FundTransactionTab({fundId}) {
@@ -90,11 +90,11 @@ export default function FundTransactionTab({fundId}) {
                     </Form.Item>
                     {isSell ? (
                         <Form.Item label="份额" name="shares" rules={[{required: true, message: '卖出类需填份额'}]}>
-                            <InputNumber className="full-width" step={0.01} precision={2}/>
+                            <InputNumber className="full-width" min={0.01} step={0.01} precision={2}/>
                         </Form.Item>
                     ) : (
                         <Form.Item label="金额(元)" name="amount" rules={[{required: true, message: '买入类需填金额'}]}>
-                            <InputNumber className="full-width" step={100} precision={2} prefix="¥"/>
+                            <InputNumber className="full-width" min={0.01} step={100} precision={2} prefix="¥"/>
                         </Form.Item>
                     )}
                     {isTransferOut && (

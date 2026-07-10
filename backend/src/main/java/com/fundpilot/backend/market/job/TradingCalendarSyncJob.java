@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 交易日历定时同步任务(task 07-09)。
- * <p>每日 04:00(UTC)从新浪同步交易日历,确保 trading_calendar 表覆盖到当年底(可前瞻)。
+ * <p>每日服务器本地时间 04:00 从新浪同步交易日历,生产容器时区为 Asia/Shanghai。
  * 启动时(ApplicationReadyEvent)预热一次,确保新部署/换环境后表非空(原同步无 @Scheduled,
  * 换环境忘同步会导致 DCA/信号/实时刷新全失效且无告警)。
  * <p>同步失败不阻塞:记 warn,保留旧数据(与原"同步失败"等价)。
@@ -33,7 +33,7 @@ public class TradingCalendarSyncJob {
     }
 
     /**
-     * 每日 04:00(UTC)同步交易日历。12:00 北京时间,盘前完成。
+     * 每日服务器本地时间 04:00 同步交易日历。生产环境即北京时间 04:00。
      * 新浪数据覆盖到当年底,节假日安排前一年 11 月发布,每日 1 次足够。
      */
     @Scheduled(cron = "0 0 4 * * *")

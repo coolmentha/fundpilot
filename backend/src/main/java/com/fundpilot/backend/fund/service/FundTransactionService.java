@@ -30,6 +30,7 @@ public class FundTransactionService {
 
     private final FundTransactionRepository fundTransactionRepository;
     private final FundRepository fundRepository;
+    private final TransactionConfirmSupport transactionConfirmSupport;
 
     /** 查某基金全部交易流水,按创建时间倒序(最新在前)。 */
     public List<FundTransactionView> listByFund(Long fundId) {
@@ -52,7 +53,11 @@ public class FundTransactionService {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
 
-        // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费/不建 lot,只改持仓份额。
+        if (request.source() == null) {
+            throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "交易来源(source)必填");
+        }
+
+        // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费,只改持仓份额。
         // amount/fee/feeRate/nav 均空,金额实时算(份额×当前净值)。
         if (request.source() == FundTransactionSource.ADJUST_IN
                 || request.source() == FundTransactionSource.ADJUST_OUT) {
@@ -71,24 +76,26 @@ public class FundTransactionService {
             tx.setStatus(FundTransactionStatus.CONFIRMED);
             tx.setConfirmTime(Instant.now());
             tx.setSignalLogEntity(null);
-            return FundTransactionView.from(fundTransactionRepository.save(tx));
+            FundTransactionEntity saved = fundTransactionRepository.save(tx);
+            transactionConfirmSupport.onAdjustConfirmed(saved);
+            return FundTransactionView.from(saved);
         }
 
         BigDecimal amount;
         BigDecimal shares;
         switch (request.source()) {
             case INCREASE, TRANSFER_IN, INVEST -> {
-                if (request.amount() == null) {
+                if (request.amount() == null || request.amount().signum() <= 0) {
                     throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
-                            request.source() + " 需填金额(amount)");
+                            request.source() + " 需填正数金额(amount)");
                 }
                 amount = request.amount();
                 shares = null;
             }
             case DECREASE, TRANSFER_OUT -> {
-                if (request.shares() == null) {
+                if (request.shares() == null || request.shares().signum() <= 0) {
                     throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
-                            request.source() + " 需填份额(shares)");
+                            request.source() + " 需填正数份额(shares)");
                 }
                 amount = null;
                 shares = request.shares();
