@@ -78,9 +78,9 @@ export default function DashboardPage() {
                         <Statistic title={<span className="kpi-label">今日盈亏合计</span>}
                                    value={dailyPnlTotal ?? 0}
                                    prefix={<WalletOutlined/>}
-                                   formatter={(v) => (
+                                   formatter={() => dailyPnlTotal == null ? '-' : (
                                        <span style={{color: pnlColor(dailyPnlTotal)}}>
-                                           {signedMoney(v)}
+                                           {signedMoney(dailyPnlTotal)}
                                            {summary?.isEstimated && <span className="estimate-tag">估</span>}
                                        </span>
                                    )}/>

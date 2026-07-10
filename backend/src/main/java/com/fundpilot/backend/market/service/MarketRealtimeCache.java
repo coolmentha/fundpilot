@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
  *   <li>{@link #indexCache} 指数实时行情(用户关注列表,30s 刷新)</li>
  *   <li>{@link #sectorCache} 行业板块涨跌 + 主力资金(30s 刷新)</li>
  *   <li>{@link #moneyFlowCache} 北向资金(30s 刷新)</li>
- *   <li>{@link #estimateCache} 基金盘中估值(交易时段 30s 刷新,N 只基金逐个拉)</li>
+ *   <li>{@link #estimateCache} 基金盘中估值(交易时段 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
  * </ul>
  *
  * <p>降级策略:任一刷新失败保留旧缓存 + 记 warn(参考 {@link FundEstimateService} 的 catch RuntimeException 模式),
@@ -137,10 +138,22 @@ public class MarketRealtimeCache {
     public void onApplicationReady() {
         try {
             refreshRealtimeWithoutEstimates();
-            log.info("行情缓存启动刷新完成(指数/板块/资金),基金估值等待交易时段任务刷新");
+            log.info("行情缓存启动刷新完成(指数/板块/资金),基金估值由后台异步预热");
         } catch (RuntimeException e) {
             log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 应用启动完成后异步预热全部基金估值。
+     * <p>复用 Spring 异步执行与东方财富共享限流,避免 N 只基金请求阻塞健康检查。
+     */
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional(readOnly = true)
+    public void warmFundEstimatesAfterReady() {
+        refreshFundEstimates();
+        log.info("基金估值缓存异步启动预热完成");
     }
 
     private void refreshIndices() {

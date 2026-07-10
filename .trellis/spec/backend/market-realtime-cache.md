@@ -33,6 +33,7 @@ public MoneyFlowSnapshot getMoneyFlow();
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/板块/资金
+@Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
 ```
 
 ### 定时任务(`MarketRealtimeRefreshJob`)
@@ -82,7 +83,9 @@ N 个前端客户端共享同一份缓存。
 - `refreshFundEstimates()` 遍历 `FundRepository.findAll()`，覆盖全部未软删基金。
 - `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
 - 单只基金拉取失败只跳过本轮该基金，不能中断其他基金，也不能清空旧缓存。
-- `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
+- 同步 `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
+- 独立的 `@Async ApplicationReadyEvent` 必须调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
+- 今日净值未落库且估值缓存缺失时，今日涨跌返回未知；禁止用 T-1 对 T-2 冒充今日值。
 
 ### 14:50 串行契约
 
@@ -100,18 +103,22 @@ N 个前端客户端共享同一份缓存。
 | 单只基金估值拉取失败 | 跳过该只,不影响其他 |
 | 缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
-| 非交易时段请求 | 返回最后一次缓存数据(可能是上一交易日) |
+| 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
+| 今日净值未落库且估值缓存为空 | 今日涨跌/盈亏返回未知，不回退昨日涨跌 |
+| 任一持仓今日盈亏未知 | 全仓 `dailyPnlTotal` 返回 null，前端显示 `-`，不展示部分合计 |
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
-| 应用启动 | 只预热指数/板块/资金；基金估值等待交易时段周期任务 |
+| 应用启动 | 同步预热指数/板块/资金；基金估值在后台异步预热，不阻塞健康检查 |
 
 ---
 
 ## Good/Base/Bad Cases
 
 - **Good**:交易时段,前端 5s 轮询指数,后端 30s 刷新缓存,用户看到近实时行情
+- **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
 - **Good**:14:50 第三批快照完成后才读取快照生成信号
-- **Base**:非交易时段,前端轮询命中旧缓存,显示上一交易日收盘数据
+- **Base**:估值接口暂时失败且缓存为空,今日涨跌显示未知而不是昨日值
+- **Bad**:今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
 - **Bad**:行情抓取和信号生成使用两个同秒 cron,信号可能先读到缺失快照
 
@@ -123,7 +130,8 @@ N 个前端客户端共享同一份缓存。
   - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null、北向资金取 s2n 最后一条
 - 缓存层降级测试:mock push2Client 抛异常,验证旧缓存保留(本期未补,留 follow-up)
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
-- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`，且启动事件不查询基金列表、不调用单基金估值接口。
+- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；同步启动事件不查询基金列表；异步启动事件带 `@Async` 并填充估值缓存。
+- `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
 - `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
 
 ---
@@ -152,6 +160,30 @@ useQuery({
 
 后端 `MarketRealtimeCache` 用 volatile 字段 + `@Scheduled` 30s 刷新,
 前端 N 客户端共享同一份缓存,东方财富侧请求量恒定(与客户端数无关)。
+
+### Wrong:盘后重启后等待下一交易时段
+
+```java
+@EventListener(ApplicationReadyEvent.class)
+public void onApplicationReady() {
+    refreshRealtimeWithoutEstimates();
+    // estimateCache 为空且 15:00 后 Job 不再运行,今日收益会缺数据。
+}
+
+return dailyChangePct(latestNav, previousNav); // T-1 vs T-2 是昨日涨跌
+```
+
+### Correct:启动完成后异步预热,缺失时返回未知
+
+```java
+@Async
+@EventListener(ApplicationReadyEvent.class)
+public void warmFundEstimatesAfterReady() {
+    refreshFundEstimates();
+}
+
+return new DailyChangeResult(null, false); // 不用昨日值冒充今日值
+```
 
 ---
 
