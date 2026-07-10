@@ -73,8 +73,22 @@ N 个前端客户端共享同一份缓存。
 
 - 时区:`Asia/Shanghai`
 - 时段:9:30-11:30(上午)、13:00-15:00(下午)
-- 非交易日:`trading_calendar` 表 `is_trading_day=false` 的日期不刷新
+- 交易日查询参数必须使用 `ChinaTradingDate.toUtcDate(clock.instant())`，即北京时间自然日对应的 UTC 00:00 标签
+- 非交易日:`trading_calendar` 表无记录或 `is_trading_day=false` 时不刷新
 - 非交易时段:Job 的 cron 放宽到 9-14 点,靠 `isTradingHours()` 精细过滤
+
+### 基金估值范围契约
+
+- `refreshFundEstimates()` 遍历 `FundRepository.findAll()`，覆盖全部未软删基金。
+- `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
+- 单只基金拉取失败只跳过本轮该基金，不能中断其他基金，也不能清空旧缓存。
+- `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
+
+### 14:50 串行契约
+
+- 14:30/14:40 仅执行 `fetchBatch(0/1)`。
+- 14:50 的唯一调度入口先执行 `fetchBatch(2)`，返回后再调用 `SignalGenerationJob.generateDaily()`。
+- `SignalGenerationJob` 不得再声明独立的同秒 `@Scheduled`，手动行情刷新和手动信号生成入口仍独立可用。
 
 ---
 
@@ -87,14 +101,19 @@ N 个前端客户端共享同一份缓存。
 | 缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
 | 非交易时段请求 | 返回最后一次缓存数据(可能是上一交易日) |
+| 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
+| 第三批行情异常抛出 | 本次不继续生成信号 |
+| 应用启动 | 只预热指数/板块/资金；基金估值等待交易时段周期任务 |
 
 ---
 
 ## Good/Base/Bad Cases
 
 - **Good**:交易时段,前端 5s 轮询指数,后端 30s 刷新缓存,用户看到近实时行情
+- **Good**:14:50 第三批快照完成后才读取快照生成信号
 - **Base**:非交易时段,前端轮询命中旧缓存,显示上一交易日收盘数据
-- **Bad**:东方财富全接口挂掉,缓存永不更新,前端持续显示旧数据 + 用户无感知
+- **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
+- **Bad**:行情抓取和信号生成使用两个同秒 cron,信号可能先读到缺失快照
 
 ---
 
@@ -103,6 +122,9 @@ N 个前端客户端共享同一份缓存。
 - `EastmoneyJsParserRealtimeTest`:7 个测试覆盖三接口解析(正常响应、空响应、字段缺失)
   - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null、北向资金取 s2n 最后一条
 - 缓存层降级测试:mock push2Client 抛异常,验证旧缓存保留(本期未补,留 follow-up)
+- `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
+- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`，且启动事件不查询基金列表、不调用单基金估值接口。
+- `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
 
 ---
 
