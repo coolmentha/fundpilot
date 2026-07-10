@@ -3,10 +3,13 @@ package com.fundpilot.backend.strategy.service;
 import java.math.BigDecimal;
 
 /**
- * 策略参数配置请求:金字塔退场后只剩移动止盈回落幅度。
- *
- * @param stopLossPullbackPercent  移动止盈回落幅度(回落 n×本阈值触发卖 holdingShares×n/4)
+ * 定投止盈策略配置请求。百分比统一使用正数比例。
  */
 public record StrategyConfigRequest(
-        BigDecimal stopLossPullbackPercent) {
+        BigDecimal profitActivationPercent,
+        BigDecimal stopLossPullbackPercent,
+        BigDecimal profitHarvestPercent,
+        BigDecimal minimumHoldingPercent,
+        BigDecimal maxSingleSellPercent,
+        Integer cooldownTradingDays) {
 }

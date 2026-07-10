@@ -32,7 +32,7 @@ public class StrategyController {
 
     @PostMapping("/api/funds/{fundId}/strategies")
     public ApiResponse<Map<String, Long>> create(@PathVariable Long fundId,
-                                                 @RequestBody StrategyConfigRequest request) {
+                                                 @RequestBody(required = false) StrategyConfigRequest request) {
         Long id = strategyConfigService.createDraft(fundId, request);
         return ApiResponse.ok(Map.of("id", id));
     }
@@ -58,5 +58,10 @@ public class StrategyController {
     @GetMapping("/api/funds/{fundId}/strategies/active")
     public ApiResponse<FundStrategyView> active(@PathVariable Long fundId) {
         return ApiResponse.ok(strategyConfigService.findActiveView(fundId).orElse(null));
+    }
+
+    @GetMapping("/api/funds/{fundId}/strategies/recommendation")
+    public ApiResponse<StrategyRecommendationView> recommendation(@PathVariable Long fundId) {
+        return ApiResponse.ok(strategyConfigService.recommendation(fundId));
     }
 }

@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 信号引擎测试(卖出纪律专用)。金字塔加仓机制退场后,evaluateSignal 仅产出 NONE/SELL:
  * 状态门控(CLEARED/PENDING_HOLDING/无策略)与 SELL 两分支(逻辑止损 / 移动止盈)。
- * <p>移动止盈从金字塔档位状态解耦为"按回落分档减仓":回落 n×阈值卖 holdingShares×(n/4)。
+ * <p>定投止盈在整仓盈利启动后按周期高点回撤收割部分浮盈，并保留长期底仓。
  */
 class DisciplineStrategyServiceTest {
 
@@ -142,63 +142,63 @@ class DisciplineStrategyServiceTest {
         assertThat(result.reason()).isEqualTo(SignalReason.LOGIC_BROKEN);
     }
 
-    // ---- 移动止盈(holdingShares × n/4)----
+    // ---- 定投止盈 ----
 
     @Test
-    void 移动止盈_回落达一档_卖四分之一持仓() {
+    void 定投止盈_回撤达标_按浮盈收割比例计算份额() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        // holdingPeriodPeakNav=1.0, currentNav=0.91 → 回落 0.09 >= 1×0.08 达一档;priceAboveYearLine=true 使逻辑止损不触发
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("0.91"));
-        CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.10"));
+        CapitalContext capital = takeProfitCapital("20", "100");
+        FundStrategyEntity strategy = strategy();
+        strategy.setCyclePeakNav(new BigDecimal("1.20"));
 
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
+        SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.triggerTier()).isEqualTo(1);
+        assertThat(result.triggerTier()).isNull();
         assertThat(result.reason()).isEqualTo(SignalReason.TRAILING_STOP);
-        // 卖出份额 = holdingShares × 1/4 = 25
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("25"));
+        // 浮盈 20 × 收割 50% ÷ 净值 1.10 = 9.0909... 份。
+        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("9.090909090909091"));
         assertThat(result.suggestedMeasure().getMeasureUnit()).isEqualTo(MeasureUnit.SHARE);
     }
 
     @Test
-    void 移动止盈_回落达二档_卖二分之一持仓() {
+    void 定投止盈_单次最多卖当前持仓百分之二十() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        // holdingPeriodPeakNav=1.0, currentNav=0.83 → 回落 0.17 >= 2×0.08=0.16 达二档
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("0.83"));
-        CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.00"));
+        CapitalContext capital = takeProfitCapital("100", "100");
+        FundStrategyEntity strategy = strategy();
+        strategy.setCyclePeakNav(new BigDecimal("1.10"));
 
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
+        SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.triggerTier()).isEqualTo(2);
-        // 卖出份额 = holdingShares × 2/4 = 50
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("50"));
+        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("20"));
     }
 
     @Test
-    void 移动止盈_回落达四档_全卖持仓() {
+    void 定投止盈_成熟份额不足时只建议卖成熟份额() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        // holdingPeriodPeakNav=1.0, currentNav=0.67 → 回落 0.33 >= 4×0.08=0.32 达四档
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("0.67"));
-        CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.00"));
+        CapitalContext capital = takeProfitCapital("100", "5");
+        FundStrategyEntity strategy = strategy();
+        strategy.setCyclePeakNav(new BigDecimal("1.10"));
 
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
+        SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
-        assertThat(result.triggerTier()).isEqualTo(4);
-        // 卖出份额 = holdingShares × 4/4 = 100(全卖)
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("100"));
+        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("5"));
     }
 
     @Test
-    void 移动止盈_回落未达一档阈值_不触发() {
+    void 定投止盈_回撤未达阈值_不触发() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        // holdingPeriodPeakNav=1.0, currentNav=0.95 → 回落 0.05 < 0.08 未达一档
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("0.95"));
-        CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.15"));
+        CapitalContext capital = takeProfitCapital("20", "100");
+        FundStrategyEntity strategy = strategy();
+        strategy.setCyclePeakNav(new BigDecimal("1.20"));
 
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
+        SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isNotEqualTo(SignalType.SELL);
     }
@@ -221,16 +221,17 @@ class DisciplineStrategyServiceTest {
     // ---- MIN_HOLD_DAYS ----
 
     @Test
-    void SELL移动止盈_未满5交易日_降级NONE_MIN_HOLD_DAYS_NOT_MET() {
+    void 定投止盈_最近买入未满5交易日_成熟旧份额仍可卖() {
         FundEntity fund = fund(FundStatus.HOLDING);
-        // holdingPeriodPeakNav=1.0, currentNav=0.90 → 回落 0.10 >= 0.08 达一档止盈;但 tradingDays=2 < 5
-        MarketIndicators market = marketWithCurrentNav(new BigDecimal("0.90"));
-        CapitalContext capital = capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+        MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.00"));
+        CapitalContext capital = takeProfitCapital("100", "30");
+        FundStrategyEntity strategy = strategy();
+        strategy.setCyclePeakNav(new BigDecimal("1.10"));
 
-        SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 2);
+        SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 2);
 
-        assertThat(result.signalType()).isEqualTo(SignalType.NONE);
-        assertThat(result.reason()).isEqualTo(SignalReason.MIN_HOLD_DAYS_NOT_MET);
+        assertThat(result.signalType()).isEqualTo(SignalType.SELL);
+        assertThat(result.reason()).isEqualTo(SignalReason.TRAILING_STOP);
     }
 
     @Test
@@ -263,7 +264,10 @@ class DisciplineStrategyServiceTest {
     private FundStrategyEntity strategy() {
         FundStrategyEntity s = new FundStrategyEntity();
         s.setStatus(StrategyParamStatus.EFFECTIVE);
-        s.setStopLossPullbackPercent(new BigDecimal("0.08"));
+        s.setStopLossPullbackPercent(new BigDecimal("0.06"));
+        s.setProfitHarvestPercent(new BigDecimal("0.50"));
+        s.setMinimumHoldingPercent(new BigDecimal("0.50"));
+        s.setMaxSingleSellPercent(new BigDecimal("0.20"));
         return s;
     }
 
@@ -280,6 +284,17 @@ class DisciplineStrategyServiceTest {
 
     private CapitalContext capital() {
         return capital(new BigDecimal("1.0"), new BigDecimal("1.0"), new BigDecimal("100"));
+    }
+
+    private CapitalContext takeProfitCapital(String floatingProfit, String matureShares) {
+        return new CapitalContext(
+                new BigDecimal("1.2"),
+                new BigDecimal("1.2"),
+                new BigDecimal("100"),
+                Instant.now(),
+                new BigDecimal(floatingProfit),
+                new BigDecimal(matureShares),
+                true);
     }
 
     private MarketIndicators marketWithCurrentNav(BigDecimal currentNav) {

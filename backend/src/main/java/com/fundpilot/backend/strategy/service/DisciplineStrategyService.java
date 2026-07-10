@@ -30,13 +30,13 @@ import java.util.List;
  * <ol>
  *   <li>状态门控:CLEARED→NONE;PENDING_HOLDING→NONE(不再给建仓建议,买入由用户手动/定投决定)</li>
  *   <li>策略生效:status≠EFFECTIVE→NONE(NO_STRATEGY)</li>
- *   <li>SELL 决策:逻辑止损(优先级最高,豁免 MIN_HOLD_DAYS)> 移动止盈(按回落分档减仓)</li>
- *   <li>MIN_HOLD_DAYS:移动止盈未满 5 交易日→NONE;逻辑止损豁免</li>
+ *   <li>SELL 决策:逻辑止损(优先级最高)> 定投止盈(盈利启动后按周期高点回撤)</li>
+ *   <li>最近买入未满 5 交易日时,逻辑止损记录豁免告警;定投止盈按 lot 保护新份额</li>
  *   <li>组装 SignalResult</li>
  * </ol>
  *
  * <p>金字塔加仓机制(建仓/四档加仓/计划总仓位/反弹清空/BUILD-ADD 硬约束)已随行情工作台转向移除。
- * 移动止盈从金字塔档位状态解耦为独立"按回落分档减仓":回落 n×阈值卖 holdingShares×(n/4)。
+ * 定投止盈以整仓盈利为启动条件,同一周期只触发一次并保留长期底仓。
  *
  * <p>回撤约定:drawdown = (currentNav - peakNav) / peakNav,负数表示跌幅。
  */
@@ -44,8 +44,6 @@ import java.util.List;
 public class DisciplineStrategyService {
 
     private static final MathContext MATH = MathContext.DECIMAL64;
-    /** 移动止盈分档数:回落 1×阈值卖 1/4,4×阈值全卖。 */
-    private static final int TRAILING_STOP_TIERS = 4;
     /** 7 天内不赎回硬约束窗口(交易日)。 */
     private static final int MIN_HOLD_DAYS = 5;
 
@@ -80,7 +78,7 @@ public class DisciplineStrategyService {
         // 步骤 3:SELL 决策(逻辑止损 > 移动止盈)
         SignalResult result = decideSell(fund, strategy, market, capital, warnings);
 
-        // 步骤 4:MIN_HOLD_DAYS(移动止盈未满 5 交易日→降级 NONE;逻辑止损豁免)
+        // 步骤 4:逻辑止损在最近买入未满 5 交易日时记录豁免告警。
         if (result.signalType() == SignalType.SELL) {
             result = applyMinHoldDays(result, tradingDaysSinceLastBuy, warnings);
         }
@@ -102,7 +100,7 @@ public class DisciplineStrategyService {
         if (logicBroken != null) {
             return logicBroken;
         }
-        // 2. 移动止盈(按回落分档减仓)
+        // 2. 定投止盈(盈利启动后按周期高点回撤)
         SignalResult trailingStop = checkTrailingStop(fund, strategy, market, capital, warnings);
         if (trailingStop != null) {
             return trailingStop;
@@ -151,14 +149,16 @@ public class DisciplineStrategyService {
     }
 
     /**
-     * 移动止盈:从 holdingPeriodPeakNav 回落 n×stopLossPullbackPercent 触发卖 holdingShares×(n/4)。
-     * <p>分档减仓:回落 1×阈值卖 1/4,2×阈值卖 1/2,3×阈值卖 3/4,4×阈值全卖。
-     * 不依赖金字塔档位状态(已解耦)——份额基数是当前持仓 holdingShares,非各档加仓份额。
+     * 定投止盈:整仓收益达到启动线后，从止盈周期高点回撤达到阈值，收割部分浮盈。
+     * 卖出份额受浮盈收割、单次上限、成熟 lot 和最低保留仓位共同限制。
      */
     private SignalResult checkTrailingStop(FundEntity fund, FundStrategyEntity strategy,
                                            MarketIndicators market, CapitalContext capital,
                                            List<SignalWarningValue> warnings) {
-        BigDecimal peak = capital.holdingPeriodPeakNav();
+        if (!capital.takeProfitEvaluationEnabled()) {
+            return null;
+        }
+        BigDecimal peak = strategy.getCyclePeakNav();
         BigDecimal currentNav = market.currentNav();
         if (peak == null || peak.signum() <= 0 || currentNav == null) {
             return null;
@@ -169,42 +169,44 @@ public class DisciplineStrategyService {
         if (stopLossPercent == null || stopLossPercent.signum() == 0) {
             return null;
         }
-        // stopLossPullbackPercent 约定为负数(如 -0.08 表回落 8%),取绝对值参与计算
-        BigDecimal threshold = stopLossPercent.abs();
-        // 计算应触发的档位:pullback >= n × threshold,n 从 4 降到 1,取最大 n
-        int triggerTier = 0;
-        for (int n = TRAILING_STOP_TIERS; n >= 1; n--) {
-            if (pullback.compareTo(threshold.multiply(BigDecimal.valueOf(n), MATH)) >= 0) {
-                triggerTier = n;
-                break;
-            }
+        if (pullback.compareTo(stopLossPercent) < 0) {
+            return null;
         }
-        if (triggerTier == 0) {
-            return null; // 未达止盈阈值
-        }
-        // 卖出份额 = holdingShares × (triggerTier / 4)
         BigDecimal holdingShares = capital.holdingShares() != null ? capital.holdingShares() : BigDecimal.ZERO;
-        BigDecimal ratio = BigDecimal.valueOf(triggerTier)
-                .divide(BigDecimal.valueOf(TRAILING_STOP_TIERS), MATH);
-        BigDecimal shares = holdingShares.multiply(ratio, MATH);
+        BigDecimal currentValue = currentNav.multiply(holdingShares, MATH);
+        BigDecimal profitHarvestShares = capital.floatingProfit()
+                .multiply(strategy.getProfitHarvestPercent(), MATH)
+                .divide(currentNav, MATH);
+        BigDecimal singleSellCapShares = holdingShares.multiply(strategy.getMaxSingleSellPercent(), MATH);
+        BigDecimal retentionCapShares = holdingShares.multiply(
+                BigDecimal.ONE.subtract(strategy.getMinimumHoldingPercent()), MATH);
+        BigDecimal matureShares = capital.matureRedeemableShares() != null
+                ? capital.matureRedeemableShares() : BigDecimal.ZERO;
+        BigDecimal shares = min(profitHarvestShares, singleSellCapShares, retentionCapShares, matureShares);
+        if (shares.signum() <= 0 || currentValue.signum() <= 0) {
+            return null;
+        }
         Measure measure = new Measure(shares, MeasureUnit.SHARE);
-        return new SignalResult(SignalType.SELL, triggerTier, null, measure, SignalReason.TRAILING_STOP, warnings, List.of());
+        return new SignalResult(SignalType.SELL, null, null, measure, SignalReason.TRAILING_STOP, warnings, List.of());
     }
 
     /**
-     * MIN_HOLD_DAYS。SELL 非逻辑止损未满 5 交易日→降级 NONE+MIN_HOLD_DAYS_NOT_MET;
-     * 逻辑止损豁免但记 MIN_HOLD_DAYS_OVERRIDDEN。
+     * 逻辑止损在最近买入未满 5 交易日时仍执行，并记录 MIN_HOLD_DAYS_OVERRIDDEN。
+     * 定投止盈的持有期保护已下沉到逐 lot 成熟份额计算。
      */
     private static SignalResult applyMinHoldDays(SignalResult result, long tradingDaysSinceLastBuy,
                                                  List<SignalWarningValue> warnings) {
         boolean logicBroken = result.reason() == SignalReason.LOGIC_BROKEN;
-        if (tradingDaysSinceLastBuy < MIN_HOLD_DAYS) {
-            if (logicBroken) {
-                warnings.add(SignalWarningValue.of(SignalWarning.MIN_HOLD_DAYS_OVERRIDDEN));
-                return result; // 逻辑止损豁免
-            }
-            return new SignalResult(SignalType.NONE, null, null, null, SignalReason.MIN_HOLD_DAYS_NOT_MET,
-                    warnings, List.of());
+        if (logicBroken && tradingDaysSinceLastBuy < MIN_HOLD_DAYS) {
+            warnings.add(SignalWarningValue.of(SignalWarning.MIN_HOLD_DAYS_OVERRIDDEN));
+        }
+        return result;
+    }
+
+    private static BigDecimal min(BigDecimal first, BigDecimal... rest) {
+        BigDecimal result = first;
+        for (BigDecimal value : rest) {
+            result = result.min(value);
         }
         return result;
     }

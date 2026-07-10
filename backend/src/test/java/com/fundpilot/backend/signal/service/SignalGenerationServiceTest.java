@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
+import com.fundpilot.backend.fund.enums.TakeProfitPhase;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
@@ -23,6 +24,8 @@ import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
+import com.fundpilot.backend.strategy.service.support.TakeProfitEvaluation;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,6 +69,7 @@ class SignalGenerationServiceTest {
     @Mock SignalLogRepository signalLogRepository;
     @Mock TradingCalendarService tradingCalendarService;
     @Mock DisciplineStrategyService disciplineStrategyService;
+    @Mock TakeProfitLifecycleService takeProfitLifecycleService;
 
     private SignalGenerationService service;
 
@@ -74,7 +78,7 @@ class SignalGenerationServiceTest {
         service = new SignalGenerationService(fundStrategyRepository, fundRepository,
                 fundNavHistoryRepository, fundTransactionRepository, fundPositionService,
                 marketIndicatorProvider, signalLogRepository,
-                tradingCalendarService, disciplineStrategyService);
+                tradingCalendarService, disciplineStrategyService, takeProfitLifecycleService);
     }
 
     /** 构造一只基金 + EFFECTIVE 策略,并 stub buildCapitalContext 所需的全部查询。返回 strategy(可取 fund)。 */
@@ -93,6 +97,8 @@ class SignalGenerationServiceTest {
                 .thenReturn(Optional.of(strategy));
         when(fundNavHistoryRepository.findPeakAccumulatedNav(id)).thenReturn(Optional.of(new BigDecimal("1.0")));
         when(fundPositionService.getHoldingShares(id)).thenReturn(BigDecimal.ZERO);
+        when(takeProfitLifecycleService.prepare(eq(fund), eq(strategy), any(), any(), any()))
+                .thenReturn(TakeProfitEvaluation.disabled());
         // MIN_HOLD_DAYS 只看最近一笔已确认买入类交易。
         FundTransactionEntity confirmTx = new FundTransactionEntity();
         confirmTx.setConfirmTime(DATE.minus(10, java.time.temporal.ChronoUnit.DAYS));
@@ -172,6 +178,24 @@ class SignalGenerationServiceTest {
     }
 
     @Test
+    void generateDailySignals_已有待回应止盈信号时不写重复NONE() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        strategy.setTakeProfitPhase(TakeProfitPhase.TRIGGERED);
+        strategy.setTriggeredSignalId(99L);
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE)))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong())).thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
+
+        service.generateDailySignals(DATE);
+
+        verify(signalLogRepository, never()).save(any(SignalLogEntity.class));
+        verify(signalLogRepository, never()).delete(any(SignalLogEntity.class));
+        verify(fundStrategyRepository).save(strategy);
+    }
+
+    @Test
     void generateDailySignals_单只基金异常不影响其他基金() {
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         stubFund(1L, FundStatus.HOLDING);
@@ -206,7 +230,8 @@ class SignalGenerationServiceTest {
         SignalGenerationService realService = new SignalGenerationService(
                 fundStrategyRepository, fundRepository, fundNavHistoryRepository,
                 fundTransactionRepository, fundPositionService, marketIndicatorProvider,
-                signalLogRepository, tradingCalendarService, new DisciplineStrategyService());
+                signalLogRepository, tradingCalendarService, new DisciplineStrategyService(),
+                takeProfitLifecycleService);
 
         realService.generateDailySignals(DATE);
 

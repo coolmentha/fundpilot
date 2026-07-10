@@ -8,6 +8,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,7 @@ public class NavConfirmService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
+    private final TakeProfitLifecycleService takeProfitLifecycleService;
 
     /**
      * 回填指定 UTC 日期的 PENDING 交易。null 时用今天 UTC 0 点。
@@ -171,6 +173,7 @@ public class NavConfirmService {
             }
         }
         fundTransactionRepository.save(tx);
+        takeProfitLifecycleService.onTransactionConfirmed(tx);
         fundPositionService.reconcileStatus(tx.getFundEntity().getId());
     }
 

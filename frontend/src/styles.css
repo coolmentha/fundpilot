@@ -961,3 +961,15 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     margin-left: 8px;
     font-size: 13px;
 }
+
+.strategy-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+}
+
+@media (max-width: 640px) {
+    .strategy-form-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

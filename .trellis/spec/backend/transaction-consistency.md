@@ -101,3 +101,78 @@ Instant txDay = ChinaTradingDate.toUtcDate(tx.getCreatedDate() != null ? tx.getC
 fundPositionService.reconcileStatus(fundId); // 只在确认/撤销后按事实重算
 repository.insertTradingDayIfAbsent(date); // INSERT ... ON CONFLICT DO NOTHING
 ```
+
+## Scenario: DCA Take-Profit Lifecycle
+
+### 1. Scope / Trigger
+
+- Trigger: changes to trailing take-profit signals, confirmed/cancelled SELL transactions, FIFO lots, or strategy activation.
+
+### 2. Signatures
+
+```java
+TakeProfitEvaluation TakeProfitLifecycleService.prepare(
+    FundEntity fund, FundStrategyEntity strategy,
+    BigDecimal currentNav, BigDecimal holdingShares, Instant today);
+void TakeProfitLifecycleService.bindTriggeredSignal(FundStrategyEntity strategy, Long signalId);
+void TakeProfitLifecycleService.onTransactionConfirmed(FundTransactionEntity transaction);
+void TakeProfitLifecycleService.onTransactionCancelled(FundTransactionEntity transaction);
+GET /api/funds/{fundId}/strategies/recommendation
+```
+
+`fund_strategy` owns the preset metadata and runtime fields: `profit_activation_percent`, `profit_harvest_percent`,
+`minimum_holding_percent`, `max_single_sell_percent`, `cooldown_trading_days`, `preset_fund_category`, `preset_version`,
+`customized`, `take_profit_phase`, `cycle_started_at`, `cycle_peak_nav`, `triggered_signal_id`, `cooldown_started_at`.
+
+### 3. Contracts
+
+- Percentages are positive ratios (`0.06` means 6%).
+- Recommendation uses `FundCategory`, never `FundSubType`; user values are changed only by explicit save/restore.
+- `ACCUMULATING -> ARMED` records the current NAV and cannot sell on the same day.
+- A `TRIGGERED` cycle keeps its original actionable SignalLog; daily reruns must not replace it with NONE.
+- Both `NavConfirmService` and `TransactionConfirmService` call the lifecycle after confirming a trailing-stop transaction.
+- `TransactionCancelService` restores the matching cycle to `ARMED`.
+- Mature shares are calculated per open `fund_lot`; a recent DCA lot cannot freeze older lots.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior | ErrorCode |
+|---|---|---|
+| Missing fund category for recommendation | Reject strategy create/update | `FUND_CATEGORY_REQUIRED` |
+| Missing/out-of-range strategy ratio | Reject request | `STRATEGY_PARAM_INVALID` |
+| Take-profit transaction confirmed | Enter `COOLDOWN` | none |
+| Matching PENDING transaction cancelled | Restore `ARMED` | none |
+| Cost, NAV, or holding shares missing/non-positive | Do not arm take-profit | none |
+
+### 5. Good/Base/Bad Cases
+
+- Good: 60 mature shares + 20 recent shares + 20 untracked adjustment shares -> 80 shares are eligible.
+- Good: cooldown finishes while return is still above activation -> arm at today's NAV and wait for a new drawdown.
+- Base: user leaves a triggered signal unanswered -> keep one pending signal and do not create daily duplicates.
+- Bad: use the latest INVEST confirm time as a fund-wide lock -> daily DCA disables take-profit forever.
+
+### 6. Tests Required
+
+- `TakeProfitPresetServiceTest`: assert all four category templates and custom detection.
+- `TakeProfitLifecycleServiceTest`: assert arming day, new high, mature lot calculation, confirm/cancel, and cooldown rearm.
+- `DisciplineStrategyServiceTest`: assert the four sell caps and logic-stop priority.
+- `SignalGenerationServiceTest`: assert a triggered cycle preserves its actionable signal on rerun.
+- Both confirmation service tests must verify lifecycle notification after transaction persistence.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```java
+lastBuy = latestConfirmedInvest();
+if (daysSince(lastBuy) < 5) return NONE; // freezes every old lot
+shares = holdingShares.multiply(new BigDecimal("0.25")); // repeats every day
+```
+
+#### Correct
+
+```java
+matureShares = sumOpenLotsHeldAtLeastFiveTradingDays();
+shares = min(profitHarvestShares, singleSellCapShares, matureShares, retentionCapShares);
+takeProfitLifecycleService.onTransactionConfirmed(tx);
+```

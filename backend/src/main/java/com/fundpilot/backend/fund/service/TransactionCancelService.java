@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class TransactionCancelService {
 
     private final FundTransactionRepository fundTransactionRepository;
     private final FundPositionService fundPositionService;
+    private final TakeProfitLifecycleService takeProfitLifecycleService;
 
     /**
      * 撤销交易。PENDING→CANCELLED;CONFIRMED 抛 {@code TRANSACTION_ALREADY_CONFIRMED};
@@ -76,6 +78,7 @@ public class TransactionCancelService {
         tx.setStatus(FundTransactionStatus.CANCELLED);
         tx.setCancelTime(Instant.now());
         fundTransactionRepository.save(tx);
+        takeProfitLifecycleService.onTransactionCancelled(tx);
         cancelled.add(tx);
     }
 }

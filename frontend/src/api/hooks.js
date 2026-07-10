@@ -76,6 +76,13 @@ export function useActiveStrategy(fundId) {
         enabled: !!fundId,
     });
 }
+export function useStrategyRecommendation(fundId) {
+    return useQuery({
+        queryKey: ['strategy-recommendation', fundId],
+        queryFn: () => get(`/api/funds/${fundId}/strategies/recommendation`),
+        enabled: !!fundId,
+    });
+}
 const invalidateStrategies = (fundId) => {
     const qc = useQueryClient();
     return () => {

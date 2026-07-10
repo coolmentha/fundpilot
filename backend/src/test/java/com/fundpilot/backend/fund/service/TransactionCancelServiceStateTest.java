@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 
 import java.util.Optional;
 
@@ -24,6 +25,7 @@ class TransactionCancelServiceStateTest {
 
     @Mock private FundTransactionRepository fundTransactionRepository;
     @Mock private FundPositionService fundPositionService;
+    @Mock private TakeProfitLifecycleService takeProfitLifecycleService;
     @InjectMocks private TransactionCancelService service;
 
     @Test

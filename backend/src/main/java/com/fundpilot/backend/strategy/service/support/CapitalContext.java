@@ -14,13 +14,25 @@ import java.time.Instant;
  * 仅保留移动止盈与逻辑止损所需的 4 个字段。
  *
  * @param peakNav              前高(基金历史最高累计净值),逻辑止损回撤基准
- * @param holdingPeriodPeakNav 持有期高点(建仓后最高累计净值),移动止盈回落判定基准
- * @param holdingShares        当前持仓份额(移动止盈按回落分档减仓的份额基数)
- * @param lastBuyConfirmTime   最近一次买入确认时间,MIN_HOLD_DAYS 起算点
+ * @param holdingPeriodPeakNav 持有期高点(建仓后最高累计净值),保留为行情派生上下文
+ * @param holdingShares        当前持仓份额
+ * @param lastBuyConfirmTime   最近一次买入确认时间,逻辑止损豁免告警起算点
+ * @param floatingProfit       当前整仓浮盈
+ * @param matureRedeemableShares 已满足持有期的可赎回份额
+ * @param takeProfitEvaluationEnabled 当前交易日是否允许判断定投止盈回撤
  */
 public record CapitalContext(
         BigDecimal peakNav,
         BigDecimal holdingPeriodPeakNav,
         BigDecimal holdingShares,
-        Instant lastBuyConfirmTime) {
+        Instant lastBuyConfirmTime,
+        BigDecimal floatingProfit,
+        BigDecimal matureRedeemableShares,
+        boolean takeProfitEvaluationEnabled) {
+
+    public CapitalContext(BigDecimal peakNav, BigDecimal holdingPeriodPeakNav,
+                          BigDecimal holdingShares, Instant lastBuyConfirmTime) {
+        this(peakNav, holdingPeriodPeakNav, holdingShares, lastBuyConfirmTime,
+                BigDecimal.ZERO, BigDecimal.ZERO, false);
+    }
 }

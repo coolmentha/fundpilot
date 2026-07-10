@@ -29,23 +29,29 @@ _Avoid_: 仅相信请求路径基金；创建 PENDING 时提前切到 HOLDING/CL
 _Avoid_: 在 `FundEntity` 上存 `peakNav` 字段（派生值落库会失真，见 ADR-0001）
 
 **持有期高点（holdingPeriodPeakNav）**:
-建仓后该基金出现的最高累计净值，是移动止盈判定的基准。**不存字段，实时派生**——
+建仓后该基金出现的最高累计净值，是持仓期行情分析指标。**不存字段，实时派生**——
 `max(fund_nav_history.accumulated_nav) WHERE nav_date >= fund.openedAt`。`FundStatus = HOLDING` 时才有意义；
 `CLEARED → PENDING_HOLDING` 时因字段不存在，自然无需清理。
 _Avoid_: 在 `FundEntity` 上存 `holdingPeriodPeakNav` 字段（同前高，派生值落库会失真）
 
 ## 卖出纪律
 
-**移动止盈（Trailing Take-Profit）**:
-从 `holdingPeriodPeakNav` 回落触发的**分档减仓**信号。回落 n×`stopLossPullbackPercent` 触发卖 `holdingShares × (n/4)`：
-回落 1×阈值卖 1/4、2×卖 1/2、3×卖 3/4、4×全卖。不依赖金字塔档位状态（已解耦，ADR-0015）——份额基数是当前持仓 `holdingShares`，
-回落越深卖越多。4×阈值全卖后若持仓归零，`FundStatus → CLEARED`。
-_Avoid_: 一次性全清（失去渐进止盈语义）；按金字塔各档加仓份额卖（金字塔已退场）
+**定投止盈（DCA Take-Profit）**:
+以整仓成本为盈利基准的周期性浮盈收割机制。整体收益率达到 `profitActivationPercent` 后进入 `ARMED`，记录本周期高点；
+从周期高点回撤达到 `stopLossPullbackPercent` 后生成一次 `TRAILING_STOP` 卖出建议。同一周期只触发一次，交易确认后进入冷静期；
+冷静期结束且收益仍达标时，以当天净值建立新周期高点，当天不卖，等待下一次新回撤。
+_Avoid_: 未盈利就把普通下跌称为止盈；同一回撤区间每日重复卖出；每次定投重置整仓止盈保护
 
-**移动止盈触发阈值（stopLossPullbackPercent）**:
-`FundStrategyEntity` 上唯一可配的策略参数。回落 n×此值 = 第 n 档触发。默认 -0.08（回落 8%）：回落 8%/16%/24%/32%
-分别触发卖 1/4、1/2、3/4、全部。用户调一个值控制全部 4 档节奏。
-_Avoid_: 把阈值做成多档可配（一个值控制全档节奏更简洁）
+**基金类型推荐参数（Take-Profit Preset）**:
+推荐依据只用 `FundCategory`，不使用决定数据源路径的 `FundSubType`。宽基推荐 15% 启动/6% 回撤，行业 20%/8%，主动 15%/7%，混合 12%/5%；
+系统只在新建或用户主动“恢复推荐值”时应用模板。用户可修改所有参数，`customized=true` 后基金类型或模板版本变化不得静默覆盖。
+所有比例按正数存储，例如 `0.06` 表示回撤 6%。
+_Avoid_: 用负数表达回撤；把推荐值当强制值；基金类型变化后自动覆盖生效策略
+
+**定投止盈建议份额（Take-Profit Suggested Shares）**:
+建议份额取四项最小值：`浮盈×收割比例÷当前净值`、`当前份额×单次上限`、成熟可赎回份额、`当前份额×(1-最低保留仓位)`。
+成熟份额按 `fund_lot` 逐笔计算 5 个交易日保护；新定投 lot 只保护自身，旧 lot 仍可止盈。实际卖出继续按 FIFO 和真实赎回费率确认。
+_Avoid_: 最近一次定投锁住全部历史持仓；止盈突破最低保留仓位；绕过 FIFO lot 直接假设所有份额都可低费赎回
 
 **逻辑破坏止损（Logic-Broken Stop-Loss）**:
 趋势死亡型止损，和移动止盈完全不同——不分档、一次清空全部持仓。触发后 `FundStatus → CLEARED`，**突破 7 天内不赎回硬约束**
@@ -69,11 +75,9 @@ _Avoid_: 用沪深300 量能代理（反映大盘情绪不反映个股层面）�
 _Avoid_: 同日多类型 SELL 信号叠加（违反"一只基金每日一行"的唯一性约束）
 
 **7 天内不赎回硬约束（MIN_HOLD_DAYS）**:
-保护性约束，防止"刚买就卖"的短线反人性操作。起算点只取最近一次已确认买入类交易（INCREASE/TRANSFER_IN/INVEST）的 `confirmTime`，
-每次买入都重置。判定窗口为 **5 个交易日**（不是自然日 7 天，更贴近市场节奏）。未满窗口时移动止盈降级为
-`signalType=NONE, reason=MIN_HOLD_DAYS_NOT_MET`；逻辑止损豁免，照常出 SELL 信号但在 `warnings` 里记
-`MIN_HOLD_DAYS_OVERRIDDEN`。手动卖出（不带 `signalLogId`）不经过 `evaluateSignal`，不卡此约束（前端可提示但不阻止）。
-_Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起算点（后续买入的短线保护就失效了）
+保护性约束，防止刚买入份额立即赎回。定投止盈按 `fund_lot.acquireDate` 对每笔剩余份额计算 **5 个交易日**，仅未成熟 lot 不参与建议份额；
+逻辑止损仍可一次清空，并在最近买入未满窗口时记录 `MIN_HOLD_DAYS_OVERRIDDEN`。手动卖出不经过止盈建议计算，实际赎回费仍由 FIFO lot 阶梯决定。
+_Avoid_: 用最近一次买入时间锁住整仓；用自然日近似交易日；逻辑止损受最低保留仓位限制
 
 **交易日历（TradingCalendar）**:
 `MIN_HOLD_DAYS` 判定 5 个交易日所需的基础数据表，记录每个日期是否为 A 股交易日（含节假日剔除）。一次性灌入未来几年的日历即可（A
@@ -87,7 +91,7 @@ _Avoid_: 自然日 7 天（不贴市场节奏）；以 `openedAt` 为唯一起�
 不再有 `calibrate` 动作和 `CALIBRATED`/`CALIBRATION_FAILED` 流转——回测本身是金字塔寻优配套，金字塔没了回测无意义，
 移动止盈阈值无需回测验证。`CALIBRATED`/`CALIBRATION_FAILED` 枚举值保留供存量数据兼容。同基金同时最多一份 `EFFECTIVE`
 （数据库 `uq_fund_strategy_effective` 兜底）。`CLEARED → PENDING_HOLDING` 时全员回退 `PENDING_CALIBRATION`。
-`FundStrategyEntity` 只剩 `status` + `stopLossPullbackPercent` 两个业务字段。
+`FundStrategyEntity` 同时保存定投止盈配置版本与该版本运行时周期：推荐参数、`customized`、`TakeProfitPhase`、周期高点和冷静期时间。
 
 ## 开发顺序
 
