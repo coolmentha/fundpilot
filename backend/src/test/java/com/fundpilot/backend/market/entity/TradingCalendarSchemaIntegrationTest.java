@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * issue #3 验收证据:trading_calendar 表 + TradingCalendarEntity + Repository 的 schema 对齐。
  * <p>A 股交易日历,记录每个日期是否为交易日(含节假日剔除),MIN_HOLD_DAYS 5 个交易日判定要用。
- * 本期人工维护,不做自动同步。每个 {@code calendar_date} 全局唯一(部分唯一索引兜底)。
+ * 新浪源自动同步。每个 {@code calendar_date} 全局唯一(部分唯一索引兜底)。
  */
 class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
 
@@ -60,5 +60,18 @@ class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
         // saveAndFlush 同步把 INSERT 推到 DB,触发 uq_trading_calendar_date 唯一约束。
         assertThatThrownBy(() -> tradingCalendarRepository.saveAndFlush(second))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @Transactional
+    void insertTradingDayIfAbsent_重复写入返回零且不抛异常() {
+        Instant date = Instant.parse("2026-07-10T00:00:00Z");
+
+        int first = tradingCalendarRepository.insertTradingDayIfAbsent(date);
+        int second = tradingCalendarRepository.insertTradingDayIfAbsent(date);
+
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        assertThat(tradingCalendarRepository.findByCalendarDate(date)).isPresent();
     }
 }

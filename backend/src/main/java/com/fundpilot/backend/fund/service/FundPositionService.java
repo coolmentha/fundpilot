@@ -24,7 +24,7 @@ import java.util.Optional;
  * <ul>
  *   <li>持仓份额 = Σ shares × direction WHERE status = CONFIRMED</li>
  *   <li>在途份额 = Σ shares × direction WHERE status = PENDING</li>
- *   <li>direction:INCREASE/TRANSFER_IN/INVEST = +1,DECREASE/TRANSFER_OUT = -1</li>
+ *   <li>direction:INCREASE/TRANSFER_IN/INVEST/ADJUST_IN = +1,DECREASE/TRANSFER_OUT/ADJUST_OUT = -1</li>
  *   <li>CANCELLED 不计入持仓也不计入在途</li>
  * </ul>
  *
@@ -100,11 +100,11 @@ public class FundPositionService {
         return sum;
     }
 
-    /** source → direction 映射:加仓类 +1,减仓类 -1。 */
+    /** source → direction 映射:加仓类 +1,减仓类 -1,调增 +1,调减 -1。 */
     private BigDecimal direction(FundTransactionSource source) {
         return switch (source) {
-            case INCREASE, TRANSFER_IN, INVEST -> BigDecimal.ONE;
-            case DECREASE, TRANSFER_OUT -> BigDecimal.ONE.negate();
+            case INCREASE, TRANSFER_IN, INVEST, ADJUST_IN -> BigDecimal.ONE;
+            case DECREASE, TRANSFER_OUT, ADJUST_OUT -> BigDecimal.ONE.negate();
         };
     }
 }

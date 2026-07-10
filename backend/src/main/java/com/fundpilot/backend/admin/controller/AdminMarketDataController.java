@@ -28,7 +28,7 @@ public class AdminMarketDataController {
         return ApiResponse.ok(Map.of("status", "refreshed"));
     }
 
-    /** 从东方财富同步 A 股交易日历(幂等,可重复调用)。 */
+    /** 从新浪同步 A 股交易日历(幂等,可重复调用)。 */
     @PostMapping("/sync-trading-calendar")
     public ApiResponse<Map<String, Object>> syncTradingCalendar() {
         int added = tradingCalendarSyncService.sync();

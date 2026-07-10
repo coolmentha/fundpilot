@@ -1,23 +1,25 @@
 import {useState} from 'react';
 import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space} from 'antd';
 import {PlusOutlined} from '@ant-design/icons';
-import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction} from '../api/hooks.js';
+import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 
 const {Title} = Typography;
 
-// 买入类写金额,卖出类写份额(与后端 createManual 方向一致)
-const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT']);
+// 买入类写金额,卖出类+调整类写份额(与后端 createManual 方向一致)
+const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT', 'ADJUST_IN', 'ADJUST_OUT']);
+const ADJUST_SOURCES = new Set(['ADJUST_IN', 'ADJUST_OUT']);
 
 /**
  * 基金详情 · 交易流水 tab(issue #18 交易合并到基金详情 + 手动录入)。
- * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持五类来源,
+ * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持七类来源,
  * 买入类填金额、卖出类填份额(份额/金额等净值确认后回填),手动卖出不卡 7 天硬约束。
  */
 export default function FundTransactionTab({fundId}) {
     const {data: transactions, isLoading} = useFundTransactions(fundId);
+    const {data: funds} = useFunds();
     const cancelTx = useCancelTransaction();
     const confirmTx = useConfirmTransaction();
     const createManual = useCreateManualTransaction(fundId);
@@ -25,6 +27,8 @@ export default function FundTransactionTab({fundId}) {
     const [form] = Form.useForm();
     const source = Form.useWatch('source', form);
     const isSell = source && SELL_SOURCES.has(source);
+    const isAdjust = source && ADJUST_SOURCES.has(source);
+    const isTransferOut = source === 'TRANSFER_OUT';
 
     const columns = [
         {title: '日期', dataIndex: 'createdDate', width: 170, render: datetime},
@@ -61,6 +65,10 @@ export default function FundTransactionTab({fundId}) {
         } else {
             body.amount = values.amount;
         }
+        // 基金转换(task 07-08):转出时选了转入基金,带 targetFundId 让后端建两条互指交易
+        if (values.source === 'TRANSFER_OUT' && values.targetFundId) {
+            body.targetFundId = values.targetFundId;
+        }
         await createManual.mutateAsync(body);
         setOpen(false);
         form.resetFields();
@@ -82,16 +90,29 @@ export default function FundTransactionTab({fundId}) {
                     </Form.Item>
                     {isSell ? (
                         <Form.Item label="份额" name="shares" rules={[{required: true, message: '卖出类需填份额'}]}>
-                            <InputNumber className="full-width" step={0.01} precision={2}/>
+                            <InputNumber className="full-width" min={0.01} step={0.01} precision={2}/>
                         </Form.Item>
                     ) : (
                         <Form.Item label="金额(元)" name="amount" rules={[{required: true, message: '买入类需填金额'}]}>
-                            <InputNumber className="full-width" step={100} precision={2} prefix="¥"/>
+                            <InputNumber className="full-width" min={0.01} step={100} precision={2} prefix="¥"/>
                         </Form.Item>
                     )}
-                    {isSell && (
+                    {isTransferOut && (
+                        <Form.Item label="转入基金" name="targetFundId"
+                                   extra="选填:选了即基金转换(转出A份额->转入B份额),确认时自动算份额与手续费;不选为纯转出单条记录">
+                            <Select allowClear showSearch optionFilterProp="label"
+                                    placeholder="选择转入基金(留空为纯转出)"
+                                    options={(funds ?? []).filter(f => f.id !== fundId)
+                                        .map(f => ({value: f.id, label: `${f.fundName}(${f.fundCode})`}))}/>
+                        </Form.Item>
+                    )}
+                    {isSell && !isAdjust && (
                         <Alert type="info" showIcon
                                message="手动卖出不卡 7 天硬约束,可自行减仓;份额对应的金额等当晚净值确认后回填。"/>
+                    )}
+                    {isAdjust && (
+                        <Alert type="info" showIcon
+                               message="调整交易录入即生效,直接增减持仓份额;不算净值/手续费/不建 lot,用于账面与真实对不上的修正。"/>
                     )}
                 </Form>
             </Modal>

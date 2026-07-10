@@ -134,6 +134,21 @@ public class EastmoneyClientConfig {
     }
 
     /**
+     * 注册 {@link SinaTradingCalendarClient} 为 Spring Bean(finance.sina.com.cn 域名,交易日历)。
+     * <p>新浪交易日历接口返回 KLC 自定义编码文本,由 {@link SinaTradingCalendarParser} 解码。
+     * 独立 target(新浪域名);共享同一限流桶(同步每日 1 次,共享无害)。
+     */
+    @Bean
+    public SinaTradingCalendarClient sinaTradingCalendarClient(
+            @Value("${sina.base-url:https://finance.sina.com.cn}") String sinaBaseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .target(SinaTradingCalendarClient.class, sinaBaseUrl);
+    }
+
+    /**
      * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
      * <p>降级顺序:中证指数公司(K 线主源,覆盖 CSI + 沪市中证编制指数,绕开 push2his IP 限流)
      * → 东方财富(净值/字典主源 + 深交所指数 K 线兜底) → 同花顺(末位兜底);
