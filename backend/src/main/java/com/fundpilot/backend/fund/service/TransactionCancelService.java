@@ -26,6 +26,7 @@ public class TransactionCancelService {
     private static final Logger log = LoggerFactory.getLogger(TransactionCancelService.class);
 
     private final FundTransactionRepository fundTransactionRepository;
+    private final FundPositionService fundPositionService;
 
     /**
      * 撤销交易。PENDING→CANCELLED;CONFIRMED 抛 {@code TRANSACTION_ALREADY_CONFIRMED};
@@ -62,6 +63,10 @@ public class TransactionCancelService {
         if (related != null && related.getStatus() == FundTransactionStatus.PENDING) {
             cancelOne(related, cancelled);
         }
+        cancelled.stream()
+                .map(t -> t.getFundEntity().getId())
+                .distinct()
+                .forEach(fundPositionService::reconcileStatus);
 
         log.info("撤单完成 tx_id={} cancelled={}", transactionId, cancelled.size());
         return cancelled;

@@ -1,8 +1,12 @@
 package com.fundpilot.backend.signal.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
+
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -56,6 +60,10 @@ public class SignalGenerationService {
     private static final MathContext MATH = MathContext.DECIMAL64;
     /** 7 天内不赎回硬约束窗口(交易日),与 DisciplineStrategyService.MIN_HOLD_DAYS 一致。 */
     private static final int MIN_HOLD_DAYS = 5;
+    private static final List<FundTransactionSource> BUY_SOURCES = List.of(
+            FundTransactionSource.INCREASE,
+            FundTransactionSource.TRANSFER_IN,
+            FundTransactionSource.INVEST);
 
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
@@ -95,17 +103,18 @@ public class SignalGenerationService {
         }
         FundStrategyEntity strategy = strategyOpt.get();
 
-        Instant dayStart = date;
-        Instant dayEnd = date.plus(1, java.time.temporal.ChronoUnit.DAYS);
+        Instant dayStart = ChinaTradingDate.toUtcDate(date);
+        Instant dayEnd = dayStart.plus(1, java.time.temporal.ChronoUnit.DAYS);
 
-        Optional<MarketIndicatorSnapshotEntity> snapshotOpt = marketIndicatorProvider.getIndicators(fundId, date);
+        Optional<MarketIndicatorSnapshotEntity> snapshotOpt = marketIndicatorProvider.getIndicators(fundId, dayStart);
         SignalResult result;
         if (snapshotOpt.isEmpty()) {
             result = SignalResult.none(SignalReason.INSUFFICIENT_MARKET_DATA);
         } else {
             MarketIndicators market = toMarketIndicators(snapshotOpt.get());
-            CapitalContext capital = buildCapitalContext(fund, strategy, market, date);
-            long tradingDaysSinceLastBuy = computeTradingDaysSinceLastBuy(fund, strategy, date);
+            Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund);
+            CapitalContext capital = buildCapitalContext(fund, market, lastBuyConfirmTime);
+            long tradingDaysSinceLastBuy = computeTradingDaysSinceLastBuy(lastBuyConfirmTime, dayStart);
             result = disciplineStrategyService.evaluateSignal(fund, strategy, market, capital, dayStart, tradingDaysSinceLastBuy);
         }
 
@@ -128,34 +137,31 @@ public class SignalGenerationService {
                 snapshot.getVolumeState(),
                 snapshot.getWeeklyDropPercent(),
                 snapshot.isSixtyDayHigh(),
-                snapshot.getVolumeState(), // 跟踪指数量能本期复用基金量能(ETF 单独拉指数量能留待后续)
-                false); // benchmarkDroppedToday 本期默认 false(需跟踪指数日K,后续补)
+                snapshot.getVolumeState(), // volumeState 来自 benchmarkIndexCode 对应的指数 K 线
+                snapshot.getVolumeState() == com.fundpilot.backend.market.enums.VolumeState.HIGH_DROP);
     }
 
-    private CapitalContext buildCapitalContext(FundEntity fund, FundStrategyEntity strategy,
-                                                MarketIndicators market, Instant date) {
+    private CapitalContext buildCapitalContext(FundEntity fund, MarketIndicators market,
+                                               Instant lastBuyConfirmTime) {
         BigDecimal currentNav = market.currentNav() != null ? market.currentNav() : BigDecimal.ZERO;
         BigDecimal peakNav = fundNavHistoryRepository.findPeakAccumulatedNav(fund.getId()).orElse(currentNav);
         BigDecimal holdingPeakNav = fund.getOpenedAt() != null
                 ? fundNavHistoryRepository.findPeakAccumulatedNavSince(fund.getId(), fund.getOpenedAt()).orElse(currentNav)
                 : peakNav;
         BigDecimal holdingShares = fundPositionService.getHoldingShares(fund.getId());
-        Instant lastBuyConfirmTime = computeLastBuyConfirmTime(fund);
-
         return new CapitalContext(peakNav, holdingPeakNav, holdingShares, lastBuyConfirmTime);
     }
 
-    /** 最近一次买入确认时间 = 最近一笔 CONFIRMED 交易的 confirmTime(金字塔 tierAddedAt 已移除)。 */
+    /** 最近一次买入确认时间:只看已确认 INCREASE/TRANSFER_IN/INVEST,卖出和调整不重置持有期。 */
     private Instant computeLastBuyConfirmTime(FundEntity fund) {
-        FundTransactionEntity latest = fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(fund.getId());
-        if (latest == null) {
-            throw new IllegalArgumentException("Fund " + fund.getId() + " has no confirm transaction.");
-        }
-        return latest.getConfirmTime();
+        return fundTransactionRepository
+                .findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
+                        fund.getId(), FundTransactionStatus.CONFIRMED, BUY_SOURCES)
+                .map(FundTransactionEntity::getConfirmTime)
+                .orElse(null);
     }
 
-    private long computeTradingDaysSinceLastBuy(FundEntity fund, FundStrategyEntity strategy, Instant today) {
-        Instant lastBuy = computeLastBuyConfirmTime(fund);
+    private long computeTradingDaysSinceLastBuy(Instant lastBuy, Instant today) {
         if (lastBuy == null) {
             return MIN_HOLD_DAYS + 1; // 无买入记录视为已满窗口
         }

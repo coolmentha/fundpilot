@@ -1,8 +1,11 @@
 package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.signal.controller.SignalLogView;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
@@ -99,5 +102,28 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
                 .doesNotContain(SignalType.NONE)
                 .contains(SignalType.BUILD, SignalType.ADD, SignalType.SELL);
         assertThat(pending).hasSize(3);
+    }
+
+    @Test
+    void pending不返回已有对应交易的已回应信号() {
+        SignalLogEntity pendingSignal = persistSignal(fund, SignalType.SELL, 1, SignalReason.TRAILING_STOP);
+        FundEntity answeredFund = newFund("159915", "创业板ETF");
+        entityManager.persist(answeredFund);
+        SignalLogEntity answeredSignal = persistSignal(answeredFund, SignalType.SELL, 2, SignalReason.TRAILING_STOP);
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(answeredFund);
+        tx.setSignalLogEntity(answeredSignal);
+        tx.setSource(FundTransactionSource.DECREASE);
+        tx.setShares(new BigDecimal("100"));
+        tx.setStatus(FundTransactionStatus.PENDING);
+        entityManager.persist(tx);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<SignalLogView> pending = service.pending();
+
+        assertThat(pending).extracting(SignalLogView::id)
+                .contains(pendingSignal.getId())
+                .doesNotContain(answeredSignal.getId());
     }
 }

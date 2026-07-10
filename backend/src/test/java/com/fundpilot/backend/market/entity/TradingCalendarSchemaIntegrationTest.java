@@ -74,4 +74,14 @@ class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
         assertThat(second).isZero();
         assertThat(tradingCalendarRepository.findByCalendarDate(date)).isPresent();
     }
+
+    @Test
+    @Transactional
+    void findMaxCalendarDate_返回当前最大日期() {
+        tradingCalendarRepository.insertTradingDayIfAbsent(Instant.parse("2026-07-08T00:00:00Z"));
+        tradingCalendarRepository.insertTradingDayIfAbsent(Instant.parse("2026-07-10T00:00:00Z"));
+
+        assertThat(tradingCalendarRepository.findMaxCalendarDate())
+                .contains(Instant.parse("2026-07-10T00:00:00Z"));
+    }
 }

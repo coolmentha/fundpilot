@@ -4,11 +4,13 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -49,6 +51,32 @@ public class FundPositionService {
     /** PENDING 状态净在途份额(已下单待净值确认)。 */
     public BigDecimal getPendingShares(Long fundId) {
         return sumShares(fundTransactionRepository.findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.PENDING));
+    }
+
+    /** 交易确认/撤销后按 CONFIRMED 事实账本统一重算基金状态。 */
+    @Transactional
+    public FundEntity reconcileStatus(Long fundId) {
+        FundEntity fund = fundRepository.findById(fundId).orElse(null);
+        if (fund == null) {
+            return null;
+        }
+        List<FundTransactionEntity> confirmed =
+                fundTransactionRepository.findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.CONFIRMED);
+        BigDecimal shares = sumShares(confirmed);
+        FundStatus target = confirmed.isEmpty() ? FundStatus.PENDING_HOLDING
+                : shares.signum() > 0 ? FundStatus.HOLDING : FundStatus.CLEARED;
+        if (target == FundStatus.HOLDING && fund.getStatus() != FundStatus.HOLDING) {
+            confirmed.stream()
+                    .filter(tx -> direction(tx.getSource()).signum() > 0 && tx.getConfirmTime() != null)
+                    .map(FundTransactionEntity::getConfirmTime)
+                    .max(Instant::compareTo)
+                    .ifPresent(fund::setOpenedAt);
+        }
+        if (fund.getStatus() != target) {
+            fund.setStatus(target);
+            fundRepository.save(fund);
+        }
+        return fund;
     }
 
     /**

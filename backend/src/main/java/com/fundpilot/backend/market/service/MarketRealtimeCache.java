@@ -1,7 +1,6 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyJsParser;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
@@ -123,21 +122,22 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 应用启动时立即刷新一次全部实时缓存。
+     * 应用启动时预热指数/板块/资金缓存,不在启动线程逐只刷新基金估值。
      *
      * <p>修复 bug:定时 Job({@link com.fundpilot.backend.market.job.MarketRealtimeRefreshJob})
      * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
      * {@code indexCache} 初始空,工作台显示「暂无关注指数」直到用户重新配置触发
      * {@link WatchedIndicesChangedEvent}。启动时刷一次,盘后/周末也能展示收盘数据
-     * (东方财富盘后返回收盘值);基金估值也预热一次,避免盘中部署后首次列表缺失估值。
+     * (东方财富盘后返回收盘值)。基金估值请求数随基金数量增长,留给交易时段 30s 任务刷新,
+     * 避免 ApplicationReadyEvent 阻塞应用启动。
      *
      * <p>刷新失败不阻塞启动:记 warn,前端显示空态直到下次定时刷新。
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         try {
-            refreshAll();
-            log.info("行情缓存启动刷新完成(指数/板块/资金/基金估值)");
+            refreshRealtimeWithoutEstimates();
+            log.info("行情缓存启动刷新完成(指数/板块/资金),基金估值等待交易时段任务刷新");
         } catch (RuntimeException e) {
             log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新: {}", e.getMessage());
         }
@@ -179,12 +179,12 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 刷新基金估值:遍历所有持仓基金,逐个拉 fundgz,失败降级跳过。
+     * 刷新基金估值:遍历所有未软删基金(含观察池),逐个拉 fundgz,失败降级跳过。
      * <p>盘中估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
      */
     private void refreshFundEstimates() {
         try {
-            List<FundEntity> funds = fundRepository.findByStatus(FundStatus.HOLDING);
+            List<FundEntity> funds = fundRepository.findAll();
             for (FundEntity fund : funds) {
                 try {
                     fundEstimateService.fetchEstimate(fund.getFundCode())

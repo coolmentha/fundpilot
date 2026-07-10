@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
@@ -18,8 +19,6 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -105,12 +104,12 @@ public class FundPnlService {
         return Optional.ofNullable(estimates.get(fundCode));
     }
 
-    /** 当日净值是否已落库:最近一期 navDate 是否 = 今天(UTC)。 */
+    /** 当日净值是否已落库:最近一期 navDate 是否达到北京时间今天对应的 UTC 日期标签。 */
     private boolean isTodayNavConfirmed(List<FundNavHistoryEntity> latestTwo) {
         if (latestTwo.isEmpty()) {
             return false;
         }
-        Instant today = ZonedDateTime.now(clock).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ChinaTradingDate.toUtcDate(clock.instant());
         Instant latestDate = latestTwo.get(0).getNavDate();
         // navDate 落库为 UTC 0 点,与 today 对齐比较
         return !latestDate.isBefore(today);

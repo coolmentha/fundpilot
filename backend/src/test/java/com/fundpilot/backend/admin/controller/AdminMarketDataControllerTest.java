@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,5 +49,17 @@ class AdminMarketDataControllerTest {
                 .andExpect(jsonPath("$.data").exists());
 
         verify(marketDataFetchService, times(1)).refreshAll();
+    }
+
+    @Test
+    void syncTradingCalendar_管理入口调用全量补写() throws Exception {
+        when(tradingCalendarSyncService.syncFull()).thenReturn(3);
+
+        mockMvc.perform(post("/api/admin/market-data/sync-trading-calendar"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.added").value(3));
+
+        verify(tradingCalendarSyncService).syncFull();
     }
 }

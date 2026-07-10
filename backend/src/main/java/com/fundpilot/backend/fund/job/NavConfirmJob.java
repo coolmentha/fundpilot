@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.job;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.service.NavConfirmService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -9,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 /**
  * 净值确认定时任务(issue #15):次日凌晨 3:00 回填前一天 PENDING 交易的 nav + 另一侧 + confirmTime,转 CONFIRMED。
@@ -30,7 +30,7 @@ public class NavConfirmJob {
     @Scheduled(cron = "0 0 3 * * MON-FRI")
     public void run() {
         log.info("净值确认任务开始");
-        Instant tradeDay = Instant.now(clock).minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS);
+        Instant tradeDay = ChinaTradingDate.previousUtcDate(clock.instant());
         int confirmed = navConfirmService.confirmPendingTransactions(tradeDay);
         log.info("净值确认任务结束 confirmed={}", confirmed);
     }

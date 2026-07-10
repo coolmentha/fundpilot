@@ -190,6 +190,8 @@ export const errorTitles = {
     MISSING_ACTUAL_AMOUNT: '缺少实际金额',
     MISSING_ACTUAL_SHARES: '缺少实际份额',
     UNSUPPORTED_SELL_REASON: '卖出原因不支持',
+    SIGNAL_ALREADY_RESPONDED: '信号已回应',
+    SIGNAL_FUND_MISMATCH: '信号与基金不匹配',
     NO_VALID_BACKTEST: '无有效回测',
     ILLEGAL_STATE_TRANSITION: '状态切换非法',
     // 寻优

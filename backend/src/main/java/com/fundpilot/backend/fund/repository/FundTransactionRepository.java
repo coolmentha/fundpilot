@@ -1,11 +1,14 @@
 package com.fundpilot.backend.fund.repository;
 
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.signal.enums.SignalType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
 
@@ -45,17 +48,19 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      */
     List<FundTransactionEntity> findByFundEntity_IdOrderByCreatedDateDesc(Long fundId);
 
-    /**
-     * 查某基金最新交易(issue #18 交易流水 Tab 列表用)。
-     * 软删行由 @SQLRestriction 自动过滤。
-     */
-    FundTransactionEntity findTopByFundEntity_IdOrderByConfirmTimeDesc(Long fundId);
+    /** MIN_HOLD_DAYS 起算点:只取最近一笔已确认买入类交易,忽略卖出、调整和 PENDING。 */
+    Optional<FundTransactionEntity>
+    findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
+            Long fundId, FundTransactionStatus status, Collection<FundTransactionSource> sources);
 
     /**
      * 幂等去重:查某定投计划在某时间区间内是否已生成 PENDING 交易(DcaSuggestionJob 用)。
      */
     boolean existsByDcaPlanIdAndStatusAndCreatedDateBetween(Long dcaPlanId,
-                                                             com.fundpilot.backend.fund.enums.FundTransactionStatus status,
-                                                             java.time.Instant start,
-                                                             java.time.Instant end);
+                                                              com.fundpilot.backend.fund.enums.FundTransactionStatus status,
+                                                              java.time.Instant start,
+                                                              java.time.Instant end);
+
+    /** 同一 SignalLog 只能生成一笔未软删交易。 */
+    boolean existsBySignalLogEntity_Id(Long signalLogId);
 }

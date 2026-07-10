@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 交易日历同步(task 07-09 换源):从新浪财经交易日历接口提取交易日,写入 trading_calendar。
@@ -36,23 +37,36 @@ public class TradingCalendarSyncService {
     private final SinaTradingCalendarClient sinaTradingCalendarClient;
     private final TradingCalendarRepository tradingCalendarRepository;
 
-    /**
-     * 从新浪同步交易日历。幂等--只 INSERT 新日期,已有日期不动。
-     *
-     * @return 本次新增的交易日条数
-     */
+    /** 日常增量同步:空表全量初始化,非空表只写当前最大日期之后的数据。 */
     @Transactional
     public int sync() {
+        return syncInternal(true);
+    }
+
+    /** 管理补写入口:遍历新浪返回的全部日期,依靠原子插入补齐任意历史缺口。 */
+    @Transactional
+    public int syncFull() {
+        return syncInternal(false);
+    }
+
+    private int syncInternal(boolean incremental) {
         String raw = sinaTradingCalendarClient.fetchTradingCalendarRaw();
         List<Instant> tradingDays = SinaTradingCalendarParser.parse(raw);
+        Optional<Instant> maxDate = incremental
+                ? tradingCalendarRepository.findMaxCalendarDate()
+                : Optional.empty();
+        List<Instant> candidates = maxDate
+                .map(max -> tradingDays.stream().filter(date -> date.isAfter(max)).toList())
+                .orElse(tradingDays);
 
         int added = 0;
-        for (Instant date : tradingDays) {
+        for (Instant date : candidates) {
             added += tradingCalendarRepository.insertTradingDayIfAbsent(date);
         }
 
-        log.info("交易日历同步完成(新浪源):本次新增 {} 条(已有 {} 条,新浪返回 {} 条)",
-                added, tradingDays.size() - added, tradingDays.size());
+        log.info("交易日历{}同步完成(新浪源):候选 {} 条,新增 {} 条,新浪返回 {} 条,当前最大日期={}",
+                incremental ? "增量" : "全量", candidates.size(), added, tradingDays.size(),
+                maxDate.map(Instant::toString).orElse("空表/全量模式"));
         return added;
     }
 }

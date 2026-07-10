@@ -3,7 +3,9 @@ package com.fundpilot.backend.signal.service;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
+import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -91,10 +93,13 @@ class SignalGenerationServiceTest {
                 .thenReturn(Optional.of(strategy));
         when(fundNavHistoryRepository.findPeakAccumulatedNav(id)).thenReturn(Optional.of(new BigDecimal("1.0")));
         when(fundPositionService.getHoldingShares(id)).thenReturn(BigDecimal.ZERO);
-        // computeLastBuyConfirmTime 需最近一笔 CONFIRMED 交易;返回 null 会抛 IllegalArgumentException 被外层 catch 吞,save 永不执行
+        // MIN_HOLD_DAYS 只看最近一笔已确认买入类交易。
         FundTransactionEntity confirmTx = new FundTransactionEntity();
         confirmTx.setConfirmTime(DATE.minus(10, java.time.temporal.ChronoUnit.DAYS));
-        when(fundTransactionRepository.findTopByFundEntity_IdOrderByConfirmTimeDesc(id)).thenReturn(confirmTx);
+        when(fundTransactionRepository
+                .findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
+                        eq(id), eq(FundTransactionStatus.CONFIRMED), anyCollection()))
+                .thenReturn(Optional.of(confirmTx));
         return strategy;
     }
 
@@ -182,5 +187,50 @@ class SignalGenerationServiceTest {
 
         // fund1 未落 SignalLog,fund2 正常落一次
         verify(signalLogRepository, times(1)).save(any(SignalLogEntity.class));
+    }
+
+    @Test
+    void generateDailySignals_ETF放量下跌快照经真实策略链触发逻辑止损() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        strategy.getFundEntity().setFundSubType(FundSubType.ETF);
+        strategy.setStopLossPullbackPercent(new BigDecimal("-0.08"));
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        MarketIndicatorSnapshotEntity snapshot = snapshot(new BigDecimal("0.80"));
+        snapshot.setPriceAboveYearLine(false);
+        snapshot.setWeeklyMacdState(WeeklyMacdState.GREEN_EXPANDING);
+        snapshot.setVolumeState(VolumeState.HIGH_DROP);
+        when(marketIndicatorProvider.getIndicators(1L, DATE)).thenReturn(Optional.of(snapshot));
+
+        SignalGenerationService realService = new SignalGenerationService(
+                fundStrategyRepository, fundRepository, fundNavHistoryRepository,
+                fundTransactionRepository, fundPositionService, marketIndicatorProvider,
+                signalLogRepository, tradingCalendarService, new DisciplineStrategyService());
+
+        realService.generateDailySignals(DATE);
+
+        ArgumentCaptor<SignalLogEntity> captor = ArgumentCaptor.forClass(SignalLogEntity.class);
+        verify(signalLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getSignalType()).isEqualTo(SignalType.SELL);
+        assertThat(captor.getValue().getReason()).isEqualTo(SignalReason.LOGIC_BROKEN);
+    }
+
+    @Test
+    void generateDailySignals_无买入确认记录时仍落信号() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        when(fundTransactionRepository
+                .findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
+                        eq(1L), eq(FundTransactionStatus.CONFIRMED), anyCollection()))
+                .thenReturn(Optional.empty());
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(1L, DATE))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("1.0"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong())).thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
+
+        service.generateDailySignals(DATE);
+
+        verify(signalLogRepository).save(any(SignalLogEntity.class));
     }
 }

@@ -1,6 +1,8 @@
 package com.fundpilot.backend.market.job;
 
 import com.fundpilot.backend.market.service.MarketDataFetchService;
+import com.fundpilot.backend.signal.job.SignalGenerationJob;
+import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -10,13 +12,11 @@ import org.springframework.stereotype.Component;
  * <p>cron 表达式 {@code 0 30 14 * * MON-FRI} = 周一到周五 14:30:00 触发(服务器本地时区)。
  */
 @Component
+@RequiredArgsConstructor
 public class MarketDataFetchJob {
 
     private final MarketDataFetchService marketDataFetchService;
-
-    public MarketDataFetchJob(MarketDataFetchService marketDataFetchService) {
-        this.marketDataFetchService = marketDataFetchService;
-    }
+    private final SignalGenerationJob signalGenerationJob;
 
     @Scheduled(cron = "0 30 14 * * MON-FRI")
     public void fetchBatch0() {
@@ -31,5 +31,6 @@ public class MarketDataFetchJob {
     @Scheduled(cron = "0 50 14 * * MON-FRI")
     public void fetchBatch2() {
         marketDataFetchService.fetchBatch(2);
+        signalGenerationJob.generateDaily();
     }
 }

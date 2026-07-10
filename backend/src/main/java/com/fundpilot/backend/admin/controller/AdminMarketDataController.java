@@ -28,10 +28,10 @@ public class AdminMarketDataController {
         return ApiResponse.ok(Map.of("status", "refreshed"));
     }
 
-    /** 从新浪同步 A 股交易日历(幂等,可重复调用)。 */
+    /** 从新浪全量补写 A 股交易日历(幂等,可重复调用,可修复历史缺口)。 */
     @PostMapping("/sync-trading-calendar")
     public ApiResponse<Map<String, Object>> syncTradingCalendar() {
-        int added = tradingCalendarSyncService.sync();
+        int added = tradingCalendarSyncService.syncFull();
         return ApiResponse.ok(Map.of("status", "synced", "added", added));
     }
 }
