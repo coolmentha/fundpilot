@@ -5,6 +5,8 @@ import com.fundpilot.backend.dca.entity.FundDcaPlanEntity;
 import com.fundpilot.backend.dca.enums.DcaFrequency;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
 import com.fundpilot.backend.dca.repository.FundDcaPlanRepository;
+import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -151,6 +153,28 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> dcaPlanService.retire(planId))
                 .isInstanceOf(IllegalStateTransitionException.class);
+    }
+
+    @Test
+    @Transactional
+    void create_周末计划日_拒绝创建() {
+        FundEntity fund = persistFund();
+
+        assertThatThrownBy(() -> dcaPlanService.create(fund.getId(),
+                new DcaPlanRequest(true, new BigDecimal("1000"), DcaFrequency.WEEKLY, 6, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.DCA_PLAN_INVALID.name());
+    }
+
+    @Test
+    @Transactional
+    void create_非正金额_拒绝创建() {
+        FundEntity fund = persistFund();
+
+        assertThatThrownBy(() -> dcaPlanService.create(fund.getId(),
+                new DcaPlanRequest(true, BigDecimal.ZERO, DcaFrequency.WEEKLY, 1, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.DCA_PLAN_INVALID.name());
     }
 
     private FundEntity persistFund() {

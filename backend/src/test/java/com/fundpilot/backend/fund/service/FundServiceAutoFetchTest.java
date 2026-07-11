@@ -121,7 +121,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         assertThat(fund.getOpenedAt()).isNotNull();
 
         // 建仓交易:INCREASE + CONFIRMED + shares=3000/1.5=2000 + nav=1.5
-        List<FundTransactionEntity> txs = fundTransactionRepository.findByFundEntity_IdOrderByCreatedDateDesc(view.id());
+        List<FundTransactionEntity> txs = fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id());
         assertThat(txs).hasSize(1);
         FundTransactionEntity tx = txs.get(0);
         assertThat(tx.getSource()).isEqualTo(FundTransactionSource.INCREASE);
@@ -158,7 +158,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         // openedAt 用用户填值(历史日期),不是 now(DB timestamp 精度可能截断,按秒比较)
         assertThat(fund.getOpenedAt().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
         // 6079ba1:confirmTime 语义改为 openedAt,与建仓时间一致(不再用 now)
-        FundTransactionEntity tx = fundTransactionRepository.findByFundEntity_IdOrderByCreatedDateDesc(view.id()).get(0);
+        FundTransactionEntity tx = fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id()).get(0);
         assertThat(tx.getConfirmTime().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
         FundLotEntity lot = fundLotRepository.findByFundEntity_Id(view.id()).get(0);
         assertThat(lot.getAcquireDate().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
@@ -230,7 +230,7 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         assertThat(fund.getStatus()).isEqualTo(FundStatus.PENDING_HOLDING);
         assertThat(fund.getOpenedAt()).isNull();
         // 无交易
-        assertThat(fundTransactionRepository.findByFundEntity_IdOrderByCreatedDateDesc(view.id())).isEmpty();
+        assertThat(fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id())).isEmpty();
     }
 
     private void persistNav(Long fundId, Instant date, BigDecimal accumulatedNav) {

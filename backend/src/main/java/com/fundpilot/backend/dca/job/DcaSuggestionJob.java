@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -36,7 +37,7 @@ import java.util.List;
  *   <li>月定投:today 的 day-of-month == plan.dayOfMonth;若计划日非交易日,顺延到下一个交易日补执行</li>
  * </ul>
  *
- * <p>幂等:同日同计划已有 PENDING 交易则跳过(防重跑重复生成)。
+ * <p>幂等:同日同计划已有任意状态交易则跳过(确认或撤销后重跑也不重复生成)。
  */
 @Component
 @RequiredArgsConstructor
@@ -80,12 +81,12 @@ public class DcaSuggestionJob {
         if (plan == null || Boolean.FALSE.equals(plan.getEnabled())) return false;
         if (!isDcaDay(plan, now)) return false;
 
-        // 幂等去重:同日同计划已有 PENDING 交易则跳过
+        // 幂等去重:同日同计划已有任意状态交易都跳过，撤销也视为用户明确放弃本次定投。
         ZonedDateTime todayStart = now.atZone(TRADING_ZONE).toLocalDate().atStartOfDay(TRADING_ZONE);
         Instant dayStart = todayStart.toInstant();
         Instant dayEnd = todayStart.plusDays(1).toInstant();
-        if (fundTransactionRepository.existsByDcaPlanIdAndStatusAndCreatedDateBetween(
-                plan.getId(), FundTransactionStatus.PENDING, dayStart, dayEnd)) {
+        if (fundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(
+                plan.getId(), dayStart, dayEnd)) {
             return false;
         }
 
@@ -96,6 +97,7 @@ public class DcaSuggestionJob {
         tx.setShares(null);
         tx.setNav(null);
         tx.setStatus(FundTransactionStatus.PENDING);
+        tx.setTradeDate(now);
         tx.setDcaPlanId(plan.getId());
         fundTransactionRepository.save(tx);
         log.info("定投交易生成 fund_id={} plan_id={} amount={}", fundId, plan.getId(), plan.getAmount());
@@ -108,7 +110,6 @@ public class DcaSuggestionJob {
      */
     boolean isDcaDay(FundDcaPlanEntity plan, Instant now) {
         ZonedDateTime today = now.atZone(TRADING_ZONE);
-        int todayDom = today.getDayOfMonth();
         if (plan.getFrequency() == DcaFrequency.DAILY) {
             return true; // run() 已 gating 交易日,每个交易日都投
         }
@@ -117,18 +118,19 @@ public class DcaSuggestionJob {
             return plan.getDayOfWeek() != null && todayDow == plan.getDayOfWeek();
         }
         if (plan.getFrequency() == DcaFrequency.MONTHLY) {
+            LocalDate todayDate = today.toLocalDate();
             int planDom = plan.getDayOfMonth();
-            if (planDom == todayDom) return true;
-            if (planDom > todayDom) return false;
-            // planDom < todayDom:计划日已过,检查是否因节假日顺延到今天
-            // 顺延条件:planDom..today-1 区间全是非交易日(节假日),且今天是该区间后第一个交易日
-            for (int d = planDom; d < todayDom; d++) {
-                Instant checkDay = ChinaTradingDate.toUtcDate(today.withDayOfMonth(d).toInstant());
+            LocalDate scheduledDate = todayDate.getDayOfMonth() >= planDom
+                    ? todayDate.withDayOfMonth(planDom)
+                    : todayDate.minusMonths(1).withDayOfMonth(planDom);
+            // 候选计划日至昨天之间只要出现过交易日，就说明本期已经错过或应已执行，不再补投。
+            for (LocalDate date = scheduledDate; date.isBefore(todayDate); date = date.plusDays(1)) {
+                Instant checkDay = date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
                 if (tradingCalendarService.isTradingDay(checkDay)) {
-                    return false; // planDom..today-1 之间有交易日,说明计划日是交易日已过,不补
+                    return false;
                 }
             }
-            return true; // planDom..today-1 全是非交易日,今天补执行
+            return true;
         }
         return false;
     }

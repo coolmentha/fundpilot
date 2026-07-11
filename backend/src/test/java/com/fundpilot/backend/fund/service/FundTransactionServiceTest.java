@@ -55,7 +55,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
 
         assertThat(rows).hasSize(3);
         // 按 createdDate 倒序(最新交易在前)
-        assertThat(rows).extracting(FundTransactionView::createdDate)
+        assertThat(rows).extracting(FundTransactionView::tradeDate)
                 .isSortedAccordingTo(Comparator.reverseOrder());
         // 全部属于该基金
         assertThat(rows).extracting(FundTransactionView::fundId).containsOnly(fund.getId());
@@ -91,6 +91,31 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         assertThat(view.shares()).isNull();
         assertThat(view.status()).isEqualTo(FundTransactionStatus.PENDING);
         assertThat(view.signalLogId()).isNull(); // 手动交易不关联信号
+    }
+
+    @Test
+    @Transactional
+    void createManual_指定历史交易日_保存为交易发生时间() {
+        FundEntity fund = persistFund();
+        Instant tradeDate = Instant.parse("2026-07-08T00:00:00Z");
+
+        FundTransactionView view = fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.INCREASE,
+                        new BigDecimal("1000"), null, null, tradeDate));
+
+        assertThat(view.tradeDate()).isEqualTo(tradeDate);
+    }
+
+    @Test
+    @Transactional
+    void createManual_未来交易时间_拒绝创建() {
+        FundEntity fund = persistFund();
+
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.INCREASE,
+                        new BigDecimal("1000"), null, null, Instant.now().plusSeconds(3600))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
     }
 
     @Test
@@ -164,8 +189,9 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         fundB.setStatus(FundStatus.HOLDING);
         fundRepository.save(fundB);
 
+        Instant tradeDate = Instant.parse("2026-07-08T00:00:00Z");
         ManualTransactionRequest req = new ManualTransactionRequest(
-                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), fundB.getId());
+                FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("300"), fundB.getId(), tradeDate);
 
         FundTransactionView view = fundTransactionService.createManual(fundA.getId(), req);
 
@@ -183,6 +209,8 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         assertThat(txIn.getAmount()).isNull();   // 待确认回填
         assertThat(txIn.getShares()).isNull();
         assertThat(txIn.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        assertThat(txOut.getTradeDate()).isEqualTo(tradeDate);
+        assertThat(txIn.getTradeDate()).isEqualTo(tradeDate);
         // 双向互指
         assertThat(txIn.getRelatedFundTransactionEntity().getId()).isEqualTo(txOut.getId());
     }

@@ -43,23 +43,23 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
     List<FundTransactionEntity> findByFundEntity_Id(Long fundId);
 
     /**
-     * 查某基金全部交易按创建时间倒序(issue #18 交易流水 Tab 列表用)。
+     * 查某基金全部交易按业务交易时间倒序(issue #18 交易流水 Tab 列表用)。
      * 软删行由 @SQLRestriction 自动过滤。
      */
-    List<FundTransactionEntity> findByFundEntity_IdOrderByCreatedDateDesc(Long fundId);
+    @org.springframework.data.jpa.repository.Query("select t from FundTransactionEntity t " +
+            "where t.fundEntity.id = :fundId " +
+            "order by coalesce(t.tradeDate, t.createdDate) desc, t.createdDate desc")
+    List<FundTransactionEntity> findByFundIdOrderByTradeDateDesc(@org.springframework.data.repository.query.Param("fundId") Long fundId);
 
     /** MIN_HOLD_DAYS 起算点:只取最近一笔已确认买入类交易,忽略卖出、调整和 PENDING。 */
     Optional<FundTransactionEntity>
     findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
             Long fundId, FundTransactionStatus status, Collection<FundTransactionSource> sources);
 
-    /**
-     * 幂等去重:查某定投计划在某时间区间内是否已生成 PENDING 交易(DcaSuggestionJob 用)。
-     */
-    boolean existsByDcaPlanIdAndStatusAndCreatedDateBetween(Long dcaPlanId,
-                                                              com.fundpilot.backend.fund.enums.FundTransactionStatus status,
-                                                              java.time.Instant start,
-                                                              java.time.Instant end);
+    /** 幂等去重:查某定投计划在某时间区间内是否已生成任意状态交易。 */
+    boolean existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId,
+                                                  java.time.Instant start,
+                                                  java.time.Instant end);
 
     /** 同一 SignalLog 只能生成一笔未软删交易。 */
     boolean existsBySignalLogEntity_Id(Long signalLogId);

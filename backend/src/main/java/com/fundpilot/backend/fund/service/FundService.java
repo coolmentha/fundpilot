@@ -157,7 +157,7 @@ public class FundService {
         tx.setShares(initialMarketValue.divide(navValue, MATH));
         tx.setNav(navValue);
         tx.setConfirmTime(effectiveOpenedAt);
-        tx.setCreatedDate(effectiveOpenedAt);
+        tx.setTradeDate(effectiveOpenedAt);
         tx.setStatus(FundTransactionStatus.CONFIRMED);
         tx.setSignalLogEntity(null);
         FundTransactionEntity savedTx = fundTransactionRepository.save(tx);

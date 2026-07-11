@@ -178,6 +178,29 @@ class SignalGenerationServiceTest {
     }
 
     @Test
+    void generateDailySignals_当日信号已回应_重跑保留原信号不生成新待办() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE)))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("0.8"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong()))
+                .thenReturn(new SignalResult(SignalType.SELL, null, null, null,
+                        SignalReason.LOGIC_BROKEN, List.of(), List.of()));
+        SignalLogEntity responded = new SignalLogEntity();
+        responded.setId(88L);
+        when(signalLogRepository.findByFundEntity_IdAndSignalDateBetween(eq(1L), any(), any()))
+                .thenReturn(List.of(responded));
+        when(fundTransactionRepository.existsBySignalLogEntity_Id(88L)).thenReturn(true);
+
+        service.generateDailySignals(DATE);
+
+        verify(signalLogRepository, never()).delete(any(SignalLogEntity.class));
+        verify(signalLogRepository, never()).save(any(SignalLogEntity.class));
+        verify(fundStrategyRepository).save(strategy);
+    }
+
+    @Test
     void generateDailySignals_已有待回应止盈信号时不写重复NONE() {
         FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
         strategy.setTakeProfitPhase(TakeProfitPhase.TRIGGERED);

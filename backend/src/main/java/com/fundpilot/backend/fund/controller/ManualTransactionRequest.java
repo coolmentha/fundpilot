@@ -3,6 +3,7 @@ package com.fundpilot.backend.fund.controller;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 /**
  * 手动录入交易请求(issue #18 手动交易):支持加仓/减仓/转入/转出/定投/调增/调减七类,绕过信号。
@@ -17,10 +18,17 @@ import java.math.BigDecimal;
  * @param amount       金额(买入类必填)
  * @param shares       份额(卖出类必填)
  * @param targetFundId 转入基金 ID(仅 source=TRANSFER_OUT 且转换模式时填;可空)
+ * @param tradeDate    交易发生时间(可空,默认当前时间)
  */
 public record ManualTransactionRequest(
         FundTransactionSource source,
         BigDecimal amount,
         BigDecimal shares,
-        Long targetFundId) {
+        Long targetFundId,
+        Instant tradeDate) {
+
+    public ManualTransactionRequest(FundTransactionSource source, BigDecimal amount,
+                                    BigDecimal shares, Long targetFundId) {
+        this(source, amount, shares, targetFundId, null);
+    }
 }

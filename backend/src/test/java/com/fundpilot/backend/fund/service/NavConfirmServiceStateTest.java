@@ -64,13 +64,14 @@ class NavConfirmServiceStateTest {
     }
 
     @Test
-    void confirmPendingTransactions_旧交易使用自身创建日净值而非任务Fallback日期() {
+    void confirmPendingTransactions_补录交易优先使用交易发生日而非审计创建日() {
         Instant friday = Instant.parse("2026-07-10T00:00:00Z");
         Instant monday = Instant.parse("2026-07-13T00:00:00Z");
         FundEntity fund = fund(1L);
         FundTransactionEntity tx = tx(10L, fund, FundTransactionSource.INCREASE);
         tx.setAmount(new BigDecimal("1000"));
-        tx.setCreatedDate(Instant.parse("2026-07-10T06:55:00Z")); // 北京时间周五 14:55
+        tx.setTradeDate(Instant.parse("2026-07-10T06:55:00Z")); // 北京时间周五 14:55
+        tx.setCreatedDate(Instant.parse("2026-07-13T02:00:00Z")); // 周一补录
 
         when(fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING))
                 .thenReturn(List.of(tx));

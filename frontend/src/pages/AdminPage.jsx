@@ -25,22 +25,22 @@ export default function AdminPage() {
                 </Text>
                 <Space direction="vertical" size="middle" className="full-width">
                     <Card size="small" title="信号生成" extra={
-                        <Popconfirm title="生成今日信号？将覆盖当日已有信号。" onConfirm={() =>
+                        <Popconfirm title="生成今日信号？未回应信号将按最新行情重算。" onConfirm={() =>
                             run('generate', () => '信号生成完成')}>
                             <Button type="primary" icon={<ThunderboltOutlined/>}
                                     loading={adminAction.isPending}>生成今日信号</Button>
                         </Popconfirm>
                     }>
-                        <Text type="secondary">每日 14:50 自动触发，遍历 EFFECTIVE 基金跑信号引擎落 SignalLog。</Text>
+                        <Text type="secondary">每日 14:50 自动触发；手动重跑会更新未回应信号，已生成交易的信号保持不变。</Text>
                     </Card>
                     <Card size="small" title="净值确认" extra={
-                        <Popconfirm title="回填今日 PENDING 交易净值？" onConfirm={() =>
+                        <Popconfirm title="按每笔交易发生日补偿确认 PENDING 交易？" onConfirm={() =>
                             run('confirm-nav', (r) => `净值确认完成，回填 ${r?.confirmed ?? 0} 条`)}>
                             <Button icon={<DatabaseOutlined/>}
                                     loading={adminAction.isPending}>回填净值</Button>
                         </Popconfirm>
                     }>
-                        <Text type="secondary">每日 21:00 自动触发，回填当日 PENDING 交易的 nav + 份额/金额，转 CONFIRMED。</Text>
+                        <Text type="secondary">按每笔交易发生日查累计净值；净值新增、启动补偿和定时补偿都会自动推进确认。</Text>
                     </Card>
                     <Card size="small" title="行情刷新" extra={
                         <Popconfirm title="全量刷新行情数据？" onConfirm={() =>
@@ -49,7 +49,7 @@ export default function AdminPage() {
                                     loading={adminAction.isPending}>刷新行情</Button>
                         </Popconfirm>
                     }>
-                        <Text type="secondary">从东方财富拉取所有 EFFECTIVE 基金的行情指标快照。</Text>
+                        <Text type="secondary">通过行情数据源降级链刷新所有未归档基金的净值和指标快照。</Text>
                     </Card>
                     <Card size="small" title="基金字典同步" extra={
                         <Popconfirm title="拉取全量基金字典并更新本地缓存？" onConfirm={() =>

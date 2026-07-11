@@ -209,8 +209,12 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 加仓（INCREASE）/减仓（DECREASE）/转入（TRANSFER_IN）/转出（TRANSFER_OUT）/定投（INVEST）/调增（ADJUST_IN）/调减（ADJUST_OUT）。买入写 amount、卖出写 shares，
 走 NavConfirmJob 回填另一侧。与信号触发交易共用同一套账目和持仓聚合。手动卖出不经过 `evaluateSignal`，不卡 7 天硬约束（前端可提示）。
 ADJUST 只修正事实份额：ADJUST_OUT 按 FIFO 缩减 open lot；ADJUST_IN 不建收费 lot，后续卖出未被 lot 覆盖的事实份额按零赎回费降级。
+`FundTransactionEntity.tradeDate` 是业务交易发生时间，`createdDate` 仅是 Spring 审计创建时间。手动交易允许填写 `tradeDate`，
+不填默认当前时间，未来时间拒绝；转换两腿必须使用同一 `tradeDate`。手动确认和自动确认都按 `tradeDate` 对应的北京时间自然日选择净值，
+仅存量记录 `tradeDate` 为空时才回退 `createdDate`。
 入口在基金详情页"交易流水" Tab 的"手动录入"按钮。
-_Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，signalLog=null 已是领域模型预留的手动标识）
+_Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，signalLog=null 已是领域模型预留的手动标识）；
+用审计字段 `createdDate` 表示用户选择的交易发生日（保存时会被审计机制覆盖）
 
 **初始持仓录入（Existing Position Onboarding）**:
 新建基金时录入已有持仓的建仓动作。`FundCreateRequest.initialMarketValue` 有值即触发——状态流转对齐 BUILD 信号确认
@@ -233,17 +237,19 @@ _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）�
 完全绕开信号引擎（SignalLog）和卖出纪律。止盈交给基金绑定的移动止盈信号独立触发,与定投解耦。
 
 `FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(DAILY·日定投 / WEEKLY·周定投 / MONTHLY·月定投) /
-dayOfWeek(1=周一..7=周日) / dayOfMonth(1-28,月定投日,封顶 28 避开月末) / status。**新建即激活**:create 直接落 EFFECTIVE
+dayOfWeek(1=周一..5=周五) / dayOfMonth(1-28,月定投日,封顶 28) / status。**新建即激活**:create 直接落 EFFECTIVE
 (同基金已有 EFFECTIVE 则回退 DRAFT)。状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE,
 同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
 
 **DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
 日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
-（判定:planDom..today-1 区间全非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易（amount=计划金额,shares/nav 留空）。
-**幂等**:同日同计划已有 PENDING 交易则跳过（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndStatusAndCreatedDateBetween` 兜底防重跑）。
+（包括月末连续休市后跨月顺延；判定候选计划日至昨天均非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易
+（amount=计划金额,shares/nav 留空,`tradeDate`=实际执行日）。
+**幂等**:同一计划同一北京时间自然日已有任意状态交易都跳过
+（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndTradeDateBetween` 兜底防重跑）。已确认表示本期完成，已撤销表示用户放弃本期，均不得重建。
 
 **NavConfirmJob 时序**:14:55 定投下单(PENDING) → 20:00 DailyNavConfirmJob 拉当日净值 → 次日 03:00 NavConfirmJob 确认昨日 PENDING
 （用下单日净值算 shares）。cron 从 `0 0 21 * *` 改 `0 0 3 * *`——凌晨确认的是"之前生成的"流水,单日定投流水在 14:55 已生成,
-次日 3 点确认时净值已落地。日期统一按北京时间自然日映射为 UTC 00:00 标签；批量确认优先使用每笔交易的 `createdDate`
+次日 3 点确认时净值已落地。日期统一按北京时间自然日映射为 UTC 00:00 标签；批量确认优先使用每笔交易的 `tradeDate`
 确定净值日，Job 参数只作为旧数据缺失时间时的降级值，避免周末旧交易被下一交易日净值确认。
-_Avoid_: 定投走信号引擎（信号是建议,定投是执行,语义不同）;月定投日 > 28（避开月末交易日缺失,强制顺延增加复杂度）
+_Avoid_: 定投走信号引擎（信号是建议,定投是执行,语义不同）;月定投日 > 28;只按 PENDING 状态判断定投幂等

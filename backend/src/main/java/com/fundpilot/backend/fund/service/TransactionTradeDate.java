@@ -11,7 +11,9 @@ final class TransactionTradeDate {
     }
 
     static Instant resolve(FundTransactionEntity transaction, Instant fallbackDate) {
-        Instant source = transaction.getCreatedDate() != null ? transaction.getCreatedDate() : fallbackDate;
+        Instant source = transaction.getTradeDate() != null
+                ? transaction.getTradeDate()
+                : transaction.getCreatedDate() != null ? transaction.getCreatedDate() : fallbackDate;
         return ChinaTradingDate.toUtcDate(source);
     }
 }

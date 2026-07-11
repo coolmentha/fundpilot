@@ -118,12 +118,18 @@ public class SignalOperationService {
         if (request.actualAmount() == null) {
             throw new BusinessException(ErrorCode.MISSING_ACTUAL_AMOUNT, "BUILD/ADD 需提供 actualAmount");
         }
+        if (request.actualAmount().signum() <= 0) {
+            throw new BusinessException(ErrorCode.SIGNAL_OPERATION_VALUE_INVALID, "实际金额必须大于 0");
+        }
         return request.actualAmount();
     }
 
     private static BigDecimal requireShares(ConfirmOperationRequest request) {
         if (request.actualShares() == null) {
             throw new BusinessException(ErrorCode.MISSING_ACTUAL_SHARES, "SELL 需提供 actualShares");
+        }
+        if (request.actualShares().signum() <= 0) {
+            throw new BusinessException(ErrorCode.SIGNAL_OPERATION_VALUE_INVALID, "实际份额必须大于 0");
         }
         return request.actualShares();
     }
@@ -138,6 +144,7 @@ public class SignalOperationService {
         tx.setShares(shares);
         tx.setNav(null); // nav 等 NavConfirmJob 回填(#15)
         tx.setStatus(com.fundpilot.backend.fund.enums.FundTransactionStatus.PENDING);
+        tx.setTradeDate(now);
         tx.setSignalLogEntity(signalLog);
         return tx;
     }

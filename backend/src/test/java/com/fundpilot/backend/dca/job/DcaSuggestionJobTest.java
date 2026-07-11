@@ -137,15 +137,29 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);
     }
 
+    @Test
+    @Transactional
+    void 月定投_月末连续休市_跨月顺延到下月首个交易日() {
+        FundEntity fund = persistFund();
+        activateMonthly(fund, 28);
+        saveCalendar(LocalDate.of(2026, 6, 28), false);
+        saveCalendar(LocalDate.of(2026, 6, 29), false);
+        saveCalendar(LocalDate.of(2026, 6, 30), false);
+
+        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), date(2026, 7, 1));
+
+        assertThat(generated).isTrue();
+        assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);
+    }
+
     // ===== 幂等去重 =====
 
     @Test
     @Transactional
     void 同日同计划重跑_跳过_只生成一笔() {
         FundEntity fund = persistFund();
-        // 用真实当前时间 + 当天星期几,使 isDcaDay 命中且 createdDate 落在幂等窗口内(同一天)。
-        int todayDow = LocalDate.now(SHANGHAI).getDayOfWeek().getValue();
-        activateWeekly(fund, todayDow);
+        // 用日定投 + 真实当前时间，使 createdDate 落在幂等窗口内且不受周末影响。
+        activateDaily(fund);
         Instant now = Instant.now();
 
         boolean first = dcaSuggestionJob.generateForFund(fund.getId(), now);
@@ -156,6 +170,40 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         List<FundTransactionEntity> pending = fundTransactionRepository.findByFundEntity_IdAndStatus(
                 fund.getId(), FundTransactionStatus.PENDING);
         assertThat(pending).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void 同日交易已确认_重跑也不重复生成() {
+        FundEntity fund = persistFund();
+        activateDaily(fund);
+        Instant now = Instant.now();
+        assertThat(dcaSuggestionJob.generateForFund(fund.getId(), now)).isTrue();
+        FundTransactionEntity tx = findPendingTx(fund.getId());
+        tx.setStatus(FundTransactionStatus.CONFIRMED);
+        fundTransactionRepository.saveAndFlush(tx);
+
+        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), now);
+
+        assertThat(generated).isFalse();
+        assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void 同日交易已撤销_重跑也不重复生成() {
+        FundEntity fund = persistFund();
+        activateDaily(fund);
+        Instant now = Instant.now();
+        assertThat(dcaSuggestionJob.generateForFund(fund.getId(), now)).isTrue();
+        FundTransactionEntity tx = findPendingTx(fund.getId());
+        tx.setStatus(FundTransactionStatus.CANCELLED);
+        fundTransactionRepository.saveAndFlush(tx);
+
+        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), now);
+
+        assertThat(generated).isFalse();
+        assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
     }
 
     // ===== enabled=false 跳过 =====

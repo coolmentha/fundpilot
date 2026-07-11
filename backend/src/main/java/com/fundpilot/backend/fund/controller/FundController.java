@@ -58,7 +58,7 @@ public class FundController {
         return ApiResponse.ok(fundService.get(id));
     }
 
-    /** 查某基金交易流水,按创建时间倒序(issue #18 交易流水 Tab)。 */
+    /** 查某基金交易流水,按交易发生时间倒序(issue #18 交易流水 Tab)。 */
     @GetMapping("/{id}/transactions")
     public ApiResponse<List<FundTransactionView>> transactions(@PathVariable Long id) {
         return ApiResponse.ok(fundTransactionService.listByFund(id));

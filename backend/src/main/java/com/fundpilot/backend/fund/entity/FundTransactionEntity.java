@@ -28,6 +28,9 @@ public class FundTransactionEntity extends AbstractEntity {
 
     private Instant cancelTime;
 
+    /** 业务交易发生时间。与审计 createdDate 分离，净值确认按此时间选交易日。 */
+    private Instant tradeDate;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
     private FundTransactionStatus status;
