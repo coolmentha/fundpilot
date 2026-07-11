@@ -13,6 +13,10 @@ return analysis such as daily change, drawdown, moving highs and MACD.
 Purchase shares are `(amount - fee) / unitNav`, while purchase cost is the full
 cash contribution: `amount / shares`. Lot acquisition and redemption holding
 periods use the business `tradeDate`, not the later confirmation timestamp.
+For legacy confirmed transactions recorded on a non-trading day, replay uses
+the latest unit NAV on or before that date. Existing-position onboarding keeps
+its original lot acquisition date and derives the user-entered cost from the
+pre-rebuild aggregate cost basis instead of replacing it with NAV.
 
 V17 schedules a one-time transactional replay of all active CONFIRMED
 transactions. The replay preserves onboarding cost evidence and historical

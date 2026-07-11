@@ -19,6 +19,8 @@ import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 
 /** 一次性重放已确认交易，重建单位净值口径下的交易派生账本。 */
 @Service
@@ -41,9 +43,10 @@ public class AccountingRebuildService {
             return false;
         }
 
-        Map<Long, BigDecimal> oldLotCosts = snapshotLotCosts();
+        Map<Long, OldLotEvidence> oldLots = snapshotLotEvidence();
+        Map<Long, BigDecimal> onboardingCosts = inferOnboardingCosts();
         Map<Long, ArrayDeque<BigDecimal>> oldRedemptionRates = snapshotRedemptionRates();
-        Map<NavKey, BigDecimal> unitNavs = loadUnitNavs();
+        Map<Long, NavigableMap<LocalDate, BigDecimal>> unitNavs = loadUnitNavs();
         List<TransactionRow> transactions = loadConfirmedTransactions();
 
         jdbcTemplate.update("delete from fund_lot_redemption");
@@ -56,7 +59,7 @@ public class AccountingRebuildService {
             BigDecimal unitNav = requiresNav(tx.source()) ? requireUnitNav(unitNavs, tx) : tx.nav();
             switch (tx.source()) {
                 case "INCREASE", "INVEST", "TRANSFER_IN" -> replayBuy(
-                        tx, unitNav, oldLotCosts, lotsByFund, transferNetAmounts);
+                        tx, unitNav, oldLots, onboardingCosts, lotsByFund, transferNetAmounts);
                 case "DECREASE", "TRANSFER_OUT" -> replaySell(
                         tx, unitNav, lotsByFund, transferNetAmounts, oldRedemptionRates);
                 case "ADJUST_OUT" -> consumeLots(tx, lotsByFund, false, BigDecimal.ZERO, unitNav);
@@ -81,7 +84,8 @@ public class AccountingRebuildService {
         return true;
     }
 
-    private void replayBuy(TransactionRow tx, BigDecimal unitNav, Map<Long, BigDecimal> oldLotCosts,
+    private void replayBuy(TransactionRow tx, BigDecimal unitNav, Map<Long, OldLotEvidence> oldLots,
+                           Map<Long, BigDecimal> onboardingCosts,
                            Map<Long, ArrayDeque<ReplayLot>> lotsByFund,
                            Map<Long, BigDecimal> transferNetAmounts) {
         BigDecimal amount = tx.amount();
@@ -95,8 +99,10 @@ public class AccountingRebuildService {
         BigDecimal fee = amount.multiply(rate, MATH);
         BigDecimal shares = amount.subtract(fee).divide(unitNav, MATH);
         BigDecimal ordinaryCost = amount.divide(shares, MATH);
-        BigDecimal oldCost = oldLotCosts.get(tx.id());
-        BigDecimal costPerShare = isOnboardingCost(tx, oldCost) ? oldCost : ordinaryCost;
+        OldLotEvidence oldLot = oldLots.get(tx.id());
+        BigDecimal onboardingCost = onboardingCosts.get(tx.id());
+        BigDecimal costPerShare = onboardingCost != null ? onboardingCost : ordinaryCost;
+        Instant acquireTime = onboardingCost != null && oldLot != null ? oldLot.acquireTime() : tx.tradeTime();
 
         jdbcTemplate.update("update fund_transaction set amount=?, shares=?, nav=?, fee=?, fee_rate=?, " +
                         "updated_date=now() where id=?",
@@ -105,9 +111,9 @@ public class AccountingRebuildService {
                 "insert into fund_lot(fund_id, acquire_tx_id, acquire_date, acquire_shares, remaining_shares, " +
                         "acquire_cost_per_share, version, created_date, updated_date) " +
                         "values(?,?,?,?,?,?,0,now(),now()) returning id", Long.class,
-                tx.fundId(), tx.id(), Timestamp.from(tx.tradeTime()), shares, shares, costPerShare);
+                tx.fundId(), tx.id(), Timestamp.from(acquireTime), shares, shares, costPerShare);
         lotsByFund.computeIfAbsent(tx.fundId(), ignored -> new ArrayDeque<>())
-                .add(new ReplayLot(lotId, tx.tradeTime(), shares));
+                .add(new ReplayLot(lotId, acquireTime, shares));
     }
 
     private void replaySell(TransactionRow tx, BigDecimal unitNav,
@@ -164,9 +170,31 @@ public class AccountingRebuildService {
         return totalFee;
     }
 
-    private Map<Long, BigDecimal> snapshotLotCosts() {
+    private Map<Long, OldLotEvidence> snapshotLotEvidence() {
+        Map<Long, OldLotEvidence> result = new HashMap<>();
+        jdbcTemplate.query("select acquire_tx_id, acquire_date, acquire_cost_per_share " +
+                        "from fund_lot where deleted_date is null",
+                (RowCallbackHandler) rs -> result.put(rs.getLong(1),
+                        new OldLotEvidence(rs.getTimestamp(2).toInstant(), rs.getBigDecimal(3))));
+        return result;
+    }
+
+    private Map<Long, BigDecimal> inferOnboardingCosts() {
         Map<Long, BigDecimal> result = new HashMap<>();
-        jdbcTemplate.query("select acquire_tx_id, acquire_cost_per_share from fund_lot where deleted_date is null",
+        jdbcTemplate.query("with evidence as (" +
+                        "select l.acquire_tx_id,l.fund_id,l.remaining_shares,l.acquire_cost_per_share," +
+                        "f.cost_per_share, " +
+                        "(t.source='INCREASE' and t.signal_log_id is null and t.dca_plan_id is null " +
+                        "and l.acquire_date <> coalesce(t.trade_date,t.created_date,t.confirm_time)) onboarding " +
+                        "from fund_lot l join fund_transaction t on t.id=l.acquire_tx_id " +
+                        "join fund f on f.id=l.fund_id where l.deleted_date is null), totals as (" +
+                        "select *,sum(remaining_shares) over(partition by fund_id) total_shares," +
+                        "sum(case when not onboarding then remaining_shares*acquire_cost_per_share else 0 end) " +
+                        "over(partition by fund_id) ordinary_cost," +
+                        "sum(case when onboarding then remaining_shares else 0 end) " +
+                        "over(partition by fund_id) onboarding_shares from evidence) " +
+                        "select acquire_tx_id,(cost_per_share*total_shares-ordinary_cost)/nullif(onboarding_shares,0) " +
+                        "from totals where onboarding",
                 (RowCallbackHandler) rs -> result.put(rs.getLong(1), rs.getBigDecimal(2)));
         return result;
     }
@@ -180,12 +208,12 @@ public class AccountingRebuildService {
         return result;
     }
 
-    private Map<NavKey, BigDecimal> loadUnitNavs() {
-        Map<NavKey, BigDecimal> result = new HashMap<>();
+    private Map<Long, NavigableMap<LocalDate, BigDecimal>> loadUnitNavs() {
+        Map<Long, NavigableMap<LocalDate, BigDecimal>> result = new HashMap<>();
         jdbcTemplate.query("select fund_id, nav_date, nav from fund_nav_history " +
                         "where deleted_date is null and nav is not null",
-                (RowCallbackHandler) rs -> result.put(new NavKey(rs.getLong(1), rs.getTimestamp(2).toInstant()
-                        .atZone(TRADING_ZONE).toLocalDate()), rs.getBigDecimal(3)));
+                (RowCallbackHandler) rs -> result.computeIfAbsent(rs.getLong(1), ignored -> new TreeMap<>())
+                        .put(rs.getTimestamp(2).toInstant().atZone(TRADING_ZONE).toLocalDate(), rs.getBigDecimal(3)));
         return result;
     }
 
@@ -201,21 +229,19 @@ public class AccountingRebuildService {
                         (Long) rs.getObject(11), (Long) rs.getObject(12)));
     }
 
-    private BigDecimal requireUnitNav(Map<NavKey, BigDecimal> navs, TransactionRow tx) {
-        BigDecimal nav = navs.get(new NavKey(tx.fundId(), tx.tradeTime().atZone(TRADING_ZONE).toLocalDate()));
+    private BigDecimal requireUnitNav(Map<Long, NavigableMap<LocalDate, BigDecimal>> navs, TransactionRow tx) {
+        NavigableMap<LocalDate, BigDecimal> fundNavs = navs.get(tx.fundId());
+        LocalDate tradeDate = tx.tradeTime().atZone(TRADING_ZONE).toLocalDate();
+        Map.Entry<LocalDate, BigDecimal> entry = fundNavs != null ? fundNavs.floorEntry(tradeDate) : null;
+        BigDecimal nav = entry != null ? entry.getValue() : null;
         if (nav == null || nav.signum() <= 0) {
             throw new IllegalStateException("历史交易缺少单位净值 tx=" + tx.id() + " fund=" + tx.fundId());
         }
-        return nav;
-    }
-
-    private boolean isOnboardingCost(TransactionRow tx, BigDecimal oldCost) {
-        if (oldCost == null || tx.shares() == null || tx.shares().signum() <= 0 || tx.amount() == null) {
-            return false;
+        if (!entry.getKey().equals(tradeDate)) {
+            log.info("历史交易日无净值，使用此前最近交易日 tx={} trade_date={} nav_date={}",
+                    tx.id(), tradeDate, entry.getKey());
         }
-        BigDecimal recordedCost = tx.amount().divide(tx.shares(), MATH);
-        return tx.signalLogId() == null && tx.dcaPlanId() == null && tx.fee() == null
-                && oldCost.compareTo(recordedCost) != 0;
+        return nav;
     }
 
     private BigDecimal purchaseRate(TransactionRow tx, BigDecimal amount) {
@@ -245,7 +271,7 @@ public class AccountingRebuildService {
         return !"ADJUST_IN".equals(source) && !"ADJUST_OUT".equals(source);
     }
 
-    private record NavKey(Long fundId, LocalDate date) {}
+    private record OldLotEvidence(Instant acquireTime, BigDecimal costPerShare) {}
     private record TransactionRow(Long id, Long fundId, String source, BigDecimal amount, BigDecimal shares,
                                   BigDecimal nav, BigDecimal fee, BigDecimal feeRate, Instant tradeTime,
                                   Long relatedTxId, Long signalLogId, Long dcaPlanId) {}

@@ -55,6 +55,8 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - 初始持仓同步确认时必须创建 open lot，`confirmTime` 使用最终 `openedAt`，且不重复扣申购费。
 - lot 的 `acquireDate` 和赎回持有期终点使用 `tradeDate`；仅存量空值才回退 `createdDate/confirmTime`。
 - V17 以一次性事务重放 CONFIRMED 账本；失败整体回滚并阻止应用带半完成账本启动，完成后不得重复执行。
+- 历史 CONFIRMED 交易的 `tradeDate` 若落在非交易日，重建使用该日期之前最近一期单位净值，禁止使用未来净值；onboarding lot 仍保留旧 `acquireDate` 作为持有期起点。
+- onboarding 用户成本从重建前基金总成本扣除普通 lot 成本后反推，不得用旧交易净值覆盖。
 - 同一定投计划同一北京时间自然日由部分唯一索引最终兜底，Job 使用 `ON CONFLICT DO NOTHING` 原子生成。
 - 卖出存在 lot 缺口时，只有卖出前事实持仓中确有未跟踪份额，缺口才按零赎回费降级。
 - 交易日历使用数据库 `ON CONFLICT DO NOTHING` 原子插入，不使用“先查后插”实现幂等。

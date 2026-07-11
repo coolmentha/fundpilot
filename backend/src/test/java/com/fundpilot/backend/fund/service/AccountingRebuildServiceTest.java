@@ -72,6 +72,34 @@ class AccountingRebuildServiceTest extends AbstractIntegrationTest {
         assertThat(accountingRebuildService.rebuildIfPending()).isFalse();
     }
 
+    @Test
+    @Transactional
+    void onboarding周末录入_使用此前交易日单位净值并保留建仓日和用户成本() {
+        long fundId = jdbcTemplate.queryForObject(
+                "insert into fund(fund_code,fund_name,status,cost_per_share,version,created_date,updated_date) " +
+                        "values('ONBOARD001','历史持仓','HOLDING',3.80,0,now(),now()) returning id", Long.class);
+        insertNav(fundId, "2026-07-03T00:00:00Z", "3.20", "4.08");
+        long txId = insertTx(fundId, "INCREASE", "4503.12", "1102.84090909", "4.0832", "0",
+                "2026-07-05T08:50:48Z");
+        Instant openedAt = Instant.parse("2025-12-28T16:00:00Z");
+        jdbcTemplate.update("insert into fund_lot(fund_id,acquire_tx_id,acquire_date,acquire_shares," +
+                        "remaining_shares,acquire_cost_per_share,version,created_date,updated_date) " +
+                        "values(?,?,?,?,?,?,0,now(),now())",
+                fundId, txId, Timestamp.from(openedAt), new BigDecimal("1102.84090909"),
+                new BigDecimal("1102.84090909"), new BigDecimal("4.0832"));
+        jdbcTemplate.update("insert into accounting_rebuild_state(rebuild_key,status) values(?, 'PENDING') " +
+                        "on conflict(rebuild_key) do update set status='PENDING',completed_at=null",
+                AccountingRebuildService.REBUILD_KEY);
+
+        assertThat(accountingRebuildService.rebuildIfPending()).isTrue();
+
+        assertThat(decimal("select nav from fund_transaction where id=?", txId)).isEqualByComparingTo("3.20");
+        assertThat(jdbcTemplate.queryForObject("select acquire_date from fund_lot where acquire_tx_id=?",
+                Timestamp.class, txId).toInstant()).isEqualTo(openedAt);
+        assertThat(decimal("select acquire_cost_per_share from fund_lot where acquire_tx_id=?", txId))
+                .isEqualByComparingTo("3.80");
+    }
+
     private void insertNav(long fundId, String date, String nav, String accumulatedNav) {
         jdbcTemplate.update("insert into fund_nav_history(fund_id,nav_date,nav,accumulated_nav,version," +
                         "created_date,updated_date) values(?,?,?,?,0,now(),now())",
