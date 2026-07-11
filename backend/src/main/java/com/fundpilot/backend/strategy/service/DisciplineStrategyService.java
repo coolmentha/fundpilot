@@ -105,7 +105,7 @@ public class DisciplineStrategyService {
         if (trailingStop != null) {
             return trailingStop;
         }
-        return new SignalResult(SignalType.NONE, null, null, null, SignalReason.NO_STRATEGY, warnings, List.of());
+        return new SignalResult(SignalType.NONE, null, null, null, SignalReason.NO_SELL_TRIGGER, warnings, List.of());
     }
 
     /**

@@ -123,6 +123,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy(), market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isNotEqualTo(SignalType.SELL);
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_SELL_TRIGGER);
     }
 
     @Test
@@ -201,6 +202,7 @@ class DisciplineStrategyServiceTest {
         SignalResult result = service.evaluateSignal(fund, strategy, market, capital, Instant.now(), 100);
 
         assertThat(result.signalType()).isNotEqualTo(SignalType.SELL);
+        assertThat(result.reason()).isEqualTo(SignalReason.NO_SELL_TRIGGER);
     }
 
     @Test

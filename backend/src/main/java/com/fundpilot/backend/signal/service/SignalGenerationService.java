@@ -128,9 +128,18 @@ public class SignalGenerationService {
             return;
         }
 
-        // 覆盖式落 SignalLog:软删同日旧行 + 写新
-        signalLogRepository.findByFundEntity_IdAndSignalDateBetween(fundId, dayStart, dayEnd)
-                .forEach(signalLogRepository::delete);
+        List<SignalLogEntity> existingSignals =
+                signalLogRepository.findByFundEntity_IdAndSignalDateBetween(fundId, dayStart, dayEnd);
+        boolean responded = existingSignals.stream()
+                .anyMatch(existing -> fundTransactionRepository.existsBySignalLogEntity_Id(existing.getId()));
+        if (responded) {
+            log.info("跳过已回应信号重跑 fund_id={} signal_date={}", fundId, dayStart);
+            fundStrategyRepository.save(strategy);
+            return;
+        }
+
+        // 未回应信号允许覆盖，保证管理员补跑可以使用最新行情重新计算。
+        existingSignals.forEach(signalLogRepository::delete);
         SignalLogEntity log = toSignalLogEntity(fund, strategy, result, dayStart);
         signalLogRepository.save(log);
         if (result.reason() == SignalReason.TRAILING_STOP) {

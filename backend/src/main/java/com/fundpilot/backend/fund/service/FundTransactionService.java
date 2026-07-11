@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * 交易流水服务(issue #18 交易合并到基金详情):查某基金交易流水列表 + 手动录入交易。
- * <p>查询按 createdDate 倒序转 {@link FundTransactionView};手动录入绕过信号(signalLog=null),
+ * <p>查询按业务交易时间倒序转 {@link FundTransactionView};手动录入绕过信号(signalLog=null),
  * 买入类(INCREASE/TRANSFER_IN/INVEST)写 amount、卖出类(DECREASE/TRANSFER_OUT)写 shares,
  * 另一侧在交易日净值落库后自动回填。
  */
@@ -32,9 +32,9 @@ public class FundTransactionService {
     private final FundRepository fundRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
 
-    /** 查某基金全部交易流水,按创建时间倒序(最新在前)。 */
+    /** 查某基金全部交易流水,按交易发生时间倒序(最新在前)。 */
     public List<FundTransactionView> listByFund(Long fundId) {
-        return fundTransactionRepository.findByFundEntity_IdOrderByCreatedDateDesc(fundId).stream()
+        return fundTransactionRepository.findByFundIdOrderByTradeDateDesc(fundId).stream()
                 .map(FundTransactionView::from)
                 .toList();
     }
@@ -56,6 +56,11 @@ public class FundTransactionService {
         if (request.source() == null) {
             throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "交易来源(source)必填");
         }
+        Instant now = Instant.now();
+        Instant tradeDate = request.tradeDate() != null ? request.tradeDate() : now;
+        if (tradeDate.isAfter(now)) {
+            throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "交易发生时间不能晚于当前时间");
+        }
 
         // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费,只改持仓份额。
         // amount/fee/feeRate/nav 均空,金额实时算(份额×当前净值)。
@@ -74,7 +79,8 @@ public class FundTransactionService {
             tx.setFee(null);
             tx.setFeeRate(null);
             tx.setStatus(FundTransactionStatus.CONFIRMED);
-            tx.setConfirmTime(Instant.now());
+            tx.setTradeDate(tradeDate);
+            tx.setConfirmTime(now);
             tx.setSignalLogEntity(null);
             FundTransactionEntity saved = fundTransactionRepository.save(tx);
             transactionConfirmSupport.onAdjustConfirmed(saved);
@@ -110,6 +116,7 @@ public class FundTransactionService {
         tx.setShares(shares);
         tx.setNav(null);
         tx.setStatus(FundTransactionStatus.PENDING);
+        tx.setTradeDate(tradeDate);
         tx.setSignalLogEntity(null);
 
         // 基金转换:TRANSFER_OUT + targetFundId -> 建转入腿并双向互指。返回转出腿。
@@ -130,6 +137,7 @@ public class FundTransactionService {
             txIn.setShares(null);   // 待确认时算
             txIn.setNav(null);
             txIn.setStatus(FundTransactionStatus.PENDING);
+            txIn.setTradeDate(tradeDate);
             txIn.setSignalLogEntity(null);
             txIn.setRelatedFundTransactionEntity(txOut);
             txOut.setRelatedFundTransactionEntity(txIn);

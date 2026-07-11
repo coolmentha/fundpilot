@@ -12,6 +12,7 @@ public enum SignalReason implements EnumValue {
     ADD("加仓"),
     FUND_CLEARED("基金已清仓"),
     NO_STRATEGY("无生效策略"),
+    NO_SELL_TRIGGER("未触发卖出条件"),
     BUILD_CONDITION_NOT_MET("建仓条件未满足"),
     NO_ADD_TIER("无加仓档位触发"),
     LOGIC_BROKEN("逻辑止损"),

@@ -21,6 +21,7 @@ import java.time.Instant;
  * @param cancelTime              撤单时间
  * @param signalLogId             关联信号日志 ID
  * @param relatedTransactionId    关联交易 ID(转换交易互指)
+ * @param tradeDate               交易发生时间
  * @param createdDate             创建时间
  */
 public record FundTransactionView(
@@ -37,6 +38,7 @@ public record FundTransactionView(
         Instant cancelTime,
         Long signalLogId,
         Long relatedTransactionId,
+        Instant tradeDate,
         Instant createdDate) {
 
     public static FundTransactionView from(FundTransactionEntity tx) {
@@ -54,6 +56,7 @@ public record FundTransactionView(
                 tx.getCancelTime(),
                 tx.getSignalLogEntity() != null ? tx.getSignalLogEntity().getId() : null,
                 tx.getRelatedFundTransactionEntity() != null ? tx.getRelatedFundTransactionEntity().getId() : null,
+                tx.getTradeDate() != null ? tx.getTradeDate() : tx.getCreatedDate(),
                 tx.getCreatedDate());
     }
 }

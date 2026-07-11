@@ -68,6 +68,7 @@ export const labels = {
     ADD: '加仓',
     FUND_CLEARED: '基金已清仓',
     NO_STRATEGY: '无生效策略',
+    NO_SELL_TRIGGER: '未触发卖出条件',
     BUILD_CONDITION_NOT_MET: '建仓条件未满足',
     NO_ADD_TIER: '无加仓档位触发',
     LOGIC_BROKEN: '逻辑止损',
@@ -202,6 +203,8 @@ export const errorTitles = {
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
     COST_PER_SHARE_INVALID: '成本单价不合法',
     STRATEGY_PARAM_INVALID: '策略参数不合法',
+    DCA_PLAN_INVALID: '定投计划参数不合法',
+    SIGNAL_OPERATION_VALUE_INVALID: '实际操作数值不合法',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',
     TRANSACTION_ALREADY_CANCELLED: '交易已撤销',

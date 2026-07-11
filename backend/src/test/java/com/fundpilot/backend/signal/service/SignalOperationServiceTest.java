@@ -111,6 +111,31 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void confirmOperation_实际金额非正_抛业务异常() {
+        SignalLogEntity signal = persistSignal(SignalType.BUILD, null, SignalReason.BUILD);
+        entityManager.flush();
+
+        assertThatThrownBy(() -> service.confirmOperation(fund.getId(), signal.getId(),
+                new ConfirmOperationRequest(signal.getId(), BigDecimal.ZERO, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(
+                        com.fundpilot.backend.exception.ErrorCode.SIGNAL_OPERATION_VALUE_INVALID.name());
+    }
+
+    @Test
+    void confirmOperation_实际份额非正_抛业务异常() {
+        fund.setStatus(FundStatus.HOLDING);
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
+        entityManager.flush();
+
+        assertThatThrownBy(() -> service.confirmOperation(fund.getId(), signal.getId(),
+                new ConfirmOperationRequest(signal.getId(), null, BigDecimal.ZERO)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(
+                        com.fundpilot.backend.exception.ErrorCode.SIGNAL_OPERATION_VALUE_INVALID.name());
+    }
+
+    @Test
     void confirmOperation_TRAILING_STOP写DECREASE交易() {
         fund.setStatus(FundStatus.HOLDING);
         SignalLogEntity signal = persistSignal(SignalType.SELL, 2, SignalReason.TRAILING_STOP);

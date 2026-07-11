@@ -1,6 +1,7 @@
 import {useState} from 'react';
-import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space} from 'antd';
+import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space, DatePicker} from 'antd';
 import {PlusOutlined} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
@@ -31,7 +32,7 @@ export default function FundTransactionTab({fundId}) {
     const isTransferOut = source === 'TRANSFER_OUT';
 
     const columns = [
-        {title: '日期', dataIndex: 'createdDate', width: 170, render: datetime},
+        {title: '交易日期', dataIndex: 'tradeDate', width: 170, render: datetime},
         {title: '来源', dataIndex: 'source', width: 110, render: (v) => <StatusTag value={v}/>},
         {title: '金额', dataIndex: 'amount', width: 140, align: 'right',
             render: (v) => v == null ? '-' : <span className="num-cell">{money(v)}</span>},
@@ -45,7 +46,7 @@ export default function FundTransactionTab({fundId}) {
         {
             title: '', width: 130, render: (_, r) => r.status === 'PENDING' && (
                 <Space size={0}>
-                    <Popconfirm title="确认该笔交易?" description="用最新净值回填另一侧并转 CONFIRMED"
+                    <Popconfirm title="确认该笔交易?" description="用交易发生日净值回填另一侧并转 CONFIRMED"
                                 onConfirm={() => confirmTx.mutate(r.id)}>
                         <Button type="link" size="small" loading={confirmTx.isPending}>确认</Button>
                     </Popconfirm>
@@ -59,7 +60,12 @@ export default function FundTransactionTab({fundId}) {
 
     const submit = async () => {
         const values = await form.validateFields();
-        const body = {source: values.source};
+        const body = {
+            source: values.source,
+            tradeDate: values.tradeDate
+                ? `${values.tradeDate.format('YYYY-MM-DD')}T00:00:00+08:00`
+                : null,
+        };
         if (SELL_SOURCES.has(values.source)) {
             body.shares = values.shares;
         } else {
@@ -84,9 +90,14 @@ export default function FundTransactionTab({fundId}) {
             <Modal title="手动录入交易" open={open} onCancel={() => setOpen(false)}
                    onOk={submit} okButtonProps={{loading: createManual.isPending}}
                    destroyOnClose onClose={() => form.resetFields()}>
-                <Form form={form} layout="vertical" initialValues={{source: 'INCREASE'}}>
+                <Form form={form} layout="vertical" initialValues={{source: 'INCREASE', tradeDate: dayjs()}}>
                     <Form.Item label="来源" name="source" rules={[{required: true}]}>
                         <Select options={fundSourceOptions}/>
+                    </Form.Item>
+                    <Form.Item label="交易发生日" name="tradeDate"
+                               rules={[{required: true, message: '请选择交易发生日'}]}>
+                        <DatePicker className="full-width"
+                                    disabledDate={(date) => date && date.isAfter(dayjs().endOf('day'))}/>
                     </Form.Item>
                     {isSell ? (
                         <Form.Item label="份额" name="shares" rules={[{required: true, message: '卖出类需填份额'}]}>
@@ -108,7 +119,7 @@ export default function FundTransactionTab({fundId}) {
                     )}
                     {isSell && !isAdjust && (
                         <Alert type="info" showIcon
-                               message="手动卖出不卡 7 天硬约束,可自行减仓;份额对应的金额等当晚净值确认后回填。"/>
+                               message="手动卖出不卡 7 天硬约束,可自行减仓;份额对应的金额在交易发生日净值可用后回填。"/>
                     )}
                     {isAdjust && (
                         <Alert type="info" showIcon

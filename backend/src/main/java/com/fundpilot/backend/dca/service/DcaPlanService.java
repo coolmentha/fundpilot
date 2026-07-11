@@ -42,6 +42,7 @@ public class DcaPlanService {
         plan.setStatus(DcaPlanStatus.EFFECTIVE);
         plan.setEnabled(true);
         applyRequest(plan, request);
+        validateAndNormalize(plan);
         return fundDcaPlanRepository.save(plan).getId();
     }
 
@@ -52,6 +53,7 @@ public class DcaPlanService {
             throw new IllegalStateTransitionException(plan.getStatus().name(), "草稿(非生效态,可改参数)");
         }
         applyRequest(plan, request);
+        validateAndNormalize(plan);
         fundDcaPlanRepository.save(plan);
     }
 
@@ -81,6 +83,7 @@ public class DcaPlanService {
         if (plan.getStatus() == DcaPlanStatus.EFFECTIVE) {
             return;
         }
+        validateAndNormalize(plan);
         demoteExistingEffective(plan.getFundEntity().getId());
         plan.setStatus(DcaPlanStatus.EFFECTIVE);
         fundDcaPlanRepository.save(plan);
@@ -112,10 +115,40 @@ public class DcaPlanService {
     }
 
     private void applyRequest(FundDcaPlanEntity plan, DcaPlanRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "定投计划参数不能为空");
+        }
         if (request.enabled() != null) plan.setEnabled(request.enabled());
         if (request.amount() != null) plan.setAmount(request.amount());
         if (request.frequency() != null) plan.setFrequency(request.frequency());
         if (request.dayOfWeek() != null) plan.setDayOfWeek(request.dayOfWeek());
         if (request.dayOfMonth() != null) plan.setDayOfMonth(request.dayOfMonth());
+    }
+
+    private void validateAndNormalize(FundDcaPlanEntity plan) {
+        if (plan.getAmount() == null || plan.getAmount().signum() <= 0) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "每次定投金额必须大于 0");
+        }
+        if (plan.getFrequency() == null) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "定投频率不能为空");
+        }
+        switch (plan.getFrequency()) {
+            case DAILY -> {
+                plan.setDayOfWeek(null);
+                plan.setDayOfMonth(null);
+            }
+            case WEEKLY -> {
+                if (plan.getDayOfWeek() == null || plan.getDayOfWeek() < 1 || plan.getDayOfWeek() > 5) {
+                    throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "周定投日必须为周一至周五");
+                }
+                plan.setDayOfMonth(null);
+            }
+            case MONTHLY -> {
+                if (plan.getDayOfMonth() == null || plan.getDayOfMonth() < 1 || plan.getDayOfMonth() > 28) {
+                    throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "月定投日必须在 1 至 28 日之间");
+                }
+                plan.setDayOfWeek(null);
+            }
+        }
     }
 }
