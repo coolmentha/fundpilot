@@ -123,14 +123,28 @@ export const signedPercent = (value) => {
     return Number(value) > 0 ? `+${pct}%` : `${pct}%`;
 };
 
-// Instant 字段是 ISO-8601 UTC 字符串（如 2026-06-25T08:00:00Z），截取前 19 位作展示。
+const instantParts = (value, options) => {
+    if (!value) return null;
+    const instant = new Date(value);
+    if (Number.isNaN(instant.getTime())) return null;
+    return Object.fromEntries(new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai', hourCycle: 'h23', ...options,
+    }).formatToParts(instant).map(({type, value: part}) => [type, part]));
+};
+
+// 后端 Instant 统一按北京时间展示，避免直接截取 UTC 字符串造成 8 小时时差。
 export const datetime = (value) => {
-    if (!value) return '-';
-    return String(value).replace('T', ' ').slice(0, 19);
+    const parts = instantParts(value, {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    return parts
+        ? `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
+        : '-';
 };
 export const date = (value) => {
-    if (!value) return '-';
-    return String(value).slice(0, 10);
+    const parts = instantParts(value, {year: 'numeric', month: '2-digit', day: '2-digit'});
+    return parts ? `${parts.year}-${parts.month}-${parts.day}` : '-';
 };
 
 // FundCategory 下拉选项
@@ -186,6 +200,7 @@ export const errorTitles = {
     // 输入校验
     FUND_CATEGORY_REQUIRED: '缺少基金类型',
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
+    COST_PER_SHARE_INVALID: '成本单价不合法',
     STRATEGY_PARAM_INVALID: '策略参数不合法',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',

@@ -12,6 +12,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.TradingCalendarService;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,6 +39,7 @@ import java.util.List;
  * <p>幂等:同日同计划已有 PENDING 交易则跳过(防重跑重复生成)。
  */
 @Component
+@RequiredArgsConstructor
 public class DcaSuggestionJob {
 
     private static final Logger log = LoggerFactory.getLogger(DcaSuggestionJob.class);
@@ -48,17 +50,7 @@ public class DcaSuggestionJob {
     private final FundTransactionRepository fundTransactionRepository;
     private final TradingCalendarService tradingCalendarService;
 
-    public DcaSuggestionJob(FundDcaPlanRepository fundDcaPlanRepository,
-                            FundRepository fundRepository,
-                            FundTransactionRepository fundTransactionRepository,
-                            TradingCalendarService tradingCalendarService) {
-        this.fundDcaPlanRepository = fundDcaPlanRepository;
-        this.fundRepository = fundRepository;
-        this.fundTransactionRepository = fundTransactionRepository;
-        this.tradingCalendarService = tradingCalendarService;
-    }
-
-    @Scheduled(cron = "0 55 14 * * MON-FRI")
+    @Scheduled(cron = "0 55 14 * * MON-FRI", zone = "Asia/Shanghai")
     public void run() {
         Instant now = Instant.now();
         Instant todayUtc = ChinaTradingDate.toUtcDate(now);

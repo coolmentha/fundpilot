@@ -1,9 +1,9 @@
-import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Empty, Skeleton} from 'antd';
+import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Skeleton} from 'antd';
 import {Link, useNavigate} from 'react-router-dom';
 import {ThunderboltOutlined, FundOutlined, WalletOutlined,
-    RiseOutlined, FallOutlined, SmileOutlined, FrownOutlined} from '@ant-design/icons';
+    RiseOutlined, FallOutlined, SmileOutlined} from '@ant-design/icons';
 import {useFunds, usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
-import {datetime, money, text, signedMoney, pnlColor} from '../constants.js';
+import {datetime, text, signedMoney, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 

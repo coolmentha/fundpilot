@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {App, Button, Card, Form, InputNumber, Modal, Space, Table, Typography} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
 import {useConfirmOperation, useFunds, usePendingSignals} from '../api/hooks.js';
-import {datetime, money, text} from '../constants.js';
+import {datetime, text} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 
 const {Title, Text} = Typography;

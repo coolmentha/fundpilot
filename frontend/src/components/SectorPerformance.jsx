@@ -1,7 +1,7 @@
 import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {useSectorPerformance} from '../api/hooks.js';
-import {signedPercent, compactMoney, signedCompactMoney, pnlColor} from '../constants.js';
+import {signedPercent, signedCompactMoney, pnlColor} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**

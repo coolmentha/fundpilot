@@ -187,6 +187,21 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void create_录现有金额填非正成本单价_抛COST_PER_SHARE_INVALID() {
+        doAnswer(inv -> {
+            Long fundId = inv.getArgument(0);
+            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            return null;
+        }).when(marketDataFetchService).fetchOneFund(anyLong());
+
+        assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
+                "161735", "非法成本基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
+                new BigDecimal("5000"), BigDecimal.ZERO, Instant.now().minusSeconds(60))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.COST_PER_SHARE_INVALID.name());
+    }
+
+    @Test
     void create_录现有金额但无净值历史_抛NAV_HISTORY_EMPTY且基金不落库() {
         // fetchOneFund 不落净值(模拟拉取失败但未抛异常,或新基金无历史)
         // 不加 @Transactional:Service 事务独立运行,抛异常真实回滚,count 才能验证未落库

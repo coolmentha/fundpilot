@@ -1,12 +1,11 @@
 import {useState} from 'react';
-import {Button, Card, DatePicker, Empty, Select, Space, Table, Typography} from 'antd';
-import {Link, useSearchParams} from 'react-router-dom';
+import {Button, Card, DatePicker, Select, Space, Table, Typography} from 'antd';
+import {useSearchParams} from 'react-router-dom';
 import {ReloadOutlined} from '@ant-design/icons';
 import {useFunds, useSignalsRange, useSignalsToday} from '../api/hooks.js';
 import {datetime, text} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import dayjs from 'dayjs';
 
 const {Title, Text} = Typography;
 const {RangePicker} = DatePicker;

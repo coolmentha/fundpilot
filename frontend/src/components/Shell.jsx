@@ -1,4 +1,4 @@
-import {Layout, Menu, Badge, Drawer, Typography} from 'antd';
+import {Layout, Menu, Badge, Drawer} from 'antd';
 import {
     FundOutlined,
     SettingOutlined,
@@ -8,7 +8,6 @@ import {
     LineChartOutlined,
     EllipsisOutlined,
     StockOutlined,
-    FundProjectionScreenOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
@@ -16,7 +15,6 @@ import {usePendingSignals} from '../api/hooks.js';
 import {useState} from 'react';
 
 const {Header, Content, Sider} = Layout;
-const {Text} = Typography;
 
 // 路由 → 页面标题/副标题。Shell 层显示通用标题，详情页标题由页面自身渲染。
 const PAGE_META = {

@@ -146,7 +146,7 @@ public class FundService {
         // 成本单价:用户填则用,不填默认 T-1 净值;>0 校验
         BigDecimal effectiveCostPerShare = costPerShare != null ? costPerShare : navValue;
         if (effectiveCostPerShare.signum() <= 0) {
-            throw new IllegalArgumentException("成本单价必须大于 0");
+            throw new BusinessException(ErrorCode.COST_PER_SHARE_INVALID, "成本单价必须大于 0");
         }
 
         // 建仓交易:INCREASE(对齐 handleBuild),同步确认(反算 shares/nav/confirmTime)

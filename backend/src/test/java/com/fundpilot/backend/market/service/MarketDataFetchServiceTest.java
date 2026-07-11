@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
@@ -68,12 +69,13 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         mockIndexKline();
 
         marketDataFetchService.refreshAll();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
 
         // 范围扩大到 findAll(issue #23)后,DB 残留基金也会被拉取,故不断言全局 count,
         // 只断言 3 只测试基金都落了 snapshot
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), Instant.now())).isPresent();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f2.getId(), Instant.now())).isPresent();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f3.getId(), Instant.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), today)).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f2.getId(), today)).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f3.getId(), today)).isPresent();
     }
 
     @Test
@@ -90,11 +92,12 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         mockIndexKline();
 
         marketDataFetchService.refreshAll();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
 
         // bad 基金不落库,其余两只正常
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(bad.getId(), Instant.now())).isEmpty();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok1.getId(), Instant.now())).isPresent();
-        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok2.getId(), Instant.now())).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(bad.getId(), today)).isEmpty();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok1.getId(), today)).isPresent();
+        assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(ok2.getId(), today)).isPresent();
     }
 
     @Test

@@ -42,7 +42,7 @@ public class TransactionConfirmService {
     private final TakeProfitLifecycleService takeProfitLifecycleService;
 
     /**
-     * 手动确认一笔交易。PENDING→CONFIRMED,用最新净值回填另一侧;转换交易两条腿一起确认。
+     * 手动确认一笔交易。PENDING→CONFIRMED,用交易发生日净值回填另一侧;转换交易两条腿一起确认。
      *
      * @return 本次确认的交易列表(普通交易 1 条;转换 2 条)
      */

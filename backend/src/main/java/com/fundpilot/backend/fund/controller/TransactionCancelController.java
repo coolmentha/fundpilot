@@ -27,7 +27,7 @@ public class TransactionCancelController {
                 .map(FundTransactionView::from).toList());
     }
 
-    /** 手动确认交易:取最新净值回填另一侧,转换交易两条腿联动确认。 */
+    /** 手动确认交易:取交易发生日净值回填另一侧,转换交易两条腿联动确认。 */
     @PostMapping("/api/transactions/{id}/confirm")
     public ApiResponse<List<FundTransactionView>> confirm(@PathVariable Long id) {
         return ApiResponse.ok(transactionConfirmService.confirm(id).stream()

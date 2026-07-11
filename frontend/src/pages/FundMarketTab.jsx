@@ -1,6 +1,6 @@
 import {Card, Descriptions, Skeleton, Typography} from 'antd';
 import {useMarketIndicatorsToday} from '../api/hooks.js';
-import {date, percent, text} from '../constants.js';
+import {date, percent} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import KlineChart from '../components/KlineChart.jsx';
