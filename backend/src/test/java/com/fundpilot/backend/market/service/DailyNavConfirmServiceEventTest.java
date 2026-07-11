@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -12,8 +13,6 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,8 +35,7 @@ class DailyNavConfirmServiceEventTest {
         FundEntity fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("510300");
-        Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate()
-                .atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(navRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(List.of());
         when(navRepository.findNavDatesByFundEntity_Id(1L)).thenReturn(List.of());

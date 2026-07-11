@@ -22,7 +22,7 @@ import java.util.List;
  * 交易流水服务(issue #18 交易合并到基金详情):查某基金交易流水列表 + 手动录入交易。
  * <p>查询按 createdDate 倒序转 {@link FundTransactionView};手动录入绕过信号(signalLog=null),
  * 买入类(INCREASE/TRANSFER_IN/INVEST)写 amount、卖出类(DECREASE/TRANSFER_OUT)写 shares,
- * 另一侧由 NavConfirmJob 当晚净值确认后回填。
+ * 另一侧在交易日净值落库后自动回填。
  */
 @Service
 @RequiredArgsConstructor
@@ -41,7 +41,7 @@ public class FundTransactionService {
 
     /**
      * 手动录入一笔交易(issue #18 手动交易)。绕过信号(signalLog=null),status=PENDING,
-     * 由 NavConfirmJob 当晚净值确认后回填另一侧并转 CONFIRMED。手动卖出不卡 7 天硬约束。
+     * 交易日净值落库后回填另一侧并转 CONFIRMED。手动卖出不卡 7 天硬约束。
      *
      * <p>基金转换(task 07-08):{@code source=TRANSFER_OUT} 且 {@code targetFundId} 非空时,
      * 创建转出(A, TRANSFER_OUT, shares)+ 转入(B, TRANSFER_IN, amount/shares 均空,待确认时回填)两条交易,

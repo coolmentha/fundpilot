@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -102,11 +101,13 @@ public class KlineService {
         if (period == null || "daily".equalsIgnoreCase(period) || "d".equalsIgnoreCase(period)) {
             return daily.stream().map(KlineService::toBar).toList();
         }
-        Map<LocalDate, List<IndexKlineEntity>> groups = new LinkedHashMap<>();
+        Map<Instant, List<IndexKlineEntity>> groups = new LinkedHashMap<>();
         boolean weekly = "weekly".equalsIgnoreCase(period) || "w".equalsIgnoreCase(period);
         for (IndexKlineEntity e : daily) {
-            LocalDate d = e.getTradeDate().atZone(ZoneOffset.UTC).toLocalDate();
-            LocalDate key = weekly ? d.with(DayOfWeek.MONDAY) : d.withDayOfMonth(1);
+            var d = e.getTradeDate().atZone(ZoneOffset.UTC);
+            Instant key = (weekly ? d.with(DayOfWeek.MONDAY) : d.withDayOfMonth(1))
+                    .truncatedTo(java.time.temporal.ChronoUnit.DAYS)
+                    .toInstant();
             groups.computeIfAbsent(key, k -> new ArrayList<>()).add(e);
         }
         List<KlineView.Bar> result = new ArrayList<>(groups.size());

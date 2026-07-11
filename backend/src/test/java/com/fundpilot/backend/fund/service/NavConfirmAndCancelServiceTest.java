@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
@@ -38,7 +39,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        today = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS);
+        today = ChinaTradingDate.toUtcDate(Instant.now());
         fund = new FundEntity();
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");

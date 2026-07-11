@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
@@ -15,8 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,11 +53,10 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
         // 已落库净值最近一期 = 昨天(未确认今天)
-        Instant yesterday = ZonedDateTime.now(ZoneOffset.UTC).minusDays(1)
-                .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
+        Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
         persistNav(fund, yesterday, "1.0000");
         // fundgz 判定:jzrq = 今天(已公布)
-        Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
         when(fundEstimateService.fetchEstimate(fundCode)).thenReturn(Optional.of(
                 new FundEstimateSnapshot(new BigDecimal("0.01"), "today 15:00", today.toString())));
         // pingzhongdata 返回含今日的累计净值序列
@@ -80,7 +78,7 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
         // 已落库今日净值(已确认)
-        Instant today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         persistNav(fund, today, "1.0200");
 
         dailyNavConfirmService.confirmTodayNav();
@@ -95,8 +93,8 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     void 未确认基金_fundgz判定jzrq非今天_跳过_净值未公布() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
-        Instant yesterday = ZonedDateTime.now(ZoneOffset.UTC).minusDays(1)
-                .toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
+        Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
         persistNav(fund, yesterday, "1.0000");
         // fundgz 判定:jzrq = 昨天(今日净值还没公布)
         when(fundEstimateService.fetchEstimate(fundCode)).thenReturn(Optional.of(

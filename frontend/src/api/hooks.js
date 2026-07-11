@@ -1,7 +1,6 @@
 import {useQuery, useMutation, useQueryClient} from '@tanstack/react-query';
 import {get, post, put, del} from './client.js';
 
-const invalidateFunds = (qc) => qc.invalidateQueries({queryKey: ['funds']});
 const realtimeQueryOptions = {
     refetchInterval: 30000,
     refetchIntervalInBackground: true,
@@ -83,7 +82,7 @@ export function useStrategyRecommendation(fundId) {
         enabled: !!fundId,
     });
 }
-const invalidateStrategies = (fundId) => {
+const useInvalidateStrategies = (fundId) => {
     const qc = useQueryClient();
     return () => {
         qc.invalidateQueries({queryKey: ['strategies', fundId]});
@@ -91,18 +90,18 @@ const invalidateStrategies = (fundId) => {
     };
 };
 export function useCreateStrategy(fundId) {
-    const onSuccess = invalidateStrategies(fundId);
+    const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/strategies`, body), onSuccess});
 }
 export function useUpdateStrategy(fundId) {
-    const onSuccess = invalidateStrategies(fundId);
+    const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({
         mutationFn: ({id, body}) => put(`/api/strategies/${id}`, body),
         onSuccess,
     });
 }
 export function useStrategyAction(fundId) {
-    const onSuccess = invalidateStrategies(fundId);
+    const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({
         mutationFn: ({id, action}) => post(`/api/strategies/${id}/${action}`),
         onSuccess,
@@ -124,7 +123,7 @@ export function useActiveDcaPlan(fundId) {
         enabled: !!fundId,
     });
 }
-const invalidateDcaPlans = (fundId) => {
+const useInvalidateDcaPlans = (fundId) => {
     const qc = useQueryClient();
     return () => {
         qc.invalidateQueries({queryKey: ['dca-plans', fundId]});
@@ -132,18 +131,18 @@ const invalidateDcaPlans = (fundId) => {
     };
 };
 export function useCreateDcaPlan(fundId) {
-    const onSuccess = invalidateDcaPlans(fundId);
+    const onSuccess = useInvalidateDcaPlans(fundId);
     return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/dca-plans`, body), onSuccess});
 }
 export function useUpdateDcaPlan(fundId) {
-    const onSuccess = invalidateDcaPlans(fundId);
+    const onSuccess = useInvalidateDcaPlans(fundId);
     return useMutation({
         mutationFn: ({id, body}) => put(`/api/dca-plans/${id}`, body),
         onSuccess,
     });
 }
 export function useDcaPlanAction(fundId) {
-    const onSuccess = invalidateDcaPlans(fundId);
+    const onSuccess = useInvalidateDcaPlans(fundId);
     return useMutation({
         mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
         onSuccess,

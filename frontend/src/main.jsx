@@ -12,13 +12,12 @@ import {errorTitle} from './constants.js';
 // 深色金紫方案（ui-ux-pro-max 推荐 + 可访问性修正）。
 // muted 文字 #94A3B8 保证 4.5:1（AA）；正文 #F8FAFC 对比 ~16:1。
 
-// 全局错误通知模块句柄:由 AppInit 在 AntdApp 上下文内注入 useApp().notification。
 // 设计原则(ui-ux-pro-max):错误须可被读屏 announced、信息清晰可看清、区分可恢复业务错误与系统异常。
-let globalNotification = null;
 
 // 业务错误码:需要用户行动(改参数/重试),用 error 级别,停留 6s 够看清数字后自动消失。
 const BUSINESS_ERROR_CODES = new Set([
     'PLANNED_AMOUNT_EXCEEDS_LIMIT', 'FUND_CATEGORY_REQUIRED', 'MANUAL_TRANSACTION_FIELD_REQUIRED',
+    'COST_PER_SHARE_INVALID',
     'TRANSACTION_ALREADY_CONFIRMED', 'TRANSACTION_ALREADY_CANCELLED',
     'INVALID_SIGNAL_TYPE', 'MISSING_TRIGGER_TIER', 'INVALID_TRIGGER_TIER',
     'MISSING_ACTUAL_AMOUNT', 'MISSING_ACTUAL_SHARES', 'UNSUPPORTED_SELL_REASON',
@@ -28,17 +27,15 @@ const BUSINESS_ERROR_CODES = new Set([
     'SIGNAL_LOG_NOT_FOUND', 'MISSING_FUND_IDENTITY', 'ENTITY_NOT_FOUND',
 ]);
 
-function showGlobalError(err, opts = {}) {
+function showGlobalError(notification, err, opts = {}) {
     const isApiError = err instanceof ApiError;
     const code = isApiError ? err.code : null;
     const detail = err?.message || '操作失败';
     const isBusiness = code && BUSINESS_ERROR_CODES.has(code);
     const title = errorTitle(code);
     const type = isBusiness ? 'error' : 'warning';
-    const n = globalNotification;
-    if (!n) return; // 上下文未就绪,降级不展示(极少触发)
     const notificationKey = opts.key || (!isBusiness && isApiError ? 'system-api-error' : undefined);
-    n.open({
+    notification.open({
         // key 去重:同一 query 反复失败(轮询)只更新不刷屏;mutation 不传 key,每次独立提示。
         ...(notificationKey ? {key: notificationKey} : {}),
         type,
@@ -53,10 +50,9 @@ function showGlobalError(err, opts = {}) {
     });
 }
 
-// AppInit:在 AntdApp 内取 notification 注入全局句柄,并持有 QueryClientProvider 配置 onError。
+// AppInit:在 AntdApp 内取 notification,并持有 QueryClientProvider 配置 onError。
 function AppInit() {
     const {notification} = AntdApp.useApp();
-    globalNotification = notification;
     // queryClient 在组件内创建,确保 onError 闭包能引用 showGlobalError。
     const [queryClient] = React.useState(() => new QueryClient({
         // 全局查询错误处理:仅「初次加载失败」(无缓存数据)弹通知,后台 refetch/轮询失败静默
@@ -64,7 +60,7 @@ function AppInit() {
         queryCache: new QueryCache({
             onError: (error, query) => {
                 if (query.state.data !== undefined) return; // 有 stale 数据,静默
-                showGlobalError(error);
+                showGlobalError(notification, error);
             },
         }),
         defaultOptions: {
@@ -72,7 +68,7 @@ function AppInit() {
             mutations: {
                 // 全局 mutation 失败提示:所有 mutate/mutateAsync 抛错时弹 notification,
                 // 调用点无需逐个 catch(表单校验失败等业务自定义错误由调用点自行处理)
-                onError: showGlobalError,
+                onError: (error) => showGlobalError(notification, error),
             },
         },
     }));

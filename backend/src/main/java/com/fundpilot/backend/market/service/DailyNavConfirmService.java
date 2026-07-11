@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
@@ -15,9 +16,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -50,7 +48,7 @@ public class DailyNavConfirmService {
      */
     @Transactional
     public void confirmTodayNav() {
-        LocalDate today = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate();
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         List<FundEntity> funds = fundRepository.findAll();
         int confirmed = 0;
         int skipped = 0;
@@ -72,7 +70,7 @@ public class DailyNavConfirmService {
     /**
      * @return true=本次新落库了当日净值;false=已确认或未公布,跳过
      */
-    private boolean confirmOne(FundEntity fund, LocalDate today) {
+    private boolean confirmOne(FundEntity fund, Instant today) {
         // 已确认(最近 navDate = 今天)→ 跳过
         if (isTodayNavConfirmed(fund.getId(), today)) {
             return false;
@@ -92,24 +90,23 @@ public class DailyNavConfirmService {
     }
 
     /** 最近一期 navDate 是否 = 今天(已确认)。 */
-    private boolean isTodayNavConfirmed(Long fundId, LocalDate today) {
+    private boolean isTodayNavConfirmed(Long fundId, Instant today) {
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
         if (latestTwo.isEmpty()) {
             return false;
         }
-        LocalDate latestDate = latestTwo.get(0).getNavDate().atZone(ZoneOffset.UTC).toLocalDate();
-        return latestDate.equals(today);
+        return latestTwo.get(0).getNavDate().equals(today);
     }
 
     /** fundgz 的 jzrq(基准净值日期)是否 = 今天(说明当日净值已公布)。 */
-    private boolean isJzrqToday(FundEstimateSnapshot estimate, LocalDate today) {
+    private boolean isJzrqToday(FundEstimateSnapshot estimate, Instant today) {
         String baseNavDate = estimate.baseNavDate();
         if (baseNavDate == null || baseNavDate.isBlank()) {
             return false;
         }
         try {
-            // jzrq 格式 "2026-06-28" 或 Instant.toString,取前 10 位作 LocalDate
-            LocalDate jzrq = LocalDate.parse(baseNavDate.substring(0, Math.min(10, baseNavDate.length())));
+            // jzrq 格式 "2026-06-28" 或 Instant.toString,统一转为 UTC 00:00 日期标签。
+            Instant jzrq = Instant.parse(baseNavDate.substring(0, 10) + "T00:00:00Z");
             return jzrq.equals(today);
         } catch (RuntimeException ex) {
             return false;

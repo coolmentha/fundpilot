@@ -11,8 +11,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -36,8 +34,8 @@ public class SignalQueryService {
 
     /** 日期范围信号(from/to 为日期字符串,UTC 0 点起算,含 from 含 to)。 */
     public List<SignalLogView> range(Long fundId, String from, String to) {
-        Instant start = LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant end = LocalDate.parse(to).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant start = Instant.parse(from + "T00:00:00Z");
+        Instant end = Instant.parse(to + "T00:00:00Z").plus(1, java.time.temporal.ChronoUnit.DAYS);
         return signalLogRepository.findByFundEntity_IdAndSignalDateBetween(fundId, start, end)
                 .stream().map(SignalLogView::from).toList();
     }

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {App, Button, Card, Select, Space, Typography} from 'antd';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
 
@@ -26,13 +26,8 @@ export default function SettingsPage() {
     const {message} = App.useApp();
     const {data: config, isLoading} = useUserConfig();
     const updateConfig = useUpdateUserConfig();
-    const [selected, setSelected] = useState([]);
-
-    useEffect(() => {
-        if (config?.watchedIndices) {
-            setSelected(config.watchedIndices);
-        }
-    }, [config]);
+    const [selectedOverride, setSelectedOverride] = useState(null);
+    const selected = selectedOverride ?? config?.watchedIndices ?? [];
 
     const save = async () => {
         await updateConfig.mutateAsync({watchedIndices: selected});
@@ -51,7 +46,7 @@ export default function SettingsPage() {
                         mode="multiple"
                         placeholder="选择关注的大盘指数"
                         value={selected}
-                        onChange={setSelected}
+                        onChange={setSelectedOverride}
                         options={INDEX_OPTIONS}
                         optionFilterProp="label"
                         style={{width: '100%'}}

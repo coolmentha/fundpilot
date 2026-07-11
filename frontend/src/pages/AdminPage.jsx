@@ -12,7 +12,7 @@ export default function AdminPage() {
         try {
             const result = await adminAction.mutateAsync(action);
             message.success(successMsg(result));
-        } catch (e) {
+        } catch {
             // 错误由全局 mutation onError 弹 notification,这里不重复提示
         }
     };
