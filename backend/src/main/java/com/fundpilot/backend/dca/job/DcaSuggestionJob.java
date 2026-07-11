@@ -90,16 +90,11 @@ public class DcaSuggestionJob {
             return false;
         }
 
-        FundTransactionEntity tx = new FundTransactionEntity();
-        tx.setFundEntity(fund);
-        tx.setSource(FundTransactionSource.INVEST);
-        tx.setAmount(plan.getAmount());
-        tx.setShares(null);
-        tx.setNav(null);
-        tx.setStatus(FundTransactionStatus.PENDING);
-        tx.setTradeDate(now);
-        tx.setDcaPlanId(plan.getId());
-        fundTransactionRepository.save(tx);
+        int inserted = fundTransactionRepository.insertDcaPendingIfAbsent(
+                fund.getId(), plan.getAmount(), now, plan.getId());
+        if (inserted == 0) {
+            return false;
+        }
         log.info("定投交易生成 fund_id={} plan_id={} amount={}", fundId, plan.getId(), plan.getAmount());
         return true;
     }

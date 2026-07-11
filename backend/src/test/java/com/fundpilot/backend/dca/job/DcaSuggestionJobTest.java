@@ -174,6 +174,23 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void 数据库唯一索引_同计划同北京时间自然日原子拒绝重复() {
+        FundEntity fund = persistFund();
+        Long planId = activateDaily(fund);
+        Instant morning = Instant.parse("2026-07-08T01:00:00Z");
+        Instant afternoon = Instant.parse("2026-07-08T07:00:00Z");
+
+        int first = fundTransactionRepository.insertDcaPendingIfAbsent(
+                fund.getId(), new BigDecimal("1000"), morning, planId);
+        int second = fundTransactionRepository.insertDcaPendingIfAbsent(
+                fund.getId(), new BigDecimal("1000"), afternoon, planId);
+
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+    }
+
+    @Test
+    @Transactional
     void 同日交易已确认_重跑也不重复生成() {
         FundEntity fund = persistFund();
         activateDaily(fund);

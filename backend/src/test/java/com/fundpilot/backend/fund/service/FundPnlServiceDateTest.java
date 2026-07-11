@@ -105,6 +105,7 @@ class FundPnlServiceDateTest {
     private static FundNavHistoryEntity nav(String date, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setNavDate(Instant.parse(date));
+        entity.setNav(new BigDecimal(accumulatedNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
         return entity;
     }

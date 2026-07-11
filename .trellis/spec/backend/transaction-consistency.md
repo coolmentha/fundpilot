@@ -38,7 +38,7 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - `NavConfirmJob` 次日 03:00 用 `ChinaTradingDate.previousUtcDate(clock.instant())` 传前一业务自然日标签。
 - `tradeDate` 是业务交易发生时间，`createdDate` 只是审计创建时间；所有新建交易路径必须显式写 `tradeDate`。
 - `NavConfirmService` 优先按每笔 PENDING 交易的 `tradeDate` 选择净值日；仅存量 `tradeDate` 为空时回退 `createdDate`，Job 参数是最后降级值。
-- 手动确认与自动确认都必须按交易 `tradeDate` 对应的北京时间自然日取累计净值，禁止使用最新净值替代。
+- 手动确认与自动确认都必须按交易 `tradeDate` 对应的北京时间自然日取单位净值；累计净值仅用于复权分析，禁止用于真实交易份额、金额和市值。
 - 手动转换的转出、转入两腿必须复用同一 `tradeDate`；流水按 `coalesce(tradeDate, createdDate)` 倒序。
 - 净值历史新增行提交后发布 `FundNavUpdatedEvent`，`AFTER_COMMIT` 监听器按基金推进 PENDING 交易，确认失败不得回滚净值。
 - 应用启动时和每小时第 5 分钟运行待确认补偿；按基金使用独立事务，单只失败不阻断其他基金。
@@ -53,6 +53,9 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - 转换任一腿已确认时，不允许撤销另一腿。
 - ADJUST_OUT 按 FIFO 缩减 open lot，不算费、不写赎回明细；ADJUST_IN 不建收费 lot。
 - 初始持仓同步确认时必须创建 open lot，`confirmTime` 使用最终 `openedAt`，且不重复扣申购费。
+- lot 的 `acquireDate` 和赎回持有期终点使用 `tradeDate`；仅存量空值才回退 `createdDate/confirmTime`。
+- V17 以一次性事务重放 CONFIRMED 账本；失败整体回滚并阻止应用带半完成账本启动，完成后不得重复执行。
+- 同一定投计划同一北京时间自然日由部分唯一索引最终兜底，Job 使用 `ON CONFLICT DO NOTHING` 原子生成。
 - 卖出存在 lot 缺口时，只有卖出前事实持仓中确有未跟踪份额，缺口才按零赎回费降级。
 - 交易日历使用数据库 `ON CONFLICT DO NOTHING` 原子插入，不使用“先查后插”实现幂等。
 - 日常 `sync()` 空表全量、非空表只写最大日期之后；管理 `syncFull()` 遍历全量以补历史缺口。

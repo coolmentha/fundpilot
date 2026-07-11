@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.client.FundFeeSnapshot;
 import com.fundpilot.backend.fund.client.RedemptionTier;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundLotEntity;
+import com.fundpilot.backend.fund.entity.FundLotRedemptionEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.repository.FundLotRedemptionRepository;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -66,6 +68,7 @@ class TransactionConfirmSupportTest {
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("665.6667"));
 
         FundTransactionEntity tx = buyTx(new BigDecimal("1000"), Instant.parse("2026-07-05T00:00:00Z"));
+        tx.setTradeDate(Instant.parse("2026-07-03T06:00:00Z"));
         support.onBuyConfirmed(tx, new BigDecimal("1.5"));
 
         assertThat(tx.getFee()).isEqualByComparingTo(new BigDecimal("1.500"));
@@ -73,7 +76,14 @@ class TransactionConfirmSupportTest {
         // shares = 998.5 / 1.5 (DECIMAL64)
         assertThat(tx.getShares()).isEqualByComparingTo(
                 new BigDecimal("998.5").divide(new BigDecimal("1.5"), MATH));
-        verify(fundLotRepository).save(any(FundLotEntity.class));
+        ArgumentCaptor<FundLotEntity> lotCaptor = ArgumentCaptor.forClass(FundLotEntity.class);
+        verify(fundLotRepository).save(lotCaptor.capture());
+        FundLotEntity lot = lotCaptor.getValue();
+        assertThat(lot.getAcquireDate()).isEqualTo(tx.getTradeDate());
+        assertThat(lot.getAcquireCostPerShare()).isEqualByComparingTo(
+                tx.getAmount().divide(tx.getShares(), MATH));
+        assertThat(fund.getCostPerShare()).isEqualByComparingTo(
+                tx.getAmount().divide(tx.getShares(), MATH));
     }
 
     @Test
@@ -131,6 +141,27 @@ class TransactionConfirmSupportTest {
         assertThat(tx.getAmount()).isEqualByComparingTo(new BigDecimal("157.6000"));
         assertThat(lot.getRemainingShares()).isEqualByComparingTo(BigDecimal.ZERO);
         verify(fundLotRedemptionRepository).saveAll(anyList());
+    }
+
+    @Test
+    void onSellConfirmed_持有期使用交易发生日而非确认日() {
+        when(fundFeeService.getFeeByFundId(1L)).thenReturn(new FundFeeSnapshot(null, List.of(
+                new RedemptionTier(7, new BigDecimal("0.015")),
+                new RedemptionTier(null, BigDecimal.ZERO)), null));
+        FundLotEntity lot = lot(100, Instant.parse("2026-06-30T00:00:00Z"));
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
+
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-20T00:00:00Z"));
+        tx.setTradeDate(Instant.parse("2026-07-05T00:00:00Z"));
+        support.onSellConfirmed(tx, new BigDecimal("1.6"));
+
+        assertThat(tx.getFee()).isEqualByComparingTo("2.400");
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<Iterable> redemptionCaptor = ArgumentCaptor.forClass(Iterable.class);
+        verify(fundLotRedemptionRepository).saveAll(redemptionCaptor.capture());
+        List<FundLotRedemptionEntity> redemptions = new java.util.ArrayList<>();
+        redemptionCaptor.getValue().forEach(row -> redemptions.add((FundLotRedemptionEntity) row));
+        assertThat(redemptions).singleElement().satisfies(row -> assertThat(row.getHoldingDays()).isEqualTo(5));
     }
 
     @Test

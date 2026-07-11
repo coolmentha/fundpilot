@@ -37,10 +37,10 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void confirm_买入交易_用交易发生日净值回填shares() {
+    void confirm_买入交易_使用单位净值而非累计净值回填shares() {
         FundEntity fund = persistFund();
-        navHistory(fund, "1.26");
-        // 买入 1000 元,净值 1.26 → shares = 1000/1.26 ≈ 793.65
+        navHistory(fund, "1.25", "2.50");
+        // 真实成交按单位净值 1.25；累计净值 2.50 仅供复权分析。
         FundTransactionEntity tx = persistPendingTx(fund, FundTransactionSource.INCREASE, new BigDecimal("1000"), null);
 
         List<FundTransactionEntity> confirmed = transactionConfirmService.confirm(tx.getId());
@@ -48,8 +48,8 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
         assertThat(confirmed).hasSize(1);
         FundTransactionEntity reloaded = fundTransactionRepository.findById(tx.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(FundTransactionStatus.CONFIRMED);
-        assertThat(reloaded.getNav()).isEqualByComparingTo("1.26");
-        assertThat(reloaded.getShares()).isCloseTo(new BigDecimal("793.65"), within(new BigDecimal("0.01")));
+        assertThat(reloaded.getNav()).isEqualByComparingTo("1.25");
+        assertThat(reloaded.getShares()).isCloseTo(new BigDecimal("800"), within(new BigDecimal("0.01")));
         assertThat(reloaded.getConfirmTime()).isNotNull();
     }
 
@@ -164,10 +164,14 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     private void navHistory(FundEntity fund, String accumulatedNav) {
+        navHistory(fund, accumulatedNav, accumulatedNav);
+    }
+
+    private void navHistory(FundEntity fund, String unitNav, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setFundEntity(fund);
         entity.setNavDate(ChinaTradingDate.toUtcDate(Instant.now()));
-        entity.setNav(new BigDecimal(accumulatedNav));
+        entity.setNav(new BigDecimal(unitNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
         fundNavHistoryRepository.save(entity);
     }

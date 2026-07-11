@@ -5,6 +5,9 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.signal.enums.SignalType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -63,4 +66,16 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
 
     /** 同一 SignalLog 只能生成一笔未软删交易。 */
     boolean existsBySignalLogEntity_Id(Long signalLogId);
+
+    /** 定投并发最终兜底：数据库唯一索引冲突时返回 0，不污染当前事务。 */
+    @Modifying
+    @Query(value = "insert into fund_transaction(fund_id,amount,status,source,trade_date,dca_plan_id," +
+            "version,created_date,updated_date) values(:fundId,:amount,'PENDING','INVEST',:tradeDate,:planId," +
+            "0,now(),now()) on conflict (dca_plan_id, ((trade_date at time zone 'Asia/Shanghai')::date)) " +
+            "where dca_plan_id is not null and trade_date is not null and deleted_date is null do nothing",
+            nativeQuery = true)
+    int insertDcaPendingIfAbsent(@Param("fundId") Long fundId,
+                                 @Param("amount") java.math.BigDecimal amount,
+                                 @Param("tradeDate") java.time.Instant tradeDate,
+                                 @Param("planId") Long planId);
 }

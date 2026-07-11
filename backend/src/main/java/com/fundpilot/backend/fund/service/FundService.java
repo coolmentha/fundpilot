@@ -135,12 +135,12 @@ public class FundService {
         // 最近一期已公布净值(findTop2...Desc 取最近一条;新建基金拉取异步,此处取已落库的)
         List<FundNavHistoryEntity> recent = fundNavHistoryRepository
                 .findTop2ByFundEntity_IdOrderByNavDateDesc(fund.getId());
-        if (recent.isEmpty() || recent.get(0).getAccumulatedNav() == null
-                || recent.get(0).getAccumulatedNav().signum() <= 0) {
+        if (recent.isEmpty() || recent.get(0).getNav() == null
+                || recent.get(0).getNav().signum() <= 0) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
                     "基金 " + fund.getId() + " 无净值历史,无法确认现有金额持仓,请先补净值或稍后建仓");
         }
-        BigDecimal navValue = recent.get(0).getAccumulatedNav();
+        BigDecimal navValue = recent.get(0).getNav();
         Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
 
         // 成本单价:用户填则用,不填默认 T-1 净值;>0 校验

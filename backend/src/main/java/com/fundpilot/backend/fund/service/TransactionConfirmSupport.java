@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -47,7 +48,7 @@ public class TransactionConfirmSupport {
      * <p>调用前需已设 tx.amount / tx.nav / tx.confirmTime;调用后 tx.shares / tx.fee / tx.feeRate 被填。
      *
      * @param tx       交易实体(PENDING→CONFIRMED,confirmTime 已设)
-     * @param navValue 当日累计净值
+     * @param navValue 交易日单位净值
      */
     public void onBuyConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
@@ -66,14 +67,14 @@ public class TransactionConfirmSupport {
         FundLotEntity lot = new FundLotEntity();
         lot.setFundEntity(tx.getFundEntity());
         lot.setAcquireTxId(tx.getId());
-        lot.setAcquireDate(tx.getConfirmTime());
+        lot.setAcquireDate(TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime()));
         lot.setAcquireShares(shares);
         lot.setRemainingShares(shares);
-        lot.setAcquireCostPerShare(netAmount.divide(shares, MATH));
+        lot.setAcquireCostPerShare(tx.getAmount().divide(shares, MATH));
         fundLotRepository.save(lot);
 
-        // 加权更新 costPerShare(用 netAmount = 扣费后金额)
-        updateCostPerShare(tx, netAmount);
+        // 申购费属于用户实际投入成本，成本分子使用完整交易金额。
+        updateCostPerShare(tx, tx.getAmount());
         log.info("买入确认扣费 fund={} amount={} fee={} rate={} netAmount={} shares={} nav={}",
                 fundId, tx.getAmount(), feeAmount, discountRate, netAmount, shares, navValue);
     }
@@ -85,7 +86,7 @@ public class TransactionConfirmSupport {
         FundLotEntity lot = new FundLotEntity();
         lot.setFundEntity(tx.getFundEntity());
         lot.setAcquireTxId(tx.getId());
-        lot.setAcquireDate(tx.getConfirmTime());
+        lot.setAcquireDate(TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime()));
         lot.setAcquireShares(tx.getShares());
         lot.setRemainingShares(tx.getShares());
         lot.setAcquireCostPerShare(acquireCostPerShare);
@@ -97,7 +98,7 @@ public class TransactionConfirmSupport {
      * <p>调用前需已设 tx.shares / tx.nav / tx.confirmTime;调用后 tx.amount / tx.fee / tx.feeRate 被填。
      *
      * @param tx       交易实体(PENDING→CONFIRMED,confirmTime 已设)
-     * @param navValue 当日累计净值
+     * @param navValue 交易日单位净值
      */
     public void onSellConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
@@ -130,9 +131,10 @@ public class TransactionConfirmSupport {
                 break;
             }
             BigDecimal consume = lot.getRemainingShares().min(remaining);
+            Instant sellTradeTime = TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime());
             long holdingDays = ChronoUnit.DAYS.between(
                     lot.getAcquireDate().atZone(ZoneOffset.UTC).toLocalDate(),
-                    tx.getConfirmTime().atZone(ZoneOffset.UTC).toLocalDate());
+                    sellTradeTime.atZone(ZoneOffset.UTC).toLocalDate());
             BigDecimal rate = lookupRedemptionRate(ladder, (int) holdingDays);
             totalFee = totalFee.add(consume.multiply(navValue, MATH).multiply(rate, MATH));
 
@@ -210,7 +212,7 @@ public class TransactionConfirmSupport {
      * 卖出不改单价(由调用方保证仅在买入时调)。
      *
      * @param tx          买入交易(shares 已填)
-     * @param effectiveAmount 扣费后金额(netAmount)
+     * @param effectiveAmount 用户实际投入金额(含申购费)
      */
     private void updateCostPerShare(FundTransactionEntity tx, BigDecimal effectiveAmount) {
         Long fundId = tx.getFundEntity().getId();
