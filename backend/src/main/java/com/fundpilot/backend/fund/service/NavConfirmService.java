@@ -31,8 +31,8 @@ import java.util.List;
  *   <li>转账两腿(TRANSFER_IN/TRANSFER_OUT)按各自方向回填(direction 同 INCREASE/DECREASE)</li>
  * </ol>
  *
- * <h3>为什么用 accumulatedNav 而非 nav</h3>
- * 累计净值已含分红再投资,份额/金额计算应基于累计净值(ADR-0001:峰值用 accumulatedNav,口径一致)。
+ * <h3>交易净值口径</h3>
+ * 真实申购、赎回按单位净值 {@code nav} 结算；累计净值只用于复权行情分析。
  *
  * <h3>costPerShare 加权更新(ADR-0013)</h3>
  * INCREASE/TRANSFER_IN/INVEST 确认后同一事务内加权更新 FundEntity.costPerShare。
@@ -136,10 +136,10 @@ public class NavConfirmService {
         FundNavHistoryEntity nav = fundNavHistoryRepository
                 .findByFundEntity_IdAndNavDateBetween(fundId, dayStart, dayEnd).stream()
                 .findFirst().orElse(null);
-        if (nav == null || nav.getAccumulatedNav() == null || nav.getAccumulatedNav().signum() <= 0) {
+        if (nav == null || nav.getNav() == null || nav.getNav().signum() <= 0) {
             return null;
         }
-        return nav.getAccumulatedNav();
+        return nav.getNav();
     }
 
     private boolean hasRequiredInput(FundTransactionEntity tx) {

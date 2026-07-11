@@ -86,6 +86,23 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void 单位净值与累计净值不同时_市值和总盈亏使用单位净值() {
+        FundEntity fund = persistHoldingFund();
+        navHistory(fund, daysAgo(1), "1.00", "2.00");
+        navHistory(fund, daysAgo(0), "1.05", "2.10");
+        txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1000", FundTransactionStatus.CONFIRMED);
+        fund.setCostPerShare(new BigDecimal("1.00"));
+        fundRepository.save(fund);
+
+        FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
+
+        assertThat(pnl.dailyChangePct()).isCloseTo(new BigDecimal("0.05"), within(new BigDecimal("0.0001")));
+        assertThat(pnl.holdingAmount()).isEqualByComparingTo("1050");
+        assertThat(pnl.totalPnl()).isEqualByComparingTo("50");
+    }
+
+    @Test
+    @Transactional
     void 无净值历史_盈亏字段为null() {
         FundEntity fund = persistHoldingFund();
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1200", FundTransactionStatus.CONFIRMED);
@@ -254,10 +271,14 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
     }
 
     private void navHistory(FundEntity fund, Instant navDate, String accumulatedNav) {
+        navHistory(fund, navDate, accumulatedNav, accumulatedNav);
+    }
+
+    private void navHistory(FundEntity fund, Instant navDate, String unitNav, String accumulatedNav) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setFundEntity(fund);
         entity.setNavDate(navDate);
-        entity.setNav(new BigDecimal(accumulatedNav));
+        entity.setNav(new BigDecimal(unitNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
         fundNavHistoryRepository.save(entity);
     }

@@ -77,7 +77,7 @@ class NavConfirmServiceStateTest {
                 .thenReturn(List.of(tx));
         when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
                 1L, friday, friday.plus(1, ChronoUnit.DAYS)))
-                .thenReturn(List.of(nav(fund, "1.25")));
+                .thenReturn(List.of(nav(fund, "1.25", "2.50")));
 
         int confirmed = service.confirmPendingTransactions(monday);
 
@@ -103,9 +103,14 @@ class NavConfirmServiceStateTest {
     }
 
     private FundNavHistoryEntity nav(FundEntity fund, String value) {
+        return nav(fund, value, value);
+    }
+
+    private FundNavHistoryEntity nav(FundEntity fund, String unitNav, String accumulatedNav) {
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
         nav.setFundEntity(fund);
-        nav.setAccumulatedNav(new BigDecimal(value));
+        nav.setNav(new BigDecimal(unitNav));
+        nav.setAccumulatedNav(new BigDecimal(accumulatedNav));
         return nav;
     }
 }

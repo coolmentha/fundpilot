@@ -106,6 +106,7 @@ class TransactionConfirmServiceStateTest {
     private FundNavHistoryEntity nav(FundEntity fund, String value) {
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
         nav.setFundEntity(fund);
+        nav.setNav(new BigDecimal(value));
         nav.setAccumulatedNav(new BigDecimal(value));
         return nav;
     }

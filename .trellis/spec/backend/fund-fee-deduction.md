@@ -90,9 +90,9 @@ shares       = netAmount ÷ navValue        // 用扣费后净额除净值,不�
 tx.shares    = shares
 tx.fee       = feeAmount
 tx.feeRate   = discountRate.signum() > 0 ? discountRate : null
-new FundLotEntity(acquireDate = tx.confirmTime, acquireShares = shares,
-                  remainingShares = shares, acquireCostPerShare = navValue)
-updateCostPerShare(tx, netAmount)   // 注意:用 netAmount,不是 amount
+new FundLotEntity(acquireDate = tx.tradeDate, acquireShares = shares,
+                  remainingShares = shares, acquireCostPerShare = tx.amount / shares)
+updateCostPerShare(tx, tx.amount)   // 申购费属于用户实际投入成本
 ```
 
 ### 卖出确认 FIFO 公式(`onSellConfirmed`)
@@ -107,7 +107,7 @@ remaining = tx.shares
 for lot in lots (FIFO):
     if remaining <= 0: break
     consume      = min(remaining, lot.remainingShares)
-    holdingDays  = 日历日(lot.acquireDate → tx.confirmTime, UTC)
+    holdingDays  = 北京时间自然日(lot.acquireDate → tx.tradeDate)
     rate         = lookupRedemptionRate(ladder, holdingDays)
     totalFee    += consume × nav × rate
     lot.remainingShares -= consume
@@ -246,7 +246,7 @@ if (tx.isBuy()) {
 (用户手动确认)原本各自内联 `tx.setShares(...)` / `tx.setAmount(...)` / `updateCostPerShare(...)`。
 
 **决策**:抽出 `@Component TransactionConfirmSupport`,两条路径都调 `onBuyConfirmed` /
-`onSellConfirmed`。`updateCostPerShare` 也移入 support(买入用 netAmount 而非 amount)。
+`onSellConfirmed`。`updateCostPerShare` 也移入 support(份额用 netAmount，成本分子用完整 amount)。
 **禁止**在确认 service 内联写算费逻辑,否则两路径会漂移(本任务前的现状)。
 
 ### 历史数据不回追 + V14 FIFO 回填

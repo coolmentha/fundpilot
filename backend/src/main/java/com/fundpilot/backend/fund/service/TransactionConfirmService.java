@@ -156,7 +156,7 @@ public class TransactionConfirmService {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
                     "基金 #" + transaction.getFundEntity().getId() + " 缺少交易日 " + dayStart + " 的净值");
         }
-        BigDecimal nav = rows.get(0).getAccumulatedNav();
+        BigDecimal nav = rows.get(0).getNav();
         if (nav == null || nav.signum() <= 0) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
                     "基金 #" + transaction.getFundEntity().getId() + " 交易日净值为空或非正,无法确认");

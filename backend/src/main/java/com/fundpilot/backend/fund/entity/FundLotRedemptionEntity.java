@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 
 /**
  * 卖出消耗 lot 记录:每笔卖出按 FIFO 拆成多行(每行对应一个被消耗的 {@link FundLotEntity})。
- * <p>记录 {@link #holdingDays}(卖出确认日 − lot.acquireDate 自然日)和 {@link #redemptionRate},
+ * <p>记录 {@link #holdingDays}(卖出交易发生日 − lot.acquireDate 自然日)和 {@link #redemptionRate},
  * 供校验与前端展示赎回费明细。
  */
 @Entity
@@ -31,7 +31,7 @@ public class FundLotRedemptionEntity extends AbstractEntity {
     @Column(name = "shares_consumed", nullable = false)
     private BigDecimal sharesConsumed;
 
-    /** 持有天数(卖出确认日 − lot.acquireDate 的自然日)。 */
+    /** 持有天数(卖出交易发生日 − lot.acquireDate 的北京时间自然日)。 */
     @Column(name = "holding_days", nullable = false)
     private Integer holdingDays;
 
