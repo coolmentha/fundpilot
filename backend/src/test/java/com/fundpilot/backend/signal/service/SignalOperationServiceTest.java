@@ -10,6 +10,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
+import com.fundpilot.backend.market.repository.TradingCalendarRepository;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -21,10 +22,15 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,12 +41,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * BUILD/ADD 仍兼容处理(存量 SignalLog),只写交易不再推进 tierNAddedAt。
  */
 @Transactional
+@Import(SignalOperationServiceTest.FixedClockConfig.class)
 class SignalOperationServiceTest extends AbstractIntegrationTest {
+
+    private static final Instant NOW = Instant.parse("2026-07-12T02:00:00Z");
+    private static final Instant LATEST_TRADING_DAY = Instant.parse("2026-07-10T00:00:00Z");
 
     @Autowired SignalOperationService service;
     @Autowired SignalLogRepository signalLogRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundPositionService fundPositionService;
+    @Autowired TradingCalendarRepository tradingCalendarRepository;
     @Autowired EntityManager entityManager;
 
     private FundEntity fund;
@@ -48,6 +59,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        tradingCalendarRepository.insertTradingDayIfAbsent(LATEST_TRADING_DAY);
         fund = new FundEntity();
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
@@ -66,7 +78,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         SignalLogEntity log = new SignalLogEntity();
         log.setFundEntity(fund);
         log.setFundStrategyEntity(strategy);
-        log.setSignalDate(Instant.now());
+        log.setSignalDate(LATEST_TRADING_DAY);
         log.setSignalType(type);
         log.setTriggerTier(tier);
         log.setReason(reason);
@@ -245,5 +257,57 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已回应");
         assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
+    }
+
+    @Test
+    void ignoreSignal_持久化忽略时间() {
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
+        entityManager.flush();
+
+        service.ignoreSignal(fund.getId(), signal.getId());
+
+        entityManager.flush();
+        entityManager.clear();
+        SignalLogEntity reloaded = signalLogRepository.findById(signal.getId()).orElseThrow();
+        assertThat(reloaded.getIgnoredDate()).isNotNull();
+    }
+
+    @Test
+    void confirmOperation_最近交易日前的普通信号已过期() {
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
+        signal.setSignalDate(Instant.parse("2026-07-09T00:00:00Z"));
+        entityManager.flush();
+
+        assertThatThrownBy(() -> service.confirmOperation(fund.getId(), signal.getId(),
+                new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("100"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(
+                        com.fundpilot.backend.exception.ErrorCode.SIGNAL_EXPIRED.name());
+    }
+
+    @Test
+    void confirmOperation_绑定TRIGGERED的旧止盈信号仍可确认() {
+        fund.setStatus(FundStatus.HOLDING);
+        SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.TRAILING_STOP);
+        signal.setSignalDate(Instant.parse("2026-07-09T00:00:00Z"));
+        entityManager.flush();
+        strategy.setTakeProfitPhase(com.fundpilot.backend.fund.enums.TakeProfitPhase.TRIGGERED);
+        strategy.setTriggeredSignalId(signal.getId());
+        entityManager.flush();
+
+        FundTransactionEntity transaction = service.confirmOperation(fund.getId(), signal.getId(),
+                new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("100")));
+
+        assertThat(transaction.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        assertThat(transaction.getSignalLogEntity().getId()).isEqualTo(signal.getId());
+    }
+
+    @TestConfiguration
+    static class FixedClockConfig {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(NOW, java.time.ZoneOffset.UTC);
+        }
     }
 }

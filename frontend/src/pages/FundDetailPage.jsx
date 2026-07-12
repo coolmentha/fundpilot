@@ -9,6 +9,7 @@ import SignalTab from './FundSignalTab.jsx';
 import MarketTab from './FundMarketTab.jsx';
 import FundTransactionTab from './FundTransactionTab.jsx';
 import FundDcaTab from './FundDcaTab.jsx';
+import QueryErrorState from '../components/QueryErrorState.jsx';
 
 const {Title, Text} = Typography;
 
@@ -19,10 +20,11 @@ const {Title, Text} = Typography;
 export default function FundDetailPage() {
     const {fundId} = useParams();
     const id = Number(fundId);
-    const {data: fund, isLoading} = useFund(id);
+    const {data: fund, isLoading, isError, refetch} = useFund(id);
     const {data: feeRates} = useFundFeeRates(id);
 
     if (isLoading) return <Card><Skeleton active paragraph={{rows: 6}}/></Card>;
+    if (isError) return <Card><QueryErrorState onRetry={refetch} description="基金详情加载失败"/></Card>;
     if (!fund) return <Card><Title level={4}>基金不存在</Title></Card>;
 
     const items = [

@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -30,13 +31,15 @@ class DailyNavConfirmServiceEventTest {
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         DailyNavConfirmService service = new DailyNavConfirmService(
-                fundRepository, navRepository, estimateService, marketDataSource, eventPublisher);
+                fundRepository, navRepository, estimateService, marketDataSource, eventPublisher,
+                new RequiresNewTransactionExecutor());
 
         FundEntity fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("510300");
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(fundRepository.findById(1L)).thenReturn(Optional.of(fund));
         when(navRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(List.of());
         when(navRepository.findNavDatesByFundEntity_Id(1L)).thenReturn(List.of());
         when(estimateService.fetchEstimate("510300")).thenReturn(Optional.of(

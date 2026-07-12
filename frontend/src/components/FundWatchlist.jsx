@@ -3,6 +3,7 @@ import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link, useNavigate} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
 import {signedMoney, signedPercent, compactMoney, pnlColor, text} from '../constants.js';
+import {buildFundWatchlistRows} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -18,30 +19,15 @@ export default function FundWatchlist() {
     const navigate = useNavigate();
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
-    const {data: estimates, isFetched: estimatesFetched} = useFundEstimates(codes);
+    const {
+        data: estimates,
+        isFetched: estimatesFetched,
+        isError: estimatesError,
+        refetch: refetchEstimates,
+    } = useFundEstimates(codes);
 
     // 合并基金档案 + 实时估值。失败态优先,防止两个轮询接口刷新时序不同导致旧估值回退。
-    const rows = (funds || []).map((f) => {
-        const est = estimates?.[f.fundCode];
-        const estimateFetchFailed = !!f.estimateFetchFailed
-            || (estimatesFetched && f.isEstimated && !est);
-        const changePct = estimateFetchFailed ? null : (est?.estimatedChangePct ?? f.dailyChangePct ?? null);
-        const isEstimated = !estimateFetchFailed && !!est;
-        return {
-            key: f.id,
-            id: f.id,
-            fundCode: f.fundCode,
-            fundName: f.fundName,
-            fundSubType: f.fundSubType,
-            changePct,
-            isEstimated,
-            estimateFetchFailed,
-            estimateTime: est?.estimateTime,
-            holdingShares: f.holdingShares,
-            dailyPnl: f.dailyPnl,
-            status: f.status,
-        };
-    });
+    const rows = buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError});
 
     const columns = [
         {
@@ -130,6 +116,9 @@ export default function FundWatchlist() {
 
     return (
         <div className="fund-watchlist">
+            {estimatesError && (
+                <QueryErrorState onRetry={refetchEstimates} description="实时估值加载失败，已隐藏旧估值"/>
+            )}
             <Table
                 dataSource={rows}
                 columns={columns}

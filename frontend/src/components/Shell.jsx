@@ -23,7 +23,7 @@ const PAGE_META = {
     '/funds': {title: '我的基金', subtitle: '维护基金档案与计划仓位'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
-    '/settings': {title: '用户配置', subtitle: '总可投资资金、关注指数等账户参数'},
+    '/settings': {title: '用户配置', subtitle: '关注指数等行情偏好'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
     '/monitor': {title: '监控', subtitle: '系统运行面板'},
 };

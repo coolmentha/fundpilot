@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {date, datetime} from './constants.js';
+import {date, datetime, errorTitle} from './constants.js';
 
 describe('Instant formatting', () => {
     it('uses Asia/Shanghai for date time', () => {
@@ -13,5 +13,12 @@ describe('Instant formatting', () => {
     it('keeps empty and invalid values readable', () => {
         expect(datetime(null)).toBe('-');
         expect(datetime('invalid')).toBe('-');
+    });
+});
+
+describe('API error titles', () => {
+    it('describes admin authentication failures', () => {
+        expect(errorTitle('ADMIN_UNAUTHORIZED')).toBe('管理凭据无效');
+        expect(errorTitle('ADMIN_AUTH_NOT_CONFIGURED')).toBe('管理端鉴权未配置');
     });
 });

@@ -6,8 +6,8 @@
 ## 信号与交易动作
 
 **SignalType（信号类型）**:
-系统每日 14:50 在第三批行情快照完成后，对绑定 `EFFECTIVE` 策略的基金评估并固化进 `SignalLogEntity`，站在**用户视角的策略动作**。四值：
-`NONE`（无建议）/ `BUILD`（建仓）/ `ADD`（加仓）/ `SELL`（卖出）。
+系统在交易日 14:50 第三批行情快照完成后，对绑定 `EFFECTIVE` 策略的基金评估并固化进 `SignalLogEntity`，站在**用户视角的策略动作**。枚举为四值：
+`NONE`（无建议）/ `BUILD`（建仓）/ `ADD`（加仓）/ `SELL`（卖出）；当前引擎只生成 `NONE/SELL`，`BUILD/ADD` 仅为存量日志兼容保留。
 _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 
 **FundTransactionSource（交易来源）**:
@@ -113,12 +113,11 @@ _Avoid_: "本期半自动灌入"的旧定位（已升级为真实接入）
 数据源维度的基金分类，区别于策略参数维度的 `FundCategory`（宽基/行业/主动/混合）。四值：`ETF`（场内交易，可直接拿自身 K 线）/
 `INDEX`（指数基金，看跟踪指数）/ `INDEX_ENHANCED`（指数增强，看跟踪指数）/ `ACTIVE`（主动管理，无跟踪指数）。自动识别只走名称启发式（方法
 A），未命中兜底为 ACTIVE（方法 C）；**不做持仓股票与指数成分股重合度反推**（方法 B，本期跳过，留给将来）。
-_Avoid_: 把 `fundSubType` 和 `FundCategory` 合并（用途不同：前者决定数据源和逻辑止损判定路径，后者决定默认档位和硬约束上限）
+_Avoid_: 把 `fundSubType` 和 `FundCategory` 合并（用途不同：前者决定数据源和逻辑止损判定路径，后者决定定投止盈推荐参数）
 
 **跟踪/基准指数代码（benchmarkIndexCode）**:
-`FundEntity` 上的可空字段。指数/ETF/指数增强基金填实际跟踪指数（如 `000300.SH`），主动/混合基金默认填沪深300 `000300.SH` 但*
-*逻辑止损不使用**（主动基金走单周跌幅路径）。识别流程：名称关键词命中 → 命中失败兜底为 ACTIVE（方法 A + C）。空值降级时逻辑止损不出信号（
-`signalType=NONE, reason=INSUFFICIENT_MARKET_DATA`）。漏网基金由用户在建仓时手动补 `benchmarkIndexCode`。
+`FundEntity` 上的可空字段。指数/ETF/指数增强基金填实际跟踪指数（如 `000300.SH`）；主动/混合基金不要求跟踪指数，逻辑止损只使用年线与周 MACD。识别流程：名称关键词命中 → 命中失败兜底为 ACTIVE（方法 A + C）。指数类空值降级时逻辑止损不出信号（
+`signalType=NONE, reason=INSUFFICIENT_MARKET_DATA`）。漏网指数基金由用户手动补 `benchmarkIndexCode`。
 _Avoid_: 主动基金强制要求填跟踪指数（主动基金本质上没有跟踪标的）；本期做持仓股票重合度反推（方法 B，复杂度高，留给将来）
 
 **基金类型自动识别（fundCategory 自动回填）**:
@@ -127,7 +126,7 @@ _Avoid_: 主动基金强制要求填跟踪指数（主动基金本质上没有�
 识别规则：指数类基金（ETF/INDEX/INDEX_ENHANCED）名称含宽基指数词（沪深300/中证500/创业板/上证50/科创50/中证1000）→ 宽基；含行业词
 （半导体/医药/新能源/消费/军工/银行等）→ 行业；两者都没命中 → 宽基。主动类基金（ACTIVE）名称含"混合/灵活配置/平衡" → 混合；否则 → 主动。
 `rawName`（东方财富"稳健成长型"等风格描述）**不参与 fundCategory 判定**——它描述投资风格不描述资产类别，无法可靠区分宽基 vs 行业。
-_Avoid_: 把识别不准的字段留 null（fundCategory 为 null 时默认档位和硬约束上限查不出来，阻塞后续流程）；用 rawName 判 fundCategory
+_Avoid_: 把识别不准的字段留 null（fundCategory 为 null 时无法选择止盈推荐参数，fundSubType 为 null 时策略分支不明确）；用 rawName 判 fundCategory
 
 **基金字典搜索（FundDict Search）**:
 新建基金时用户只需输代码或名称二选一，搜索框自动补全候选列表（多候选时让用户选，A/C 份额作为不同条目并列出），选中一条后 code/name/

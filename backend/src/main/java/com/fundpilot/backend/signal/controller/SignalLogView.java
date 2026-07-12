@@ -2,6 +2,7 @@ package com.fundpilot.backend.signal.controller;
 
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
+import com.fundpilot.backend.signal.enums.SignalActionStatus;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.valueobject.Measure;
 
@@ -36,9 +37,11 @@ public record SignalLogView(
         Measure suggestedMeasure,
         SignalReason reason,
         String warnings,
-        String hardConstraintBreaches) {
+        String hardConstraintBreaches,
+        SignalActionStatus actionStatus,
+        Instant ignoredDate) {
 
-    public static SignalLogView from(SignalLogEntity log) {
+    public static SignalLogView from(SignalLogEntity log, SignalActionStatus actionStatus) {
         return new SignalLogView(
                 log.getId(),
                 log.getFundEntity() != null ? log.getFundEntity().getId() : null,
@@ -51,6 +54,8 @@ public record SignalLogView(
                 log.getSuggestedMeasure(),
                 log.getReason(),
                 log.getWarnings(),
-                log.getHardConstraintBreaches());
+                log.getHardConstraintBreaches(),
+                actionStatus,
+                log.getIgnoredDate());
     }
 }

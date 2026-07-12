@@ -32,7 +32,7 @@ class NavConfirmJobTest {
         job.run();
 
         ArgumentCaptor<Instant> date = ArgumentCaptor.forClass(Instant.class);
-        verify(navConfirmService).confirmPendingTransactions(date.capture());
+        verify(navConfirmService).confirmPendingTransactionsIsolated(date.capture());
         assertThat(date.getValue()).isEqualTo(expected);
     }
 

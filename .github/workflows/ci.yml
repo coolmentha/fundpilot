@@ -1,6 +1,5 @@
-# CI:push / PR 时跑后端测试 + 前端构建验证。
+# CI:push / PR 时跑后端测试 + 前端 lint/test/build 验证。
 # 后端 mvn verify 含 testcontainers 集成测试(GitHub runner 自带 Docker)。
-# 前端无 lint/test(项目本就没有),只验 build 能产出 dist。
 name: CI
 
 on:
@@ -55,8 +54,8 @@ jobs:
           path: backend/target/site/jacoco/
           retention-days: 7
 
-  frontend-build:
-    name: Frontend build
+  frontend-verify:
+    name: Frontend verify
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -73,6 +72,12 @@ jobs:
 
       - name: Install deps
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

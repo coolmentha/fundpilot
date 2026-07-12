@@ -14,12 +14,13 @@ import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -59,8 +60,16 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     @Autowired
     ApplicationContext applicationContext;
 
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @AfterEach
+    void cleanUp() {
+        jdbcTemplate.execute("TRUNCATE TABLE fund CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE index_kline CASCADE");
+    }
+
     @Test
-    @Transactional
     void refreshAll_三只基金全部落库_snapshot_表_3_行() {
         FundEntity f1 = persistEffectiveFund("161725", "1.000300");
         FundEntity f2 = persistEffectiveFund("161726", "1.000300");
@@ -79,7 +88,6 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void fetchBatch_单只基金拉取抛异常_其他基金继续落库() {
         FundEntity ok1 = persistEffectiveFund("161728", "1.000300");
         FundEntity bad = persistEffectiveFund("161729", "1.000300");
@@ -101,7 +109,6 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void refreshAll_同日重跑_不新增行_幂等覆盖() {
         persistEffectiveFund("161731", "1.000300");
         mockNavHistory();
@@ -117,7 +124,6 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void refreshAll_拉取后_净值历史落库fund_nav_history() {
         FundEntity fund = persistEffectiveFund("161732", "1.000300");
         mockNavHistory();
@@ -131,7 +137,6 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void refreshAll_同日重跑_净值历史不重复落库() {
         FundEntity fund = persistEffectiveFund("161733", "1.000300");
         mockNavHistory();
@@ -148,7 +153,6 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void refreshAll_未建仓基金无策略_也拉取落库净值历史() {
         // issue #23:范围扩大到所有未软删基金,无 EFFECTIVE 策略的观察池基金也要落净值历史
         FundEntity fund = new FundEntity();

@@ -1,6 +1,8 @@
 package com.fundpilot.backend.signal.service;
 
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundSubType;
@@ -25,6 +27,8 @@ import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.strategy.repository.FundStrategyRepository;
 import com.fundpilot.backend.strategy.service.DisciplineStrategyService;
 import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
+import com.fundpilot.backend.strategy.service.support.CapitalContext;
+import com.fundpilot.backend.strategy.service.support.MarketIndicators;
 import com.fundpilot.backend.strategy.service.support.TakeProfitEvaluation;
 import com.fundpilot.backend.strategy.service.support.SignalResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,7 +82,18 @@ class SignalGenerationServiceTest {
         service = new SignalGenerationService(fundStrategyRepository, fundRepository,
                 fundNavHistoryRepository, fundTransactionRepository, fundPositionService,
                 marketIndicatorProvider, signalLogRepository,
-                tradingCalendarService, disciplineStrategyService, takeProfitLifecycleService);
+                tradingCalendarService, disciplineStrategyService, takeProfitLifecycleService,
+                new RequiresNewTransactionExecutor());
+        when(tradingCalendarService.isTradingDay(any())).thenReturn(true);
+    }
+
+    @Test
+    void 非交易日_不查询策略也不生成信号() {
+        when(tradingCalendarService.isTradingDay(any())).thenReturn(false);
+
+        service.generateDailySignals(DATE);
+
+        verifyNoInteractions(fundStrategyRepository, signalLogRepository);
     }
 
     /** 构造一只基金 + EFFECTIVE 策略,并 stub buildCapitalContext 所需的全部查询。返回 strategy(可取 fund)。 */
@@ -96,8 +111,13 @@ class SignalGenerationServiceTest {
         when(fundStrategyRepository.findByFundEntity_IdAndStatus(id, StrategyParamStatus.EFFECTIVE))
                 .thenReturn(Optional.of(strategy));
         when(fundNavHistoryRepository.findPeakAccumulatedNav(id)).thenReturn(Optional.of(new BigDecimal("1.0")));
+        FundNavHistoryEntity latestNav = new FundNavHistoryEntity();
+        latestNav.setNav(new BigDecimal("1.0"));
+        latestNav.setAccumulatedNav(new BigDecimal("1.0"));
+        when(fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(id))
+                .thenReturn(Optional.of(latestNav));
         when(fundPositionService.getHoldingShares(id)).thenReturn(BigDecimal.ZERO);
-        when(takeProfitLifecycleService.prepare(eq(fund), eq(strategy), any(), any(), any()))
+        when(takeProfitLifecycleService.prepare(eq(fund), eq(strategy), any(), any(), any(), any()))
                 .thenReturn(TakeProfitEvaluation.disabled());
         // MIN_HOLD_DAYS 只看最近一笔已确认买入类交易。
         FundTransactionEntity confirmTx = new FundTransactionEntity();
@@ -145,6 +165,36 @@ class SignalGenerationServiceTest {
     }
 
     @Test
+    void generateDailySignals_止盈使用同一期单位与累计净值() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        FundNavHistoryEntity latestNav = new FundNavHistoryEntity();
+        latestNav.setNav(new BigDecimal("0.80"));
+        latestNav.setAccumulatedNav(new BigDecimal("1.50"));
+        when(fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(Optional.of(latestNav));
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(1L, DATE))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("1.10"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong()))
+                .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
+
+        service.generateDailySignals(DATE);
+
+        verify(takeProfitLifecycleService).prepare(
+                eq(strategy.getFundEntity()), eq(strategy),
+                eq(new BigDecimal("0.80")), eq(new BigDecimal("1.50")), any(), eq(DATE));
+        ArgumentCaptor<MarketIndicators> marketCaptor = ArgumentCaptor.forClass(MarketIndicators.class);
+        ArgumentCaptor<CapitalContext> capitalCaptor = ArgumentCaptor.forClass(CapitalContext.class);
+        verify(disciplineStrategyService).evaluateSignal(
+                eq(strategy.getFundEntity()), eq(strategy), marketCaptor.capture(), capitalCaptor.capture(),
+                eq(DATE), anyLong());
+        assertThat(marketCaptor.getValue().currentNav()).isEqualByComparingTo("1.10");
+        assertThat(capitalCaptor.getValue().currentUnitNav()).isEqualByComparingTo("0.80");
+        assertThat(capitalCaptor.getValue().currentAccumulatedNav()).isEqualByComparingTo("1.50");
+    }
+
+    @Test
     void generateDailySignals_snapshot缺失落NONE_INSUFFICIENT_MARKET_DATA() {
         stubFund(1L, FundStatus.HOLDING);
         when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
@@ -168,13 +218,16 @@ class SignalGenerationServiceTest {
         when(disciplineStrategyService.evaluateSignal(eq(s1.getFundEntity()), eq(s1), any(), any(), any(), anyLong()))
                 .thenReturn(SignalResult.none(SignalReason.NO_STRATEGY));
         SignalLogEntity stale = new SignalLogEntity();
-        when(signalLogRepository.findByFundEntity_IdAndSignalDateBetween(eq(1L), any(), any()))
+        when(signalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+                eq(1L), any(), any()))
                 .thenReturn(List.of(stale));
 
         service.generateDailySignals(DATE);
 
-        verify(signalLogRepository).delete(stale); // 软删旧行(SQLDelete 重定向为 UPDATE deleted_date)
-        verify(signalLogRepository).save(any(SignalLogEntity.class)); // 写新行
+        var order = inOrder(signalLogRepository);
+        order.verify(signalLogRepository).deleteAll(List.of(stale));
+        order.verify(signalLogRepository).flush(); // 先让软删 UPDATE 生效，释放同日唯一索引
+        order.verify(signalLogRepository).save(any(SignalLogEntity.class));
     }
 
     @Test
@@ -189,9 +242,34 @@ class SignalGenerationServiceTest {
                         SignalReason.LOGIC_BROKEN, List.of(), List.of()));
         SignalLogEntity responded = new SignalLogEntity();
         responded.setId(88L);
-        when(signalLogRepository.findByFundEntity_IdAndSignalDateBetween(eq(1L), any(), any()))
+        when(signalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+                eq(1L), any(), any()))
                 .thenReturn(List.of(responded));
         when(fundTransactionRepository.existsBySignalLogEntity_Id(88L)).thenReturn(true);
+
+        service.generateDailySignals(DATE);
+
+        verify(signalLogRepository, never()).delete(any(SignalLogEntity.class));
+        verify(signalLogRepository, never()).save(any(SignalLogEntity.class));
+        verify(fundStrategyRepository).save(strategy);
+    }
+
+    @Test
+    void generateDailySignals_当日信号已忽略_重跑保留原信号() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(eq(1L), eq(DATE)))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("0.8"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong()))
+                .thenReturn(new SignalResult(SignalType.SELL, null, null, null,
+                        SignalReason.LOGIC_BROKEN, List.of(), List.of()));
+        SignalLogEntity ignored = new SignalLogEntity();
+        ignored.setId(89L);
+        ignored.setIgnoredDate(DATE.plusSeconds(60));
+        when(signalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+                eq(1L), any(), any()))
+                .thenReturn(List.of(ignored));
 
         service.generateDailySignals(DATE);
 
@@ -254,7 +332,7 @@ class SignalGenerationServiceTest {
                 fundStrategyRepository, fundRepository, fundNavHistoryRepository,
                 fundTransactionRepository, fundPositionService, marketIndicatorProvider,
                 signalLogRepository, tradingCalendarService, new DisciplineStrategyService(),
-                takeProfitLifecycleService);
+                takeProfitLifecycleService, new RequiresNewTransactionExecutor());
 
         realService.generateDailySignals(DATE);
 

@@ -10,9 +10,10 @@ import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -47,8 +48,15 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     @Autowired
     FundNavHistoryRepository fundNavHistoryRepository;
 
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @AfterEach
+    void cleanUp() {
+        jdbcTemplate.execute("TRUNCATE TABLE fund CASCADE");
+    }
+
     @Test
-    @Transactional
     void 未确认基金_fundgz判定jzrq今天_拉pingzhongdata落库当日累计净值() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
@@ -69,11 +77,10 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         // 今日累计净值已落库
         List<FundNavHistoryEntity> navs = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
         assertThat(navs).extracting(FundNavHistoryEntity::getAccumulatedNav)
-                .contains(new BigDecimal("1.0100"));
+                .anyMatch(value -> value.compareTo(new BigDecimal("1.0100")) == 0);
     }
 
     @Test
-    @Transactional
     void 已确认基金_最近navDate今天_跳过不重复拉取() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
@@ -89,7 +96,6 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @Transactional
     void 未确认基金_fundgz判定jzrq非今天_跳过_净值未公布() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);

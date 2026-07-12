@@ -1,6 +1,7 @@
 package com.fundpilot.backend.signal.service;
 
 import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
@@ -31,7 +32,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -77,17 +77,25 @@ public class SignalGenerationService {
     private final TradingCalendarService tradingCalendarService;
     private final DisciplineStrategyService disciplineStrategyService;
     private final TakeProfitLifecycleService takeProfitLifecycleService;
+    private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
 
     /**
      * 生成指定日期的全量信号。每只 EFFECTIVE 基金落一行 SignalLog(含 NONE 兜底)。
      * 单只基金异常不影响其他基金。
      */
-    @Transactional
     public void generateDailySignals(Instant date) {
+        Instant day = ChinaTradingDate.toUtcDate(date);
+        if (!tradingCalendarService.isTradingDay(day)) {
+            log.info("非交易日跳过信号生成 date={}", day);
+            return;
+        }
         List<Long> fundIds = fundStrategyRepository.findEffectiveFundIds();
         for (Long fundId : fundIds) {
             try {
-                generateForFund(fundId, date);
+                requiresNewTransactionExecutor.execute(() -> {
+                    generateForFund(fundId, date);
+                    return null;
+                });
             } catch (RuntimeException ex) {
                 log.error("信号生成失败 fund_id={} date={}: {}", fundId, date, ex.getMessage(), ex);
             }
@@ -129,17 +137,20 @@ public class SignalGenerationService {
         }
 
         List<SignalLogEntity> existingSignals =
-                signalLogRepository.findByFundEntity_IdAndSignalDateBetween(fundId, dayStart, dayEnd);
-        boolean responded = existingSignals.stream()
-                .anyMatch(existing -> fundTransactionRepository.existsBySignalLogEntity_Id(existing.getId()));
-        if (responded) {
-            log.info("跳过已回应信号重跑 fund_id={} signal_date={}", fundId, dayStart);
+                signalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+                        fundId, dayStart, dayEnd);
+        boolean handled = existingSignals.stream()
+                .anyMatch(existing -> existing.getIgnoredDate() != null
+                        || fundTransactionRepository.existsBySignalLogEntity_Id(existing.getId()));
+        if (handled) {
+            log.info("跳过已处理信号重跑 fund_id={} signal_date={}", fundId, dayStart);
             fundStrategyRepository.save(strategy);
             return;
         }
 
         // 未回应信号允许覆盖，保证管理员补跑可以使用最新行情重新计算。
-        existingSignals.forEach(signalLogRepository::delete);
+        signalLogRepository.deleteAll(existingSignals);
+        signalLogRepository.flush();
         SignalLogEntity log = toSignalLogEntity(fund, strategy, result, dayStart);
         signalLogRepository.save(log);
         if (result.reason() == SignalReason.TRAILING_STOP) {
@@ -165,19 +176,27 @@ public class SignalGenerationService {
     private CapitalContext buildCapitalContext(FundEntity fund, FundStrategyEntity strategy,
                                                MarketIndicators market, Instant lastBuyConfirmTime,
                                                Instant today) {
-        BigDecimal currentNav = market.currentNav() != null ? market.currentNav() : BigDecimal.ZERO;
-        BigDecimal peakNav = fundNavHistoryRepository.findPeakAccumulatedNav(fund.getId()).orElse(currentNav);
+        Optional<FundNavHistoryEntity> latestNav = fundNavHistoryRepository
+                .findFirstByFundEntity_IdOrderByNavDateDesc(fund.getId());
+        BigDecimal currentUnitNav = latestNav.map(FundNavHistoryEntity::getNav).orElse(null);
+        BigDecimal currentAccumulatedNav = latestNav.map(FundNavHistoryEntity::getAccumulatedNav).orElse(null);
+        BigDecimal accumulatedNavFallback = market.currentNav() != null ? market.currentNav() : BigDecimal.ZERO;
+        BigDecimal peakNav = fundNavHistoryRepository.findPeakAccumulatedNav(fund.getId())
+                .orElse(accumulatedNavFallback);
         BigDecimal holdingPeakNav = fund.getOpenedAt() != null
-                ? fundNavHistoryRepository.findPeakAccumulatedNavSince(fund.getId(), fund.getOpenedAt()).orElse(currentNav)
+                ? fundNavHistoryRepository.findPeakAccumulatedNavSince(fund.getId(), fund.getOpenedAt())
+                        .orElse(accumulatedNavFallback)
                 : peakNav;
         BigDecimal holdingShares = fundPositionService.getHoldingShares(fund.getId());
         TakeProfitEvaluation takeProfit = takeProfitLifecycleService.prepare(
-                fund, strategy, currentNav, holdingShares, today);
+                fund, strategy, currentUnitNav, currentAccumulatedNav, holdingShares, today);
         return new CapitalContext(
                 peakNav,
                 holdingPeakNav,
                 holdingShares,
                 lastBuyConfirmTime,
+                currentUnitNav,
+                currentAccumulatedNav,
                 takeProfit.floatingProfit(),
                 takeProfit.matureRedeemableShares(),
                 takeProfit.evaluationEnabled());

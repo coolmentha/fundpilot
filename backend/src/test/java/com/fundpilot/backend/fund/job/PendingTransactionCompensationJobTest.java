@@ -3,12 +3,14 @@ package com.fundpilot.backend.fund.job;
 import com.fundpilot.backend.fund.service.PendingTransactionCompensationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class PendingTransactionCompensationJobTest {
 
@@ -25,5 +27,16 @@ class PendingTransactionCompensationJobTest {
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
         assertThat(scheduled.cron()).isEqualTo("0 5 * * * *");
         assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");
+    }
+
+    @Test
+    void deploymentValidationMode_skipsStartupWrite() {
+        PendingTransactionCompensationService service = mock(PendingTransactionCompensationService.class);
+        PendingTransactionCompensationJob job = new PendingTransactionCompensationJob(service);
+        ReflectionTestUtils.setField(job, "deploymentValidationMode", true);
+
+        job.compensateOnStartup();
+
+        verifyNoInteractions(service);
     }
 }

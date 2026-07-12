@@ -20,7 +20,7 @@ public class AdminTransactionController {
 
     @PostMapping("/api/admin/transactions/confirm-nav")
     public ApiResponse<Map<String, Object>> confirmNav() {
-        int confirmed = navConfirmService.confirmPendingTransactions(Instant.now());
+        int confirmed = navConfirmService.confirmPendingTransactionsIsolated(Instant.now());
         return ApiResponse.ok(Map.of("confirmed", confirmed));
     }
 }

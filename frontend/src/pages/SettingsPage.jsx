@@ -1,6 +1,8 @@
 import {useState} from 'react';
 import {App, Button, Card, Select, Space, Typography} from 'antd';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
+import QueryErrorState from '../components/QueryErrorState.jsx';
+import {isQueryDataReady} from '../querySafety.js';
 
 const {Title, Text} = Typography;
 
@@ -24,12 +26,14 @@ const INDEX_OPTIONS = [
 
 export default function SettingsPage() {
     const {message} = App.useApp();
-    const {data: config, isLoading} = useUserConfig();
+    const {data: config, isLoading, isError, refetch} = useUserConfig();
     const updateConfig = useUpdateUserConfig();
     const [selectedOverride, setSelectedOverride] = useState(null);
     const selected = selectedOverride ?? config?.watchedIndices ?? [];
+    const configReady = isQueryDataReady({data: config, isLoading, isError});
 
     const save = async () => {
+        if (!configReady) return;
         await updateConfig.mutateAsync({watchedIndices: selected});
         message.success('关注指数已更新');
     };
@@ -51,10 +55,13 @@ export default function SettingsPage() {
                         optionFilterProp="label"
                         style={{width: '100%'}}
                         loading={isLoading}
+                        disabled={!configReady}
                         maxTagCount="responsive"
                     />
                 </div>
-                <Button type="primary" loading={updateConfig.isPending} onClick={save}>保存配置</Button>
+                {isError && <QueryErrorState onRetry={refetch} description="用户配置加载失败"/>}
+                <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
+                        onClick={save}>保存配置</Button>
             </Space>
         </Card>
     );

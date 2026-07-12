@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
@@ -38,7 +39,7 @@ class MarketDataFetchServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         MarketDataFetchService service = new MarketDataFetchService(
                 fundRepository, navRepository, marketDataSource, snapshotService, indexKlineRepository, clock,
-                eventPublisher);
+                eventPublisher, new RequiresNewTransactionExecutor());
 
         FundEntity fund = new FundEntity();
         fund.setId(1L);

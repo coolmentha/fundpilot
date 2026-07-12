@@ -12,6 +12,7 @@ import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,12 +36,16 @@ class SignalOperationServiceUnitTest {
 
     @Mock SignalLogRepository signalLogRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
+    @Mock SignalActionabilityService signalActionabilityService;
+    @Mock TakeProfitLifecycleService takeProfitLifecycleService;
 
     private SignalOperationService service;
 
     @BeforeEach
     void setUp() {
-        service = new SignalOperationService(signalLogRepository, fundTransactionRepository);
+        service = new SignalOperationService(signalLogRepository, fundTransactionRepository,
+                signalActionabilityService, takeProfitLifecycleService,
+                Clock.fixed(Instant.parse("2026-07-10T08:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test
@@ -67,6 +75,7 @@ class SignalOperationServiceUnitTest {
     void confirmOperation_SELL交易保留SignalLog关联() {
         SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.TRAILING_STOP);
         when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
+        when(signalActionabilityService.isActionable(signal)).thenReturn(true);
         when(fundTransactionRepository.save(any(FundTransactionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -78,6 +87,31 @@ class SignalOperationServiceUnitTest {
         assertThat(transaction.getShares()).isEqualByComparingTo("100");
         assertThat(transaction.getSignalLogEntity()).isSameAs(signal);
         verify(fundTransactionRepository).existsBySignalLogEntity_Id(11L);
+    }
+
+    @Test
+    void confirmOperation_已过期信号拒绝() {
+        SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.LOGIC_BROKEN);
+        when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
+        when(signalActionabilityService.isActionable(signal)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.confirmOperation(1L, 11L,
+                new ConfirmOperationRequest(11L, null, new BigDecimal("100"))))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.SIGNAL_EXPIRED.name()));
+    }
+
+    @Test
+    void ignoreSignal_写忽略时间并通知止盈生命周期() {
+        SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.TRAILING_STOP);
+        when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
+        when(signalLogRepository.save(signal)).thenReturn(signal);
+        when(signalActionabilityService.isActionable(signal)).thenReturn(true);
+
+        SignalLogEntity result = service.ignoreSignal(1L, 11L);
+
+        assertThat(result.getIgnoredDate()).isEqualTo(Instant.parse("2026-07-10T08:00:00Z"));
+        verify(takeProfitLifecycleService).onSignalIgnored(signal);
     }
 
     private static SignalLogEntity signal(Long signalId, Long fundId, SignalType type, SignalReason reason) {

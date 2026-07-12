@@ -33,13 +33,15 @@ public class TakeProfitLifecycleService {
     private final TradingCalendarService tradingCalendarService;
 
     public TakeProfitEvaluation prepare(FundEntity fund, FundStrategyEntity strategy,
-                                        BigDecimal currentNav, BigDecimal holdingShares, Instant today) {
-        if (!hasPositive(currentNav) || !hasPositive(holdingShares) || !hasPositive(fund.getCostPerShare())) {
+                                        BigDecimal currentUnitNav, BigDecimal currentAccumulatedNav,
+                                        BigDecimal holdingShares, Instant today) {
+        if (!hasPositive(currentUnitNav) || !hasPositive(currentAccumulatedNav)
+                || !hasPositive(holdingShares) || !hasPositive(fund.getCostPerShare())) {
             return TakeProfitEvaluation.disabled();
         }
 
         BigDecimal holdingCost = fund.getCostPerShare().multiply(holdingShares, MATH);
-        BigDecimal marketValue = currentNav.multiply(holdingShares, MATH);
+        BigDecimal marketValue = currentUnitNav.multiply(holdingShares, MATH);
         BigDecimal floatingProfit = marketValue.subtract(holdingCost).max(BigDecimal.ZERO);
         BigDecimal overallReturn = floatingProfit.divide(holdingCost, MATH);
 
@@ -60,7 +62,7 @@ public class TakeProfitLifecycleService {
             strategy.setCooldownStartedAt(null);
             strategy.setTriggeredSignalId(null);
             if (overallReturn.compareTo(strategy.getProfitActivationPercent()) >= 0) {
-                arm(strategy, currentNav, today);
+                arm(strategy, currentAccumulatedNav, today);
             } else {
                 strategy.setTakeProfitPhase(TakeProfitPhase.ACCUMULATING);
                 strategy.setCycleStartedAt(null);
@@ -71,13 +73,14 @@ public class TakeProfitLifecycleService {
 
         if (phase == TakeProfitPhase.ACCUMULATING) {
             if (overallReturn.compareTo(strategy.getProfitActivationPercent()) >= 0) {
-                arm(strategy, currentNav, today);
+                arm(strategy, currentAccumulatedNav, today);
             }
             return TakeProfitEvaluation.disabled();
         }
 
-        if (strategy.getCyclePeakNav() == null || currentNav.compareTo(strategy.getCyclePeakNav()) > 0) {
-            strategy.setCyclePeakNav(currentNav);
+        if (strategy.getCyclePeakNav() == null
+                || currentAccumulatedNav.compareTo(strategy.getCyclePeakNav()) > 0) {
+            strategy.setCyclePeakNav(currentAccumulatedNav);
             return TakeProfitEvaluation.disabled();
         }
 
@@ -124,6 +127,22 @@ public class TakeProfitLifecycleService {
         fundStrategyRepository.save(strategy);
     }
 
+    /** 忽略当前止盈信号等价于放弃本次执行，恢复 ARMED 等待新的回撤。 */
+    public void onSignalIgnored(com.fundpilot.backend.signal.entity.SignalLogEntity signal) {
+        if (signal.getReason() != SignalReason.TRAILING_STOP || signal.getFundStrategyEntity() == null) {
+            return;
+        }
+        FundStrategyEntity strategy = signal.getFundStrategyEntity();
+        if (strategy.getTakeProfitPhase() != TakeProfitPhase.TRIGGERED
+                || strategy.getTriggeredSignalId() == null
+                || !strategy.getTriggeredSignalId().equals(signal.getId())) {
+            return;
+        }
+        strategy.setTakeProfitPhase(TakeProfitPhase.ARMED);
+        strategy.setTriggeredSignalId(null);
+        fundStrategyRepository.save(strategy);
+    }
+
     private boolean cooldownFinished(FundStrategyEntity strategy, Instant today) {
         if (strategy.getCooldownStartedAt() == null) {
             return true;
@@ -149,10 +168,10 @@ public class TakeProfitLifecycleService {
         return matureShares.add(untrackedShares).min(holdingShares);
     }
 
-    private static void arm(FundStrategyEntity strategy, BigDecimal currentNav, Instant today) {
+    private static void arm(FundStrategyEntity strategy, BigDecimal currentAccumulatedNav, Instant today) {
         strategy.setTakeProfitPhase(TakeProfitPhase.ARMED);
         strategy.setCycleStartedAt(today);
-        strategy.setCyclePeakNav(currentNav);
+        strategy.setCyclePeakNav(currentAccumulatedNav);
         strategy.setTriggeredSignalId(null);
     }
 

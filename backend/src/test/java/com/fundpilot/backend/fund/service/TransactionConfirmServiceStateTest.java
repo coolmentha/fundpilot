@@ -52,7 +52,7 @@ class TransactionConfirmServiceStateTest {
         in.setRelatedFundTransactionEntity(out);
 
         when(fundTransactionRepository.findById(11L)).thenReturn(Optional.of(in));
-        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
                 2L, tradeDay, tradeDay.plus(1, ChronoUnit.DAYS)))
                 .thenReturn(List.of(nav(fundB, "2.00")));
 
@@ -76,7 +76,7 @@ class TransactionConfirmServiceStateTest {
         Instant tradeDay = Instant.parse("2026-07-09T00:00:00Z");
 
         when(fundTransactionRepository.findById(20L)).thenReturn(Optional.of(tx));
-        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
                 1L, tradeDay, tradeDay.plus(1, ChronoUnit.DAYS)))
                 .thenReturn(List.of(nav(fund, "1.25")));
 

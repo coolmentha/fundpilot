@@ -9,10 +9,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    # VPS 历史:曾跑过未合并的 V7(dca_take_profit),代码回滚后 flyway_schema_history 残留坏记录。
-    # ignoreMigrationPatterns 容忍"缺失的已应用迁移"(旧 V7 文件不在代码库里),让应用能启动。
-    # 新迁移用 V8+ 版本号避开冲突。testcontainers/CI 重建库无此问题。
-    ignoreMigrationPatterns: '*:missing'
   jpa:
     hibernate:
       ddl-auto: validate
@@ -33,3 +29,15 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+fundpilot:
+  deployment:
+    # 候选发布阶段关闭定时任务与启动写监听器；正常运行必须为 false。
+    validation-mode: ${DEPLOYMENT_VALIDATION_MODE:false}
+  admin:
+    # 管理端点失败关闭；生产必须通过环境变量注入，禁止提供默认密钥。
+    api-key: ${ADMIN_API_KEY:}
+  flyway:
+    # 仅允许修复 VPS 已知的遗留 V7 Missing 记录；未命中时仍执行严格校验。
+    legacy-v7-repair:
+      enabled: ${FLYWAY_REPAIR_LEGACY_V7:false}

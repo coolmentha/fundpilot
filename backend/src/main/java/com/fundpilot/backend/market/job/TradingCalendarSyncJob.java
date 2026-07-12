@@ -29,6 +29,9 @@ public class TradingCalendarSyncJob {
     @Value("${trading-calendar.sync-on-startup:true}")
     private boolean syncOnStartup;
 
+    @Value("${fundpilot.deployment.validation-mode:false}")
+    private boolean deploymentValidationMode;
+
     /**
      * 每日北京时间 04:00 同步交易日历。
      * 新浪数据覆盖到当年底,节假日安排前一年 11 月发布,每日 1 次足够。
@@ -50,6 +53,10 @@ public class TradingCalendarSyncJob {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
+        if (deploymentValidationMode) {
+            log.info("部署候选验证模式已启用,跳过交易日历启动写入");
+            return;
+        }
         if (!syncOnStartup) {
             log.info("交易日历启动预热已关闭(sync-on-startup=false)");
             return;

@@ -3,7 +3,7 @@ package com.fundpilot.backend.exception;
 /**
  * 业务错误码枚举,集中定义所有 {@link BusinessException} 携带的机器可读 code。
  * <p>替代散落的字符串字面量,消除拼写漂移,作为前后端错误码约定的单一事实源。
- * <p>所有业务问题统一 HTTP 400,404 留给框架处理路由不存在,500 留给未预期的代码问题。
+ * <p>所有业务异常统一 HTTP 400；请求边界错误可由过滤器映射 401/503，404 留给框架，500 留给未预期问题。
  */
 public enum ErrorCode {
     // 资源未找到(业务问题,400)
@@ -33,13 +33,20 @@ public enum ErrorCode {
     MISSING_ACTUAL_SHARES,
     UNSUPPORTED_SELL_REASON,
     SIGNAL_ALREADY_RESPONDED,
+    SIGNAL_ALREADY_IGNORED,
+    SIGNAL_EXPIRED,
     SIGNAL_FUND_MISMATCH,
     ILLEGAL_STATE_TRANSITION,
     INSUFFICIENT_LOTS,
+    INSUFFICIENT_HOLDING_SHARES,
 
     // 数据源(400)
     NAV_HISTORY_EMPTY,
     MARKET_DATA_ALL_SOURCES_FAILED,
+
+    // 管理端鉴权(401/503,由请求过滤器直接映射 HTTP 状态)
+    ADMIN_UNAUTHORIZED,
+    ADMIN_AUTH_NOT_CONFIGURED,
 
     // 兜底(500)
     INTERNAL_ERROR;

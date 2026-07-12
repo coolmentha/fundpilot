@@ -1,6 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.client.FundFeeSnapshot;
 import com.fundpilot.backend.fund.client.RedemptionTier;
 import com.fundpilot.backend.fund.entity.FundEntity;
@@ -24,6 +25,7 @@ import java.math.MathContext;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +57,8 @@ class TransactionConfirmSupportTest {
         fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("001071");
+        lenient().when(fundRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(fund));
+        lenient().when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("1000000"));
     }
 
     // ===== 申购费扣除 =====
@@ -207,15 +211,13 @@ class TransactionConfirmSupportTest {
     }
 
     @Test
-    void onSellConfirmed_卖超抛INSUFFICIENT_LOTS() {
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
-        FundLotEntity lot = lot(50, Instant.parse("2026-06-30T00:00:00Z"));
-        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
+    void onSellConfirmed_卖超事实持仓抛INSUFFICIENT_HOLDING_SHARES() {
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("50"));
 
         FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
         assertThatThrownBy(() -> support.onSellConfirmed(tx, new BigDecimal("1.6")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("可用 lot 份额不足");
+                .extracting("code").isEqualTo(ErrorCode.INSUFFICIENT_HOLDING_SHARES.name());
     }
 
     @Test
@@ -225,8 +227,8 @@ class TransactionConfirmSupportTest {
                         List.of(new RedemptionTier(null, new BigDecimal("0.01"))), null));
         FundLotEntity lot = lot(50, Instant.parse("2026-06-30T00:00:00Z"));
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
-        // 调用时卖出交易已标 CONFIRMED，因此事实持仓为卖出后的 0；卖出前为 100，超出 lot 的 50 来自 ADJUST_IN。
-        when(fundPositionService.getHoldingShares(1L)).thenReturn(BigDecimal.ZERO);
+        // 卖出确认前事实持仓为 100，超出 lot 的 50 来自 ADJUST_IN。
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
         support.onSellConfirmed(tx, new BigDecimal("1.6"));

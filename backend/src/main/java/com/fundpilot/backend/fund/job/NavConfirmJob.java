@@ -31,7 +31,7 @@ public class NavConfirmJob {
     public void run() {
         log.info("净值确认任务开始");
         Instant tradeDay = ChinaTradingDate.previousUtcDate(clock.instant());
-        int confirmed = navConfirmService.confirmPendingTransactions(tradeDay);
+        int confirmed = navConfirmService.confirmPendingTransactionsIsolated(tradeDay);
         log.info("净值确认任务结束 confirmed={}", confirmed);
     }
 }

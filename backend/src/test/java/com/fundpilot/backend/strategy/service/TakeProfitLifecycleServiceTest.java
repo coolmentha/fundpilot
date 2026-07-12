@@ -50,11 +50,12 @@ class TakeProfitLifecycleServiceTest {
         FundStrategyEntity strategy = strategy(TakeProfitPhase.ACCUMULATING);
 
         TakeProfitEvaluation result = service.prepare(
-                fund, strategy, new BigDecimal("1.15"), new BigDecimal("100"), TODAY);
+                fund, strategy, new BigDecimal("1.15"), new BigDecimal("1.30"),
+                new BigDecimal("100"), TODAY);
 
         assertThat(result.evaluationEnabled()).isFalse();
         assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
-        assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.15");
+        assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.30");
         assertThat(strategy.getCycleStartedAt()).isEqualTo(TODAY);
     }
 
@@ -65,7 +66,8 @@ class TakeProfitLifecycleServiceTest {
         strategy.setCyclePeakNav(new BigDecimal("1.15"));
 
         TakeProfitEvaluation result = service.prepare(
-                fund, strategy, new BigDecimal("1.20"), new BigDecimal("100"), TODAY);
+                fund, strategy, new BigDecimal("1.10"), new BigDecimal("1.20"),
+                new BigDecimal("100"), TODAY);
 
         assertThat(result.evaluationEnabled()).isFalse();
         assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.20");
@@ -84,7 +86,8 @@ class TakeProfitLifecycleServiceTest {
                 .thenReturn(10L, 1L);
 
         TakeProfitEvaluation result = service.prepare(
-                fund, strategy, new BigDecimal("1.10"), new BigDecimal("100"), TODAY);
+                fund, strategy, new BigDecimal("1.10"), new BigDecimal("1.10"),
+                new BigDecimal("100"), TODAY);
 
         assertThat(result.evaluationEnabled()).isTrue();
         assertThat(result.floatingProfit()).isEqualByComparingTo("10");
@@ -100,12 +103,27 @@ class TakeProfitLifecycleServiceTest {
         when(tradingCalendarService.daysBetweenTradingDays(any(), any())).thenReturn(10L);
 
         TakeProfitEvaluation result = service.prepare(
-                fund, strategy, new BigDecimal("1.18"), new BigDecimal("100"), TODAY);
+                fund, strategy, new BigDecimal("1.18"), new BigDecimal("1.35"),
+                new BigDecimal("100"), TODAY);
 
         assertThat(result.evaluationEnabled()).isFalse();
         assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
-        assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.18");
+        assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.35");
         assertThat(strategy.getCooldownStartedAt()).isNull();
+    }
+
+    @Test
+    void 累计净值上涨但单位净值未盈利_不得启动止盈() {
+        FundEntity fund = fund("1.00");
+        FundStrategyEntity strategy = strategy(TakeProfitPhase.ACCUMULATING);
+
+        TakeProfitEvaluation result = service.prepare(
+                fund, strategy, new BigDecimal("1.00"), new BigDecimal("1.30"),
+                new BigDecimal("100"), TODAY);
+
+        assertThat(result.evaluationEnabled()).isFalse();
+        assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ACCUMULATING);
+        assertThat(strategy.getCyclePeakNav()).isNull();
     }
 
     @Test
@@ -132,6 +150,22 @@ class TakeProfitLifecycleServiceTest {
         transaction.setStatus(FundTransactionStatus.CANCELLED);
         service.onTransactionCancelled(transaction);
         assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
+    }
+
+    @Test
+    void 忽略当前止盈信号_恢复ARMED并清除绑定() {
+        FundStrategyEntity strategy = strategy(TakeProfitPhase.TRIGGERED);
+        strategy.setTriggeredSignalId(99L);
+        SignalLogEntity signal = new SignalLogEntity();
+        signal.setId(99L);
+        signal.setReason(SignalReason.TRAILING_STOP);
+        signal.setFundStrategyEntity(strategy);
+
+        service.onSignalIgnored(signal);
+
+        assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
+        assertThat(strategy.getTriggeredSignalId()).isNull();
+        verify(fundStrategyRepository).save(strategy);
     }
 
     private FundEntity fund(String costPerShare) {

@@ -93,6 +93,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     @Test
     void confirmPendingTransactions_卖出PENDING回填amount转CONFIRMED() {
         persistNavToday(new BigDecimal("2.00"));
+        persistConfirmedShares(fund, FundTransactionSource.ADJUST_IN, "500");
         FundTransactionEntity tx = persistTx(FundTransactionSource.DECREASE, null, new BigDecimal("500"));
         entityManager.flush();
 
@@ -140,6 +141,27 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void confirmPendingTransactions_仅次日有净值时不得提前确认() {
+        FundNavHistoryEntity nextDayNav = new FundNavHistoryEntity();
+        nextDayNav.setFundEntity(fund);
+        nextDayNav.setNavDate(today.plus(1, java.time.temporal.ChronoUnit.DAYS));
+        nextDayNav.setNav(new BigDecimal("9.99"));
+        nextDayNav.setAccumulatedNav(new BigDecimal("9.99"));
+        entityManager.persist(nextDayNav);
+        FundTransactionEntity tx = persistTx(FundTransactionSource.INCREASE, new BigDecimal("1000"), null);
+        entityManager.flush();
+
+        int confirmed = navConfirmService.confirmPendingTransactions(today);
+
+        assertThat(confirmed).isZero();
+        entityManager.flush();
+        entityManager.clear();
+        FundTransactionEntity reloaded = entityManager.find(FundTransactionEntity.class, tx.getId());
+        assertThat(reloaded.getStatus()).isEqualTo(FundTransactionStatus.PENDING);
+        assertThat(reloaded.getNav()).isNull();
+    }
+
+    @Test
     void confirmPendingTransactions_转换两腿当日净值均有_批量联动确认() {
         // task 07-08:转出腿确认后回填转入 amount 并递归确认转入腿
         FundEntity fundB = new FundEntity();
@@ -150,6 +172,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         entityManager.persist(fundB);
         persistNavToday(new BigDecimal("1.25"));
         persistNavToday(fundB, new BigDecimal("2.00"));
+        persistConfirmedShares(fund, FundTransactionSource.ADJUST_IN, "500");
 
         FundTransactionEntity out = persistTx(FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
         FundTransactionEntity in = new FundTransactionEntity();
@@ -266,5 +289,16 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     void cancel_交易不存在抛BusinessException() {
         assertThatThrownBy(() -> transactionCancelService.cancel(999999L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    private void persistConfirmedShares(FundEntity target, FundTransactionSource source, String shares) {
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(target);
+        tx.setSource(source);
+        tx.setStatus(FundTransactionStatus.CONFIRMED);
+        tx.setShares(new BigDecimal(shares));
+        tx.setTradeDate(today);
+        tx.setConfirmTime(Instant.now());
+        entityManager.persist(tx);
     }
 }

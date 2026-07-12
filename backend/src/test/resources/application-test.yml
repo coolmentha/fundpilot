@@ -1,14 +1,17 @@
-# Test profile:本地开发集成测试配置。
-# 连本地 PostgreSQL 的 fundpilot 库(与 main profile 同库,靠 @Transactional 回滚隔离测试数据)。
-# 凭证默认 fundpilot/fundpilot(本地开发默认,非生产凭据),可被环境变量覆盖。
-# Flyway 真实跑迁移,Hibernate ddl-auto=validate 真实校验 schema。
+# Test profile:使用独立 fundpilot_test schema，禁止连接或清理业务 public schema。
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/fundpilot}
-    username: ${DB_USERNAME:fundpilot}
-    password: ${DB_PASSWORD:fundpilot}
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=fundpilot_test}
+    username: ${TEST_DB_USERNAME:fundpilot}
+    password: ${TEST_DB_PASSWORD:fundpilot}
   flyway:
-    clean-disabled: false   # 允许测试间清理(开发期方便)
+    schemas: fundpilot_test
+    default-schema: fundpilot_test
+    create-schemas: true
+  jpa:
+    properties:
+      hibernate:
+        default_schema: fundpilot_test
 
 # 关闭交易日历启动预热:避免集成测试启动时灌入 8000+ 条新浪交易日,
 # 与测试夹具日期(如 2026-06-22)撞唯一索引 uq_trading_calendar_date。

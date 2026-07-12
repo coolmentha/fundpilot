@@ -149,7 +149,7 @@ class DisciplineStrategyServiceTest {
     void 定投止盈_回撤达标_按浮盈收割比例计算份额() {
         FundEntity fund = fund(FundStatus.HOLDING);
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.10"));
-        CapitalContext capital = takeProfitCapital("20", "100");
+        CapitalContext capital = takeProfitCapital("0.80", "1.10", "20", "100");
         FundStrategyEntity strategy = strategy();
         strategy.setCyclePeakNav(new BigDecimal("1.20"));
 
@@ -158,8 +158,8 @@ class DisciplineStrategyServiceTest {
         assertThat(result.signalType()).isEqualTo(SignalType.SELL);
         assertThat(result.triggerTier()).isNull();
         assertThat(result.reason()).isEqualTo(SignalReason.TRAILING_STOP);
-        // 浮盈 20 × 收割 50% ÷ 净值 1.10 = 9.0909... 份。
-        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("9.090909090909091"));
+        // 累计净值 1.10 只用于回撤；浮盈 20 × 收割 50% ÷ 单位净值 0.80 = 12.5 份。
+        assertThat(result.suggestedMeasure().getValue()).isEqualByComparingTo(new BigDecimal("12.5"));
         assertThat(result.suggestedMeasure().getMeasureUnit()).isEqualTo(MeasureUnit.SHARE);
     }
 
@@ -195,7 +195,7 @@ class DisciplineStrategyServiceTest {
     void 定投止盈_回撤未达阈值_不触发() {
         FundEntity fund = fund(FundStatus.HOLDING);
         MarketIndicators market = marketWithCurrentNav(new BigDecimal("1.15"));
-        CapitalContext capital = takeProfitCapital("20", "100");
+        CapitalContext capital = takeProfitCapital("1.0", "1.15", "20", "100");
         FundStrategyEntity strategy = strategy();
         strategy.setCyclePeakNav(new BigDecimal("1.20"));
 
@@ -289,11 +289,18 @@ class DisciplineStrategyServiceTest {
     }
 
     private CapitalContext takeProfitCapital(String floatingProfit, String matureShares) {
+        return takeProfitCapital("1.0", "1.0", floatingProfit, matureShares);
+    }
+
+    private CapitalContext takeProfitCapital(String currentUnitNav, String currentAccumulatedNav,
+                                             String floatingProfit, String matureShares) {
         return new CapitalContext(
                 new BigDecimal("1.2"),
                 new BigDecimal("1.2"),
                 new BigDecimal("100"),
                 Instant.now(),
+                new BigDecimal(currentUnitNav),
+                new BigDecimal(currentAccumulatedNav),
                 new BigDecimal(floatingProfit),
                 new BigDecimal(matureShares),
                 true);

@@ -6,11 +6,13 @@ import {useFunds, useSignalsRange, useSignalsToday} from '../api/hooks.js';
 import {datetime, text} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import QueryErrorState from '../components/QueryErrorState.jsx';
 
 const {Title, Text} = Typography;
 const {RangePicker} = DatePicker;
 
 const signalColumns = (extraCol) => [
+    {title: '状态', dataIndex: 'actionStatus', width: 100, render: (v) => <StatusTag value={v}/>},
     {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
     {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
     {title: '系数', dataIndex: 'coefficient', width: 80, render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
@@ -29,11 +31,21 @@ export default function SignalsPage() {
     const fundIdParam = params.get('fundId');
     const fundId = fundIdParam ? Number(fundIdParam) : null;
     const {data: funds} = useFunds();
-    const {data: todaySignal, isLoading: todayLoading} = useSignalsToday(fundId);
+    const {
+        data: todaySignal,
+        isLoading: todayLoading,
+        isError: todayError,
+        refetch: refetchToday,
+    } = useSignalsToday(fundId);
     const [range, setRange] = useState(null);
     const from = range?.[0]?.format('YYYY-MM-DD');
     const to = range?.[1]?.format('YYYY-MM-DD');
-    const {data: rangeSignals, isLoading: rangeLoading} = useSignalsRange(fundId, from, to);
+    const {
+        data: rangeSignals,
+        isLoading: rangeLoading,
+        isError: rangeError,
+        refetch: refetchRange,
+    } = useSignalsRange(fundId, from, to);
 
     const fundOptions = (funds || []).map((f) => ({
         value: String(f.id),
@@ -51,7 +63,9 @@ export default function SignalsPage() {
                             options={fundOptions} allowClear
                             onChange={(v) => setParams(v ? {fundId: v} : {})}/>
                 </Space>
-                {fundId ? (
+                {fundId && todayError ? (
+                    <QueryErrorState onRetry={refetchToday} description="今日信号加载失败"/>
+                ) : fundId ? (
                     <Table rowKey="id" size="small" loading={todayLoading}
                            dataSource={todaySignal ? [todaySignal] : []}
                            columns={signalColumns()} pagination={false}
@@ -65,9 +79,13 @@ export default function SignalsPage() {
                     <Space style={{marginBottom: 16}}>
                         <RangePicker value={range} onChange={setRange}/>
                     </Space>
-                    <Table rowKey="id" size="small" loading={rangeLoading} dataSource={rangeSignals}
-                           columns={signalColumns()} pagination={false}
-                           locale={{emptyText: <EmptyState description="所选区间无信号"/>}}/>
+                    {rangeError ? (
+                        <QueryErrorState onRetry={refetchRange} description="历史信号加载失败"/>
+                    ) : (
+                        <Table rowKey="id" size="small" loading={rangeLoading} dataSource={rangeSignals}
+                               columns={signalColumns()} pagination={false}
+                               locale={{emptyText: <EmptyState description="所选区间无信号"/>}}/>
+                    )}
                 </Card>
             )}
         </Space>

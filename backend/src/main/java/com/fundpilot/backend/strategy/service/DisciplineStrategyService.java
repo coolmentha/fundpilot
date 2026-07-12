@@ -159,12 +159,14 @@ public class DisciplineStrategyService {
             return null;
         }
         BigDecimal peak = strategy.getCyclePeakNav();
-        BigDecimal currentNav = market.currentNav();
-        if (peak == null || peak.signum() <= 0 || currentNav == null) {
+        BigDecimal currentAccumulatedNav = capital.currentAccumulatedNav();
+        BigDecimal currentUnitNav = capital.currentUnitNav();
+        if (peak == null || peak.signum() <= 0 || currentAccumulatedNav == null
+                || currentUnitNav == null || currentUnitNav.signum() <= 0) {
             return null;
         }
         // 回落幅度 = (peak - current) / peak,正数
-        BigDecimal pullback = peak.subtract(currentNav).divide(peak, MATH);
+        BigDecimal pullback = peak.subtract(currentAccumulatedNav).divide(peak, MATH);
         BigDecimal stopLossPercent = strategy.getStopLossPullbackPercent();
         if (stopLossPercent == null || stopLossPercent.signum() == 0) {
             return null;
@@ -173,10 +175,10 @@ public class DisciplineStrategyService {
             return null;
         }
         BigDecimal holdingShares = capital.holdingShares() != null ? capital.holdingShares() : BigDecimal.ZERO;
-        BigDecimal currentValue = currentNav.multiply(holdingShares, MATH);
+        BigDecimal currentValue = currentUnitNav.multiply(holdingShares, MATH);
         BigDecimal profitHarvestShares = capital.floatingProfit()
                 .multiply(strategy.getProfitHarvestPercent(), MATH)
-                .divide(currentNav, MATH);
+                .divide(currentUnitNav, MATH);
         BigDecimal singleSellCapShares = holdingShares.multiply(strategy.getMaxSingleSellPercent(), MATH);
         BigDecimal retentionCapShares = holdingShares.multiply(
                 BigDecimal.ONE.subtract(strategy.getMinimumHoldingPercent()), MATH);

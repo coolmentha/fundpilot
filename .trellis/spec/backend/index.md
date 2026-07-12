@@ -22,6 +22,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Market Realtime Cache](./market-realtime-cache.md) | 行情工作台实时数据缓存层契约(刷新频率、字段缩放、降级策略) | Filled |
 | [Fund Fee Deduction](./fund-fee-deduction.md) | 交易手续费扣除(申购费+赎回费+FIFO lot 匹配、Jsoup HTML 爬虫、双确认路径共用 support) | Filled |
 | [Transaction Consistency](./transaction-consistency.md) | 夜间确认、转换状态、ADJUST/lot 与日历并发幂等契约 | Filled |
+| [Operations Security And Release Safety](./operations-security.md) | 管理 API Key、Flyway 严格修复、CI 门禁与生产备份回滚契约 | Filled |
 
 ---
 
