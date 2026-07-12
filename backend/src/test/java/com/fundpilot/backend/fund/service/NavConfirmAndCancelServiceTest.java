@@ -10,6 +10,8 @@ import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
+import com.fundpilot.backend.user.entity.UserConfigEntity;
+import com.fundpilot.backend.user.repository.UserConfigRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +35,18 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     @Autowired NavConfirmService navConfirmService;
     @Autowired TransactionCancelService transactionCancelService;
     @Autowired EntityManager entityManager;
+    @Autowired UserConfigRepository userConfigRepository;
 
     private FundEntity fund;
     private Instant today;
 
     @BeforeEach
     void setUp() {
+        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
+                .orElseGet(UserConfigEntity::new);
+        config.setTotalCapital(new BigDecimal("100000"));
+        userConfigRepository.save(config);
+
         today = ChinaTradingDate.toUtcDate(Instant.now());
         fund = new FundEntity();
         fund.setFundCode("510300");

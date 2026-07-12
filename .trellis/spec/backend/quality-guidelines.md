@@ -13,6 +13,7 @@ Applies to Java code under `backend/src/main/java` and its tests. The hard rules
 - Every `@Scheduled` method declares `zone = "Asia/Shanghai"` unless the schedule is explicitly UTC and documented as such.
 - Controllers only route requests and return View DTOs. Entity creation, repository access, and branching belong in services.
 - External-source failures log enough context for diagnosis and either follow the documented degradation contract or throw the source-chain business error.
+- Integration tests prepare their own required singleton business configuration. They must not depend on another test class's committed rows or replace explicit negative coverage with a global default fixture.
 
 ## Forbidden Patterns
 
@@ -47,6 +48,7 @@ mvn test
 - New business validation requires a regression test asserting the `ErrorCode`.
 - Date logic requires boundary tests around UTC/Asia-Shanghai day changes.
 - Database changes require a fresh-schema Flyway migration and Hibernate validation run.
+- Integration-test fixes for shared database state require a clean-schema run of the affected classes and a full-suite run to detect order dependencies.
 
 ## Review Checklist
 

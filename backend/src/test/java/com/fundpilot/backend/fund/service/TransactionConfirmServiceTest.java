@@ -13,6 +13,9 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
+import com.fundpilot.backend.user.entity.UserConfigEntity;
+import com.fundpilot.backend.user.repository.UserConfigRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,15 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
     @Autowired FundRepository fundRepository;
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundNavHistoryRepository fundNavHistoryRepository;
+    @Autowired UserConfigRepository userConfigRepository;
+
+    @BeforeEach
+    void setUpUserConfig() {
+        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
+                .orElseGet(UserConfigEntity::new);
+        config.setTotalCapital(new BigDecimal("100000"));
+        userConfigRepository.save(config);
+    }
 
     @Test
     @Transactional
