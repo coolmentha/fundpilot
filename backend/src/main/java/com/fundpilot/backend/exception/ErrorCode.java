@@ -44,7 +44,7 @@ public enum ErrorCode {
     NAV_HISTORY_EMPTY,
     MARKET_DATA_ALL_SOURCES_FAILED,
 
-    // 管理端鉴权(401/503,由请求过滤器直接映射 HTTP 状态)
+    // 全站 API 鉴权(401/503,由请求过滤器直接映射 HTTP 状态)
     ADMIN_UNAUTHORIZED,
     ADMIN_AUTH_NOT_CONFIGURED,
 

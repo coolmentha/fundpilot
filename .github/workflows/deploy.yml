@@ -209,6 +209,7 @@ jobs:
               echo "ADMIN_API_KEY must use at least 32 safe ASCII characters" >&2
               exit 1
             }
+            HEALTHCHECK_API_KEY=$ADMIN_API_KEY
             case "$DEPLOYMENT_TOKEN" in
               [0-9]*-[0-9]*) ;;
               *) echo "invalid deployment token" >&2; exit 1 ;;
@@ -432,8 +433,9 @@ jobs:
               for i in $(seq 1 30); do
                 if run_before_total_deadline 15 docker exec "$candidate" \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
-                  run_before_total_deadline 15 docker exec "$candidate" \
-                    wget -q -T 5 -O - http://127.0.0.1/api/funds |
+                  printf 'GET /api/funds HTTP/1.1\r\nHost: localhost\r\nX-Admin-Key: %s\r\nConnection: close\r\n\r\n' \
+                    "$HEALTHCHECK_API_KEY" |
+                  run_before_total_deadline 15 docker exec -i "$candidate" nc 127.0.0.1 80 |
                     grep -q '"success":true'; then
                   run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
                   return 0
@@ -451,7 +453,8 @@ jobs:
                   run_before_total_deadline 15 "${COMPOSE[@]}" exec -T frontend \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
                   curl -fsS --max-time 5 "$PUBLIC_URL/" >/dev/null &&
-                  curl -fsS --max-time 5 "$PUBLIC_URL/api/funds" |
+                  printf 'header = "X-Admin-Key: %s"\n' "$HEALTHCHECK_API_KEY" |
+                  curl -fsS --max-time 5 --config - "$PUBLIC_URL/api/funds" |
                     grep -q '"success":true'; then
                   return 0
                 fi
@@ -516,6 +519,10 @@ jobs:
                 git checkout --detach "$PREVIOUS_RELEASE_TAG" || release_files_ok=0
                 if [ "$PREVIOUS_ENV_READY" -eq 1 ]; then
                   if cp "$PREVIOUS_ENV_FILE" .env && chmod 600 .env; then
+                    previous_healthcheck_api_key=$(sed -n 's/^ADMIN_API_KEY=//p' .env | head -n 1 | tr -d '\r\n')
+                    if [ -n "$previous_healthcheck_api_key" ]; then
+                      HEALTHCHECK_API_KEY=$previous_healthcheck_api_key
+                    fi
                     unset DB_USERNAME DB_PASSWORD ADMIN_API_KEY FLYWAY_REPAIR_LEGACY_V7
                     unset BACKEND_IMAGE FRONTEND_IMAGE
                   else

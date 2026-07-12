@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-适用于 `/api/admin/**` 管理入口、Flyway 校验/repair、GitHub Actions CI、生产 Compose 发布、数据库备份和失败回滚。任何改动触及管理凭据、迁移历史、发布 tag、健康检查或数据库恢复时，必须按本契约检查。
+适用于全站 `/api/**` 访问鉴权、Flyway 校验/repair、GitHub Actions CI、生产 Compose 发布、数据库备份和失败回滚。任何改动触及访问凭据、迁移历史、发布 tag、健康检查或数据库恢复时，必须按本契约检查。
 
 ## 2. Signatures
 
@@ -17,6 +17,7 @@ POST /api/admin/market-data/refresh
 POST /api/admin/market-data/sync-trading-calendar
 POST /api/admin/signals/generate
 POST /api/admin/transactions/confirm-nav
+GET /api/auth/verify
 ```
 
 ```java
@@ -28,9 +29,12 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 ## 3. Contracts
 
-- `AdminApiKeyFilter` 只保护 `/api/admin` 和 `/api/admin/**`；公共 API、Actuator 与定时任务不受影响。
-- 管理 Key 使用常量时间比较，不进入 URL、请求体、日志、localStorage 或前端构建变量。
-- 前端只在管理操作请求中发送 `X-Admin-Key`，Key 仅保存在 `AdminPage` 组件内存，刷新页面即清空。
+- `AdminApiKeyFilter` 保护 `/api` 和所有 `/api/**`；静态资源、Actuator 与定时任务不受影响。
+- 访问 Key 使用常量时间比较，不进入 URL、请求体、日志、localStorage、sessionStorage、Cookie 或前端构建变量。
+- 未认证时前端只渲染登录页，业务路由与查询 hooks 不得挂载。`GET /api/auth/verify` 验证成功后，Key 仅保存在 `SiteAuthGate` 与 API client 的进程内存中，所有业务请求统一发送 `X-Admin-Key`，刷新页面即清空。
+- 已认证请求返回 401 时必须清空 Key 和 React Query 缓存并回到登录页；管理页复用全站登录态，不得再次采集 Key。
+- API client 必须按认证代次关联请求；旧代次的迟到 401 不得退出已完成的新登录。
+- 所有 `/api/**` 成功和失败响应必须返回 `Cache-Control: no-store, private` 与 `Vary: X-Admin-Key`，退出后不得依赖浏览器或代理继续持有敏感响应。
 - 服务端 Key 未配置时失败关闭，不得匿名放行。
 - Flyway 默认严格校验，禁止 `ignoreMigrationPatterns: '*:missing'` 或 `versioned:missing`。
 - repair 开关开启时，只有唯一 `MISSING_SUCCESS`、version `7`、description `dca take profit replaces timing`、script `V7__dca_take_profit_replaces_timing.sql` 可以进入 repair。
@@ -42,10 +46,11 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 维护和回滚中的 `docker`、Compose、`pg_dump`、`pg_restore`、探活等外部命令必须用绝对截止时间与 `timeout --foreground --kill-after=5s` 双重约束。提交前命令按 30 分钟前向截止裁剪，rollback/提交后命令按 55 分钟总截止裁剪，禁止只依赖 Bash 收到 TERM 后执行 trap。
 - 部署在同一 SSH 脚本中用上一 release 的 Compose 停止 frontend/backend、等待固定 `fundpilot-db` 容器、生成并校验 `pg_dump -Fc`。
 - 候选 backend 使用 `DEPLOYMENT_VALIDATION_MODE=true`：不注册 Scheduler，Pending 补偿和交易日历启动监听器不得写库。
-- 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
+- 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和带 `X-Admin-Key` 的 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
+- 部署探活的 Key 必须通过 stdin 传给 HTTP 客户端，不得出现在 `curl`、`wget`、`docker` 或 `timeout` 的进程参数中；回滚探活必须从旧 `.env` 读取上一版本 Key，并兼容不要求 Key 的旧 release。
 - 容器内 Nginx 探活必须使用 `http://127.0.0.1/`，禁止使用可能优先解析到未监听 IPv6 回环的 `localhost`。
 - 远程 Compose 命令必须显式传 `--env-file "$VPS_PATH/.env"`；切换到上一 release 后仍从根目录环境文件读取数据库凭据，禁止依赖 Compose 随版本/工作目录变化的隐式 `.env` 搜索。
-- 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和 `/api/funds`。
+- 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和带 `X-Admin-Key` 的 `/api/funds`。
 - 发布失败时先保持应用停止，恢复发布前数据库备份，再启动上一 tag；恢复失败或没有上一 tag 时保持应用停止并让工作流失败。
 - 提交后的正常 backend 或公网 frontend 启动失败时停止对外服务并报错，不得恢复旧数据库覆盖后台任务或用户写入。
 - ERR/HUP/INT/TERM 始终进入同一个阶段分派 trap；以原子落盘 `.deployed-state` 中本次 `DEPLOYMENT_TOKEN` 判断是否已提交。提交前恢复数据库和旧状态，提交后只停止 backend/frontend，不得依赖相邻两行命令切换 trap。
@@ -58,9 +63,10 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 | 条件 | 行为 | HTTP / 结果 |
 |---|---|---|
-| `ADMIN_API_KEY` 为空 | 管理请求失败关闭 | 503 `ADMIN_AUTH_NOT_CONFIGURED` |
-| 管理 Header 缺失或不匹配 | 不进入 Controller | 401 `ADMIN_UNAUTHORIZED` |
-| 管理 Header 匹配 | 执行对应管理 Service | 原端点响应 |
+| `ADMIN_API_KEY` 为空 | 所有 `/api/**` 请求失败关闭 | 503 `ADMIN_AUTH_NOT_CONFIGURED` |
+| API Header 缺失或不匹配 | 不进入 Controller | 401 `ADMIN_UNAUTHORIZED` |
+| API Header 匹配 | 执行对应业务 Controller | 原端点响应 |
+| 静态资源或 Actuator | 不经过 Key Filter | 原端点响应 |
 | Flyway repair 开关关闭 | 直接严格 migrate/validate | 任意 missing 导致启动失败 |
 | 开关开启且无遗留 V7 | 不调用 repair，正常 migrate 后严格 validate | 正常启动 |
 | 唯一已知 V7 Missing | 仅将 V7 标为 `DELETED` | repair/migrate/validate 后启动 |
@@ -76,7 +82,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 ## 5. Good / Base / Bad Cases
 
-- Good：浏览器内存中输入管理 Key，只有 `/api/admin/signals/generate` 请求带 Header，普通基金查询不带凭据。
+- Good：浏览器内存中输入访问 Key，登录验证成功后所有 `/api/**` 请求统一带 Header，刷新页面后重新登录。
 - Good：生产存在唯一旧 V7 Missing，repair 标记 `DELETED` 后 V1-V18 严格校验通过。
 - Good：候选 backend 无调度/启动写，候选 frontend 只在内部网络完成 API 反代验证，失败时安全恢复备份。
 - Good：部署使用 backend/frontend digest；Git tag 被移动时在停写前拒绝发布。
@@ -85,8 +91,9 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Good：新版本候选验证失败，部署脚本恢复停写前备份，使用 `.deployed-state` 的旧 release/digest 重新健康启动。
 - Base：repair 开关保持开启但旧 V7 已修复，不调用 repair，继续严格 validate/migrate。
 - Base：首次部署没有上一 tag，失败时恢复数据库并保持应用停止。
-- Bad：把管理 Key 编进 `VITE_*`，密钥会出现在公开 JS 中。
-- Bad：只隐藏前端管理菜单，后端端点仍可匿名调用。
+- Bad：把访问 Key 编进 `VITE_*`，密钥会出现在公开 JS 中。
+- Bad：只做前端登录页，后端普通业务 API 仍可匿名调用。
+- Bad：把 Key 写入 localStorage、sessionStorage 或 Cookie，刷新后仍保留长期凭据。
 - Bad：使用 `*:missing` 让任意缺失迁移继续启动。
 - Bad：新版本运行且允许写入后再恢复部署前备份，会覆盖用户新数据。
 - Bad：使用 `latest` 回滚，无法证明恢复的是哪一版。
@@ -97,9 +104,9 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 ## 6. Tests Required
 
-- `AdminApiKeyFilterTest`：正确、缺失、错误、未配置 Key 及公共路径。
-- `AdminApiKeyIntegrationTest`：真实 Spring Web 过滤链验证 401/200 与公共 API 放行。
-- `frontend/src/api/client.test.js` / `hooks.test.js`：调用方 Header 合并、五个管理 action 路由和未知 action 拒绝。
+- `AdminApiKeyFilterTest`：普通 API 的正确、缺失、错误、未配置 Key，编码/矩阵绕过路径及 Actuator 放行。
+- `AdminApiKeyIntegrationTest`：真实 Spring Web 过滤链验证普通 API 与 `/api/auth/verify` 的 401/200，以及 Actuator 放行。
+- `frontend/src/api/client.test.js` / `hooks.test.js`：全站内存 Key 注入、调用方 Header 不得覆盖、401 退出通知、五个管理 action 路由和未知 action 拒绝。
 - `LegacyV7FlywayRepairServiceTest`：开关关闭、幂等、额外 missing、failed、元数据漂移及越权 repair 结果。
 - `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，并保留至少一个合法 pending migration；repair 后 V7 为 `DELETED`、pending 成功应用且严格 validate 成功。
 - CI YAML 必须可解析，部署脚本必须通过 `bash -n`，Compose 必须通过 `docker compose config --quiet`。

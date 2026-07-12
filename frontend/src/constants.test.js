@@ -18,7 +18,7 @@ describe('Instant formatting', () => {
 
 describe('API error titles', () => {
     it('describes admin authentication failures', () => {
-        expect(errorTitle('ADMIN_UNAUTHORIZED')).toBe('管理凭据无效');
-        expect(errorTitle('ADMIN_AUTH_NOT_CONFIGURED')).toBe('管理端鉴权未配置');
+        expect(errorTitle('ADMIN_UNAUTHORIZED')).toBe('访问凭据无效');
+        expect(errorTitle('ADMIN_AUTH_NOT_CONFIGURED')).toBe('访问鉴权未配置');
     });
 });

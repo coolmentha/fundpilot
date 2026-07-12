@@ -1,5 +1,23 @@
 // 真实后端 fetch 封装：解包 ApiResponse，失败抛含 code/message 的 Error。
 
+let siteApiKey = '';
+let siteUnauthorizedHandler = null;
+let siteAuthGeneration = 0;
+
+export function setSiteApiKey(apiKey) {
+    siteApiKey = apiKey;
+    siteAuthGeneration += 1;
+}
+
+export function clearSiteApiKey() {
+    siteApiKey = '';
+    siteAuthGeneration += 1;
+}
+
+export function setSiteUnauthorizedHandler(handler) {
+    siteUnauthorizedHandler = handler;
+}
+
 /**
  * 调后端接口，返回 ApiResponse.data（已解包）。
  * @param {string} path 形如 /api/funds
@@ -7,8 +25,12 @@
  * @returns {Promise<any>} data 字段
  */
 export async function apiFetch(path, options = {}) {
+    const requestAuthGeneration = siteAuthGeneration;
     const method = (options.method || 'GET').toUpperCase();
     const init = {method, headers: {...(options.headers || {})}};
+    if (siteApiKey && (path === '/api' || path.startsWith('/api/'))) {
+        init.headers['X-Admin-Key'] = siteApiKey;
+    }
     if (options.body !== undefined) {
         init.headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(options.body);
@@ -28,9 +50,19 @@ export async function apiFetch(path, options = {}) {
     if (!resp.ok || payload?.success === false) {
         const code = payload?.code || `HTTP_${resp.status}`;
         const message = payload?.message || `请求失败 (HTTP ${resp.status})`;
+        if ((resp.status === 401 || code === 'ADMIN_UNAUTHORIZED')
+            && requestAuthGeneration === siteAuthGeneration) {
+            siteUnauthorizedHandler?.();
+        }
         throw new ApiError(code, message);
     }
     return payload.data;
+}
+
+export function verifySiteApiKey(apiKey) {
+    return apiFetch('/api/auth/verify', {
+        headers: {'X-Admin-Key': apiKey},
+    });
 }
 
 export class ApiError extends Error {

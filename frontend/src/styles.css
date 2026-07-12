@@ -91,6 +91,45 @@ body {
     min-width: 0;
 }
 
+.app-header-copy {
+    flex: 1;
+}
+
+/* ===== 全站访问鉴权 ===== */
+.site-login-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--color-bg);
+}
+
+.site-login-panel {
+    width: min(100%, 420px);
+    border-top: 3px solid var(--color-primary);
+}
+
+.site-login-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    color: var(--color-text);
+    font-family: 'Fira Code', monospace;
+    font-weight: 700;
+}
+
+.site-login-title.ant-typography {
+    margin-bottom: 4px;
+    font-size: 24px;
+}
+
+.site-login-form {
+    display: grid;
+    gap: 16px;
+    margin-top: 24px;
+}
+
 .app-header .page-title {
     margin: 0;
     font-family: 'Fira Code', monospace;
