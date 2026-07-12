@@ -86,6 +86,19 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
         return log;
     }
 
+    private void persistConfirmedHolding(String shares) {
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(fund);
+        tx.setSource(FundTransactionSource.INCREASE);
+        tx.setStatus(FundTransactionStatus.CONFIRMED);
+        tx.setAmount(new BigDecimal(shares));
+        tx.setShares(new BigDecimal(shares));
+        tx.setNav(BigDecimal.ONE);
+        tx.setTradeDate(LATEST_TRADING_DAY);
+        tx.setConfirmTime(LATEST_TRADING_DAY);
+        entityManager.persist(tx);
+    }
+
     @Test
     void confirmOperation_BUILD只写Pending交易_不提前推进HOLDING() {
         SignalLogEntity signal = persistSignal(SignalType.BUILD, null, SignalReason.BUILD);
@@ -166,6 +179,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     @Test
     void confirmOperation_LOGIC_BROKEN只写Pending交易_确认前保持HOLDING() {
         fund.setStatus(FundStatus.HOLDING);
+        persistConfirmedHolding("1000");
         SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
         entityManager.flush();
 
@@ -246,6 +260,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
 
     @Test
     void confirmOperation_同一信号重复回应时只生成一笔交易() {
+        persistConfirmedHolding("100");
         SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
         entityManager.flush();
 
@@ -256,7 +271,9 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
                 new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("100"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已回应");
-        assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
+        assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId()))
+                .filteredOn(tx -> tx.getStatus() == FundTransactionStatus.PENDING)
+                .hasSize(1);
     }
 
     @Test

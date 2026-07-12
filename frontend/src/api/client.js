@@ -1,16 +1,10 @@
 // 真实后端 fetch 封装：解包 ApiResponse，失败抛含 code/message 的 Error。
 
-let siteApiKey = '';
 let siteUnauthorizedHandler = null;
 let siteAuthGeneration = 0;
+const REQUEST_TIMEOUT_MS = 15000;
 
-export function setSiteApiKey(apiKey) {
-    siteApiKey = apiKey;
-    siteAuthGeneration += 1;
-}
-
-export function clearSiteApiKey() {
-    siteApiKey = '';
+export function markSiteAuthChanged() {
     siteAuthGeneration += 1;
 }
 
@@ -27,10 +21,14 @@ export function setSiteUnauthorizedHandler(handler) {
 export async function apiFetch(path, options = {}) {
     const requestAuthGeneration = siteAuthGeneration;
     const method = (options.method || 'GET').toUpperCase();
-    const init = {method, headers: {...(options.headers || {})}};
-    if (siteApiKey && (path === '/api' || path.startsWith('/api/'))) {
-        init.headers['X-Admin-Key'] = siteApiKey;
-    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const init = {
+        method,
+        headers: {...(options.headers || {})},
+        signal: controller.signal,
+        credentials: 'same-origin',
+    };
     if (options.body !== undefined) {
         init.headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(options.body);
@@ -39,7 +37,12 @@ export async function apiFetch(path, options = {}) {
     try {
         resp = await fetch(path, init);
     } catch (e) {
+        if (e?.name === 'AbortError') {
+            throw new ApiError('REQUEST_TIMEOUT', '请求超时，请稍后重试');
+        }
         throw new ApiError('NETWORK_ERROR', `网络异常：${e.message}`);
+    } finally {
+        clearTimeout(timeoutId);
     }
     let payload;
     try {
@@ -59,10 +62,19 @@ export async function apiFetch(path, options = {}) {
     return payload.data;
 }
 
-export function verifySiteApiKey(apiKey) {
-    return apiFetch('/api/auth/verify', {
+export function loginSiteApiKey(apiKey) {
+    return apiFetch('/api/auth/login', {
+        method: 'POST',
         headers: {'X-Admin-Key': apiKey},
     });
+}
+
+export function verifySiteSession() {
+    return apiFetch('/api/auth/verify');
+}
+
+export function logoutSiteSession() {
+    return apiFetch('/api/auth/logout', {method: 'POST'});
 }
 
 export class ApiError extends Error {

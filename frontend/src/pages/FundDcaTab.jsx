@@ -73,6 +73,13 @@ export default function FundDcaTab({fundId}) {
                             <Button size="small" type="primary">激活</Button>
                         </Popconfirm>}
                     {r.status === 'EFFECTIVE' &&
+                        <Popconfirm title={r.enabled ? '暂停自动定投？' : '恢复自动定投？'}
+                                    onConfirm={() => doAction(r.id, r.enabled ? 'pause' : 'resume')}>
+                            <Button size="small" type={r.enabled ? 'default' : 'primary'}>
+                                {r.enabled ? '暂停' : '恢复'}
+                            </Button>
+                        </Popconfirm>}
+                    {r.status === 'EFFECTIVE' &&
                         <Popconfirm title="停用此定投计划？" onConfirm={() => doAction(r.id, 'retire')}>
                             <Button size="small">停用</Button>
                         </Popconfirm>}

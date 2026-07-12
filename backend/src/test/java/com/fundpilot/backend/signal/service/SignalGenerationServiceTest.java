@@ -297,6 +297,33 @@ class SignalGenerationServiceTest {
     }
 
     @Test
+    void generateDailySignals_逻辑止损取代旧的跨日止盈信号() {
+        FundStrategyEntity strategy = stubFund(1L, FundStatus.HOLDING);
+        strategy.setTakeProfitPhase(TakeProfitPhase.TRIGGERED);
+        strategy.setTriggeredSignalId(99L);
+        SignalLogEntity oldTrailingStop = new SignalLogEntity();
+        oldTrailingStop.setId(99L);
+        oldTrailingStop.setFundEntity(strategy.getFundEntity());
+        oldTrailingStop.setFundStrategyEntity(strategy);
+        oldTrailingStop.setSignalType(SignalType.SELL);
+        oldTrailingStop.setReason(SignalReason.TRAILING_STOP);
+        when(signalLogRepository.findById(99L)).thenReturn(Optional.of(oldTrailingStop));
+        when(fundStrategyRepository.findEffectiveFundIds()).thenReturn(List.of(1L));
+        when(marketIndicatorProvider.getIndicators(1L, DATE))
+                .thenReturn(Optional.of(snapshot(new BigDecimal("0.80"))));
+        when(disciplineStrategyService.evaluateSignal(eq(strategy.getFundEntity()), eq(strategy),
+                any(), any(), any(), anyLong()))
+                .thenReturn(new SignalResult(SignalType.SELL, null, null, null,
+                        SignalReason.LOGIC_BROKEN, List.of(), List.of()));
+
+        service.generateDailySignals(DATE);
+
+        assertThat(oldTrailingStop.getIgnoredDate()).isEqualTo(DATE);
+        verify(signalLogRepository).save(oldTrailingStop);
+        verify(takeProfitLifecycleService).onSignalIgnored(oldTrailingStop);
+    }
+
+    @Test
     void generateDailySignals_单只基金异常不影响其他基金() {
         FundStrategyEntity s2 = stubFund(2L, FundStatus.HOLDING);
         stubFund(1L, FundStatus.HOLDING);

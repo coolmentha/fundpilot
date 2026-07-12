@@ -53,6 +53,18 @@ public class DcaPlanController {
         return ApiResponse.ok(null);
     }
 
+    @PostMapping("/api/dca-plans/{id}/pause")
+    public ApiResponse<Void> pause(@PathVariable Long id) {
+        dcaPlanService.setEnabled(id, false);
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/api/dca-plans/{id}/resume")
+    public ApiResponse<Void> resume(@PathVariable Long id) {
+        dcaPlanService.setEnabled(id, true);
+        return ApiResponse.ok(null);
+    }
+
     @GetMapping("/api/funds/{fundId}/dca-plans/active")
     public ApiResponse<FundDcaPlanView> active(@PathVariable Long fundId) {
         return ApiResponse.ok(dcaPlanService.findActiveView(fundId).orElse(null));

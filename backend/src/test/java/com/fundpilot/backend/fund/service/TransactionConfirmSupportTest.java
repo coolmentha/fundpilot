@@ -47,6 +47,7 @@ class TransactionConfirmSupportTest {
     @Mock private FundLotRedemptionRepository fundLotRedemptionRepository;
     @Mock private FundPositionService fundPositionService;
     @Mock private FundRepository fundRepository;
+    @Mock private PositionLimitService positionLimitService;
 
     @InjectMocks private TransactionConfirmSupport support;
 
@@ -145,6 +146,23 @@ class TransactionConfirmSupportTest {
         assertThat(tx.getAmount()).isEqualByComparingTo(new BigDecimal("157.6000"));
         assertThat(lot.getRemainingShares()).isEqualByComparingTo(BigDecimal.ZERO);
         verify(fundLotRedemptionRepository).saveAll(anyList());
+    }
+
+    @Test
+    void onSellConfirmed_持有天数按北京时间自然日而非UTC日期() {
+        List<RedemptionTier> ladder = List.of(
+                new RedemptionTier(7, new BigDecimal("0.015")),
+                new RedemptionTier(null, BigDecimal.ZERO));
+        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+                new FundFeeSnapshot(null, ladder, null));
+        FundLotEntity lot = lot(100, Instant.parse("2026-07-01T16:30:00Z"));
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
+
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-08T15:30:00Z"));
+        tx.setTradeDate(Instant.parse("2026-07-08T15:30:00Z"));
+        support.onSellConfirmed(tx, new BigDecimal("1.6"));
+
+        assertThat(tx.getFee()).isEqualByComparingTo("2.400");
     }
 
     @Test

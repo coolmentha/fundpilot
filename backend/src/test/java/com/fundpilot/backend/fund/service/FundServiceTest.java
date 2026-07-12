@@ -12,6 +12,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,6 +39,7 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(view.fundCode()).isEqualTo("510300");
         assertThat(view.fundName()).isEqualTo("沪深300ETF");
         assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
+        assertThat(view.maxPositionRatio()).isEqualByComparingTo("0.30");
     }
 
     @Test
@@ -49,6 +51,17 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> fundService.create(request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.FUND_CATEGORY_REQUIRED.name());
+    }
+
+    @Test
+    void create_初始持仓市值非正数_抛异常() {
+        FundCreateRequest request = new FundCreateRequest(
+                "510300", "沪深300ETF", FundCategory.BROAD_BASE, FundSubType.ETF, null,
+                BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> fundService.create(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.INITIAL_MARKET_VALUE_INVALID.name());
     }
 
     @Test
@@ -65,6 +78,19 @@ class FundServiceTest extends AbstractIntegrationTest {
         FundEntity reloaded = entityManager.find(FundEntity.class, fund.getId());
         assertThat(reloaded.getFundName()).isEqualTo("新名称");
         assertThat(reloaded.getFundCategory()).isEqualTo(FundCategory.BROAD_BASE);
+    }
+
+    @Test
+    void update_仓位上限超过30百分比_抛POSITION_LIMIT_INVALID() {
+        FundEntity fund = persistFund(FundCategory.BROAD_BASE);
+        entityManager.flush();
+        FundCreateRequest request = new FundCreateRequest(
+                null, null, null, null, null,
+                new BigDecimal("0.31"), null, null, null);
+
+        assertThatThrownBy(() -> fundService.update(fund.getId(), request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.POSITION_LIMIT_INVALID.name());
     }
 
     private FundEntity persistFund(FundCategory category) {

@@ -203,6 +203,13 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 
 ## 手动交易
 
+**总资金池与单基金仓位上限（Capital Pool & Position Limit）**:
+外部入金只有一种语义：正数金额累加到单用户总资金池，不直接归属任何基金，也不自动生成交易。每只基金保存独立的
+`maxPositionRatio`，默认 30%，可向下调整但不能超过 30%；数据库 CHECK 与业务层共同保证该硬上限。所有买入类交易
+（INCREASE/TRANSFER_IN/INVEST，含初始持仓同步确认）在最终确认事务内先锁基金行，再按单位净值计算当前事实持仓市值，校验
+`当前持仓市值 + 本次投入 <= totalCapital * maxPositionRatio`。V20 不从历史交易猜测总资金池：存量持仓继续展示和卖出，首次外部入金前禁止新增买入确认。
+_Avoid_: 把入金直接分配给基金；把总池当可用现金余额随交易扣减；用该约束恢复已退役的金字塔自动加仓。
+
 **手动交易（Manual Transaction）**:
 不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 7 类来源：
 加仓（INCREASE）/减仓（DECREASE）/转入（TRANSFER_IN）/转出（TRANSFER_OUT）/定投（INVEST）/调增（ADJUST_IN）/调减（ADJUST_OUT）。买入写 amount、卖出写 shares，

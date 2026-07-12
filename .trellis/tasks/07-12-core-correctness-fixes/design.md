@@ -51,15 +51,15 @@
 
 确认页读取已有 `FundView.holdingShares`，提供份额上限和快捷回填。查询失败复用 `QueryErrorState`。`PRODUCT.md` 做当前模型重写，`CONTEXT.md` 明确 BUILD/ADD 仅为存量兼容。
 
-## 8. 管理 API Key
+## 8. 全站 API Key 与持久会话
 
-新增 `AdminApiKeyFilter`，仅拦截 `/api/admin` 与 `/api/admin/**`。服务端从 `fundpilot.admin.api-key` 读取 Key，使用常量时间比较：
+`AdminApiKeyFilter` 拦截 `/api` 与所有 `/api/**`。服务端从 `fundpilot.admin.api-key` 读取 Key，使用常量时间比较：
 
 - 配置为空：503 `ADMIN_AUTH_NOT_CONFIGURED`，失败关闭。
 - 请求缺失或不匹配：401 `ADMIN_UNAUTHORIZED`。
-- 请求匹配：继续 Controller 调用。
+- Header 匹配或存在有效签名会话 Cookie：继续 Controller 调用。
 
-前端管理页使用密码输入框保存组件内存态 Key，`useAdminAction` 仅为管理请求增加 `X-Admin-Key`。刷新页面后凭据清空，不写浏览器持久存储。
+浏览器登录时只在 `POST /api/auth/login` Header 中提交一次 Key。后端签发 30 天、host-only、HttpOnly、SameSite=Strict 的 HMAC 会话 Cookie，HTTPS 下增加 Secure。启动通过 `/api/auth/verify` 恢复会话；主动退出清 Cookie并广播不含凭据的 localStorage 事件。管理页复用全站会话，不再次采集或保存 Key。
 
 ## 9. Flyway 遗留修复
 
@@ -95,6 +95,8 @@ repair 只修复 Flyway 元数据，不执行旧 V7 SQL。部署失败时数据�
 
 - 历史 BUILD/ADD/REBALANCE 等枚举保留。
 - 历史普通信号按交易日动态过期。
+- V20 为 `user_config` 恢复 `total_capital`，为 `fund` 增加 `max_position_ratio`；不从交易历史猜测总资金池。
+- 存量持仓允许继续展示和卖出；新的买入确认必须先通过总池与单基金上限校验。
 - 已有关联 CANCELLED 交易的信号仍视为已回应，不重新进入 pending。
 - V18 不回填历史行，`ignored_date` 默认 null。
 
@@ -103,5 +105,5 @@ repair 只修复 Flyway 元数据，不执行旧 V7 SQL。部署失败时数据�
 - R1-R4 均为代码级变更，可逐提交回滚。
 - V18 加列为向后兼容变更；回滚应用时旧版本忽略新列。
 - 测试 schema 与开发 schema 分离，清理仅作用于测试 schema。
-- 管理 API Key 可通过清空前端输入立即停止发送；服务端不提供匿名降级。
+- 主动退出可立即清除浏览器会话；服务端 Key 轮换会让旧签名会话失效，且不提供匿名降级。
 - 部署失败恢复发布前数据库与上一镜像 tag；首次部署无上一 tag 时恢复数据库后保持应用停止。

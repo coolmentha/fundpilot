@@ -12,7 +12,8 @@ const {Title} = Typography;
 
 // 新建表单初始值:基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
-    benchmarkIndexCode: '', initialMarketValue: null, costPerShare: null, openedAt: null};
+    benchmarkIndexCode: '', maxPositionRatioPct: 30,
+    initialMarketValue: null, costPerShare: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
@@ -60,6 +61,7 @@ export default function FundsPage() {
             fundCategory: fund.fundCategory,
             fundSubType: fund.fundSubType,
             benchmarkIndexCode: fund.benchmarkIndexCode,
+            maxPositionRatioPct: Number(fund.maxPositionRatio ?? 0.3) * 100,
         });
         setOpen(true);
     };
@@ -84,9 +86,11 @@ export default function FundsPage() {
         try {
             const values = await form.validateFields();
             // openedAt:DatePicker 返回 dayjs,提交前转 ISO 字符串(后端 Instant 解析);未选则不传(后端用 now)
+            const {maxPositionRatioPct, ...requestValues} = values;
+            const normalized = {...requestValues, maxPositionRatio: maxPositionRatioPct / 100};
             const body = values.openedAt
-                ? {...values, openedAt: values.openedAt.startOf('day').toISOString()}
-                : {...values, openedAt: null};
+                ? {...normalized, openedAt: values.openedAt.startOf('day').toISOString()}
+                : {...normalized, openedAt: null};
             await saveFund.mutateAsync({id: editing?.id, body});
             message.success(editing ? '基金已更新' : '基金已新建');
             setOpen(false);
@@ -108,6 +112,8 @@ export default function FundsPage() {
         {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
+        {title: '仓位上限', dataIndex: 'maxPositionRatio', width: 96, align: 'right',
+            render: (v) => `${(Number(v ?? 0.3) * 100).toFixed(0)}%`},
         {
             title: '今日涨跌/盈亏', width: 126, align: 'right',
             render: (_, r) => r.estimateFetchFailed ? (
@@ -214,10 +220,18 @@ export default function FundsPage() {
                                help="自动识别,可手动调整">
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
                     </Form.Item>
+                    <Form.Item label="仓位上限" name="maxPositionRatioPct"
+                               rules={[{required: true, message: '请输入仓位上限'},
+                                   {type: 'number', min: 0.01, max: 30, message: '仓位上限必须大于 0 且不超过 30%'}]}>
+                        <InputNumber min={0.01} max={30} precision={2} className="full-width"
+                                     formatter={(value) => value === undefined || value === null ? '' : `${value}%`}
+                                     parser={(value) => value?.replace('%', '')}/>
+                    </Form.Item>
                     {!editing && (
                         <Form.Item label="入仓市值（可选）" name="initialMarketValue"
-                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金">
-                            <InputNumber min={0} precision={2} className="full-width" placeholder="已有持仓市值,不填则空仓"
+                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金"
+                                   rules={[{type: 'number', min: 0.01, message: '入仓市值必须大于 0'}]}>
+                            <InputNumber min={0.01} precision={2} className="full-width" placeholder="已有持仓市值,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                          parser={(v) => v.replace(/,/g, '')}/>
                         </Form.Item>

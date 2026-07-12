@@ -3,6 +3,7 @@ package com.fundpilot.backend.admin.security;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.servlet.http.Cookie;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.TestPropertySource;
@@ -22,6 +23,9 @@ class AdminApiKeyIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     MockMvc mockMvc;
+
+    @Autowired
+    AdminSessionTokenService sessionTokenService;
 
     @Test
     void missingKeyCannotReachAdminController() throws Exception {
@@ -87,6 +91,32 @@ class AdminApiKeyIntegrationTest extends AbstractIntegrationTest {
     void correctKeyPassesAuthVerification() throws Exception {
         mockMvc.perform(get("/api/auth/verify")
                         .header(AdminApiKeyFilter.HEADER_NAME, "test-admin-key"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void loginIssuesHttpOnlyPersistentCookieAndCookieRestoresSession() throws Exception {
+        String setCookie = mockMvc.perform(post("/api/auth/login")
+                        .header(AdminApiKeyFilter.HEADER_NAME, "test-admin-key")
+                        .header("X-Forwarded-Proto", "https"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("HttpOnly")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("SameSite=Strict")))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, org.hamcrest.Matchers.containsString("Secure")))
+                .andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+
+        String token = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+        mockMvc.perform(get("/api/auth/verify")
+                        .cookie(new Cookie(AdminSessionTokenService.COOKIE_NAME, token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void signedSessionCookieReachesBusinessApi() throws Exception {
+        mockMvc.perform(get("/api/funds")
+                        .cookie(new Cookie(AdminSessionTokenService.COOKIE_NAME, sessionTokenService.issue())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }

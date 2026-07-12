@@ -17,4 +17,6 @@ public interface FundStrategyActivationRepository extends JpaRepository<FundStra
      * 查某基金所有未停用的任期(issue #10 CLEARED 全员回退时批量回填)。
      */
     List<FundStrategyActivationEntity> findByFundEntity_IdAndDeactivatedAtIsNull(Long fundId);
+
+    List<FundStrategyActivationEntity> findByFundEntity_Id(Long fundId);
 }

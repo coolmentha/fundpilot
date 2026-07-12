@@ -20,6 +20,7 @@ import java.time.Instant;
 @Getter
 @Setter
 public class FundEntity extends AbstractEntity {
+    public static final BigDecimal DEFAULT_MAX_POSITION_RATIO = new BigDecimal("0.30");
     private String fundCode;
 
     private String fundName;
@@ -59,5 +60,9 @@ public class FundEntity extends AbstractEntity {
      * 卖出不改单价;清仓再入场时自然覆盖。
      */
     private BigDecimal costPerShare;
+
+    /** 单基金仓位上限比例，可向下调整，但数据库硬限制不超过 30%。 */
+    @Column(name = "max_position_ratio", nullable = false)
+    private BigDecimal maxPositionRatio = DEFAULT_MAX_POSITION_RATIO;
 
 }

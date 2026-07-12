@@ -1,15 +1,16 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
     apiFetch,
-    clearSiteApiKey,
-    setSiteApiKey,
+    loginSiteApiKey,
+    markSiteAuthChanged,
     setSiteUnauthorizedHandler,
-    verifySiteApiKey,
+    verifySiteSession,
 } from './client.js';
 
 describe('apiFetch headers', () => {
     afterEach(() => {
-        clearSiteApiKey();
+        vi.useRealTimers();
+        markSiteAuthChanged();
         setSiteUnauthorizedHandler(null);
         vi.unstubAllGlobals();
     });
@@ -27,44 +28,47 @@ describe('apiFetch headers', () => {
             headers: {'X-Admin-Key': 'test-admin-key'},
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('/api/admin/test', {
+        expect(fetchMock).toHaveBeenCalledWith('/api/admin/test', expect.objectContaining({
             method: 'POST',
             headers: {'X-Admin-Key': 'test-admin-key'},
-        });
+            signal: expect.any(AbortSignal),
+            credentials: 'same-origin',
+        }));
     });
 
-    it('adds the in-memory site key to every API request', async () => {
+    it('sends same-origin credentials with every API request', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
             json: async () => ({success: true, data: []}),
         });
         vi.stubGlobal('fetch', fetchMock);
-        setSiteApiKey('site-key');
-
         await apiFetch('/api/funds', {headers: {Accept: 'application/json'}});
 
-        expect(fetchMock).toHaveBeenCalledWith('/api/funds', {
+        expect(fetchMock).toHaveBeenCalledWith('/api/funds', expect.objectContaining({
             method: 'GET',
-            headers: {Accept: 'application/json', 'X-Admin-Key': 'site-key'},
-        });
+            headers: {Accept: 'application/json'},
+            signal: expect.any(AbortSignal),
+            credentials: 'same-origin',
+        }));
     });
 
-    it('does not allow a caller header to override the authenticated site key', async () => {
+    it('uses the raw key only for the login request', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
             json: async () => ({success: true, data: null}),
         });
         vi.stubGlobal('fetch', fetchMock);
-        setSiteApiKey('site-key');
+        await loginSiteApiKey('candidate-key');
+        await apiFetch('/api/funds');
 
-        await apiFetch('/api/funds', {headers: {'X-Admin-Key': 'wrong-key'}});
-
-        expect(fetchMock.mock.calls[0][1].headers['X-Admin-Key']).toBe('site-key');
+        expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/login');
+        expect(fetchMock.mock.calls[0][1].headers['X-Admin-Key']).toBe('candidate-key');
+        expect(fetchMock.mock.calls[1][1].headers['X-Admin-Key']).toBeUndefined();
     });
 
-    it('verifies a candidate key without persisting it as the site key', async () => {
+    it('verifies the current cookie session without a raw key header', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
@@ -72,11 +76,10 @@ describe('apiFetch headers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        await verifySiteApiKey('candidate-key');
-        await apiFetch('/api/funds');
+        await verifySiteSession();
 
-        expect(fetchMock.mock.calls[0][1].headers['X-Admin-Key']).toBe('candidate-key');
-        expect(fetchMock.mock.calls[1][1].headers['X-Admin-Key']).toBeUndefined();
+        expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/verify');
+        expect(fetchMock.mock.calls[0][1].headers['X-Admin-Key']).toBeUndefined();
     });
 
     it('notifies the auth gate when an authenticated request becomes unauthorized', async () => {
@@ -86,7 +89,6 @@ describe('apiFetch headers', () => {
             status: 401,
             json: async () => ({success: false, code: 'ADMIN_UNAUTHORIZED', message: '访问凭据无效'}),
         }));
-        setSiteApiKey('site-key');
         setSiteUnauthorizedHandler(onUnauthorized);
 
         await expect(apiFetch('/api/funds')).rejects.toMatchObject({code: 'ADMIN_UNAUTHORIZED'});
@@ -101,12 +103,10 @@ describe('apiFetch headers', () => {
         });
         vi.stubGlobal('fetch', vi.fn().mockReturnValue(oldResponse));
         const onUnauthorized = vi.fn();
-        setSiteApiKey('old-key');
         setSiteUnauthorizedHandler(onUnauthorized);
         const pending = apiFetch('/api/funds');
 
-        clearSiteApiKey();
-        setSiteApiKey('new-key');
+        markSiteAuthChanged();
         resolveOldRequest({
             ok: false,
             status: 401,
@@ -115,5 +115,19 @@ describe('apiFetch headers', () => {
 
         await expect(pending).rejects.toMatchObject({code: 'ADMIN_UNAUTHORIZED'});
         expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
+    it('aborts a request after the shared timeout', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', vi.fn((path, init) => new Promise((resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        })));
+
+        const pending = apiFetch('/api/funds');
+        const rejection = expect(pending).rejects.toMatchObject({code: 'REQUEST_TIMEOUT'});
+        await vi.advanceTimersByTimeAsync(15000);
+
+        await rejection;
+        vi.useRealTimers();
     });
 });

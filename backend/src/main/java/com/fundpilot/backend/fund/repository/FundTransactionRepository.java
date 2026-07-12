@@ -16,6 +16,11 @@ import java.util.Set;
 
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
 
+    interface HoldingSharesProjection {
+        Long getFundId();
+        java.math.BigDecimal getHoldingShares();
+    }
+
     /**
      * 查所有指定状态的交易(issue #15 NavConfirmJob 遍历 PENDING 用)。
      */
@@ -26,6 +31,15 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      * 软删行由 {@code @SQLRestriction} 自动过滤。
      */
     List<FundTransactionEntity> findByFundEntity_IdAndStatus(Long fundId, FundTransactionStatus status);
+
+    boolean existsByFundEntity_IdAndStatus(Long fundId, FundTransactionStatus status);
+
+    @Query(value = "select fund_id as fundId, " +
+            "coalesce(sum(case when source in ('INCREASE','TRANSFER_IN','INVEST','ADJUST_IN') " +
+            "then shares else -shares end), 0) as holdingShares " +
+            "from fund_transaction where status='CONFIRMED' and deleted_date is null " +
+            "and fund_id in (:fundIds) group by fund_id", nativeQuery = true)
+    List<HoldingSharesProjection> aggregateConfirmedShares(@Param("fundIds") Collection<Long> fundIds);
 
     /**
      * 按基金 + 信号类型 + 档位 + 状态查交易(issue #13 移动止盈份额来源 A1 规则)。
@@ -56,9 +70,13 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
     List<FundTransactionEntity> findByFundIdOrderByTradeDateDesc(@org.springframework.data.repository.query.Param("fundId") Long fundId);
 
     /** MIN_HOLD_DAYS 起算点:只取最近一笔已确认买入类交易,忽略卖出、调整和 PENDING。 */
+    @Query("select t from FundTransactionEntity t where t.fundEntity.id = :fundId " +
+            "and t.status = :status and t.source in :sources and t.confirmTime is not null " +
+            "order by coalesce(t.tradeDate, t.confirmTime, t.createdDate) desc")
     Optional<FundTransactionEntity>
     findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
-            Long fundId, FundTransactionStatus status, Collection<FundTransactionSource> sources);
+            @Param("fundId") Long fundId, @Param("status") FundTransactionStatus status,
+            @Param("sources") Collection<FundTransactionSource> sources);
 
     /** 幂等去重:查某定投计划在某时间区间内是否已生成任意状态交易。 */
     boolean existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId,

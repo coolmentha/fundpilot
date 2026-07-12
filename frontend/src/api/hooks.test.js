@@ -8,7 +8,7 @@ vi.mock('./client.js', () => ({
 }));
 
 import {post} from './client.js';
-import {invalidateSignalQueries, requestAdminAction} from './hooks.js';
+import {depositCapital, invalidateSignalQueries, requestAdminAction} from './hooks.js';
 
 describe('signal query invalidation', () => {
     it('refreshes pending, today, and range queries after a signal response', () => {
@@ -40,5 +40,13 @@ describe('admin actions', () => {
     it('rejects unsupported actions instead of falling back to refresh', () => {
         expect(() => requestAdminAction('unknown'))
             .toThrow('Unsupported admin action: unknown');
+    });
+});
+
+describe('capital pool', () => {
+    it('posts external deposits to the singleton capital pool endpoint', () => {
+        depositCapital(2500.5);
+
+        expect(post).toHaveBeenLastCalledWith('/api/user-config/deposits', {amount: 2500.5});
     });
 });

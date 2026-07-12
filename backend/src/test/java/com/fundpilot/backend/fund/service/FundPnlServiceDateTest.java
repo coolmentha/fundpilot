@@ -4,6 +4,7 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import org.junit.jupiter.api.Test;
@@ -28,13 +29,15 @@ class FundPnlServiceDateTest {
     @Mock FundPositionService fundPositionService;
     @Mock FundNavHistoryRepository fundNavHistoryRepository;
     @Mock FundRepository fundRepository;
+    @Mock FundTransactionRepository fundTransactionRepository;
     @Mock MarketRealtimeCache marketRealtimeCache;
 
     @Test
     void 北京时间凌晨不把昨日净值认作今日已确认() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
-                fundPositionService, fundNavHistoryRepository, fundRepository, marketRealtimeCache, clock);
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock);
         FundEntity fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("510300");
@@ -58,7 +61,8 @@ class FundPnlServiceDateTest {
     void 北京时间盘后重启_今日净值未落库_使用缓存估值计算今日收益() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
-                fundPositionService, fundNavHistoryRepository, fundRepository, marketRealtimeCache, clock);
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock);
         FundEntity fund = fund();
         FundNavHistoryEntity yesterday = nav("2026-07-09T00:00:00Z", "1.20");
         FundNavHistoryEntity previous = nav("2026-07-08T00:00:00Z", "1.10");
@@ -80,7 +84,8 @@ class FundPnlServiceDateTest {
     void 北京时间盘后重启_今日净值未落库且估值为空_不回退昨日收益() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
-                fundPositionService, fundNavHistoryRepository, fundRepository, marketRealtimeCache, clock);
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock);
         FundEntity fund = fund();
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(

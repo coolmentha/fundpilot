@@ -157,6 +157,21 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void setEnabled_暂停和恢复不改变_EFFECTIVE_状态() {
+        FundEntity fund = persistFund();
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+
+        dcaPlanService.setEnabled(planId, false);
+        FundDcaPlanEntity paused = fundDcaPlanRepository.findById(planId).orElseThrow();
+        assertThat(paused.getEnabled()).isFalse();
+        assertThat(paused.getStatus()).isEqualTo(DcaPlanStatus.EFFECTIVE);
+
+        dcaPlanService.setEnabled(planId, true);
+        assertThat(fundDcaPlanRepository.findById(planId).orElseThrow().getEnabled()).isTrue();
+    }
+
+    @Test
+    @Transactional
     void create_周末计划日_拒绝创建() {
         FundEntity fund = persistFund();
 

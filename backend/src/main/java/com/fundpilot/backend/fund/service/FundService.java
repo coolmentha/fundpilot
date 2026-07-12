@@ -48,14 +48,17 @@ public class FundService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundTransactionRepository fundTransactionRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
+    private final PositionLimitService positionLimitService;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     public List<FundView> list() {
-        return fundRepository.findAll().stream()
-                .map(fund -> FundView.from(fund, fundPnlService.computeForFund(fund)))
+        List<FundEntity> funds = fundRepository.findAll();
+        var pnlByFund = fundPnlService.computeForFunds(funds);
+        return funds.stream()
+                .map(fund -> FundView.from(fund, pnlByFund.get(fund.getId())))
                 .toList();
     }
 
@@ -66,7 +69,7 @@ public class FundService {
      * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认(反算 shares、置 CONFIRMED),
      * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重"现有金额是历史持仓"
      * (用已公布净值,不等 NavConfirmJob)。无净值可反算则报错不让建(同步确认的硬前提)。
-     * <p>initialMarketValue 为 null/非正数 → 走原 PENDING_HOLDING 流程。
+     * <p>initialMarketValue 为 null → 走原 PENDING_HOLDING 流程；非正数拒绝。
      * <p>@Transactional:initialMarketValue 路径需写基金+交易原子。同步建仓必须取得净值，
      * 行情拉取失败时整个创建事务失败，避免返回一个没有可核算份额的半成品基金。
      */
@@ -75,6 +78,9 @@ public class FundService {
         if ((request.fundCode() == null || request.fundCode().isBlank())
                 && (request.fundName() == null || request.fundName().isBlank())) {
             throw new BusinessException(ErrorCode.MISSING_FUND_IDENTITY, "基金代码和名称至少填一个");
+        }
+        if (request.initialMarketValue() != null && request.initialMarketValue().signum() <= 0) {
+            throw new BusinessException(ErrorCode.INITIAL_MARKET_VALUE_INVALID, "初始持仓市值必须大于 0");
         }
         FundEntity fund = new FundEntity();
         fund.setFundCode(request.fundCode());
@@ -89,12 +95,13 @@ public class FundService {
                 : (fallback != null ? fallback.fundCategory() : null));
         fund.setBenchmarkIndexCode(request.benchmarkIndexCode() != null ? request.benchmarkIndexCode()
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
+        fund.setMaxPositionRatio(PositionLimitService.normalizeRatio(request.maxPositionRatio()));
 
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
 
         // initialMarketValue 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
-        if (request.initialMarketValue() != null && request.initialMarketValue().signum() > 0) {
+        if (request.initialMarketValue() != null) {
             marketDataFetchService.fetchOneFund(saved.getId());
             openWithExistingPosition(saved, request.initialMarketValue(), request.costPerShare(), request.openedAt());
         } else {
@@ -144,6 +151,8 @@ public class FundService {
             throw new BusinessException(ErrorCode.COST_PER_SHARE_INVALID, "成本单价必须大于 0");
         }
 
+        positionLimitService.validatePurchase(fund.getId(), initialMarketValue, navValue);
+
         // 建仓交易:INCREASE(对齐 handleBuild),同步确认(反算 shares/nav/confirmTime)
         FundTransactionEntity tx = new FundTransactionEntity();
         tx.setFundEntity(fund);
@@ -189,6 +198,9 @@ public class FundService {
         }
         if (request.benchmarkIndexCode() != null) {
             fund.setBenchmarkIndexCode(request.benchmarkIndexCode());
+        }
+        if (request.maxPositionRatio() != null) {
+            fund.setMaxPositionRatio(PositionLimitService.normalizeRatio(request.maxPositionRatio()));
         }
         return FundView.from(fundRepository.save(fund));
     }

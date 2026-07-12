@@ -12,4 +12,8 @@ public interface FundLotRedemptionRepository extends JpaRepository<FundLotRedemp
 
     /** 查某 lot 的所有被消耗记录(校验 remaining_shares 一致性用)。 */
     List<FundLotRedemptionEntity> findByLotId(Long lotId);
+
+    List<FundLotRedemptionEntity> findByLotIdIn(List<Long> lotIds);
+
+    List<FundLotRedemptionEntity> findBySellTxIdIn(List<Long> transactionIds);
 }

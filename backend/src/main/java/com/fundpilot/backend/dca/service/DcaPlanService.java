@@ -33,7 +33,7 @@ public class DcaPlanService {
 
     @Transactional
     public Long create(Long fundId, DcaPlanRequest request) {
-        FundEntity fund = fundRepository.findById(fundId)
+        FundEntity fund = fundRepository.findByIdForUpdate(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         // 新建即激活:同基金已有 EFFECTIVE 计划则回退为 DRAFT(同基金同时最多一份 EFFECTIVE)
         demoteExistingEffective(fundId);
@@ -83,6 +83,9 @@ public class DcaPlanService {
         if (plan.getStatus() == DcaPlanStatus.EFFECTIVE) {
             return;
         }
+        fundRepository.findByIdForUpdate(plan.getFundEntity().getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND,
+                        "Fund #" + plan.getFundEntity().getId() + " 不存在"));
         validateAndNormalize(plan);
         demoteExistingEffective(plan.getFundEntity().getId());
         plan.setStatus(DcaPlanStatus.EFFECTIVE);
@@ -96,6 +99,16 @@ public class DcaPlanService {
             throw new IllegalStateTransitionException(plan.getStatus().name(), "DRAFT(停用)");
         }
         plan.setStatus(DcaPlanStatus.DRAFT);
+        fundDcaPlanRepository.save(plan);
+    }
+
+    @Transactional
+    public void setEnabled(Long planId, boolean enabled) {
+        FundDcaPlanEntity plan = requirePlan(planId);
+        if (plan.getStatus() != DcaPlanStatus.EFFECTIVE) {
+            throw new IllegalStateTransitionException(plan.getStatus().name(), "EFFECTIVE(暂停/恢复)");
+        }
+        plan.setEnabled(enabled);
         fundDcaPlanRepository.save(plan);
     }
 

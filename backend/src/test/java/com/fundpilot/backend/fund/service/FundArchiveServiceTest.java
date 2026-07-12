@@ -1,6 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundStrategyActivationEntity;
@@ -72,6 +73,23 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         assertThat(deletedCount("signal_log", "fund_id", fundId)).isEqualTo(1);
         assertThat(deletedCount("fund_nav_history", "fund_id", fundId)).isEqualTo(1);
         assertThat(deletedCount("market_indicator_snapshot", "fund_id", fundId)).isEqualTo(1);
+    }
+
+    @Test
+    void archive_存在待确认交易时拒绝避免拆断转换或未完成操作() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(fund);
+        tx.setSource(FundTransactionSource.DECREASE);
+        tx.setShares(BigDecimal.ONE);
+        tx.setStatus(FundTransactionStatus.PENDING);
+        entityManager.persist(tx);
+        entityManager.flush();
+
+        assertThatThrownBy(() -> fundArchiveService.archive(fund.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.FUND_HAS_PENDING_TRANSACTIONS.name());
+        assertThat(entityManager.find(FundEntity.class, fund.getId())).isNotNull();
     }
 
     /** 用原生 SQL 绕过 @SQLRestriction,数 deleted_date 非空的行数。 */

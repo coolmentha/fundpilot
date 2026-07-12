@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
+import java.math.BigDecimal;
 
 /**
  * 单用户账户配置(单用户场景,不存 userId)。行情工作台转向后,只剩 {@code watchedIndices}——
@@ -20,6 +21,10 @@ import org.hibernate.annotations.SQLDelete;
 @Getter
 @Setter
 public class UserConfigEntity extends AbstractEntity {
+
+    /** 所有外部入金累加形成的账户总资金池；null 表示尚未初始化。 */
+    @Column(name = "total_capital")
+    private BigDecimal totalCapital;
 
     /** 用户关注的大盘指数列表(secid 逗号分隔,如 "1.000001,1.000300,0.399006");null/空用默认列表。 */
     @Column(name = "watched_indices", length = 512)
