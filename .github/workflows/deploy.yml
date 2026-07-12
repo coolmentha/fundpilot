@@ -139,6 +139,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 80m
           envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,ADMIN_API_KEY,DEPLOYMENT_TOKEN
           script: |
             set -Eeuo pipefail
@@ -215,10 +216,11 @@ jobs:
 
             # 首次 clone；后续 fetch 不允许强制覆盖已有 release tag。
             if [ ! -d "$VPS_PATH/.git" ]; then
-              git clone https://github.com/coolmentha/fundpilot.git "$VPS_PATH"
+              timeout --foreground --kill-after=5s 300s \
+                git clone https://github.com/coolmentha/fundpilot.git "$VPS_PATH"
             fi
             cd "$VPS_PATH"
-            git fetch --tags
+            timeout --foreground --kill-after=5s 120s git fetch --tags
             release_commit=$(git rev-parse "$RELEASE_TAG^{commit}")
             [ "$release_commit" = "$image_sha" ] || {
               echo "release tag no longer points to the built commit" >&2
@@ -377,7 +379,20 @@ jobs:
                 return 1
               }
               (
-                sleep "$remaining_seconds"
+                watchdog_sleep_pid=""
+                cleanup_watchdog_sleep() {
+                  if [ -n "$watchdog_sleep_pid" ]; then
+                    kill "$watchdog_sleep_pid" 2>/dev/null || true
+                    wait "$watchdog_sleep_pid" 2>/dev/null || true
+                    watchdog_sleep_pid=""
+                  fi
+                }
+                trap cleanup_watchdog_sleep EXIT
+                trap 'cleanup_watchdog_sleep; exit 0' HUP INT TERM
+                sleep "$remaining_seconds" &
+                watchdog_sleep_pid=$!
+                wait "$watchdog_sleep_pid"
+                watchdog_sleep_pid=""
                 echo "deployment forward maintenance exceeded ${FORWARD_MAINTENANCE_SECONDS}s" >&2
                 kill -TERM "$deploy_shell_pid"
               ) &
@@ -551,8 +566,8 @@ jobs:
             }
 
             # 镜像拉取不需要停写；完成后再检查一个有硬上限的完整维护区间。
-            docker pull "$BACKEND_IMAGE"
-            docker pull "$FRONTEND_IMAGE"
+            timeout --foreground --kill-after=5s 300s docker pull "$BACKEND_IMAGE"
+            timeout --foreground --kill-after=5s 300s docker pull "$FRONTEND_IMAGE"
             maintenance_window_is_safe
 
             # 升级前必须使用上一已部署版本的 Compose 和环境完成停写与备份。
@@ -562,7 +577,7 @@ jobs:
               git checkout --detach "$RELEASE_TAG"
               write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
             fi
-            docker network inspect deploy_sub2api-network >/dev/null
+            run_before_total_deadline 30 docker network inspect deploy_sub2api-network >/dev/null
 
             trap deployment_abort ERR HUP INT TERM
             start_maintenance_watchdog

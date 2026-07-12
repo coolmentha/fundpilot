@@ -34,7 +34,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 服务端 Key 未配置时失败关闭，不得匿名放行。
 - Flyway 默认严格校验，禁止 `ignoreMigrationPatterns: '*:missing'` 或 `versioned:missing`。
 - repair 开关开启时，只有唯一 `MISSING_SUCCESS`、version `7`、description `dca take profit replaces timing`、script `V7__dca_take_profit_replaces_timing.sql` 可以进入 repair。
-- repair 前拒绝其他 missing/future/failed 与 checksum、description、type 不匹配；repair 后必须只有 V7 为 `DELETED`，不得 removed 或 aligned 其他迁移。
+- repair 前拒绝其他 missing/future/failed 与 checksum、description、type 不匹配；repair 后必须只有 V7 为 `DELETED`，不得 removed 或 aligned 其他迁移。合法 pending migration 必须先正常 migrate，再执行最终严格 validate，禁止用前置 validate 阻断版本升级。
 - 前端 CI 固定执行 `npm ci -> npm run lint -> npm test -> npm run build`；tag 发布工作流必须重新执行后端 verify 和前端完整验证。
 - Git `v*` tag 只用于检出 Compose；实际部署和回滚必须使用构建步骤返回的 backend/frontend GHCR digest。
 - 发布工作流使用 concurrency 串行化，且必须确认 release tag 仍指向本次构建 commit。
@@ -50,6 +50,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 提交后的正常 backend 或公网 frontend 启动失败时停止对外服务并报错，不得恢复旧数据库覆盖后台任务或用户写入。
 - ERR/HUP/INT/TERM 始终进入同一个阶段分派 trap；以原子落盘 `.deployed-state` 中本次 `DEPLOYMENT_TOKEN` 判断是否已提交。提交前恢复数据库和旧状态，提交后只停止 backend/frontend，不得依赖相邻两行命令切换 trap。
 - `.deployed-state` 提交后必须立即取消 30 分钟前向 watchdog；提交后命令只受 55 分钟总截止约束。
+- 前向 watchdog 停止时必须终止并等待其 sleep 子进程，禁止后台后代继续持有 SSH 输出管道。仓库 clone/fetch 和候选镜像 pull 必须分别有硬超时；SSH Action 的 `command_timeout` 必须覆盖这些前置上限、55 分钟总维护截止和至少 5 分钟清理余量。
 - rollback 或 post-commit 探活失败后的最终停服使用独立 `timeout --kill-after`，不得因总 deadline 已耗尽而跳过停服。
 - `.env`、状态临时文件和数据库备份从创建起必须受 `umask 077` 保护；数据库恢复使用单事务。
 
@@ -61,8 +62,8 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 | 管理 Header 缺失或不匹配 | 不进入 Controller | 401 `ADMIN_UNAUTHORIZED` |
 | 管理 Header 匹配 | 执行对应管理 Service | 原端点响应 |
 | Flyway repair 开关关闭 | 直接严格 migrate/validate | 任意 missing 导致启动失败 |
-| 开关开启且无遗留 V7 | 不调用 repair，严格 validate/migrate | 正常启动 |
-| 唯一已知 V7 Missing | 仅将 V7 标为 `DELETED` | validate/migrate 后启动 |
+| 开关开启且无遗留 V7 | 不调用 repair，正常 migrate 后严格 validate | 正常启动 |
+| 唯一已知 V7 Missing | 仅将 V7 标为 `DELETED` | repair/migrate/validate 后启动 |
 | 其他 missing/failed/元数据漂移 | 禁止 repair | 启动失败 |
 | 数据库备份为空或不可列出 | 不启动新版本 | 部署失败 |
 | 新版本健康检查失败 | 恢复数据库和上一 tag | 回滚后工作流仍失败 |
@@ -100,7 +101,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - `AdminApiKeyIntegrationTest`：真实 Spring Web 过滤链验证 401/200 与公共 API 放行。
 - `frontend/src/api/client.test.js` / `hooks.test.js`：调用方 Header 合并、五个管理 action 路由和未知 action 拒绝。
 - `LegacyV7FlywayRepairServiceTest`：开关关闭、幂等、额外 missing、failed、元数据漂移及越权 repair 结果。
-- `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，repair 后状态为 `DELETED` 且严格 validate 成功。
+- `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，并保留至少一个合法 pending migration；repair 后 V7 为 `DELETED`、pending 成功应用且严格 validate 成功。
 - CI YAML 必须可解析，部署脚本必须通过 `bash -n`，Compose 必须通过 `docker compose config --quiet`。
 - 部署脚本复核必须覆盖禁区交叉计算、绝对 deadline、命令级 timeout，以及 `.deployed-state` 原子提交前后的信号分派。
 - `SchedulingConfigTest`、`PendingTransactionCompensationJobTest`、`TradingCalendarSyncJobTest`：候选模式不注册调度且跳过启动写。
@@ -138,8 +139,8 @@ if (!MessageDigest.isEqual(expected, supplied)) reject(401, ADMIN_UNAUTHORIZED);
 verifyNoFailedOrMismatchedMigrations(flyway.info().all());
 repairOnlyExpectedLegacyV7();
 verifyV7IsDeleted();
-flyway.validate();
 flyway.migrate();
+flyway.validate();
 ```
 
 ```sh

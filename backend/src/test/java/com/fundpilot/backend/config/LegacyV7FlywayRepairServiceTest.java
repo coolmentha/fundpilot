@@ -68,8 +68,8 @@ class LegacyV7FlywayRepairServiceTest {
         order.verify(flyway).info();
         order.verify(flyway).repair();
         order.verify(flyway).info();
-        order.verify(flyway).validate();
         order.verify(flyway).migrate();
+        order.verify(flyway).validate();
     }
 
     @Test
@@ -104,8 +104,25 @@ class LegacyV7FlywayRepairServiceTest {
         verify(flyway, never()).repair();
         InOrder order = inOrder(flyway);
         order.verify(flyway).info();
-        order.verify(flyway).validate();
         order.verify(flyway).migrate();
+        order.verify(flyway).validate();
+    }
+
+    @Test
+    void migratesPendingVersionBeforeStrictValidation() {
+        LegacyV7FlywayRepairService service = service(true);
+        MigrationInfo pendingV18 = migration(MigrationState.PENDING, "18", "add signal ignore date",
+                "V18__add_signal_ignore_date.sql");
+        when(flyway.info()).thenReturn(migrationInfoService);
+        when(migrationInfoService.all()).thenReturn(new MigrationInfo[]{pendingV18});
+
+        service.migrate(flyway);
+
+        verify(flyway, never()).repair();
+        InOrder order = inOrder(flyway);
+        order.verify(flyway).info();
+        order.verify(flyway).migrate();
+        order.verify(flyway).validate();
     }
 
     @Test

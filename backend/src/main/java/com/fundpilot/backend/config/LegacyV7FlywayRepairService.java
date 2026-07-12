@@ -39,16 +39,16 @@ public class LegacyV7FlywayRepairService {
         verifyNoFailedOrMismatchedMigrations(migrations);
         List<MigrationInfo> deletable = findDeletableMigrations(migrations);
         if (deletable.isEmpty()) {
-            flyway.validate();
             flyway.migrate();
+            flyway.validate();
             return;
         }
         verifyRepairPreconditions(deletable);
         RepairResult repairResult = flyway.repair();
         verifyRepairResult(repairResult);
         verifyRepairedHistory(flyway.info().all());
-        flyway.validate();
         flyway.migrate();
+        flyway.validate();
     }
 
     private List<MigrationInfo> findDeletableMigrations(MigrationInfo[] migrations) {
