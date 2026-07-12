@@ -3,6 +3,7 @@ package com.fundpilot.backend.config;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationState;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -21,30 +22,47 @@ class LegacyV7FlywayRepairIntegrationTest extends AbstractIntegrationTest {
     DataSource dataSource;
 
     @Test
-    void repairsRealLegacyHistoryRowAndKeepsStrictValidationGreen() throws Exception {
+    void repairsRealLegacyHistoryAndAppliesPendingMigrationBeforeStrictValidation() throws Exception {
         recreateSchema();
         try {
+            Flyway.configure()
+                    .dataSource(dataSource)
+                    .schemas(SCHEMA)
+                    .defaultSchema(SCHEMA)
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("17"))
+                    .load()
+                    .migrate();
+            insertLegacyV7HistoryRow();
+
             Flyway flyway = Flyway.configure()
                     .dataSource(dataSource)
                     .schemas(SCHEMA)
                     .defaultSchema(SCHEMA)
                     .locations("classpath:db/migration")
                     .load();
-            flyway.migrate();
-            insertLegacyV7HistoryRow();
+
+            assertThat(migrationState(flyway, "7")).isEqualTo(MigrationState.MISSING_SUCCESS);
+            assertThat(migrationState(flyway, "18")).isEqualTo(MigrationState.PENDING);
 
             LegacyV7FlywayRepairService service = new LegacyV7FlywayRepairService(
                     new LegacyV7FlywayRepairProperties(true));
             service.migrate(flyway);
 
-            assertThat(Arrays.stream(flyway.info().all())
-                    .filter(info -> info.getVersion() != null && "7".equals(info.getVersion().toString()))
-                    .map(info -> info.getState()))
-                    .containsExactly(MigrationState.DELETED);
+            assertThat(migrationState(flyway, "7")).isEqualTo(MigrationState.DELETED);
+            assertThat(migrationState(flyway, "18")).isEqualTo(MigrationState.SUCCESS);
             assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         } finally {
             dropSchema();
         }
+    }
+
+    private MigrationState migrationState(Flyway flyway, String version) {
+        return Arrays.stream(flyway.info().all())
+                .filter(info -> info.getVersion() != null && version.equals(info.getVersion().toString()))
+                .map(info -> info.getState())
+                .findFirst()
+                .orElseThrow();
     }
 
     private void recreateSchema() throws Exception {
