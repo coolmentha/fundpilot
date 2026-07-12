@@ -231,9 +231,9 @@ export const errorTitles = {
     // 数据源
     NAV_HISTORY_EMPTY: '净值历史为空',
     MARKET_DATA_ALL_SOURCES_FAILED: '行情数据源全部失败',
-    // 管理端鉴权
-    ADMIN_UNAUTHORIZED: '管理凭据无效',
-    ADMIN_AUTH_NOT_CONFIGURED: '管理端鉴权未配置',
+    // 全站 API 鉴权
+    ADMIN_UNAUTHORIZED: '访问凭据无效',
+    ADMIN_AUTH_NOT_CONFIGURED: '访问鉴权未配置',
     // 兜底
     INTERNAL_ERROR: '服务异常',
     NETWORK_ERROR: '网络异常',

@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UrlPathHelper;
@@ -18,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 /**
- * 使用部署环境注入的单一 API Key 保护所有管理写入口。
+ * 使用部署环境注入的单一 API Key 保护所有业务 API。
  * 配置为空时保持失败关闭,避免部署漏配后退化为匿名可调用。
  */
 @Component
@@ -33,7 +34,7 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = UrlPathHelper.defaultInstance.getPathWithinApplication(request);
-        return !(path.equals("/api/admin") || path.startsWith("/api/admin/"));
+        return !(path.equals("/api") || path.startsWith("/api/"));
     }
 
     @Override
@@ -42,16 +43,18 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store, private");
+        response.addHeader(HttpHeaders.VARY, HEADER_NAME);
         if (properties.apiKey() == null || properties.apiKey().isBlank()) {
             reject(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-                    ErrorCode.ADMIN_AUTH_NOT_CONFIGURED, "管理端鉴权未配置");
+                    ErrorCode.ADMIN_AUTH_NOT_CONFIGURED, "访问鉴权未配置");
             return;
         }
 
         String suppliedKey = request.getHeader(HEADER_NAME);
         if (suppliedKey == null || !matches(suppliedKey)) {
             reject(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    ErrorCode.ADMIN_UNAUTHORIZED, "管理凭据无效");
+                    ErrorCode.ADMIN_UNAUTHORIZED, "访问凭据无效");
             return;
         }
 

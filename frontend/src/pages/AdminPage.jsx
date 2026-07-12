@@ -1,6 +1,5 @@
-import {useState} from 'react';
-import {App, Button, Card, Input, Popconfirm, Space, Typography} from 'antd';
-import {DatabaseOutlined, KeyOutlined, ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons';
+import {App, Button, Card, Popconfirm, Space, Typography} from 'antd';
+import {DatabaseOutlined, ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {useAdminAction} from '../api/hooks.js';
 
 const {Title, Text} = Typography;
@@ -8,15 +7,11 @@ const {Title, Text} = Typography;
 export default function AdminPage() {
     const {message} = App.useApp();
     const adminAction = useAdminAction();
-    const [adminKey, setAdminKey] = useState('');
-    const keyMissing = adminKey.length === 0;
-
     const run = async (action, successMsg) => {
         try {
-            const result = await adminAction.mutateAsync({action, adminKey});
+            const result = await adminAction.mutateAsync({action});
             message.success(successMsg(result));
-        } catch (error) {
-            if (error?.code === 'ADMIN_UNAUTHORIZED') setAdminKey('');
+        } catch {
             // 错误由全局 mutation onError 弹 notification,这里不重复提示
         }
     };
@@ -27,21 +22,11 @@ export default function AdminPage() {
                 <Text type="secondary" style={{display: 'block', marginBottom: 24}}>
                     手动触发定时任务（日常由后端 @Scheduled 自动执行，此处用于调试/补跑）。
                 </Text>
-                <Input.Password
-                    value={adminKey}
-                    onChange={(event) => setAdminKey(event.target.value)}
-                    prefix={<KeyOutlined/>}
-                    placeholder="管理员 API Key"
-                    autoComplete="off"
-                    aria-label="管理员 API Key"
-                    style={{maxWidth: 420, marginBottom: 24}}
-                />
                 <Space direction="vertical" size="middle" className="full-width">
                     <Card size="small" title="信号生成" extra={
                         <Popconfirm title="生成今日信号？未回应信号将按最新行情重算。" onConfirm={() =>
                             run('generate', () => '信号生成完成')}>
                             <Button type="primary" icon={<ThunderboltOutlined/>}
-                                    disabled={keyMissing}
                                     loading={adminAction.isPending}>生成今日信号</Button>
                         </Popconfirm>
                     }>
@@ -51,7 +36,6 @@ export default function AdminPage() {
                         <Popconfirm title="按每笔交易发生日补偿确认 PENDING 交易？" onConfirm={() =>
                             run('confirm-nav', (r) => `净值确认完成，回填 ${r?.confirmed ?? 0} 条`)}>
                             <Button icon={<DatabaseOutlined/>}
-                                    disabled={keyMissing}
                                     loading={adminAction.isPending}>回填净值</Button>
                         </Popconfirm>
                     }>
@@ -61,7 +45,6 @@ export default function AdminPage() {
                         <Popconfirm title="全量刷新行情数据？" onConfirm={() =>
                             run('refresh', () => '行情刷新完成')}>
                             <Button icon={<ReloadOutlined/>}
-                                    disabled={keyMissing}
                                     loading={adminAction.isPending}>刷新行情</Button>
                         </Popconfirm>
                     }>
@@ -71,7 +54,6 @@ export default function AdminPage() {
                         <Popconfirm title="拉取全量基金字典并更新本地缓存？" onConfirm={() =>
                             run('sync-dict', (r) => `字典同步完成，更新 ${r?.upserted ?? 0} 条，回填 ${r?.backfilled ?? 0} 只基金`)}>
                             <Button icon={<DatabaseOutlined/>}
-                                    disabled={keyMissing}
                                     loading={adminAction.isPending}>同步字典</Button>
                         </Popconfirm>
                     }>
@@ -81,7 +63,6 @@ export default function AdminPage() {
                         <Popconfirm title="从东方财富同步 A 股交易日历？" onConfirm={() =>
                             run('sync-calendar', (r) => `交易日历同步完成，新增 ${r?.added ?? 0} 条`)}>
                             <Button icon={<DatabaseOutlined/>}
-                                    disabled={keyMissing}
                                     loading={adminAction.isPending}>同步交易日历</Button>
                         </Popconfirm>
                     }>

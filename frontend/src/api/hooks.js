@@ -274,16 +274,16 @@ const ADMIN_ACTION_PATHS = {
     refresh: '/api/admin/market-data/refresh',
 };
 
-export function requestAdminAction(action, adminKey) {
+export function requestAdminAction(action) {
     const path = ADMIN_ACTION_PATHS[action];
     if (!path) throw new Error(`Unsupported admin action: ${action}`);
-    return post(path, undefined, {headers: {'X-Admin-Key': adminKey}});
+    return post(path);
 }
 
 export function useAdminAction() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({action, adminKey}) => requestAdminAction(action, adminKey),
+        mutationFn: ({action}) => requestAdminAction(action),
         onSuccess: () => qc.invalidateQueries(),
     });
 }

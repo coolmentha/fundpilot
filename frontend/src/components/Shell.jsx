@@ -1,4 +1,4 @@
-import {Layout, Menu, Badge, Drawer} from 'antd';
+import {Badge, Button, Drawer, Layout, Menu, Tooltip} from 'antd';
 import {
     FundOutlined,
     SettingOutlined,
@@ -7,12 +7,14 @@ import {
     ThunderboltOutlined,
     LineChartOutlined,
     EllipsisOutlined,
+    LogoutOutlined,
     StockOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
 import {usePendingSignals} from '../api/hooks.js';
 import {useState} from 'react';
+import {useSiteAuth} from '../auth/SiteAuthContext.js';
 
 const {Header, Content, Sider} = Layout;
 
@@ -72,6 +74,7 @@ const useSelectedKey = () => {
 };
 
 export default function Shell() {
+    const {logout} = useSiteAuth();
     const navigate = useNavigate();
     const selected = useSelectedKey();
     const {data: pending} = usePendingSignals();
@@ -111,10 +114,13 @@ export default function Shell() {
             </Sider>
             <Layout>
                 <Header className="app-header">
-                    <div>
+                    <div className="app-header-copy">
                         <div className="page-title">{meta.title}</div>
                         <div className="page-subtitle">{meta.subtitle}</div>
                     </div>
+                    <Tooltip title="退出">
+                        <Button type="text" icon={<LogoutOutlined/>} onClick={logout} aria-label="退出登录"/>
+                    </Tooltip>
                 </Header>
                 <Content className="app-content">
                     <ErrorBoundary>

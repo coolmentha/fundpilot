@@ -31,16 +31,14 @@ describe('admin actions', () => {
         ['sync-dict', '/api/admin/fund-dict/sync'],
         ['sync-calendar', '/api/admin/market-data/sync-trading-calendar'],
         ['refresh', '/api/admin/market-data/refresh'],
-    ])('sends the API key only with %s', (action, path) => {
-        requestAdminAction(action, 'test-admin-key');
+    ])('routes %s through the authenticated API client', (action, path) => {
+        requestAdminAction(action);
 
-        expect(post).toHaveBeenLastCalledWith(path, undefined, {
-            headers: {'X-Admin-Key': 'test-admin-key'},
-        });
+        expect(post).toHaveBeenLastCalledWith(path);
     });
 
     it('rejects unsupported actions instead of falling back to refresh', () => {
-        expect(() => requestAdminAction('unknown', 'test-admin-key'))
+        expect(() => requestAdminAction('unknown'))
             .toThrow('Unsupported admin action: unknown');
     });
 });

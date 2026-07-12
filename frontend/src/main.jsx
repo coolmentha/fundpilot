@@ -6,6 +6,7 @@ import {App as AntdApp, ConfigProvider, theme} from 'antd';
 import 'antd/dist/reset.css';
 import './styles.css';
 import App from './App.jsx';
+import SiteAuthGate from './auth/SiteAuthGate.jsx';
 import {ApiError} from './api/client.js';
 import {errorTitle} from './constants.js';
 
@@ -74,9 +75,11 @@ function AppInit() {
     }));
     return (
         <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
-                <App/>
-            </BrowserRouter>
+            <SiteAuthGate>
+                <BrowserRouter>
+                    <App/>
+                </BrowserRouter>
+            </SiteAuthGate>
         </QueryClientProvider>
     );
 }

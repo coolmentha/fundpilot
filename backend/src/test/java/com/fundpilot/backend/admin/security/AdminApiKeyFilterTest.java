@@ -3,6 +3,7 @@ package com.fundpilot.backend.admin.security;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.json.JsonMapper;
@@ -23,19 +24,21 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
-    void correctKeyAllowsAdminRequest() throws Exception {
-        MockHttpServletRequest request = adminRequest();
+    void correctKeyAllowsApiRequest() throws Exception {
+        MockHttpServletRequest request = apiRequest();
         request.addHeader(AdminApiKeyFilter.HEADER_NAME, "test-admin-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+        assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store, private");
+        assertThat(response.getHeader(HttpHeaders.VARY)).isEqualTo(AdminApiKeyFilter.HEADER_NAME);
     }
 
     @Test
-    void missingKeyRejectsAdminRequest() throws Exception {
-        MockHttpServletRequest request = adminRequest();
+    void missingKeyRejectsApiRequest() throws Exception {
+        MockHttpServletRequest request = apiRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
@@ -46,8 +49,8 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
-    void wrongKeyRejectsAdminRequest() throws Exception {
-        MockHttpServletRequest request = adminRequest();
+    void wrongKeyRejectsApiRequest() throws Exception {
+        MockHttpServletRequest request = apiRequest();
         request.addHeader(AdminApiKeyFilter.HEADER_NAME, "wrong-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -61,7 +64,7 @@ class AdminApiKeyFilterTest {
     @Test
     void missingConfigurationFailsClosed() throws Exception {
         filter = createFilter("");
-        MockHttpServletRequest request = adminRequest();
+        MockHttpServletRequest request = apiRequest();
         request.addHeader(AdminApiKeyFilter.HEADER_NAME, "any-key");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -80,9 +83,9 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
-    void publicRequestDoesNotRequireKey() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/funds");
-        request.setServletPath("/api/funds");
+    void nonApiRequestDoesNotRequireKey() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/health");
+        request.setServletPath("/actuator/health");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
@@ -91,10 +94,10 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
-    void encodedAdminPathStillRequiresKey() throws Exception {
+    void encodedApiPathStillRequiresKey() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
-                "POST", "/api/%61dmin/market-data/refresh");
-        request.setRequestURI("/api/%61dmin/market-data/refresh");
+                "GET", "/%61pi/funds");
+        request.setRequestURI("/%61pi/funds");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
@@ -104,10 +107,10 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
-    void matrixParameterAdminPathStillRequiresKey() throws Exception {
+    void matrixParameterApiPathStillRequiresKey() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
-                "POST", "/api/admin;x/market-data/refresh");
-        request.setRequestURI("/api/admin;x/market-data/refresh");
+                "GET", "/api;x/funds");
+        request.setRequestURI("/api;x/funds");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
@@ -116,9 +119,9 @@ class AdminApiKeyFilterTest {
         verifyNoInteractions(filterChain);
     }
 
-    private MockHttpServletRequest adminRequest() {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/market-data/refresh");
-        request.setServletPath("/api/admin/market-data/refresh");
+    private MockHttpServletRequest apiRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/funds");
+        request.setServletPath("/api/funds");
         return request;
     }
 }
