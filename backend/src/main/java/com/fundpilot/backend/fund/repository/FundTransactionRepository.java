@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
 
@@ -66,6 +67,10 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
 
     /** 同一 SignalLog 只能生成一笔未软删交易。 */
     boolean existsBySignalLogEntity_Id(Long signalLogId);
+
+    @Query("select t.signalLogEntity.id from FundTransactionEntity t " +
+            "where t.signalLogEntity.id in :signalIds")
+    Set<Long> findRespondedSignalIds(@Param("signalIds") Collection<Long> signalIds);
 
     /** 定投并发最终兜底：数据库唯一索引冲突时返回 0，不污染当前事务。 */
     @Modifying

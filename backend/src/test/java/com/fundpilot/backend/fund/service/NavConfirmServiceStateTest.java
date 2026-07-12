@@ -50,9 +50,9 @@ class NavConfirmServiceStateTest {
 
         when(fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING))
                 .thenReturn(List.of(out, in));
-        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(1L, day, end))
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(1L, day, end))
                 .thenReturn(List.of(nav(fundA, "1.25")));
-        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(2L, day, end))
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(2L, day, end))
                 .thenReturn(List.of());
 
         int confirmed = service.confirmPendingTransactions(day);
@@ -75,7 +75,7 @@ class NavConfirmServiceStateTest {
 
         when(fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING))
                 .thenReturn(List.of(tx));
-        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
+        when(fundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
                 1L, friday, friday.plus(1, ChronoUnit.DAYS)))
                 .thenReturn(List.of(nav(fund, "1.25", "2.50")));
 

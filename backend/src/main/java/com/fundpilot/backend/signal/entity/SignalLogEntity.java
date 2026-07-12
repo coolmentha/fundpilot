@@ -51,6 +51,5 @@ public class SignalLogEntity extends AbstractEntity {
 
     private String hardConstraintBreaches;
 
-
-
+    private Instant ignoredDate;
 }

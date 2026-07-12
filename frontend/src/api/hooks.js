@@ -171,14 +171,24 @@ export function usePendingSignals() {
 export function usePortfolioSummary() {
     return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary'), ...realtimeQueryOptions});
 }
+export function invalidateSignalQueries(queryClient) {
+    queryClient.invalidateQueries({queryKey: ['signals-pending']});
+    queryClient.invalidateQueries({queryKey: ['signals-today']});
+    queryClient.invalidateQueries({queryKey: ['signals-range']});
+}
 export function useConfirmOperation(fundId) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => post(`/api/funds/${fundId}/operations`, body),
-        onSuccess: () => {
-            qc.invalidateQueries({queryKey: ['signals-pending']});
-            qc.invalidateQueries({queryKey: ['signals-today']});
-        },
+        onSuccess: () => invalidateSignalQueries(qc),
+    });
+}
+
+export function useIgnoreSignal() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({fundId, signalId}) => post(`/api/funds/${fundId}/signals/${signalId}/ignore`),
+        onSuccess: () => invalidateSignalQueries(qc),
     });
 }
 
@@ -256,17 +266,24 @@ export function useMarketIndicatorsToday(fundId) {
 }
 
 // ===== 管理 =====
+const ADMIN_ACTION_PATHS = {
+    generate: '/api/admin/signals/generate',
+    'confirm-nav': '/api/admin/transactions/confirm-nav',
+    'sync-dict': '/api/admin/fund-dict/sync',
+    'sync-calendar': '/api/admin/market-data/sync-trading-calendar',
+    refresh: '/api/admin/market-data/refresh',
+};
+
+export function requestAdminAction(action, adminKey) {
+    const path = ADMIN_ACTION_PATHS[action];
+    if (!path) throw new Error(`Unsupported admin action: ${action}`);
+    return post(path, undefined, {headers: {'X-Admin-Key': adminKey}});
+}
+
 export function useAdminAction() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (action) => {
-            const path = action === 'generate' ? '/api/admin/signals/generate'
-                : action === 'confirm-nav' ? '/api/admin/transactions/confirm-nav'
-                : action === 'sync-dict' ? '/api/admin/fund-dict/sync'
-                : action === 'sync-calendar' ? '/api/admin/market-data/sync-trading-calendar'
-                : '/api/admin/market-data/refresh';
-            return post(path);
-        },
+        mutationFn: ({action, adminKey}) => requestAdminAction(action, adminKey),
         onSuccess: () => qc.invalidateQueries(),
     });
 }

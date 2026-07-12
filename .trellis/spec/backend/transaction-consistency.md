@@ -8,6 +8,7 @@
 
 ```java
 int NavConfirmService.confirmPendingTransactions(Instant tradeDayUtc);
+int NavConfirmService.confirmPendingTransactionsIsolated(Instant tradeDayUtc);
 int NavConfirmService.confirmPendingTransactionsForFund(Long fundId);
 int PendingTransactionCompensationService.compensateAll();
 int PendingTransactionCompensationService.compensateFund(Long fundId);
@@ -23,6 +24,11 @@ int TradingCalendarSyncService.sync();
 int TradingCalendarSyncService.syncFull();
 FundTransactionView FundTransactionService.createManual(Long fundId, ManualTransactionRequest request);
 boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
+List<FundNavHistoryEntity> FundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
+    Long fundId, Instant startInclusive, Instant endExclusive);
+List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+    Long fundId, Instant startInclusive, Instant endExclusive);
+<T> T RequiresNewTransactionExecutor.execute(Supplier<T> work);
 ```
 
 前端 `POST /api/funds/{fundId}/transactions`：买入类传正数 `amount`，卖出/调整类传正数 `shares`，转换可额外传 `targetFundId`；
@@ -39,6 +45,8 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - `tradeDate` 是业务交易发生时间，`createdDate` 只是审计创建时间；所有新建交易路径必须显式写 `tradeDate`。
 - `NavConfirmService` 优先按每笔 PENDING 交易的 `tradeDate` 选择净值日；仅存量 `tradeDate` 为空时回退 `createdDate`，Job 参数是最后降级值。
 - 手动确认与自动确认都必须按交易 `tradeDate` 对应的北京时间自然日取单位净值；累计净值仅用于复权分析，禁止用于真实交易份额、金额和市值。
+- 单日净值查询必须使用半开区间 `[startInclusive, endExclusive)`；禁止 `Between` 或包含结束点的查询，避免当日缺净值时用次日净值确认历史交易。
+- 单日/日期范围信号查询也必须使用半开区间；历史列表和同日重跑都不得把次日 `00:00` 信号纳入当前日。
 - 手动转换的转出、转入两腿必须复用同一 `tradeDate`；流水按 `coalesce(tradeDate, createdDate)` 倒序。
 - 净值历史新增行提交后发布 `FundNavUpdatedEvent`，`AFTER_COMMIT` 监听器按基金推进 PENDING 交易，确认失败不得回滚净值。
 - 应用启动时和每小时第 5 分钟运行待确认补偿；按基金使用独立事务，单只失败不阻断其他基金。
@@ -58,11 +66,17 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - 历史 CONFIRMED 交易的 `tradeDate` 若落在非交易日，重建使用该日期之前最近一期单位净值，禁止使用未来净值；onboarding lot 仍保留旧 `acquireDate` 作为持有期起点。
 - onboarding 用户成本从重建前基金总成本扣除普通 lot 成本后反推，不得用旧交易净值覆盖。
 - 同一定投计划同一北京时间自然日由部分唯一索引最终兜底，Job 使用 `ON CONFLICT DO NOTHING` 原子生成。
+- DCA Job 只负责交易日门控、基金遍历和失败隔离；每只基金必须调用独立 Spring Bean 的 `@Transactional` Service，禁止同 Bean 自调用事务方法。
+- 行情抓取、信号生成、夜间净值确认等按基金遍历的定时批处理，每只基金必须通过 `RequiresNewTransactionExecutor` 或等价的代理 Bean 在独立事务中执行；单只失败只回滚当前基金并继续后续基金。
 - 卖出存在 lot 缺口时，只有卖出前事实持仓中确有未跟踪份额，缺口才按零赎回费降级。
+- 所有 SELL 确认入口在消费 lot 前必须先悲观锁定基金行，再基于 CONFIRMED 交易汇总校验事实持仓；不得依赖请求前页面持仓、缓存持仓或仅校验 lot 总数。
+- ADJUST 分支先悲观锁基金行；`ADJUST_OUT` 不得超过 CONFIRMED 事实持仓，交易、lot 更新和 `reconcileStatus` 必须位于同一事务。
 - 交易日历使用数据库 `ON CONFLICT DO NOTHING` 原子插入，不使用“先查后插”实现幂等。
 - 日常 `sync()` 空表全量、非空表只写最大日期之后；管理 `syncFull()` 遍历全量以补历史缺口。
 - DCA 周计划只接受周一至周五；月计划允许连续休市后跨月顺延到首个交易日。
 - DCA 幂等按 `dcaPlanId + tradeDate` 的北京时间自然日范围检查任意状态；CONFIRMED/CANCELLED 都不得重建本期交易。
+- 普通信号仅在当前日期之前最近一个交易日有效；当前策略绑定的 `TRIGGERED` 止盈信号可跨日回应。
+- 信号操作状态统一投影为 `INFORMATIONAL/PENDING/RESPONDED/IGNORED/EXPIRED`；已忽略或过期信号不得确认，同日重跑不得覆盖已忽略信号。
 
 ## 4. Validation & Error Matrix
 
@@ -78,8 +92,12 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 | lot 缺口大于事实未跟踪份额 | 交易不确认 | `INSUFFICIENT_LOTS` |
 | 路径 fundId 与 SignalLog 所属基金不一致 | 拒绝回应 | `SIGNAL_FUND_MISMATCH` |
 | SignalLog 已有关联未软删交易 | 拒绝重复回应 | `SIGNAL_ALREADY_RESPONDED` |
+| SignalLog 已忽略 | 拒绝回应 | `SIGNAL_ALREADY_IGNORED` |
+| SignalLog 已过期 | 拒绝回应 | `SIGNAL_EXPIRED` |
+| ADJUST_OUT 超过 CONFIRMED 事实持仓 | 拒绝创建 | `INSUFFICIENT_HOLDING_SHARES` |
 | 日历日期已存在 | 返回 0，不抛异常 | 无 |
 | 手动确认缺少交易发生日净值 | 保持 PENDING，拒绝使用最新净值 | `NAV_HISTORY_EMPTY` |
+| SELL 份额超过锁后计算的 CONFIRMED 事实持仓 | 交易不确认，不消费 lot | `INSUFFICIENT_HOLDING_SHARES` |
 | 单只基金补偿失败 | 记录错误并继续其他基金 | 无 |
 
 ## 5. Good / Base / Bad Cases
@@ -92,12 +110,17 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - Good：03:00 时周五净值缺失，周五下午历史净值补齐后由提交后事件立即确认，不等待下周一。
 - Good：应用在 cron 后启动，启动补偿扫描确认所有已具备交易日净值的历史 PENDING。
 - Good：同一信号并发回应时锁内只允许第一笔创建交易。
+- Good：基金 A 行情抓取失败并回滚，基金 B 仍在独立事务中成功落库。
+- Good：卖出确认锁定基金后重新汇总 CONFIRMED 事实持仓，拒绝并发请求造成的第二次超卖。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
 - Base：50 份 open lot + 50 份 ADJUST_IN，卖 100 份时仅前 50 份计算赎回费。
 - Base：日历空表日常同步执行全量初始化，非空表只处理最大日期之后。
 - Bad：北京时间 03:00 直接按 JVM UTC 日期减一天，会再偏一天。
 - Bad：所有 PENDING 交易共用 Job 日期，会把周末积压交易按后续净值确认。
 - Bad：手动确认直接读取最新一期净值，会把历史交易按后续交易日价格成交。
+- Bad：用 `[dayStart, nextDayStart]` 查询单日净值，会在当日缺失时命中次日边界值。
+- Bad：批处理外围包一层大事务，基金 B 的失败会回滚基金 A 已完成的结果。
+- Bad：先读取持仓再确认卖出，两个并发请求都可能基于同一旧持仓通过校验。
 - Bad：把用户选择的发生日写入 `createdDate`，Spring 审计保存时会覆盖为当前时间。
 - Bad：定投幂等只查 PENDING，确认或撤销后重跑会重复扣款。
 - Bad：在净值写入事务内同步确认，确认异常会把已抓到的净值一起回滚。
@@ -111,6 +134,7 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - `PendingTransactionCompensationServiceTest`：覆盖按基金去重、单只失败隔离和继续确认其他基金。
 - `DailyNavConfirmServiceEventTest` / `MarketDataFetchServiceDateTest`：断言新增净值后发布 `FundNavUpdatedEvent`。
 - `NavConfirmServiceStateTest`：覆盖交易自身日期、周末旧交易、缺净值保持 PENDING 和转换两腿原子确认。
+- `NavConfirmAndCancelServiceTest` / `SellConfirmationHoldingValidationTest`：覆盖结束点排除、手动/自动/转换卖出的锁后事实持仓校验和并发超卖保护。
 - `FundTransactionServiceTest`：覆盖历史 `tradeDate`、未来日期拒绝和转换两腿日期一致。
 - `SignalOperationServiceUnitTest` / `SignalOperationServiceTest`：覆盖归属、重复回应、SELL 关联、PENDING 状态和非正实际值。
 - `SignalQueryServiceTest`：已回应信号不再出现在 pending 列表。
@@ -123,6 +147,7 @@ boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaP
 - `TransactionConfirmSupportTest`：部分 lot 缺口、ADJUST_OUT、初始持仓 lot 且不重复扣费。
 - `TradingCalendarSchemaIntegrationTest`：原子重复写返回 1/0，最大日期查询正确。
 - `TradingCalendarSyncServiceTest`：空表全量、非空增量和管理全量补写。
+- `RequiresNewTransactionExecutorTest` 及各批处理 Service/Job 测试：断言每只基金使用 `REQUIRES_NEW`，单基金异常不回滚或阻断其他基金。
 - 前端生产构建必须通过；推送后 GitHub CI 必须全绿。
 
 ## 7. Wrong vs Correct
@@ -136,6 +161,9 @@ fund.setStatus(CLEARED); // PENDING 阶段提前改事实状态
 if (!existing.contains(date)) repository.save(entity); // 并发竞态
 tx.setCreatedDate(request.tradeDate()); // 审计字段会被保存流程覆盖
 repository.existsByDcaPlanIdAndStatusAndCreatedDateBetween(id, PENDING, start, end); // 确认/撤销后可重复生成
+repository.findByFundEntity_IdAndNavDateBetweenOrderByNavDateAsc(id, start, end); // Between 包含结束点
+for (FundEntity fund : funds) confirmOne(fund); // 外围大事务导致整批回滚
+onSellConfirmed(tx, nav); // 未锁基金、未按 CONFIRMED 事实持仓复核
 ```
 
 ### Correct
@@ -149,6 +177,10 @@ fundPositionService.reconcileStatus(fundId); // 只在确认/撤销后按事实�
 repository.insertTradingDayIfAbsent(date); // INSERT ... ON CONFLICT DO NOTHING
 eventPublisher.publishEvent(new FundNavUpdatedEvent(fundId)); // AFTER_COMMIT 再推进交易
 repository.existsByDcaPlanIdAndTradeDateBetween(id, start, end); // 任意状态均防重
+navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(id, start, end); // [start, end)
+requiresNewTransactionExecutor.execute(() -> processFund(fundId)); // 每只基金独立提交/回滚
+fundRepository.findByIdForUpdate(fundId);
+validateAgainstConfirmedHolding(fundId, tx.getShares());
 ```
 
 ## Scenario: DCA Take-Profit Lifecycle
@@ -162,10 +194,12 @@ repository.existsByDcaPlanIdAndTradeDateBetween(id, start, end); // 任意状态
 ```java
 TakeProfitEvaluation TakeProfitLifecycleService.prepare(
     FundEntity fund, FundStrategyEntity strategy,
-    BigDecimal currentNav, BigDecimal holdingShares, Instant today);
+    BigDecimal currentUnitNav, BigDecimal currentAccumulatedNav,
+    BigDecimal holdingShares, Instant today);
 void TakeProfitLifecycleService.bindTriggeredSignal(FundStrategyEntity strategy, Long signalId);
 void TakeProfitLifecycleService.onTransactionConfirmed(FundTransactionEntity transaction);
 void TakeProfitLifecycleService.onTransactionCancelled(FundTransactionEntity transaction);
+void TakeProfitLifecycleService.onSignalIgnored(SignalLogEntity signal);
 GET /api/funds/{fundId}/strategies/recommendation
 ```
 
@@ -176,11 +210,13 @@ GET /api/funds/{fundId}/strategies/recommendation
 ### 3. Contracts
 
 - Percentages are positive ratios (`0.06` means 6%).
+- Overall return, floating profit, and suggested sell shares use unit NAV; cycle peak and drawdown use accumulated NAV. Both NAV values must come from the same latest `FundNavHistoryEntity`; the intraday snapshot remains logic-stop input and must not be mixed into take-profit calculation. Missing either NAV disables the evaluation without cross-fallback.
 - Recommendation uses `FundCategory`, never `FundSubType`; user values are changed only by explicit save/restore.
 - `ACCUMULATING -> ARMED` records the current NAV and cannot sell on the same day.
 - A `TRIGGERED` cycle keeps its original actionable SignalLog; daily reruns must not replace it with NONE.
 - Both `NavConfirmService` and `TransactionConfirmService` call the lifecycle after confirming a trailing-stop transaction.
 - `TransactionCancelService` restores the matching cycle to `ARMED`.
+- Ignoring the matching trailing-stop signal restores the cycle to `ARMED` and clears `triggeredSignalId`.
 - Mature shares are calculated per open `fund_lot`; a recent DCA lot cannot freeze older lots.
 
 ### 4. Validation & Error Matrix
@@ -191,6 +227,7 @@ GET /api/funds/{fundId}/strategies/recommendation
 | Missing/out-of-range strategy ratio | Reject request | `STRATEGY_PARAM_INVALID` |
 | Take-profit transaction confirmed | Enter `COOLDOWN` | none |
 | Matching PENDING transaction cancelled | Restore `ARMED` | none |
+| Matching trailing-stop signal ignored | Restore `ARMED` | none |
 | Cost, NAV, or holding shares missing/non-positive | Do not arm take-profit | none |
 
 ### 5. Good/Base/Bad Cases
@@ -204,8 +241,9 @@ GET /api/funds/{fundId}/strategies/recommendation
 
 - `TakeProfitPresetServiceTest`: assert all four category templates and custom detection.
 - `TakeProfitLifecycleServiceTest`: assert arming day, new high, mature lot calculation, confirm/cancel, and cooldown rearm.
-- `DisciplineStrategyServiceTest`: assert the four sell caps and logic-stop priority.
-- `SignalGenerationServiceTest`: assert a triggered cycle preserves its actionable signal on rerun.
+- `DisciplineStrategyServiceTest`: assert the four sell caps, logic-stop priority, and unit/accumulated NAV divergence.
+- `SignalGenerationServiceTest`: assert a triggered cycle preserves its actionable signal on rerun and take-profit receives same-row unit/accumulated NAV.
+- `SignalQueryServiceTest`: assert a range ending on day T excludes a signal at T+1 `00:00`.
 - Both confirmation service tests must verify lifecycle notification after transaction persistence.
 
 ### 7. Wrong vs Correct
@@ -216,12 +254,16 @@ GET /api/funds/{fundId}/strategies/recommendation
 lastBuy = latestConfirmedInvest();
 if (daysSince(lastBuy) < 5) return NONE; // freezes every old lot
 shares = holdingShares.multiply(new BigDecimal("0.25")); // repeats every day
+profitHarvestShares = floatingProfit.divide(snapshot.getCurrentNav()); // snapshot is accumulated NAV
 ```
 
 #### Correct
 
 ```java
 matureShares = sumOpenLotsHeldAtLeastFiveTradingDays();
+latestNav = navHistoryRepository.findLatest();
+profitHarvestShares = floatingProfit.divide(latestNav.getNav());
+pullback = cyclePeak.subtract(latestNav.getAccumulatedNav()).divide(cyclePeak);
 shares = min(profitHarvestShares, singleSellCapShares, matureShares, retentionCapShares);
 takeProfitLifecycleService.onTransactionConfirmed(tx);
 ```

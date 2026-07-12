@@ -58,6 +58,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
     void confirm_卖出交易_用交易发生日净值回填amount() {
         FundEntity fund = persistFund();
         navHistory(fund, "1.26");
+        persistConfirmedShares(fund, FundTransactionSource.ADJUST_IN, "500");
         // 卖出 500 份,净值 1.26 → amount = 500 × 1.26 = 630
         FundTransactionEntity tx = persistPendingTx(fund, FundTransactionSource.DECREASE, null, new BigDecimal("500"));
 
@@ -74,6 +75,25 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
     void confirm_无净值历史_抛异常() {
         FundEntity fund = persistFund();
         FundTransactionEntity tx = persistPendingTx(fund, FundTransactionSource.INCREASE, new BigDecimal("1000"), null);
+
+        assertThatThrownBy(() -> transactionConfirmService.confirm(tx.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.NAV_HISTORY_EMPTY.name());
+    }
+
+    @Test
+    @Transactional
+    void confirm_仅次日有净值时不得用于交易日确认() {
+        FundEntity fund = persistFund();
+        FundNavHistoryEntity nextDayNav = new FundNavHistoryEntity();
+        nextDayNav.setFundEntity(fund);
+        nextDayNav.setNavDate(ChinaTradingDate.toUtcDate(Instant.now())
+                .plus(1, java.time.temporal.ChronoUnit.DAYS));
+        nextDayNav.setNav(new BigDecimal("9.99"));
+        nextDayNav.setAccumulatedNav(new BigDecimal("9.99"));
+        fundNavHistoryRepository.save(nextDayNav);
+        FundTransactionEntity tx = persistPendingTx(
+                fund, FundTransactionSource.INCREASE, new BigDecimal("1000"), null);
 
         assertThatThrownBy(() -> transactionConfirmService.confirm(tx.getId()))
                 .isInstanceOf(BusinessException.class)
@@ -103,6 +123,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
         FundEntity fundB = persistFund("161725", "招商白酒");
         navHistory(fundA, "1.26");
         navHistory(fundB, "2.00");
+        persistConfirmedShares(fundA, FundTransactionSource.ADJUST_IN, "500");
         FundTransactionEntity tout = persistPendingTx(fundA, FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
         FundTransactionEntity tin = persistPendingTx(fundB, FundTransactionSource.TRANSFER_IN, null, null);
         tin.setRelatedFundTransactionEntity(tout);
@@ -136,6 +157,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
         FundEntity fundB = persistFund("161725", "招商白酒");
         navHistory(fundA, "1.26");
         navHistory(fundB, "2.00");
+        persistConfirmedShares(fundA, FundTransactionSource.ADJUST_IN, "500");
         FundTransactionEntity tout = persistPendingTx(fundA, FundTransactionSource.TRANSFER_OUT, null, new BigDecimal("500"));
         FundTransactionEntity tin = persistPendingTx(fundB, FundTransactionSource.TRANSFER_IN, null, null);
         tin.setRelatedFundTransactionEntity(tout);
@@ -185,5 +207,16 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
         tx.setAmount(amount);
         tx.setShares(shares);
         return fundTransactionRepository.save(tx);
+    }
+
+    private void persistConfirmedShares(FundEntity fund, FundTransactionSource source, String shares) {
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(fund);
+        tx.setSource(source);
+        tx.setStatus(FundTransactionStatus.CONFIRMED);
+        tx.setShares(new BigDecimal(shares));
+        tx.setTradeDate(Instant.now());
+        tx.setConfirmTime(Instant.now());
+        fundTransactionRepository.save(tx);
     }
 }

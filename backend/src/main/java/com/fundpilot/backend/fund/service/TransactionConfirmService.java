@@ -109,7 +109,7 @@ public class TransactionConfirmService {
             throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
                     "仅 PENDING 交易可确认,tx_id=" + tx.getId());
         }
-        BigDecimal navValue = transactionDayAccumulatedNav(tx);
+        BigDecimal navValue = transactionDayUnitNav(tx);
         FundTransactionSource source = tx.getSource();
         switch (source) {
             case INCREASE, TRANSFER_IN, INVEST -> {
@@ -130,14 +130,18 @@ public class TransactionConfirmService {
         }
         tx.setNav(navValue);
         tx.setConfirmTime(Instant.now());
-        tx.setStatus(FundTransactionStatus.CONFIRMED);
         // 扣手续费 + 建/消耗 lot + 更新成本单价(统一走 TransactionConfirmSupport)
         switch (source) {
-            case INCREASE, TRANSFER_IN, INVEST -> transactionConfirmSupport.onBuyConfirmed(tx, navValue);
-            case DECREASE, TRANSFER_OUT -> transactionConfirmSupport.onSellConfirmed(tx, navValue);
-            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达此处)
-            case ADJUST_IN, ADJUST_OUT -> {
+            case INCREASE, TRANSFER_IN, INVEST -> {
+                tx.setStatus(FundTransactionStatus.CONFIRMED);
+                transactionConfirmSupport.onBuyConfirmed(tx, navValue);
             }
+            case DECREASE, TRANSFER_OUT -> {
+                transactionConfirmSupport.onSellConfirmed(tx, navValue);
+                tx.setStatus(FundTransactionStatus.CONFIRMED);
+            }
+            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达此处)
+            case ADJUST_IN, ADJUST_OUT -> tx.setStatus(FundTransactionStatus.CONFIRMED);
         }
         fundTransactionRepository.save(tx);
         takeProfitLifecycleService.onTransactionConfirmed(tx);
@@ -147,11 +151,13 @@ public class TransactionConfirmService {
 
     // updateCostPerShare 已移至 TransactionConfirmSupport(统一扣费 + lot + 成本更新)
 
-    /** 取交易发生日累计净值，禁止用最新一期净值替代历史成交净值。 */
-    private BigDecimal transactionDayAccumulatedNav(FundTransactionEntity transaction) {
+    /** 取交易发生日单位净值，禁止用次日或最新一期净值替代历史成交净值。 */
+    private BigDecimal transactionDayUnitNav(FundTransactionEntity transaction) {
         Instant dayStart = TransactionTradeDate.resolve(transaction, Instant.now());
-        List<FundNavHistoryEntity> rows = fundNavHistoryRepository.findByFundEntity_IdAndNavDateBetween(
-                transaction.getFundEntity().getId(), dayStart, dayStart.plus(1, ChronoUnit.DAYS));
+        List<FundNavHistoryEntity> rows = fundNavHistoryRepository
+                .findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
+                        transaction.getFundEntity().getId(), dayStart,
+                        dayStart.plus(1, ChronoUnit.DAYS));
         if (rows.isEmpty()) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
                     "基金 #" + transaction.getFundEntity().getId() + " 缺少交易日 " + dayStart + " 的净值");

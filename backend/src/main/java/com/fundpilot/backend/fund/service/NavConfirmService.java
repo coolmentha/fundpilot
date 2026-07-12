@@ -1,6 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.LinkedHashSet;
 
 /**
  * 净值确认服务(issue #15):每晚净值公布后回填当天 PENDING 交易的另一侧 + nav + confirmTime,转 CONFIRMED。
@@ -47,6 +49,7 @@ public class NavConfirmService {
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
     private final TakeProfitLifecycleService takeProfitLifecycleService;
+    private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
 
     /**
      * 回填指定 UTC 日期的 PENDING 交易。null 时用今天 UTC 0 点。
@@ -59,11 +62,33 @@ public class NavConfirmService {
         return confirmTransactions(pendings, fallbackDate);
     }
 
+    /** 生产批处理入口：按基金拆分独立事务，单只失败不回滚其他基金。 */
+    public int confirmPendingTransactionsIsolated(Instant date) {
+        Instant fallbackDate = date != null ? date : Instant.now();
+        LinkedHashSet<Long> fundIds = fundTransactionRepository.findByStatus(FundTransactionStatus.PENDING).stream()
+                .map(tx -> tx.getFundEntity().getId())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        int confirmed = 0;
+        for (Long fundId : fundIds) {
+            try {
+                confirmed += requiresNewTransactionExecutor.execute(
+                        () -> confirmPendingTransactionsForFund(fundId, fallbackDate));
+            } catch (RuntimeException ex) {
+                log.error("基金待确认交易批量确认失败 fund_id={}: {}", fundId, ex.getMessage(), ex);
+            }
+        }
+        return confirmed;
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int confirmPendingTransactionsForFund(Long fundId) {
+        return confirmPendingTransactionsForFund(fundId, Instant.now());
+    }
+
+    private int confirmPendingTransactionsForFund(Long fundId, Instant fallbackDate) {
         List<FundTransactionEntity> pendings = fundTransactionRepository
                 .findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.PENDING);
-        return confirmTransactions(pendings, Instant.now());
+        return confirmTransactions(pendings, fallbackDate);
     }
 
     private int confirmTransactions(List<FundTransactionEntity> pendings, Instant fallbackDate) {
@@ -134,7 +159,8 @@ public class NavConfirmService {
 
     private BigDecimal findNavValue(Long fundId, Instant dayStart, Instant dayEnd) {
         FundNavHistoryEntity nav = fundNavHistoryRepository
-                .findByFundEntity_IdAndNavDateBetween(fundId, dayStart, dayEnd).stream()
+                .findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
+                        fundId, dayStart, dayEnd).stream()
                 .findFirst().orElse(null);
         if (nav == null || nav.getNav() == null || nav.getNav().signum() <= 0) {
             return null;
@@ -170,14 +196,18 @@ public class NavConfirmService {
         FundTransactionSource source = tx.getSource();
         tx.setNav(navValue);
         tx.setConfirmTime(Instant.now());
-        tx.setStatus(FundTransactionStatus.CONFIRMED);
         // 扣手续费 + 建/消耗 lot + 更新成本单价(统一走 TransactionConfirmSupport)
         switch (source) {
-            case INCREASE, TRANSFER_IN, INVEST -> transactionConfirmSupport.onBuyConfirmed(tx, navValue);
-            case DECREASE, TRANSFER_OUT -> transactionConfirmSupport.onSellConfirmed(tx, navValue);
-            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达批量确认)
-            case ADJUST_IN, ADJUST_OUT -> {
+            case INCREASE, TRANSFER_IN, INVEST -> {
+                tx.setStatus(FundTransactionStatus.CONFIRMED);
+                transactionConfirmSupport.onBuyConfirmed(tx, navValue);
             }
+            case DECREASE, TRANSFER_OUT -> {
+                transactionConfirmSupport.onSellConfirmed(tx, navValue);
+                tx.setStatus(FundTransactionStatus.CONFIRMED);
+            }
+            // ADJUST 不建 lot/不算费(录入即 CONFIRMED,不触达批量确认)
+            case ADJUST_IN, ADJUST_OUT -> tx.setStatus(FundTransactionStatus.CONFIRMED);
         }
         fundTransactionRepository.save(tx);
         takeProfitLifecycleService.onTransactionConfirmed(tx);

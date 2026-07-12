@@ -102,6 +102,7 @@ public class TransactionConfirmSupport {
      */
     public void onSellConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
+        BigDecimal holdingBefore = lockAndValidateSellShares(tx);
         FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
         List<RedemptionTier> ladder = fee.redemptionLadder();
 
@@ -124,7 +125,7 @@ public class TransactionConfirmSupport {
         BigDecimal trackedShares = lots.stream()
                 .map(FundLotEntity::getRemainingShares)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal untrackedShares = untrackedSharesBeforeSell(tx, trackedShares);
+        BigDecimal untrackedShares = holdingBefore.subtract(trackedShares).max(BigDecimal.ZERO);
 
         for (FundLotEntity lot : lots) {
             if (remaining.signum() <= 0) {
@@ -197,13 +198,17 @@ public class TransactionConfirmSupport {
         }
     }
 
-    private BigDecimal untrackedSharesBeforeSell(FundTransactionEntity tx, BigDecimal trackedShares) {
-        BigDecimal holdingAfter = fundPositionService.getHoldingShares(tx.getFundEntity().getId());
-        if (holdingAfter == null) {
-            return BigDecimal.ZERO;
+    private BigDecimal lockAndValidateSellShares(FundTransactionEntity tx) {
+        Long fundId = tx.getFundEntity().getId();
+        fundRepository.findByIdForUpdate(fundId)
+                .orElseThrow(() -> ErrorCode.FUND_NOT_FOUND.toException("Fund #" + fundId + " 不存在"));
+        BigDecimal holdingShares = fundPositionService.getHoldingShares(fundId);
+        BigDecimal confirmedHolding = holdingShares != null ? holdingShares : BigDecimal.ZERO;
+        if (tx.getShares().compareTo(confirmedHolding) > 0) {
+            throw ErrorCode.INSUFFICIENT_HOLDING_SHARES.toException(
+                    "卖出份额 " + tx.getShares() + " 超过 CONFIRMED 事实持仓 " + confirmedHolding);
         }
-        BigDecimal holdingBefore = holdingAfter.add(tx.getShares());
-        return holdingBefore.subtract(trackedShares).max(BigDecimal.ZERO);
+        return confirmedHolding;
     }
 
     /**

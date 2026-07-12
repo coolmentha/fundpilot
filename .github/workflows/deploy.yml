@@ -1,5 +1,6 @@
 # CD:打 tag v* 时构建镜像推 GHCR,SSH 到 VPS 拉镜像重启。
-# 需配置仓库 Secrets:VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PATH / DB_USERNAME / DB_PASSWORD
+# 需配置仓库 Secrets:VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PATH /
+# DB_USERNAME / DB_PASSWORD / ADMIN_API_KEY / PUBLIC_URL
 # VPS 须先 docker login ghcr.io(拉私有镜像);clone 仓库与 .env 由本工作流自动完成
 name: Deploy
 
@@ -7,20 +8,66 @@ on:
   push:
     tags: [ 'v*' ]
 
+concurrency:
+  group: fundpilot-production
+  cancel-in-progress: false
+
 jobs:
-  build-push:
-    name: Build & push images
+  verify:
+    name: Verify release
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fundpilot
+          POSTGRES_USER: fundpilot
+          POSTGRES_PASSWORD: fundpilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fundpilot -d fundpilot"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Verify backend
+        working-directory: backend
+        run: ./mvnw -B verify
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+  build-backend:
+    name: Build backend image
+    runs-on: ubuntu-latest
+    needs: verify
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        include:
-          - context: backend
-            image: ghcr.io/coolmentha/fundpilot-backend
-          - context: frontend
-            image: ghcr.io/coolmentha/fundpilot-frontend
     steps:
       - uses: actions/checkout@v5
 
@@ -31,30 +78,60 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ matrix.image }}
-          tags: |
-            type=ref,event=tag
-            type=raw,value=latest
-
       - name: Build & push
+        id: build
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
+          context: backend
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/coolmentha/fundpilot-backend:${{ github.ref_name }}
+            ghcr.io/coolmentha/fundpilot-backend:sha-${{ github.sha }}
+
+  build-frontend:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    needs: verify
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ghcr.io/coolmentha/fundpilot-frontend:${{ github.ref_name }}
+            ghcr.io/coolmentha/fundpilot-frontend:sha-${{ github.sha }}
 
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    needs: build-push
+    needs: [build-backend, build-frontend]
     env:
+      VPS_PATH: ${{ secrets.VPS_PATH }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      IMAGE_TAG: sha-${{ github.sha }}
+      BACKEND_IMAGE: ghcr.io/coolmentha/fundpilot-backend@${{ needs.build-backend.outputs.digest }}
+      FRONTEND_IMAGE: ghcr.io/coolmentha/fundpilot-frontend@${{ needs.build-frontend.outputs.digest }}
+      PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
       DB_USERNAME: ${{ secrets.DB_USERNAME }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: SSH deploy
         uses: appleboy/ssh-action@v1
@@ -62,52 +139,484 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DB_USERNAME, DB_PASSWORD
+          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,ADMIN_API_KEY,DEPLOYMENT_TOKEN
+          script_stop: true
           script: |
-            set -e
-            # 首次:目录不存在则 clone;之后:fetch + checkout 到 tag
-            if [ ! -d ${{ secrets.VPS_PATH }}/.git ]; then
-              git clone https://github.com/coolmentha/fundpilot.git ${{ secrets.VPS_PATH }}
+            set -Eeuo pipefail
+            umask 077
+
+            case "$RELEASE_TAG" in
+              v[0-9]*) ;;
+              *) echo "invalid release tag: $RELEASE_TAG" >&2; exit 1 ;;
+            esac
+            case "$RELEASE_TAG" in
+              *[!A-Za-z0-9._-]*) echo "release tag contains unsafe characters" >&2; exit 1 ;;
+            esac
+            case "$IMAGE_TAG" in
+              sha-*) ;;
+              *) echo "invalid image tag: $IMAGE_TAG" >&2; exit 1 ;;
+            esac
+            [ "${#IMAGE_TAG}" -eq 44 ] || { echo "invalid image tag length" >&2; exit 1; }
+            image_sha=${IMAGE_TAG#sha-}
+            case "$image_sha" in
+              *[!0-9a-f]*) echo "invalid image tag digest" >&2; exit 1 ;;
+            esac
+            case "$BACKEND_IMAGE" in
+              ghcr.io/coolmentha/fundpilot-backend@sha256:*) ;;
+              *) echo "invalid backend image digest" >&2; exit 1 ;;
+            esac
+            case "$FRONTEND_IMAGE" in
+              ghcr.io/coolmentha/fundpilot-frontend@sha256:*) ;;
+              *) echo "invalid frontend image digest" >&2; exit 1 ;;
+            esac
+            backend_digest=${BACKEND_IMAGE##*@sha256:}
+            frontend_digest=${FRONTEND_IMAGE##*@sha256:}
+            [ "${#backend_digest}" -eq 64 ] && [ "${#frontend_digest}" -eq 64 ] || {
+              echo "invalid image digest length" >&2
+              exit 1
+            }
+            case "$backend_digest$frontend_digest" in
+              *[!0-9a-f]*) echo "invalid image digest characters" >&2; exit 1 ;;
+            esac
+            [ -n "$VPS_PATH" ] || { echo "VPS_PATH is required" >&2; exit 1; }
+            case "$PUBLIC_URL" in
+              https://*) ;;
+              *) echo "PUBLIC_URL must be an https URL" >&2; exit 1 ;;
+            esac
+            PUBLIC_URL=${PUBLIC_URL%/}
+            [ -n "$DB_USERNAME" ] || { echo "DB_USERNAME is required" >&2; exit 1; }
+            [ -n "$DB_PASSWORD" ] || { echo "DB_PASSWORD is required" >&2; exit 1; }
+            case "$DB_USERNAME" in
+              *[!A-Za-z0-9_]*) echo "DB_USERNAME contains unsafe characters" >&2; exit 1 ;;
+            esac
+            case "$DB_PASSWORD" in
+              ""|*[!A-Za-z0-9._-]*)
+                echo "DB_PASSWORD must use safe ASCII characters" >&2
+                exit 1
+                ;;
+            esac
+            [ "${#DB_PASSWORD}" -ge 16 ] || {
+              echo "DB_PASSWORD must use at least 16 safe ASCII characters" >&2
+              exit 1
+            }
+            case "$ADMIN_API_KEY" in
+              ""|*[!A-Za-z0-9._-]*)
+                echo "ADMIN_API_KEY must use at least 32 safe ASCII characters" >&2
+                exit 1
+                ;;
+            esac
+            [ "${#ADMIN_API_KEY}" -ge 32 ] || {
+              echo "ADMIN_API_KEY must use at least 32 safe ASCII characters" >&2
+              exit 1
+            }
+            case "$DEPLOYMENT_TOKEN" in
+              [0-9]*-[0-9]*) ;;
+              *) echo "invalid deployment token" >&2; exit 1 ;;
+            esac
+
+            # 首次 clone；后续 fetch 不允许强制覆盖已有 release tag。
+            if [ ! -d "$VPS_PATH/.git" ]; then
+              git clone https://github.com/coolmentha/fundpilot.git "$VPS_PATH"
             fi
-            cd ${{ secrets.VPS_PATH }}
-            # --force:允许覆盖本地已有同名 tag(重打 tag 时 VPS 本地旧 tag 要被远端覆盖)
-            git fetch --tags --force
-            git checkout ${{ github.ref_name }}
+            cd "$VPS_PATH"
+            git fetch --tags
+            release_commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+            [ "$release_commit" = "$image_sha" ] || {
+              echo "release tag no longer points to the built commit" >&2
+              exit 1
+            }
+            PREVIOUS_RELEASE_TAG=""
+            PREVIOUS_IMAGE_TAG=""
+            PREVIOUS_BACKEND_IMAGE=""
+            PREVIOUS_FRONTEND_IMAGE=""
+            if [ -f .deployed-state ]; then
+              PREVIOUS_RELEASE_TAG=$(sed -n 's/^RELEASE_TAG=//p' .deployed-state | head -n 1 | tr -d '\r\n')
+              PREVIOUS_IMAGE_TAG=$(sed -n 's/^IMAGE_TAG=//p' .deployed-state | head -n 1 | tr -d '\r\n')
+              PREVIOUS_BACKEND_IMAGE=$(sed -n 's/^BACKEND_IMAGE=//p' .deployed-state | head -n 1 | tr -d '\r\n')
+              PREVIOUS_FRONTEND_IMAGE=$(sed -n 's/^FRONTEND_IMAGE=//p' .deployed-state | head -n 1 | tr -d '\r\n')
+            elif [ -f .deployed-release ]; then
+              PREVIOUS_RELEASE_TAG=$(tr -d '\r\n' < .deployed-release)
+            elif [ -f .deployed-tag ]; then
+              PREVIOUS_RELEASE_TAG=$(tr -d '\r\n' < .deployed-tag)
+            fi
+            if [ -z "$PREVIOUS_IMAGE_TAG" ] && [ -f .deployed-image-tag ]; then
+              PREVIOUS_IMAGE_TAG=$(tr -d '\r\n' < .deployed-image-tag)
+            fi
+            if [ -f .env ]; then
+              candidate=$(sed -n 's/^TAG=//p' .env | head -n 1 | tr -d '\r\n')
+              [ -n "$PREVIOUS_BACKEND_IMAGE" ] || \
+                PREVIOUS_BACKEND_IMAGE=$(sed -n 's/^BACKEND_IMAGE=//p' .env | head -n 1 | tr -d '\r\n')
+              [ -n "$PREVIOUS_FRONTEND_IMAGE" ] || \
+                PREVIOUS_FRONTEND_IMAGE=$(sed -n 's/^FRONTEND_IMAGE=//p' .env | head -n 1 | tr -d '\r\n')
+              case "$candidate" in
+                v[0-9]*)
+                  [ -n "$PREVIOUS_RELEASE_TAG" ] || PREVIOUS_RELEASE_TAG=$candidate
+                  [ -n "$PREVIOUS_IMAGE_TAG" ] || PREVIOUS_IMAGE_TAG=$candidate
+                  ;;
+                sha-[0-9a-f]*)
+                  [ -n "$PREVIOUS_IMAGE_TAG" ] || PREVIOUS_IMAGE_TAG=$candidate
+                  ;;
+                ""|latest) ;;
+                *) echo "invalid previous image tag in .env: $candidate" >&2; exit 1 ;;
+              esac
+            fi
+            [ -n "$PREVIOUS_IMAGE_TAG" ] || PREVIOUS_IMAGE_TAG=$PREVIOUS_RELEASE_TAG
+            case "$PREVIOUS_RELEASE_TAG" in
+              ""|v[0-9]*) ;;
+              *) echo "invalid previous release tag: $PREVIOUS_RELEASE_TAG" >&2; exit 1 ;;
+            esac
+            case "$PREVIOUS_IMAGE_TAG" in
+              ""|v[0-9]*|sha-[0-9a-f]*) ;;
+              *) echo "invalid previous image tag: $PREVIOUS_IMAGE_TAG" >&2; exit 1 ;;
+            esac
 
-            # 动态生成 .env(机密从 Secrets 注入,不落工作流日志)
-            cat > .env <<EOF
-            DB_USERNAME=$DB_USERNAME
-            DB_PASSWORD=$DB_PASSWORD
-            TAG=${{ github.ref_name }}
-            EOF
-            chmod 600 .env
+            PREVIOUS_ENV_FILE="$VPS_PATH/.env.pre-deploy"
+            PREVIOUS_ENV_READY=0
+            rm -f "$PREVIOUS_ENV_FILE"
+            if [ -f .env ]; then
+              cp .env "$PREVIOUS_ENV_FILE"
+              chmod 600 "$PREVIOUS_ENV_FILE"
+              PREVIOUS_ENV_READY=1
+            fi
+            PREVIOUS_STATE_FILE="$VPS_PATH/.deployed-state.pre-deploy"
+            PREVIOUS_STATE_READY=0
+            rm -f "$PREVIOUS_STATE_FILE"
+            if [ -f .deployed-state ]; then
+              cp .deployed-state "$PREVIOUS_STATE_FILE"
+              PREVIOUS_STATE_READY=1
+            fi
 
-            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml pull
-            # 清理残留容器:先按 project 停掉本编排的容器,再兜底按名删除
-            # (早期部署未指定 -p fundpilot 或手动启的容器属于别的 project,
-            #  compose down 管不到,但 container_name 跨 project 唯一会顶掉 up -d)
-            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-            docker rm -f fundpilot-db fundpilot-backend fundpilot-frontend 2>/dev/null || true
-            TAG=${{ github.ref_name }} docker compose -p fundpilot -f deploy/docker-compose.prod.yml up -d
+            write_env() {
+              target_tag=$1
+              target_backend_image=${2:-}
+              target_frontend_image=${3:-}
+              validation_mode=${4:-false}
+              {
+                printf 'DB_USERNAME=%s\n' "$DB_USERNAME"
+                printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
+                printf 'ADMIN_API_KEY=%s\n' "$ADMIN_API_KEY"
+                printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
+                printf 'DEPLOYMENT_VALIDATION_MODE=%s\n' "$validation_mode"
+                printf 'TAG=%s\n' "$target_tag"
+                if [ -n "$target_backend_image" ]; then
+                  printf 'BACKEND_IMAGE=%s\n' "$target_backend_image"
+                fi
+                if [ -n "$target_frontend_image" ]; then
+                  printf 'FRONTEND_IMAGE=%s\n' "$target_frontend_image"
+                fi
+              } > .env.tmp
+              chmod 600 .env.tmp
+              mv .env.tmp .env
+            }
 
-      - name: Smoke test
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd ${{ secrets.VPS_PATH }}
-            # 直连 backend 容器探 actuator health(绕过 Caddy/nginx 入口层,且不把 actuator 暴露公网)
-            # -T 关闭 TTY 分配(非交互 SSH 下 exec 需要);backend 启动含 Flyway 首次迁移,最多等 90s
-            for i in $(seq 1 45); do
-              if docker compose -p fundpilot -f deploy/docker-compose.prod.yml exec -T backend curl -sf http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
-                echo "backend healthy"
-                exit 0
+            COMPOSE="docker compose -p fundpilot -f deploy/docker-compose.prod.yml"
+            DB_CONTAINER="fundpilot-db"
+            BACKUP_DIR="$VPS_PATH/backups"
+            BACKUP_FILE="$BACKUP_DIR/pre-$RELEASE_TAG.dump"
+            BACKUP_READY=0
+            DATABASE_MAY_HAVE_CHANGED=0
+            FORWARD_MAINTENANCE_SECONDS=1800
+            TOTAL_MAINTENANCE_SECONDS=3300
+            MAINTENANCE_SAFETY_SECONDS=3600
+            FORWARD_DEADLINE_EPOCH=0
+            TOTAL_DEADLINE_EPOCH=0
+            MAINTENANCE_WATCHDOG_PID=""
+            ROLLBACK_ACTIVE=0
+
+            maintenance_window_is_safe() {
+              now_epoch=$(date +%s)
+              FORWARD_DEADLINE_EPOCH=$((now_epoch + FORWARD_MAINTENANCE_SECONDS))
+              TOTAL_DEADLINE_EPOCH=$((now_epoch + TOTAL_MAINTENANCE_SECONDS))
+              safety_deadline_epoch=$((now_epoch + MAINTENANCE_SAFETY_SECONDS))
+              base_day=$(TZ=Asia/Shanghai date -d "@$now_epoch" +%F)
+              for day_offset in 0 1; do
+                candidate_day=$(TZ=Asia/Shanghai date -d "$base_day +$day_offset day" +%F)
+                blocked_start=$(TZ=Asia/Shanghai date -d "$candidate_day 02:00" +%s)
+                blocked_end=$(TZ=Asia/Shanghai date -d "$candidate_day 04:16" +%s)
+                if [ "$now_epoch" -lt "$blocked_end" ] && [ "$safety_deadline_epoch" -ge "$blocked_start" ]; then
+                  echo "deployment maintenance could overlap 02:00-04:15 scheduled-job window" >&2
+                  return 1
+                fi
+                weekday=$((10#$(TZ=Asia/Shanghai date -d "$candidate_day" +%u)))
+                if [ "$weekday" -le 5 ]; then
+                  blocked_start=$(TZ=Asia/Shanghai date -d "$candidate_day 14:00" +%s)
+                  blocked_end=$(TZ=Asia/Shanghai date -d "$candidate_day 15:16" +%s)
+                  if [ "$now_epoch" -lt "$blocked_end" ] && [ "$safety_deadline_epoch" -ge "$blocked_start" ]; then
+                    echo "deployment maintenance could overlap weekday 14:00-15:15 scheduled-job window" >&2
+                    return 1
+                  fi
+                fi
+              done
+            }
+
+            run_before_total_deadline() {
+              max_seconds=$1
+              shift
+              now_epoch=$(date +%s)
+              command_deadline_epoch=$TOTAL_DEADLINE_EPOCH
+              if [ "$ROLLBACK_ACTIVE" -ne 1 ] &&
+                { [ ! -f .deployed-state ] ||
+                  ! grep -Fqx "DEPLOYMENT_TOKEN=$DEPLOYMENT_TOKEN" .deployed-state; }; then
+                command_deadline_epoch=$FORWARD_DEADLINE_EPOCH
               fi
-              sleep 2
-            done
-            echo "backend not healthy" >&2
-            docker compose -p fundpilot -f deploy/docker-compose.prod.yml logs --tail=50 backend
-            exit 1
+              remaining_seconds=$((command_deadline_epoch - now_epoch))
+              if [ "$remaining_seconds" -le 0 ]; then
+                echo "deployment phase exceeded its absolute deadline" >&2
+                return 124
+              fi
+              if [ "$max_seconds" -gt "$remaining_seconds" ]; then
+                max_seconds=$remaining_seconds
+              fi
+              timeout --foreground --kill-after=5s "${max_seconds}s" "$@"
+            }
+
+            start_maintenance_watchdog() {
+              deploy_shell_pid=$$
+              remaining_seconds=$((FORWARD_DEADLINE_EPOCH - $(date +%s)))
+              [ "$remaining_seconds" -gt 0 ] || {
+                echo "deployment forward maintenance deadline already expired" >&2
+                return 1
+              }
+              (
+                sleep "$remaining_seconds"
+                echo "deployment forward maintenance exceeded ${FORWARD_MAINTENANCE_SECONDS}s" >&2
+                kill -TERM "$deploy_shell_pid"
+              ) &
+              MAINTENANCE_WATCHDOG_PID=$!
+            }
+
+            stop_maintenance_watchdog() {
+              if [ -n "$MAINTENANCE_WATCHDOG_PID" ]; then
+                kill "$MAINTENANCE_WATCHDOG_PID" 2>/dev/null || true
+                wait "$MAINTENANCE_WATCHDOG_PID" 2>/dev/null || true
+                MAINTENANCE_WATCHDOG_PID=""
+              fi
+            }
+
+            backend_is_healthy() {
+              run_before_total_deadline 15 $COMPOSE exec -T backend \
+                curl -sf --max-time 5 http://localhost:8080/actuator/health |
+                grep -q '"status":"UP"'
+            }
+
+            wait_for_backend() {
+              for i in $(seq 1 45); do
+                if backend_is_healthy; then
+                  return 0
+                fi
+                sleep 2
+              done
+              run_before_total_deadline 30 $COMPOSE logs --tail=50 backend || true
+              return 1
+            }
+
+            smoke_candidate_frontend() {
+              candidate=fundpilot-frontend-candidate
+              run_before_total_deadline 30 docker rm -f "$candidate" 2>/dev/null || true
+              run_before_total_deadline 120 docker run -d --rm --name "$candidate" --network fundpilot_default \
+                "$FRONTEND_IMAGE" >/dev/null
+              for i in $(seq 1 30); do
+                if run_before_total_deadline 15 docker exec "$candidate" \
+                    wget -q -T 5 -O /dev/null http://localhost/ &&
+                  run_before_total_deadline 15 docker exec "$candidate" \
+                    wget -q -T 5 -O - http://localhost/api/funds |
+                    grep -q '"success":true'; then
+                  run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
+                  return 0
+                fi
+                sleep 2
+              done
+              run_before_total_deadline 30 docker logs --tail=50 "$candidate" || true
+              run_before_total_deadline 30 docker rm -f "$candidate" 2>/dev/null || true
+              return 1
+            }
+
+            wait_for_release() {
+              for i in $(seq 1 30); do
+                if backend_is_healthy &&
+                  run_before_total_deadline 15 $COMPOSE exec -T frontend \
+                    wget -q -T 5 -O /dev/null http://localhost/ &&
+                  curl -fsS --max-time 5 "$PUBLIC_URL/" >/dev/null &&
+                  curl -fsS --max-time 5 "$PUBLIC_URL/api/funds" |
+                    grep -q '"success":true'; then
+                  return 0
+                fi
+                sleep 2
+              done
+              run_before_total_deadline 30 $COMPOSE logs --tail=50 backend frontend || true
+              return 1
+            }
+
+            wait_for_database() {
+              for i in $(seq 1 30); do
+                if run_before_total_deadline 15 docker exec "$DB_CONTAINER" \
+                    pg_isready -U "$DB_USERNAME" -d fundpilot >/dev/null 2>&1; then
+                  return 0
+                fi
+                sleep 2
+              done
+              run_before_total_deadline 30 $COMPOSE logs --tail=50 db || true
+              return 1
+            }
+
+            rollback() {
+              status=$?
+              trap - ERR HUP INT TERM
+              set +e
+              ROLLBACK_ACTIVE=1
+              stop_maintenance_watchdog
+              timeout --foreground --kill-after=5s 30s \
+                docker rm -f fundpilot-frontend-candidate 2>/dev/null || true
+              rm -f .deployed-state.next
+              if [ "$PREVIOUS_STATE_READY" -eq 1 ]; then
+                cp "$PREVIOUS_STATE_FILE" .deployed-state
+              else
+                rm -f .deployed-state
+              fi
+              echo "deployment failed; restoring pre-deploy database" >&2
+              timeout --foreground --kill-after=5s 120s \
+                docker stop fundpilot-backend fundpilot-frontend 2>/dev/null || true
+
+              restore_ok=1
+              if [ "$DATABASE_MAY_HAVE_CHANGED" -eq 1 ]; then
+                restore_ok=0
+              fi
+              if [ "$DATABASE_MAY_HAVE_CHANGED" -eq 1 ] && [ "$BACKUP_READY" -eq 1 ]; then
+                if run_before_total_deadline 120 docker exec "$DB_CONTAINER" \
+                    dropdb -U "$DB_USERNAME" --maintenance-db=postgres \
+                    --force --if-exists fundpilot &&
+                  run_before_total_deadline 120 docker exec "$DB_CONTAINER" \
+                    createdb -U "$DB_USERNAME" --maintenance-db=postgres fundpilot &&
+                  run_before_total_deadline 600 docker exec -i "$DB_CONTAINER" pg_restore -U "$DB_USERNAME" \
+                    --dbname=fundpilot --no-owner --no-privileges --exit-on-error \
+                    --single-transaction < "$BACKUP_FILE"; then
+                  restore_ok=1
+                else
+                  echo "database restore failed; application remains stopped" >&2
+                fi
+              fi
+
+              if [ "$restore_ok" -eq 1 ] && [ -n "$PREVIOUS_RELEASE_TAG" ] &&
+                  [ -n "$PREVIOUS_IMAGE_TAG" ]; then
+                release_files_ok=1
+                git checkout --detach "$PREVIOUS_RELEASE_TAG" || release_files_ok=0
+                if [ "$PREVIOUS_ENV_READY" -eq 1 ]; then
+                  if cp "$PREVIOUS_ENV_FILE" .env && chmod 600 .env; then
+                    unset DB_USERNAME DB_PASSWORD ADMIN_API_KEY FLYWAY_REPAIR_LEGACY_V7
+                    unset BACKEND_IMAGE FRONTEND_IMAGE
+                  else
+                    release_files_ok=0
+                  fi
+                else
+                  write_env "$PREVIOUS_IMAGE_TAG" "$PREVIOUS_BACKEND_IMAGE" \
+                    "$PREVIOUS_FRONTEND_IMAGE" || release_files_ok=0
+                fi
+                if [ "$release_files_ok" -eq 1 ] &&
+                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 300 $COMPOSE pull backend frontend &&
+                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d --remove-orphans &&
+                  wait_for_release; then
+                  echo "rollback restored $PREVIOUS_RELEASE_TAG ($PREVIOUS_IMAGE_TAG)" >&2
+                else
+                  echo "rollback application health check failed" >&2
+                  timeout --foreground --kill-after=5s 120s \
+                    $COMPOSE stop backend frontend 2>/dev/null || true
+                fi
+              else
+                echo "no restorable database or previous immutable tag; application remains stopped" >&2
+              fi
+              [ "$status" -ne 0 ] || status=1
+              exit "$status"
+            }
+
+            post_commit_abort() {
+              status=$?
+              trap - ERR HUP INT TERM
+              set +e
+              stop_maintenance_watchdog
+              timeout --foreground --kill-after=5s 30s \
+                docker rm -f fundpilot-frontend-candidate 2>/dev/null || true
+              timeout --foreground --kill-after=5s 120s \
+                docker stop fundpilot-backend fundpilot-frontend 2>/dev/null || true
+              echo "release already committed; stopped application without restoring database" >&2
+              [ "$status" -ne 0 ] || status=1
+              exit "$status"
+            }
+
+            deployment_abort() {
+              if [ -f .deployed-state ] &&
+                grep -Fqx "DEPLOYMENT_TOKEN=$DEPLOYMENT_TOKEN" .deployed-state; then
+                post_commit_abort
+              else
+                rollback
+              fi
+            }
+
+            # 镜像拉取不需要停写；完成后再检查一个有硬上限的完整维护区间。
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+            maintenance_window_is_safe
+
+            # 升级前必须使用上一已部署版本的 Compose 和环境完成停写与备份。
+            if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
+              git checkout --detach "$PREVIOUS_RELEASE_TAG"
+            else
+              git checkout --detach "$RELEASE_TAG"
+              write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
+            fi
+            docker network inspect deploy_sub2api-network >/dev/null
+
+            trap deployment_abort ERR HUP INT TERM
+            start_maintenance_watchdog
+
+            # 维护窗口:先停止应用阻断写入,数据库保持在线以完成一致备份。
+            if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
+              TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 120 $COMPOSE stop backend frontend
+            else
+              TAG="$IMAGE_TAG" run_before_total_deadline 120 $COMPOSE stop backend frontend 2>/dev/null || true
+            fi
+            TAG="${PREVIOUS_IMAGE_TAG:-$IMAGE_TAG}" run_before_total_deadline 180 $COMPOSE up -d db
+            wait_for_database
+            mkdir -p "$BACKUP_DIR"
+            backup_tmp="$BACKUP_FILE.tmp"
+            rm -f "$backup_tmp"
+            run_before_total_deadline 600 docker exec "$DB_CONTAINER" \
+              pg_dump -U "$DB_USERNAME" -d fundpilot -Fc > "$backup_tmp"
+            test -s "$backup_tmp"
+            run_before_total_deadline 120 docker exec -i "$DB_CONTAINER" \
+              pg_restore --list < "$backup_tmp" >/dev/null
+            mv "$backup_tmp" "$BACKUP_FILE"
+            chmod 600 "$BACKUP_FILE"
+            BACKUP_READY=1
+
+            git checkout --detach "$RELEASE_TAG"
+            write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" true
+            {
+              printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG"
+              printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
+              printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE"
+              printf 'FRONTEND_IMAGE=%s\n' "$FRONTEND_IMAGE"
+              printf 'DEPLOYMENT_TOKEN=%s\n' "$DEPLOYMENT_TOKEN"
+            } > .deployed-state.next
+            DATABASE_MAY_HAVE_CHANGED=1
+            TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d db backend
+            wait_for_backend
+            smoke_candidate_frontend
+
+            write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
+            mv .deployed-state.next .deployed-state
+            stop_maintenance_watchdog
+            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d --force-recreate backend || ! wait_for_backend; then
+              echo "release committed but normal backend startup failed; database was not rolled back" >&2
+              post_commit_abort
+            fi
+            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d frontend || ! wait_for_release; then
+              echo "release committed but public frontend smoke test failed; database was not rolled back" >&2
+              post_commit_abort
+            fi
+            rm -f "$PREVIOUS_ENV_FILE" || true
+            rm -f "$PREVIOUS_STATE_FILE" || true
+            find "$BACKUP_DIR" -maxdepth 1 -type f -name 'pre-v*.dump' -mtime +30 -delete || true
+            stop_maintenance_watchdog
+            trap - ERR HUP INT TERM
+            echo "deployed $RELEASE_TAG ($IMAGE_TAG)"
 

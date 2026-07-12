@@ -6,6 +6,7 @@ import com.fundpilot.backend.dca.enums.DcaFrequency;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
 import com.fundpilot.backend.dca.repository.FundDcaPlanRepository;
 import com.fundpilot.backend.dca.service.DcaPlanService;
+import com.fundpilot.backend.dca.service.DcaSuggestionService;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
@@ -39,7 +40,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     @Autowired
-    DcaSuggestionJob dcaSuggestionJob;
+    DcaSuggestionService dcaSuggestionService;
 
     @Autowired
     DcaPlanService dcaPlanService;
@@ -69,7 +70,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         // 2026-06-22 是周一
         Instant monday = date(2026, 6, 22);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), monday);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), monday);
 
         assertThat(generated).isTrue();
         FundTransactionEntity tx = findPendingTx(fund.getId());
@@ -86,7 +87,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         // 2026-06-23 是周二
         Instant tuesday = date(2026, 6, 23);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), tuesday);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), tuesday);
 
         assertThat(generated).isFalse();
         assertThat(fundTransactionRepository.findByFundEntity_IdAndStatus(
@@ -102,7 +103,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         activateMonthly(fund, 15);
         Instant day15 = date(2026, 6, 15);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), day15);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), day15);
 
         assertThat(generated).isTrue();
         assertThat(findPendingTx(fund.getId()).getDcaPlanId()).isNotNull();
@@ -117,7 +118,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         saveCalendar(LocalDate.of(2026, 6, 15), true);
         Instant day16 = date(2026, 6, 16);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), day16);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), day16);
 
         assertThat(generated).isFalse();
     }
@@ -131,7 +132,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         saveCalendar(LocalDate.of(2026, 6, 15), false);
         Instant day16 = date(2026, 6, 16);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), day16);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), day16);
 
         assertThat(generated).isTrue();
         assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);
@@ -146,7 +147,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         saveCalendar(LocalDate.of(2026, 6, 29), false);
         saveCalendar(LocalDate.of(2026, 6, 30), false);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), date(2026, 7, 1));
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), date(2026, 7, 1));
 
         assertThat(generated).isTrue();
         assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);
@@ -162,8 +163,8 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         activateDaily(fund);
         Instant now = Instant.now();
 
-        boolean first = dcaSuggestionJob.generateForFund(fund.getId(), now);
-        boolean second = dcaSuggestionJob.generateForFund(fund.getId(), now);
+        boolean first = dcaSuggestionService.generateForFund(fund.getId(), now);
+        boolean second = dcaSuggestionService.generateForFund(fund.getId(), now);
 
         assertThat(first).isTrue();
         assertThat(second).isFalse();
@@ -195,12 +196,12 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         FundEntity fund = persistFund();
         activateDaily(fund);
         Instant now = Instant.now();
-        assertThat(dcaSuggestionJob.generateForFund(fund.getId(), now)).isTrue();
+        assertThat(dcaSuggestionService.generateForFund(fund.getId(), now)).isTrue();
         FundTransactionEntity tx = findPendingTx(fund.getId());
         tx.setStatus(FundTransactionStatus.CONFIRMED);
         fundTransactionRepository.saveAndFlush(tx);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), now);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), now);
 
         assertThat(generated).isFalse();
         assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
@@ -212,12 +213,12 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         FundEntity fund = persistFund();
         activateDaily(fund);
         Instant now = Instant.now();
-        assertThat(dcaSuggestionJob.generateForFund(fund.getId(), now)).isTrue();
+        assertThat(dcaSuggestionService.generateForFund(fund.getId(), now)).isTrue();
         FundTransactionEntity tx = findPendingTx(fund.getId());
         tx.setStatus(FundTransactionStatus.CANCELLED);
         fundTransactionRepository.saveAndFlush(tx);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), now);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), now);
 
         assertThat(generated).isFalse();
         assertThat(fundTransactionRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
@@ -233,7 +234,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
                 new DcaPlanRequest(false, new BigDecimal("1000"), DcaFrequency.WEEKLY, 1, null));
         Instant monday = date(2026, 6, 22);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), monday);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), monday);
 
         assertThat(generated).isFalse();
         assertThat(fundTransactionRepository.findByFundEntity_IdAndStatus(
@@ -250,7 +251,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
         // 2026-06-23 周二,任意交易日(日定投不看星期)
         Instant tuesday = date(2026, 6, 23);
 
-        boolean generated = dcaSuggestionJob.generateForFund(fund.getId(), tuesday);
+        boolean generated = dcaSuggestionService.generateForFund(fund.getId(), tuesday);
 
         assertThat(generated).isTrue();
         assertThat(findPendingTx(fund.getId()).getSource()).isEqualTo(FundTransactionSource.INVEST);

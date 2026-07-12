@@ -218,6 +218,21 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void create_录现有金额且行情拉取异常_整个创建事务回滚() {
+        long before = fundRepository.count();
+        doThrow(new RuntimeException("行情源不可达"))
+                .when(marketDataFetchService).fetchOneFund(anyLong());
+
+        assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
+                "161738", "行情失败基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
+                new BigDecimal("3000"))))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("行情源不可达");
+
+        assertThat(fundRepository.count()).isEqualTo(before);
+    }
+
+    @Test
     @Transactional
     void create_不录现有金额_走原PENDING_HOLDING流程不建仓() {
         FundView view = fundService.create(new FundCreateRequest(

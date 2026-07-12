@@ -2,6 +2,7 @@ package com.fundpilot.backend.signal.repository;
 
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.fund.enums.TakeProfitPhase;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
@@ -19,7 +20,8 @@ public interface SignalLogRepository extends JpaRepository<SignalLogEntity, Long
      * 查某基金某日(UTC 0点起 24 小时区间)已存在的 SignalLog(用于 #13 重跑覆盖:软删旧 + 写新)。
      * 唯一约束 {@code uq_signal_log_daily} 按 signal_date::date 去重,这里用区间查整日。
      */
-    List<SignalLogEntity> findByFundEntity_IdAndSignalDateBetween(Long fundId, Instant dayStart, Instant dayEnd);
+    List<SignalLogEntity> findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
+            Long fundId, Instant dayStart, Instant dayEnd);
 
     /**
      * 查某基金全部信号日志(归档级联软删用,无日期范围以避免区间端点溢出)。
@@ -44,7 +46,21 @@ public interface SignalLogRepository extends JpaRepository<SignalLogEntity, Long
      */
     @Query("select s from SignalLogEntity s " +
             "where s.signalType <> :excludedType " +
+            "and s.ignoredDate is null " +
+            "and s.signalDate >= :minDate " +
             "and not exists (select t.id from FundTransactionEntity t where t.signalLogEntity = s) " +
             "order by s.signalDate desc")
-    List<SignalLogEntity> findPendingSignals(@Param("excludedType") SignalType excludedType, Pageable pageable);
+    List<SignalLogEntity> findRecentPendingSignals(@Param("excludedType") SignalType excludedType,
+                                                    @Param("minDate") Instant minDate,
+                                                    Pageable pageable);
+
+    @Query("select s from SignalLogEntity s join s.fundStrategyEntity st " +
+            "where s.signalType <> :excludedType " +
+            "and s.ignoredDate is null " +
+            "and st.takeProfitPhase = :phase " +
+            "and st.triggeredSignalId = s.id " +
+            "and not exists (select t.id from FundTransactionEntity t where t.signalLogEntity = s) " +
+            "order by s.signalDate desc")
+    List<SignalLogEntity> findTriggeredPendingSignals(@Param("excludedType") SignalType excludedType,
+                                                       @Param("phase") TakeProfitPhase phase);
 }

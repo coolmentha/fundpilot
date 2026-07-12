@@ -1,5 +1,6 @@
 package com.fundpilot.backend.signal.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
@@ -11,6 +12,7 @@ import com.fundpilot.backend.signal.controller.SignalLogView;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
+import com.fundpilot.backend.market.repository.TradingCalendarRepository;
 import com.fundpilot.backend.strategy.entity.FundStrategyEntity;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
@@ -37,12 +39,17 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
     SignalQueryService service;
     @Autowired
     EntityManager entityManager;
+    @Autowired
+    TradingCalendarRepository tradingCalendarRepository;
 
     private FundEntity fund;
     private FundStrategyEntity strategy;
 
     @BeforeEach
     void setUp() {
+        tradingCalendarRepository.insertTradingDayIfAbsent(
+                ChinaTradingDate.toUtcDate(Instant.now())
+                        .minus(1, java.time.temporal.ChronoUnit.DAYS));
         fund = newFund("510300", "沪深300ETF");
         entityManager.persist(fund);
 
@@ -66,15 +73,37 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
     }
 
     private SignalLogEntity persistSignal(FundEntity f, SignalType type, Integer tier, SignalReason reason) {
+        return persistSignalAt(f, type, tier, reason, ChinaTradingDate.toUtcDate(Instant.now()));
+    }
+
+    private SignalLogEntity persistSignalAt(FundEntity f, SignalType type, Integer tier,
+                                             SignalReason reason, Instant signalDate) {
         SignalLogEntity log = new SignalLogEntity();
         log.setFundEntity(f);
         log.setFundStrategyEntity(strategy);
-        log.setSignalDate(Instant.now());
+        log.setSignalDate(signalDate);
         log.setSignalType(type);
         log.setTriggerTier(tier);
         log.setReason(reason);
         entityManager.persist(log);
         return log;
+    }
+
+    @Test
+    void range使用半开区间_不包含次日零点信号() {
+        Instant day = ChinaTradingDate.toUtcDate(Instant.now());
+        SignalLogEntity expected = persistSignalAt(
+                fund, SignalType.SELL, 1, SignalReason.TRAILING_STOP, day);
+        persistSignalAt(
+                fund, SignalType.SELL, 2, SignalReason.TRAILING_STOP,
+                day.plus(1, java.time.temporal.ChronoUnit.DAYS));
+        entityManager.flush();
+        entityManager.clear();
+        String date = day.toString().substring(0, 10);
+
+        List<SignalLogView> history = service.range(fund.getId(), date, date);
+
+        assertThat(history).extracting(SignalLogView::id).containsExactly(expected.getId());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
@@ -21,7 +22,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -55,11 +55,11 @@ public class MarketDataFetchService {
     private final IndexKlineRepository indexKlineRepository;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
 
     /**
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
      */
-    @Transactional
     public void fetchBatch(int batchNumber) {
         // issue #23:范围从"有 EFFECTIVE 策略的基金"扩大到"所有未软删基金",
         // 让未建仓(观察池)基金也落净值历史支撑今日涨跌(story 21)。软删由 @SQLRestriction 自动过滤。
@@ -73,7 +73,10 @@ public class MarketDataFetchService {
                 continue;
             }
             try {
-                fetchOne(fundId);
+                requiresNewTransactionExecutor.execute(() -> {
+                    fetchOne(fundId);
+                    return null;
+                });
                 success++;
             } catch (RuntimeException ex) {
                 failure++;
@@ -86,7 +89,6 @@ public class MarketDataFetchService {
     /**
      * 当日全量刷新——跑全部三批,供 {@code POST /api/admin/market-data/refresh} 手动触发。
      */
-    @Transactional
     public void refreshAll() {
         for (int batch = 0; batch < TOTAL_BATCHES; batch++) {
             fetchBatch(batch);
@@ -95,12 +97,12 @@ public class MarketDataFetchService {
 
     /**
      * 拉取单只基金的历史净值落库(issue #37):供 {@code FundService.create} 建基金后自动拉取。
-     * <p>用 {@code REQUIRES_NEW} 独立事务,避免与建基金事务共用长事务(东方财富 HTTP 调用秒级,
-     * 不应占着 create 的事务和 DB 连接)。拉取失败(净值空/网络异常)抛异常由调用方 catch 降级。
+     * <p>由独立入口直接调用时开启事务；批处理路径通过
+     * {@link RequiresNewTransactionExecutor} 为每只基金建立独立事务。
      *
      * @param fundId 基金 id
      */
-    @Transactional
+    @org.springframework.transaction.annotation.Transactional
     public void fetchOneFund(Long fundId) {
         fetchOne(fundId);
     }

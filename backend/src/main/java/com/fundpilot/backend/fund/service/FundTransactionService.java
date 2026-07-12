@@ -31,6 +31,7 @@ public class FundTransactionService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundRepository fundRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
+    private final FundPositionService fundPositionService;
 
     /** 查某基金全部交易流水,按交易发生时间倒序(最新在前)。 */
     public List<FundTransactionView> listByFund(Long fundId) {
@@ -50,12 +51,13 @@ public class FundTransactionService {
      */
     @Transactional
     public FundTransactionView createManual(Long fundId, ManualTransactionRequest request) {
-        FundEntity fund = fundRepository.findById(fundId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
-
         if (request.source() == null) {
             throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "交易来源(source)必填");
         }
+        boolean isAdjust = request.source() == FundTransactionSource.ADJUST_IN
+                || request.source() == FundTransactionSource.ADJUST_OUT;
+        FundEntity fund = (isAdjust ? fundRepository.findByIdForUpdate(fundId) : fundRepository.findById(fundId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         Instant now = Instant.now();
         Instant tradeDate = request.tradeDate() != null ? request.tradeDate() : now;
         if (tradeDate.isAfter(now)) {
@@ -64,11 +66,18 @@ public class FundTransactionService {
 
         // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费,只改持仓份额。
         // amount/fee/feeRate/nav 均空,金额实时算(份额×当前净值)。
-        if (request.source() == FundTransactionSource.ADJUST_IN
-                || request.source() == FundTransactionSource.ADJUST_OUT) {
+        if (isAdjust) {
             if (request.shares() == null || request.shares().signum() <= 0) {
                 throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
                         request.source() + " 需填正数份额(shares)");
+            }
+            if (request.source() == FundTransactionSource.ADJUST_OUT) {
+                BigDecimal holdingShares = fundPositionService.getHoldingShares(fundId);
+                if (holdingShares == null || request.shares().compareTo(holdingShares) > 0) {
+                    throw new BusinessException(ErrorCode.INSUFFICIENT_HOLDING_SHARES,
+                            "调减份额 " + request.shares() + " 超过当前持仓 "
+                                    + (holdingShares == null ? BigDecimal.ZERO : holdingShares));
+                }
             }
             FundTransactionEntity tx = new FundTransactionEntity();
             tx.setFundEntity(fund);
@@ -84,6 +93,7 @@ public class FundTransactionService {
             tx.setSignalLogEntity(null);
             FundTransactionEntity saved = fundTransactionRepository.save(tx);
             transactionConfirmSupport.onAdjustConfirmed(saved);
+            fundPositionService.reconcileStatus(fundId);
             return FundTransactionView.from(saved);
         }
 

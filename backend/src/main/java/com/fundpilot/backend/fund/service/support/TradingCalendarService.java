@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * 交易日历服务:判定某日是否为 A 股交易日,及两个日期间(不含起点、含终点)的交易日数。
@@ -24,6 +25,20 @@ public class TradingCalendarService {
         return tradingCalendarRepository.findByCalendarDate(date)
                 .map(TradingCalendarEntity::isTradingDay)
                 .orElse(false);
+    }
+
+    /** 查给定日期之前最近一个 A 股交易日，周末会返回周五。 */
+    public Optional<Instant> latestTradingDayOnOrBefore(Instant date) {
+        return tradingCalendarRepository
+                .findTopByCalendarDateLessThanEqualAndTradingDayTrueOrderByCalendarDateDesc(date)
+                .map(TradingCalendarEntity::getCalendarDate);
+    }
+
+    /** 查给定日期之前最近一个 A 股交易日，不包含给定日期。 */
+    public Optional<Instant> latestTradingDayBefore(Instant date) {
+        return tradingCalendarRepository
+                .findTopByCalendarDateLessThanAndTradingDayTrueOrderByCalendarDateDesc(date)
+                .map(TradingCalendarEntity::getCalendarDate);
     }
 
     /**

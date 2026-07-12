@@ -258,6 +258,8 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void createManual_调增录入即CONFIRMED_持仓增加_不建lot不算费() {
         // task 07-09:ADJUST_IN 录入即 CONFIRMED,amount/fee/nav 均空,持仓份额立即增加
         FundEntity fund = persistFund();
+        fund.setStatus(FundStatus.PENDING_HOLDING);
+        fundRepository.save(fund);
         assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("0");
 
         ManualTransactionRequest req = new ManualTransactionRequest(
@@ -272,6 +274,8 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         assertThat(view.confirmTime()).isNotNull();
         // 持仓立即 +100
         assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("100");
+        assertThat(fundRepository.findById(fund.getId()).orElseThrow().getStatus())
+                .isEqualTo(FundStatus.HOLDING);
     }
 
     @Test
@@ -285,12 +289,60 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
                 new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null, new BigDecimal("50"), null));
 
         assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("150");
+        assertThat(fundRepository.findById(fund.getId()).orElseThrow().getStatus())
+                .isEqualTo(FundStatus.HOLDING);
+    }
+
+    @Test
+    @Transactional
+    void createManual_调减至零_状态变为CLEARED() {
+        FundEntity fund = persistFund();
+        fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null,
+                        new BigDecimal("100"), null));
+
+        fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null,
+                        new BigDecimal("100"), null));
+
+        assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("0");
+        assertThat(fundRepository.findById(fund.getId()).orElseThrow().getStatus())
+                .isEqualTo(FundStatus.CLEARED);
+    }
+
+    @Test
+    @Transactional
+    void createManual_调减超过事实持仓_拒绝且不写交易() {
+        FundEntity fund = persistFund();
+        fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null,
+                        new BigDecimal("100"), null));
+        long before = fundTransactionRepository.count();
+
+        assertThatThrownBy(() -> fundTransactionService.createManual(fund.getId(),
+                new ManualTransactionRequest(FundTransactionSource.ADJUST_OUT, null,
+                        new BigDecimal("101"), null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.INSUFFICIENT_HOLDING_SHARES.name());
+
+        assertThat(fundTransactionRepository.count()).isEqualTo(before);
+        assertThat(fundPositionService.getHoldingShares(fund.getId())).isEqualByComparingTo("100");
     }
 
     @Test
     @Transactional
     void createManual_调减同步缩减lot且不生成赎回明细() {
         FundEntity fund = persistFund();
+        FundTransactionEntity holding = new FundTransactionEntity();
+        holding.setFundEntity(fund);
+        holding.setSource(FundTransactionSource.INCREASE);
+        holding.setStatus(FundTransactionStatus.CONFIRMED);
+        holding.setAmount(new BigDecimal("120"));
+        holding.setShares(new BigDecimal("100"));
+        holding.setNav(new BigDecimal("1.20"));
+        holding.setTradeDate(Instant.parse("2026-06-01T00:00:00Z"));
+        holding.setConfirmTime(Instant.parse("2026-06-02T00:00:00Z"));
+        fundTransactionRepository.save(holding);
         FundLotEntity lot = new FundLotEntity();
         lot.setFundEntity(fund);
         lot.setAcquireTxId(999L);

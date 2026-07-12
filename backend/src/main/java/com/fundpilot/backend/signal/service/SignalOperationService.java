@@ -11,12 +11,14 @@ import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
+import com.fundpilot.backend.strategy.service.TakeProfitLifecycleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
 
 /**
  * 信号操作确认服务(issue #14):用户回应 SignalLog 的统一入口。
@@ -46,6 +48,9 @@ public class SignalOperationService {
 
     private final SignalLogRepository signalLogRepository;
     private final FundTransactionRepository fundTransactionRepository;
+    private final SignalActionabilityService signalActionabilityService;
+    private final TakeProfitLifecycleService takeProfitLifecycleService;
+    private final Clock clock;
 
     /**
      * 确认信号操作:根据 SignalLog 分派推进动作并写 FundTransaction。
@@ -70,9 +75,17 @@ public class SignalOperationService {
             throw new BusinessException(ErrorCode.SIGNAL_ALREADY_RESPONDED,
                     "SignalLog #" + signalLogId + " 已回应");
         }
+        if (signalLog.getIgnoredDate() != null) {
+            throw new BusinessException(ErrorCode.SIGNAL_ALREADY_IGNORED,
+                    "SignalLog #" + signalLogId + " 已忽略");
+        }
+        if (!signalActionabilityService.isActionable(signalLog)) {
+            throw new BusinessException(ErrorCode.SIGNAL_EXPIRED,
+                    "SignalLog #" + signalLogId + " 已过期");
+        }
         SignalType type = signalLog.getSignalType();
         SignalReason reason = signalLog.getReason();
-        Instant now = Instant.now();
+        Instant now = clock.instant();
 
         FundTransactionEntity tx = switch (type) {
             case BUILD -> handleBuild(signalLog, fund, request, now);
@@ -82,6 +95,36 @@ public class SignalOperationService {
                     "NONE 信号无需确认操作");
         };
         return fundTransactionRepository.save(tx);
+    }
+
+    @Transactional
+    public SignalLogEntity ignoreSignal(Long fundId, Long signalLogId) {
+        SignalLogEntity signalLog = signalLogRepository.findByIdForUpdate(signalLogId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SIGNAL_LOG_NOT_FOUND, "SignalLog #" + signalLogId + " 不存在"));
+        FundEntity fund = signalLog.getFundEntity();
+        if (!fund.getId().equals(fundId)) {
+            throw new BusinessException(ErrorCode.SIGNAL_FUND_MISMATCH,
+                    "SignalLog #" + signalLogId + " 不属于基金 #" + fundId);
+        }
+        if (signalLog.getSignalType() == SignalType.NONE) {
+            throw new BusinessException(ErrorCode.INVALID_SIGNAL_TYPE, "NONE 信号无需忽略");
+        }
+        if (fundTransactionRepository.existsBySignalLogEntity_Id(signalLogId)) {
+            throw new BusinessException(ErrorCode.SIGNAL_ALREADY_RESPONDED,
+                    "SignalLog #" + signalLogId + " 已回应");
+        }
+        if (signalLog.getIgnoredDate() != null) {
+            return signalLog;
+        }
+        if (!signalActionabilityService.isActionable(signalLog)) {
+            throw new BusinessException(ErrorCode.SIGNAL_EXPIRED,
+                    "SignalLog #" + signalLogId + " 已过期");
+        }
+        signalLog.setIgnoredDate(clock.instant());
+        SignalLogEntity saved = signalLogRepository.save(signalLog);
+        takeProfitLifecycleService.onSignalIgnored(saved);
+        return saved;
     }
 
     /** BUILD:写 PENDING INCREASE(amount)，状态在交易确认后按事实持仓重算。 */

@@ -3,12 +3,12 @@
 /**
  * 调后端接口，返回 ApiResponse.data（已解包）。
  * @param {string} path 形如 /api/funds
- * @param {{method?: string, body?: any}} options
+ * @param {{method?: string, body?: any, headers?: Record<string, string>}} options
  * @returns {Promise<any>} data 字段
  */
 export async function apiFetch(path, options = {}) {
     const method = (options.method || 'GET').toUpperCase();
-    const init = {method, headers: {}};
+    const init = {method, headers: {...(options.headers || {})}};
     if (options.body !== undefined) {
         init.headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(options.body);
@@ -42,6 +42,6 @@ export class ApiError extends Error {
 
 // 便捷方法
 export const get = (path) => apiFetch(path);
-export const post = (path, body) => apiFetch(path, {method: 'POST', body});
+export const post = (path, body, options = {}) => apiFetch(path, {...options, method: 'POST', body});
 export const put = (path, body) => apiFetch(path, {method: 'PUT', body});
 export const del = (path) => apiFetch(path, {method: 'DELETE'});

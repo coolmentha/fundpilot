@@ -82,7 +82,7 @@ public record SectorSnapshot(
     BigDecimal leadingStockChangePct  // 领涨股涨跌幅（可空）
 ) {}
 
-// 资金流向
+// 遗留北向资金快照；当前工作台使用 SectorSnapshot.mainforceNet 展示行业主力资金
 public record MoneyFlowSnapshot(
     BigDecimal northboundNet,   // 北向资金净流入（元，正=流入）
     BigDecimal mainforceNet,    // 主力净流入

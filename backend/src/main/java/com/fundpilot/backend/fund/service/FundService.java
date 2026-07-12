@@ -67,9 +67,8 @@ public class FundService {
      * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重"现有金额是历史持仓"
      * (用已公布净值,不等 NavConfirmJob)。无净值可反算则报错不让建(同步确认的硬前提)。
      * <p>initialMarketValue 为 null/非正数 → 走原 PENDING_HOLDING 流程。
-     * <p>@Transactional:initialMarketValue 路径需写基金+交易原子;fetchOneFund 开 REQUIRES_NEW 独立事务
-     * 拉取净值(可见已提交的基金)。代价:若 openWithExistingPosition 抛错(无净值),外层回滚基金 save,
-     * 但 fetchOneFund 已提交的净值历史成孤儿——可接受(行情数据非业务数据,下次 refresh 复用)。
+     * <p>@Transactional:initialMarketValue 路径需写基金+交易原子。同步建仓必须取得净值，
+     * 行情拉取失败时整个创建事务失败，避免返回一个没有可核算份额的半成品基金。
      */
     @Transactional
     public FundView create(FundCreateRequest request) {
@@ -96,11 +95,7 @@ public class FundService {
 
         // initialMarketValue 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
         if (request.initialMarketValue() != null && request.initialMarketValue().signum() > 0) {
-            try {
-                marketDataFetchService.fetchOneFund(saved.getId());
-            } catch (RuntimeException ex) {
-                log.warn("建基金 {} 后拉取历史净值失败,降级(可稍后手动 refresh 补): {}", saved.getId(), ex.getMessage());
-            }
+            marketDataFetchService.fetchOneFund(saved.getId());
             openWithExistingPosition(saved, request.initialMarketValue(), request.costPerShare(), request.openedAt());
         } else {
             eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));

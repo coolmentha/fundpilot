@@ -29,6 +29,11 @@ export const labels = {
     BUILD: '建仓',
     ADD: '加仓',
     SELL: '卖出',
+    // SignalActionStatus
+    INFORMATIONAL: '无需操作',
+    RESPONDED: '已回应',
+    IGNORED: '已忽略',
+    EXPIRED: '已过期',
     // FundTransactionStatus
     PENDING: '待确认',
     CONFIRMED: '已确认',
@@ -215,14 +220,20 @@ export const errorTitles = {
     MISSING_ACTUAL_SHARES: '缺少实际份额',
     UNSUPPORTED_SELL_REASON: '卖出原因不支持',
     SIGNAL_ALREADY_RESPONDED: '信号已回应',
+    SIGNAL_ALREADY_IGNORED: '信号已忽略',
+    SIGNAL_EXPIRED: '信号已过期',
     SIGNAL_FUND_MISMATCH: '信号与基金不匹配',
     NO_VALID_BACKTEST: '无有效回测',
     ILLEGAL_STATE_TRANSITION: '状态切换非法',
+    INSUFFICIENT_HOLDING_SHARES: '持仓份额不足',
     // 寻优
     OPTIMIZATION_NO_VALID_PARAMS: '寻优未达标',
     // 数据源
     NAV_HISTORY_EMPTY: '净值历史为空',
     MARKET_DATA_ALL_SOURCES_FAILED: '行情数据源全部失败',
+    // 管理端鉴权
+    ADMIN_UNAUTHORIZED: '管理凭据无效',
+    ADMIN_AUTH_NOT_CONFIGURED: '管理端鉴权未配置',
     // 兜底
     INTERNAL_ERROR: '服务异常',
     NETWORK_ERROR: '网络异常',

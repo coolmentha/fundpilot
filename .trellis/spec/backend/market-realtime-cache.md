@@ -55,7 +55,7 @@ public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 |---------|---------|---------|------|
 | 指数实时 | 30s | 5s | 单请求批量,快 |
 | 板块涨跌 | 30s | 30s | 单请求 |
-| 北向资金 | 30s | 30s | 单请求 |
+| 行业主力资金 | 30s | 30s | 随板块快照批量返回 |
 | 基金估值 | **30s** | 10s | 盘中实时性优先,后台逐只刷新;失败立即失效该基金旧估值 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
@@ -155,7 +155,7 @@ N 个前端客户端共享同一份缓存。
 ## Tests Required
 
 - `EastmoneyJsParserRealtimeTest`:实时行情解析测试覆盖正常响应、空响应、字段缺失
-  - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null、北向资金取 s2n 最后一条
+  - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null；北向资金解析仅作为遗留兼容回归
 - `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
 - 缓存层降级测试:指数/市场宽度等仍验证旧缓存保留；基金估值必须单独验证成功后空响应、异常、旧日期都会删除旧值。
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
@@ -263,15 +263,15 @@ if (breadth != null) {
 
 ---
 
-## Design Decision: 资金流向只做北向资金
+## Design Decision: 当前工作台使用行业主力资金
 
 **Context**:设计阶段设想展示「北向 + 主力 + 超大单 + 大单 + 中单 + 小单」六项全市场汇总。
 
 **验证发现**:东方财富全市场资金汇总接口(`fflow/daykline/get`)返回 `rc:102 data:null`,
 结构不稳定。板块级资金(`clist` 的 f62 主力净流入)可靠。
 
-**Decision**:本期 MoneyFlow 只含北向资金一项(来自 `kamt.rtmin` 接口,稳定)。
-板块级主力资金随 `SectorSnapshot.mainforceNet` 返回,前端在板块组件里展示。
+**Decision**:当前工作台以板块级主力资金为主合同，随 `SectorSnapshot.mainforceNet` 返回并在板块组件展示。
+北向资金 `MoneyFlowSnapshot` 与既有接口保留为遗留兼容能力，但不作为当前页面验收项。
 全市场主力/超大单等汇总留 follow-up,待找到稳定接口再做。
 
 **Extensibility**:`MoneyFlowSnapshot` 是 record,未来加字段只需扩 record + 解析器,

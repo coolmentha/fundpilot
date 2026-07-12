@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
@@ -13,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -42,25 +42,25 @@ public class DailyNavConfirmService {
     private final FundEstimateService fundEstimateService;
     private final MarketDataSource marketDataSource;
     private final ApplicationEventPublisher eventPublisher;
+    private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
 
     /**
      * 遍历所有基金,确认当日净值落库。供 {@code DailyNavConfirmJob} 每分钟调用。
      */
-    @Transactional
     public void confirmTodayNav() {
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
-        List<FundEntity> funds = fundRepository.findAll();
+        List<Long> fundIds = fundRepository.findAll().stream().map(FundEntity::getId).toList();
         int confirmed = 0;
         int skipped = 0;
-        for (FundEntity fund : funds) {
+        for (Long fundId : fundIds) {
             try {
-                if (confirmOne(fund, today)) {
+                if (requiresNewTransactionExecutor.execute(() -> confirmOne(fundId, today))) {
                     confirmed++;
                 } else {
                     skipped++;
                 }
             } catch (RuntimeException ex) {
-                log.warn("确认基金 {} 当日净值失败,跳过: {}", fund.getId(), ex.getMessage());
+                log.warn("确认基金 {} 当日净值失败,跳过: {}", fundId, ex.getMessage());
                 skipped++;
             }
         }
@@ -70,7 +70,11 @@ public class DailyNavConfirmService {
     /**
      * @return true=本次新落库了当日净值;false=已确认或未公布,跳过
      */
-    private boolean confirmOne(FundEntity fund, Instant today) {
+    private boolean confirmOne(Long fundId, Instant today) {
+        FundEntity fund = fundRepository.findById(fundId).orElse(null);
+        if (fund == null) {
+            return false;
+        }
         // 已确认(最近 navDate = 今天)→ 跳过
         if (isTodayNavConfirmed(fund.getId(), today)) {
             return false;
