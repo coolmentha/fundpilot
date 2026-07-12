@@ -48,7 +48,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 候选 backend 使用 `DEPLOYMENT_VALIDATION_MODE=true`：不注册 Scheduler，Pending 补偿和交易日历启动监听器不得写库。
 - 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和带 `X-Admin-Key` 的 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
 - 部署探活的 Key 必须通过 stdin 传给 HTTP 客户端，不得出现在 `curl`、`wget`、`docker` 或 `timeout` 的进程参数中；回滚探活必须从旧 `.env` 读取上一版本 Key，并兼容不要求 Key 的旧 release。
-- 候选前端的原始 HTTP 探活必须在容器内读取 stdin 中的 Key，再由容器内 `printf | nc` 构造请求；禁止在宿主机直接 `printf request | docker exec -i ... nc`，BusyBox `nc` 会因 Docker stdin EOF 提前关闭连接并让 Nginx 记录 `499`。
+- 候选前端的原始 HTTP 探活必须在容器内读取 stdin 中的 Key，由容器内管道构造请求并短暂保持写端打开，同时在宿主机完整捕获响应后再匹配 JSON；禁止让 BusyBox `nc` 直接收到请求端 EOF，或把其输出直接接到 `grep -q`，两者都会提前关闭连接并让有反代延迟的 Nginx 请求记录 `499`。
 - 容器内 Nginx 探活必须使用 `http://127.0.0.1/`，禁止使用可能优先解析到未监听 IPv6 回环的 `localhost`。
 - 远程 Compose 命令必须显式传 `--env-file "$VPS_PATH/.env"`；切换到上一 release 后仍从根目录环境文件读取数据库凭据，禁止依赖 Compose 随版本/工作目录变化的隐式 `.env` 搜索。
 - 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和带 `X-Admin-Key` 的 `/api/funds`。
@@ -86,6 +86,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Good：浏览器内存中输入访问 Key，登录验证成功后所有 `/api/**` 请求统一带 Header，刷新页面后重新登录。
 - Good：生产存在唯一旧 V7 Missing，repair 标记 `DELETED` 后 V1-V18 严格校验通过。
 - Good：候选 backend 无调度/启动写，候选 frontend 只在内部网络完成 API 反代验证，失败时安全恢复备份。
+- Good：候选前端原始 HTTP 探活在容器内保持请求写端打开，宿主完整读取响应后再判断成功，Nginx 反代慢于静态页时仍返回 200。
 - Good：部署使用 backend/frontend digest；Git tag 被移动时在停写前拒绝发布。
 - Good：镜像先拉取，维护前确认未来 60 分钟不跨 cron 禁区；前向命令按 30 分钟截止，rollback/提交后按 55 分钟截止，命令忽略 TERM 时 5 秒后强制 KILL。
 - Good：状态文件原子提交后收到 HUP，统一 trap 读取本次 `DEPLOYMENT_TOKEN` 并只停止应用，不恢复数据库。
@@ -100,6 +101,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Bad：使用 `latest` 回滚，无法证明恢复的是哪一版。
 - Bad：候选 backend 开着 Scheduler 等待前端探活，回滚会删除这段窗口的定时写入。
 - Bad：正式 frontend 接入 Caddy 后仍允许数据库回滚，会覆盖健康等待窗口的用户写入。
+- Bad：只用静态 Nginx 或直接后端验证 BusyBox `nc`；这无法复现 Nginx 等待上游时因客户端 EOF 产生的 `499`。
 - Bad：只在脚本启动时检查当前时刻，镜像拉取或备份变慢后仍可能跨入 cron 窗口。
 - Bad：先 `mv .deployed-state`、下一行才切换 trap，两个命令之间的信号会走错回滚阶段。
 
@@ -112,6 +114,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，并保留至少一个合法 pending migration；repair 后 V7 为 `DELETED`、pending 成功应用且严格 validate 成功。
 - CI YAML 必须可解析，部署脚本必须通过 `bash -n`，Compose 必须通过 `docker compose config --quiet`。
 - 部署脚本复核必须覆盖禁区交叉计算、绝对 deadline、命令级 timeout，以及 `.deployed-state` 原子提交前后的信号分派。
+- 候选前端探活回归必须运行项目真实 frontend Nginx，并用至少延迟 2 秒的测试 backend 验证：直接 EOF 的旧管道产生 `499`，保持写端并完整捕获响应的新管道返回 200 和 `"success":true`。
 - `SchedulingConfigTest`、`PendingTransactionCompensationJobTest`、`TradingCalendarSyncJobTest`：候选模式不注册调度且跳过启动写。
 - 修改后运行后端全量测试，以及前端 lint、test、build。
 
