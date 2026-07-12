@@ -6,6 +6,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,6 +31,7 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
     private final JsonMapper jsonMapper;
     private final AdminApiKeyProperties properties;
+    private final AdminSessionTokenService sessionTokenService;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -52,7 +54,7 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
         }
 
         String suppliedKey = request.getHeader(HEADER_NAME);
-        if (suppliedKey == null || !matches(suppliedKey)) {
+        if (!matches(suppliedKey) && !hasValidSession(request)) {
             reject(response, HttpServletResponse.SC_UNAUTHORIZED,
                     ErrorCode.ADMIN_UNAUTHORIZED, "访问凭据无效");
             return;
@@ -62,10 +64,26 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
     }
 
     private boolean matches(String suppliedKey) {
+        if (suppliedKey == null) {
+            return false;
+        }
         return MessageDigest.isEqual(
                 properties.apiKey().getBytes(StandardCharsets.UTF_8),
                 suppliedKey.getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private boolean hasValidSession(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return false;
+        }
+        for (Cookie cookie : cookies) {
+            if (AdminSessionTokenService.COOKIE_NAME.equals(cookie.getName())) {
+                return sessionTokenService.isValid(cookie.getValue());
+            }
+        }
+        return false;
     }
 
     private void reject(HttpServletResponse response, int status, ErrorCode code, String message) throws IOException {

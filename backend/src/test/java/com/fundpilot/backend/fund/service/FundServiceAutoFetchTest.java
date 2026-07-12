@@ -70,9 +70,10 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUpUserConfig() {
-        // 清空本地 DB 残留的 user_config,确保测试隔离。
-        // 计划仓位校验已随 totalInvestableCapital 移除(V9),不再需要预先初始化资金配置。
-        userConfigRepository.deleteAll();
+        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
+                .orElseGet(UserConfigEntity::new);
+        config.setTotalCapital(new BigDecimal("100000"));
+        userConfigRepository.save(config);
     }
 
     @Test
@@ -214,6 +215,27 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
                 .extracting("code").isEqualTo(ErrorCode.NAV_HISTORY_EMPTY.name());
 
         // 基金未落库(Service 事务回滚)
+        assertThat(fundRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    void create_录现有金额但未配置总资金池_抛CAPITAL_POOL_NOT_CONFIGURED且基金不落库() {
+        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst().orElseThrow();
+        config.setTotalCapital(null);
+        userConfigRepository.saveAndFlush(config);
+        doAnswer(inv -> {
+            Long fundId = inv.getArgument(0);
+            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            return null;
+        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        long before = fundRepository.count();
+
+        assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
+                "161739", "未入金基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
+                new BigDecimal("3000"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.CAPITAL_POOL_NOT_CONFIGURED.name());
+
         assertThat(fundRepository.count()).isEqualTo(before);
     }
 

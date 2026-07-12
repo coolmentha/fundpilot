@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.DailyChangeResolver;
 import com.fundpilot.backend.fund.service.support.DailyChangeResult;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
@@ -23,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
 
 /**
  * 盈亏与涨跌聚合服务(issue #18,CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
@@ -41,6 +44,7 @@ public class FundPnlService {
     private final FundPositionService fundPositionService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
+    private final FundTransactionRepository fundTransactionRepository;
     private final MarketRealtimeCache marketRealtimeCache;
     private final Clock clock;
 
@@ -63,6 +67,46 @@ public class FundPnlService {
     public Pnl computeForFund(FundEntity fund) {
         Long fundId = fund.getId();
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
+        BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
+        return computeForFund(fund, latestTwo, rawShares, null);
+    }
+
+    /** 列表/组合批量聚合，固定三次批量读取，避免逐基金 N+1。 */
+    public Map<Long, Pnl> computeForFunds(List<FundEntity> funds) {
+        if (funds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> fundIds = funds.stream().map(FundEntity::getId).toList();
+        Map<Long, BigDecimal> sharesByFund = new HashMap<>();
+        fundTransactionRepository.aggregateConfirmedShares(fundIds)
+                .forEach(row -> sharesByFund.put(row.getFundId(), row.getHoldingShares()));
+
+        Map<Long, List<FundNavHistoryEntity>> navsByFund = new HashMap<>();
+        fundNavHistoryRepository.findLatestTwoByFundIds(fundIds).forEach(row -> {
+            FundNavHistoryEntity nav = new FundNavHistoryEntity();
+            nav.setNavDate(row.getNavDate());
+            nav.setNav(row.getNav());
+            nav.setAccumulatedNav(row.getAccumulatedNav());
+            navsByFund.computeIfAbsent(row.getFundId(), ignored -> new ArrayList<>()).add(nav);
+        });
+        List<String> fundCodes = funds.stream().map(FundEntity::getFundCode)
+                .filter(code -> code != null && !code.isBlank()).distinct().toList();
+        Map<String, FundEstimateSnapshot> estimates = fundCodes.isEmpty()
+                ? Map.of() : marketRealtimeCache.getEstimates(fundCodes);
+
+        Map<Long, Pnl> result = new LinkedHashMap<>();
+        for (FundEntity fund : funds) {
+            result.put(fund.getId(), computeForFund(
+                    fund,
+                    navsByFund.getOrDefault(fund.getId(), List.of()),
+                    sharesByFund.getOrDefault(fund.getId(), BigDecimal.ZERO),
+                    estimates));
+        }
+        return result;
+    }
+
+    private Pnl computeForFund(FundEntity fund, List<FundNavHistoryEntity> latestTwo,
+                               BigDecimal rawShares, Map<String, FundEstimateSnapshot> batchEstimates) {
         BigDecimal latestAccumulatedNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousAccumulatedNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
         BigDecimal latestUnitNav = latestTwo.size() >= 1 ? latestTwo.get(0).getNav() : null;
@@ -72,7 +116,7 @@ public class FundPnlService {
         // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)只读实时缓存,不在 GET 请求里打外部接口
         Optional<FundEstimateSnapshot> estimate = todayNavConfirmed
                 ? Optional.empty()  // 盘后不需要估值
-                : getCachedEstimate(fund.getFundCode());
+                : getCachedEstimate(fund.getFundCode(), batchEstimates);
         DailyChangeResult changeResult = DailyChangeResolver.resolve(
                 clock.instant(), todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
@@ -81,7 +125,6 @@ public class FundPnlService {
                 && marketRealtimeCache.hasEstimateFetchFailed(fund.getFundCode());
 
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
-        BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
         BigDecimal costPerShare = holdingShares != null ? fund.getCostPerShare() : null;
 
@@ -104,10 +147,16 @@ public class FundPnlService {
 
     /** 从实时缓存读取 fundgz 盘中估值;缓存未命中降级返 empty。 */
     private Optional<FundEstimateSnapshot> getCachedEstimate(String fundCode) {
+        return getCachedEstimate(fundCode, null);
+    }
+
+    private Optional<FundEstimateSnapshot> getCachedEstimate(
+            String fundCode, Map<String, FundEstimateSnapshot> batchEstimates) {
         if (fundCode == null || fundCode.isBlank()) {
             return Optional.empty();
         }
-        Map<String, FundEstimateSnapshot> estimates = marketRealtimeCache.getEstimates(List.of(fundCode));
+        Map<String, FundEstimateSnapshot> estimates = batchEstimates != null
+                ? batchEstimates : marketRealtimeCache.getEstimates(List.of(fundCode));
         return Optional.ofNullable(estimates.get(fundCode));
     }
 
@@ -147,13 +196,14 @@ public class FundPnlService {
      */
     public PortfolioSummary computePortfolioSummary() {
         List<FundEntity> holdingFunds = fundRepository.findByStatus(FundStatus.HOLDING);
+        Map<Long, Pnl> pnlByFund = computeForFunds(holdingFunds);
         List<BigDecimal> changePcts = new ArrayList<>();
         List<BigDecimal> dailyPnls = new ArrayList<>();
         List<BigDecimal> totalPnls = new ArrayList<>();
         boolean isEstimated = false;
         int estimateFetchFailedCount = 0;
         for (FundEntity fund : holdingFunds) {
-            Pnl pnl = computeForFund(fund);
+            Pnl pnl = pnlByFund.get(fund.getId());
             changePcts.add(pnl.dailyChangePct());
             dailyPnls.add(pnl.dailyPnl());
             totalPnls.add(pnl.totalPnl());

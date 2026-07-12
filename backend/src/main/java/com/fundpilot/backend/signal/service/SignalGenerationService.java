@@ -129,6 +129,8 @@ public class SignalGenerationService {
             result = disciplineStrategyService.evaluateSignal(fund, strategy, market, capital, dayStart, tradingDaysSinceLastBuy);
         }
 
+        supersedeTriggeredTakeProfit(strategy, result, dayStart);
+
         // 已有未完成止盈周期时不写新的 NONE 日志，保留原可执行信号供用户回应。
         if (strategy.getTakeProfitPhase() == com.fundpilot.backend.fund.enums.TakeProfitPhase.TRIGGERED
                 && result.signalType() == com.fundpilot.backend.signal.enums.SignalType.NONE) {
@@ -158,6 +160,22 @@ public class SignalGenerationService {
         } else {
             fundStrategyRepository.save(strategy);
         }
+    }
+
+    private void supersedeTriggeredTakeProfit(FundStrategyEntity strategy, SignalResult result, Instant now) {
+        if (result.reason() != SignalReason.LOGIC_BROKEN
+                || strategy.getTakeProfitPhase() != com.fundpilot.backend.fund.enums.TakeProfitPhase.TRIGGERED
+                || strategy.getTriggeredSignalId() == null) {
+            return;
+        }
+        signalLogRepository.findById(strategy.getTriggeredSignalId())
+                .filter(signal -> signal.getIgnoredDate() == null)
+                .filter(signal -> !fundTransactionRepository.existsBySignalLogEntity_Id(signal.getId()))
+                .ifPresent(signal -> {
+                    signal.setIgnoredDate(now);
+                    signalLogRepository.save(signal);
+                    takeProfitLifecycleService.onSignalIgnored(signal);
+                });
     }
 
     private MarketIndicators toMarketIndicators(MarketIndicatorSnapshotEntity snapshot) {
@@ -207,7 +225,7 @@ public class SignalGenerationService {
         return fundTransactionRepository
                 .findFirstByFundEntity_IdAndStatusAndSourceInAndConfirmTimeIsNotNullOrderByConfirmTimeDesc(
                         fund.getId(), FundTransactionStatus.CONFIRMED, BUY_SOURCES)
-                .map(FundTransactionEntity::getConfirmTime)
+                .map(tx -> tx.getTradeDate() != null ? tx.getTradeDate() : tx.getConfirmTime())
                 .orElse(null);
     }
 

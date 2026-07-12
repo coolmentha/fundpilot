@@ -8,6 +8,7 @@
 
 ```text
 HTTP Header: X-Admin-Key: <secret>
+Browser session: HttpOnly host-only cookie fundpilot_session=<signed opaque token>
 Config: fundpilot.admin.api-key=${ADMIN_API_KEY:}
 Config: fundpilot.flyway.legacy-v7-repair.enabled=${FLYWAY_REPAIR_LEGACY_V7:false}
 Config: fundpilot.deployment.validation-mode=${DEPLOYMENT_VALIDATION_MODE:false}
@@ -30,9 +31,12 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 ## 3. Contracts
 
 - `AdminApiKeyFilter` 保护 `/api` 和所有 `/api/**`；静态资源、Actuator 与定时任务不受影响。
-- 访问 Key 使用常量时间比较，不进入 URL、请求体、日志、localStorage、sessionStorage、Cookie 或前端构建变量。
-- 未认证时前端只渲染登录页，业务路由与查询 hooks 不得挂载。`GET /api/auth/verify` 验证成功后，Key 仅保存在 `SiteAuthGate` 与 API client 的进程内存中，所有业务请求统一发送 `X-Admin-Key`，刷新页面即清空。
-- 已认证请求返回 401 时必须清空 Key 和 React Query 缓存并回到登录页；管理页复用全站登录态，不得再次采集 Key。
+- 访问 Key 使用常量时间比较，不进入 URL、请求体、日志、localStorage、sessionStorage、Cookie 或前端构建变量。浏览器只在登录请求 Header 中提交一次 Key，后端签发不含原始 Key 的 HMAC 签名会话 Cookie。
+- 会话 Cookie 必须为 host-only、`HttpOnly`、`SameSite=Strict`，生产 HTTPS 下带 `Secure`，有效期 30 天。业务 API 同时接受有效会话 Cookie和 `X-Admin-Key`，后者仅供脚本、部署探活和首次登录。
+- 未认证时前端只渲染登录页，业务路由与查询 hooks 不得挂载。页面启动通过 `GET /api/auth/verify` 重验 Cookie，验证成功前不得挂载业务界面。
+- 启动重验仅在 401 时进入登录页；网络错误、超时和 5xx 保留 Cookie并显示重试态。所有前端 API 请求必须有统一超时。
+- 主动退出调用后端清除 Cookie，并用不含凭据的 localStorage logout 事件同步其他标签页。
+- 已认证请求返回 401 时必须推进认证代次、清空 React Query 缓存并回到登录页；管理页复用全站登录态，不得再次采集 Key。
 - API client 必须按认证代次关联请求；旧代次的迟到 401 不得退出已完成的新登录。
 - 所有 `/api/**` 成功和失败响应必须返回 `Cache-Control: no-store, private` 与 `Vary: X-Admin-Key`，退出后不得依赖浏览器或代理继续持有敏感响应。
 - 服务端 Key 未配置时失败关闭，不得匿名放行。
@@ -67,6 +71,10 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 | `ADMIN_API_KEY` 为空 | 所有 `/api/**` 请求失败关闭 | 503 `ADMIN_AUTH_NOT_CONFIGURED` |
 | API Header 缺失或不匹配 | 不进入 Controller | 401 `ADMIN_UNAUTHORIZED` |
 | API Header 匹配 | 执行对应业务 Controller | 原端点响应 |
+| 会话 Cookie 缺失/无效 | 显示登录页，不挂载业务路由 | 等待用户输入 |
+| 会话 Cookie 重验成功 | 挂载业务路由 | 恢复登录态 |
+| 重验网络错误/超时/5xx | 保留 Cookie和查询隔离 | 显示重试/重新登录 |
+| 用户主动退出或已认证请求 401 | 清 Cookie、内存认证代次和查询缓存 | 所有标签页返回登录页 |
 | 静态资源或 Actuator | 不经过 Key Filter | 原端点响应 |
 | Flyway repair 开关关闭 | 直接严格 migrate/validate | 任意 missing 导致启动失败 |
 | 开关开启且无遗留 V7 | 不调用 repair，正常 migrate 后严格 validate | 正常启动 |
@@ -83,7 +91,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 ## 5. Good / Base / Bad Cases
 
-- Good：浏览器内存中输入访问 Key，登录验证成功后所有 `/api/**` 请求统一带 Header，刷新页面后重新登录。
+- Good：登录请求验证 Key 后签发 HttpOnly 持久会话 Cookie；刷新、关闭或重启浏览器后先重新验证 Cookie，成功才恢复业务界面。
 - Good：生产存在唯一旧 V7 Missing，repair 标记 `DELETED` 后 V1-V18 严格校验通过。
 - Good：候选 backend 无调度/启动写，候选 frontend 只在内部网络完成 API 反代验证，失败时安全恢复备份。
 - Good：候选前端原始 HTTP 探活在容器内保持请求写端打开，宿主完整读取响应后再判断成功，Nginx 反代慢于静态页时仍返回 200。
@@ -95,7 +103,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Base：首次部署没有上一 tag，失败时恢复数据库并保持应用停止。
 - Bad：把访问 Key 编进 `VITE_*`，密钥会出现在公开 JS 中。
 - Bad：只做前端登录页，后端普通业务 API 仍可匿名调用。
-- Bad：把 Key 写入 localStorage、sessionStorage 或 Cookie，刷新后仍保留长期凭据。
+- Bad：把原始 Key 写入 localStorage/sessionStorage/普通 Cookie，或读取浏览器状态后不经服务端验证就挂载业务界面。
 - Bad：使用 `*:missing` 让任意缺失迁移继续启动。
 - Bad：新版本运行且允许写入后再恢复部署前备份，会覆盖用户新数据。
 - Bad：使用 `latest` 回滚，无法证明恢复的是哪一版。
@@ -109,7 +117,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 - `AdminApiKeyFilterTest`：普通 API 的正确、缺失、错误、未配置 Key，编码/矩阵绕过路径及 Actuator 放行。
 - `AdminApiKeyIntegrationTest`：真实 Spring Web 过滤链验证普通 API 与 `/api/auth/verify` 的 401/200，以及 Actuator 放行。
-- `frontend/src/api/client.test.js` / `hooks.test.js`：全站内存 Key 注入、调用方 Header 不得覆盖、401 退出通知、五个管理 action 路由和未知 action 拒绝。
+- `frontend/src/auth/SiteAuthGate.test.jsx` / `api/client.test.js` / `siteAuthStorage.test.js` / `hooks.test.js`：一次性 Header 登录、Cookie 启动重验、暂时故障重试、401 退出、认证代次隔离、跨标签页退出、五个管理 action 路由和未知 action 拒绝。
 - `LegacyV7FlywayRepairServiceTest`：开关关闭、幂等、额外 missing、failed、元数据漂移及越权 repair 结果。
 - `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，并保留至少一个合法 pending migration；repair 后 V7 为 `DELETED`、pending 成功应用且严格 validate 成功。
 - CI YAML 必须可解析，部署脚本必须通过 `bash -n`，Compose 必须通过 `docker compose config --quiet`。
@@ -144,6 +152,14 @@ TAG=latest docker compose up -d
 ```java
 if (configuredKey.isBlank()) reject(503, ADMIN_AUTH_NOT_CONFIGURED);
 if (!MessageDigest.isEqual(expected, supplied)) reject(401, ADMIN_UNAUTHORIZED);
+```
+
+```javascript
+await loginSiteApiKey(candidate); // 主 Key 只提交一次，服务端签发 HttpOnly 会话 Cookie。
+await verifySiteSession();        // 刷新/重开只验证会话，不读取或重传主 Key。
+// 只有明确 401 才回到登录页；网络、超时和 5xx 保留会话并提供重试。
+await logoutSiteSession();
+broadcastSiteLogout();            // 同源其他标签页立即退出。
 ```
 
 ```java

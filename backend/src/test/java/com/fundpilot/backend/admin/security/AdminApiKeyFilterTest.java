@@ -6,12 +6,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 class AdminApiKeyFilterTest {
 
@@ -75,11 +79,47 @@ class AdminApiKeyFilterTest {
         verifyNoInteractions(filterChain);
     }
 
+    @Test
+    void validSessionCookieAllowsApiRequestWithoutRawKey() throws Exception {
+        AdminSessionTokenService sessions = createSessionService("test-admin-key");
+        filter = createFilter("test-admin-key", sessions);
+        MockHttpServletRequest request = apiRequest();
+        request.setCookies(new Cookie(AdminSessionTokenService.COOKIE_NAME, sessions.issue()));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void invalidSessionCookieIsRejected() throws Exception {
+        MockHttpServletRequest request = apiRequest();
+        request.setCookies(new Cookie(AdminSessionTokenService.COOKIE_NAME, "invalid"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        verifyNoInteractions(filterChain);
+    }
+
     private AdminApiKeyFilter createFilter(String configuredKey) {
+        return createFilter(configuredKey, createSessionService(configuredKey));
+    }
+
+    private AdminApiKeyFilter createFilter(String configuredKey, AdminSessionTokenService sessions) {
         return new AdminApiKeyFilter(
                 JsonMapper.builder().build(),
-                new AdminApiKeyProperties(configuredKey)
+                new AdminApiKeyProperties(configuredKey),
+                sessions
         );
+    }
+
+    private AdminSessionTokenService createSessionService(String configuredKey) {
+        return new AdminSessionTokenService(
+                new AdminApiKeyProperties(configuredKey),
+                Clock.fixed(Instant.parse("2026-07-12T00:00:00Z"), ZoneOffset.UTC));
     }
 
     @Test

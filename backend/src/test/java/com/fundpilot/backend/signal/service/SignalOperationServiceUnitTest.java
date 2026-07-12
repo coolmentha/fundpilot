@@ -7,6 +7,8 @@ import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -36,6 +38,8 @@ class SignalOperationServiceUnitTest {
 
     @Mock SignalLogRepository signalLogRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
+    @Mock FundRepository fundRepository;
+    @Mock FundPositionService fundPositionService;
     @Mock SignalActionabilityService signalActionabilityService;
     @Mock TakeProfitLifecycleService takeProfitLifecycleService;
 
@@ -44,6 +48,7 @@ class SignalOperationServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SignalOperationService(signalLogRepository, fundTransactionRepository,
+                fundRepository, fundPositionService,
                 signalActionabilityService, takeProfitLifecycleService,
                 Clock.fixed(Instant.parse("2026-07-10T08:00:00Z"), ZoneOffset.UTC));
     }
@@ -87,6 +92,23 @@ class SignalOperationServiceUnitTest {
         assertThat(transaction.getShares()).isEqualByComparingTo("100");
         assertThat(transaction.getSignalLogEntity()).isSameAs(signal);
         verify(fundTransactionRepository).existsBySignalLogEntity_Id(11L);
+    }
+
+    @Test
+    void confirmOperation_逻辑止损忽略部分卖出输入并按锁内事实持仓清仓() {
+        SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.LOGIC_BROKEN);
+        when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
+        when(signalActionabilityService.isActionable(signal)).thenReturn(true);
+        when(fundRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(signal.getFundEntity()));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        when(fundTransactionRepository.save(any(FundTransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        FundTransactionEntity transaction = service.confirmOperation(1L, 11L,
+                new ConfirmOperationRequest(11L, null, BigDecimal.ONE));
+
+        assertThat(transaction.getShares()).isEqualByComparingTo("100");
+        verify(fundRepository).findByIdForUpdate(1L);
     }
 
     @Test

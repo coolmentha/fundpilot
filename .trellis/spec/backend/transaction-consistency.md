@@ -70,6 +70,8 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - 行情抓取、信号生成、夜间净值确认等按基金遍历的定时批处理，每只基金必须通过 `RequiresNewTransactionExecutor` 或等价的代理 Bean 在独立事务中执行；单只失败只回滚当前基金并继续后续基金。
 - 卖出存在 lot 缺口时，只有卖出前事实持仓中确有未跟踪份额，缺口才按零赎回费降级。
 - 所有 SELL 确认入口在消费 lot 前必须先悲观锁定基金行，再基于 CONFIRMED 交易汇总校验事实持仓；不得依赖请求前页面持仓、缓存持仓或仅校验 lot 总数。
+- 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST 与初始持仓同步确认）必须在基金行锁内校验总资金池与单基金上限。当前事实持仓市值使用本次交易日单位净值；累计净值不得用于仓位约束。
+- 外部入金只累加单用户 `totalCapital`，不归属基金、不创建交易、买入后也不从总池扣减。单基金 `maxPositionRatio` 只能在 `(0, 0.30]`，数据库 CHECK 与业务层必须同时兜底。
 - ADJUST 分支先悲观锁基金行；`ADJUST_OUT` 不得超过 CONFIRMED 事实持仓，交易、lot 更新和 `reconcileStatus` 必须位于同一事务。
 - 交易日历使用数据库 `ON CONFLICT DO NOTHING` 原子插入，不使用“先查后插”实现幂等。
 - 日常 `sync()` 空表全量、非空表只写最大日期之后；管理 `syncFull()` 遍历全量以补历史缺口。
@@ -98,6 +100,9 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 | 日历日期已存在 | 返回 0，不抛异常 | 无 |
 | 手动确认缺少交易发生日净值 | 保持 PENDING，拒绝使用最新净值 | `NAV_HISTORY_EMPTY` |
 | SELL 份额超过锁后计算的 CONFIRMED 事实持仓 | 交易不确认，不消费 lot | `INSUFFICIENT_HOLDING_SHARES` |
+| 总资金池为空或非正 | 买入不确认 | `CAPITAL_POOL_NOT_CONFIGURED` |
+| 买入后市值超过 `totalCapital * maxPositionRatio` | 买入不确认 | `POSITION_LIMIT_EXCEEDED` |
+| 单基金上限非正或超过 30% | 拒绝创建/更新 | `POSITION_LIMIT_INVALID` |
 | 单只基金补偿失败 | 记录错误并继续其他基金 | 无 |
 
 ## 5. Good / Base / Bad Cases
@@ -145,6 +150,7 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - `TransactionConfirmServiceStateTest`：CONFIRMED/PENDING 不重复调用 `onSellConfirmed`。
 - `TransactionCancelServiceStateTest`：关联腿已确认时拒绝撤销。
 - `TransactionConfirmSupportTest`：部分 lot 缺口、ADJUST_OUT、初始持仓 lot 且不重复扣费。
+- `PositionLimitServiceTest` / `FundServiceAutoFetchTest`：覆盖恰好等于上限、超过上限、未配置总池、初始持仓不可绕过和基金行锁。
 - `TradingCalendarSchemaIntegrationTest`：原子重复写返回 1/0，最大日期查询正确。
 - `TradingCalendarSyncServiceTest`：空表全量、非空增量和管理全量补写。
 - `RequiresNewTransactionExecutorTest` 及各批处理 Service/Job 测试：断言每只基金使用 `REQUIRES_NEW`，单基金异常不回滚或阻断其他基金。

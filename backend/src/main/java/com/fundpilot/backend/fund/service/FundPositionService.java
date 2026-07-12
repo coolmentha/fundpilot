@@ -67,8 +67,9 @@ public class FundPositionService {
                 : shares.signum() > 0 ? FundStatus.HOLDING : FundStatus.CLEARED;
         if (target == FundStatus.HOLDING && fund.getStatus() != FundStatus.HOLDING) {
             confirmed.stream()
-                    .filter(tx -> direction(tx.getSource()).signum() > 0 && tx.getConfirmTime() != null)
-                    .map(FundTransactionEntity::getConfirmTime)
+                    .filter(tx -> direction(tx.getSource()).signum() > 0)
+                    .map(tx -> TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime()))
+                    .filter(java.util.Objects::nonNull)
                     .max(Instant::compareTo)
                     .ifPresent(fund::setOpenedAt);
         }

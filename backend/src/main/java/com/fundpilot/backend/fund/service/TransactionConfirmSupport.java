@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.client.FundFeeSnapshot;
 import com.fundpilot.backend.fund.client.RedemptionTier;
@@ -42,6 +43,7 @@ public class TransactionConfirmSupport {
     private final FundLotRedemptionRepository fundLotRedemptionRepository;
     private final FundPositionService fundPositionService;
     private final FundRepository fundRepository;
+    private final PositionLimitService positionLimitService;
 
     /**
      * 买入确认:扣申购费,算 shares,建 lot,加权更新 costPerShare。
@@ -52,6 +54,7 @@ public class TransactionConfirmSupport {
      */
     public void onBuyConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
+        positionLimitService.validatePurchase(fundId, tx.getAmount(), navValue);
         FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
         BigDecimal discountRate = fee.discountRate() != null ? fee.discountRate() : BigDecimal.ZERO;
 
@@ -134,8 +137,8 @@ public class TransactionConfirmSupport {
             BigDecimal consume = lot.getRemainingShares().min(remaining);
             Instant sellTradeTime = TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime());
             long holdingDays = ChronoUnit.DAYS.between(
-                    lot.getAcquireDate().atZone(ZoneOffset.UTC).toLocalDate(),
-                    sellTradeTime.atZone(ZoneOffset.UTC).toLocalDate());
+                    ChinaTradingDate.toUtcDate(lot.getAcquireDate()),
+                    ChinaTradingDate.toUtcDate(sellTradeTime));
             BigDecimal rate = lookupRedemptionRate(ladder, (int) holdingDays);
             totalFee = totalFee.add(consume.multiply(navValue, MATH).multiply(rate, MATH));
 

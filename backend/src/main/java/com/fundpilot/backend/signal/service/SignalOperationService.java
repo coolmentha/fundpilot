@@ -6,6 +6,8 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -34,7 +36,7 @@ import java.time.Clock;
  *   <tr><td>BUILD</td><td>写 PENDING INCREASE 交易(amount=actualAmount)</td></tr>
  *   <tr><td>ADD tierN</td><td>写 INCREASE 交易(存量兼容,不再推进 tierNAddedAt)</td></tr>
  *   <tr><td>SELL TRAILING_STOP</td><td>写 PENDING DECREASE 交易(shares=actualShares)</td></tr>
- *   <tr><td>SELL LOGIC_BROKEN</td><td>写 PENDING DECREASE 交易(shares=actualShares)</td></tr>
+ *   <tr><td>SELL LOGIC_BROKEN</td><td>锁基金后按 CONFIRMED 事实持仓写全仓 PENDING DECREASE</td></tr>
  * </table>
  *
  * <h3>偏离说明</h3>
@@ -48,6 +50,8 @@ public class SignalOperationService {
 
     private final SignalLogRepository signalLogRepository;
     private final FundTransactionRepository fundTransactionRepository;
+    private final FundRepository fundRepository;
+    private final FundPositionService fundPositionService;
     private final SignalActionabilityService signalActionabilityService;
     private final TakeProfitLifecycleService takeProfitLifecycleService;
     private final Clock clock;
@@ -150,9 +154,24 @@ public class SignalOperationService {
      */
     private FundTransactionEntity handleSell(SignalLogEntity signalLog, FundEntity fund, SignalReason reason,
                                              ConfirmOperationRequest request, Instant now) {
-        BigDecimal shares = requireShares(request);
         if (reason != SignalReason.TRAILING_STOP && reason != SignalReason.LOGIC_BROKEN) {
             throw new BusinessException(ErrorCode.UNSUPPORTED_SELL_REASON, "不支持的 SELL reason: " + reason);
+        }
+        BigDecimal shares;
+        if (reason == SignalReason.LOGIC_BROKEN) {
+            requireShares(request);
+            Long fundId = fund.getId();
+            FundEntity lockedFund = fundRepository.findByIdForUpdate(fundId)
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+            shares = fundPositionService.getHoldingShares(lockedFund.getId());
+            if (shares == null || shares.signum() <= 0) {
+                throw new BusinessException(ErrorCode.INSUFFICIENT_HOLDING_SHARES,
+                        "逻辑止损确认时已无可卖持仓");
+            }
+            fund = lockedFund;
+        } else {
+            shares = requireShares(request);
         }
         return newTransaction(fund, signalLog, FundTransactionSource.DECREASE, null, shares, now);
     }

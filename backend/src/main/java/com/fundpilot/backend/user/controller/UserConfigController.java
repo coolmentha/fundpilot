@@ -4,16 +4,18 @@ import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.user.service.UserConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 用户配置 Controller:单用户场景,管理关注指数列表。
- * <p>GET 取配置(未初始化返默认);PUT 更新关注指数。逻辑下沉 {@link UserConfigService}。
+ * 用户配置 Controller:单用户场景,管理总资金池与关注指数列表。
+ * <p>GET 取配置;PUT 更新关注指数;POST /deposits 累加外部入金。逻辑下沉 {@link UserConfigService}。
  */
 @RestController
 @RequestMapping("/api/user-config")
@@ -32,6 +34,14 @@ public class UserConfigController {
         return ApiResponse.ok(userConfigService.update(request.watchedIndices()));
     }
 
+    @PostMapping("/deposits")
+    public ApiResponse<UserConfigView> deposit(@RequestBody DepositRequest request) {
+        return ApiResponse.ok(userConfigService.deposit(request.amount()));
+    }
+
     public record UserConfigUpdateRequest(List<String> watchedIndices) {
+    }
+
+    public record DepositRequest(BigDecimal amount) {
     }
 }

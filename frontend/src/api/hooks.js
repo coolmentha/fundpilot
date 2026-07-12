@@ -256,6 +256,18 @@ export function useUpdateUserConfig() {
     });
 }
 
+export function useDepositCapital() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: depositCapital,
+        onSuccess: () => qc.invalidateQueries({queryKey: ['user-config']}),
+    });
+}
+
+export function depositCapital(amount) {
+    return post('/api/user-config/deposits', {amount});
+}
+
 // ===== 行情 =====
 export function useMarketIndicatorsToday(fundId) {
     return useQuery({

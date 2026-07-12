@@ -1,5 +1,5 @@
 import {useEffect} from 'react';
-import {Form, InputNumber, Modal, Select} from 'antd';
+import {Form, InputNumber, Modal, Select, Switch} from 'antd';
 
 const FREQUENCY_OPTIONS = [
     {value: 'DAILY', label: '日定投'},
@@ -36,6 +36,9 @@ export default function DcaPlanFormModal({open, editing, onOk, onCancel, confirm
         <Modal title={editing ? '编辑定投计划' : '新建定投计划'} open={open} onCancel={onCancel}
                onOk={handleOk} confirmLoading={confirmLoading} destroyOnHidden width={520}>
             <Form form={form} layout="vertical">
+                <Form.Item label="启用自动定投" name="enabled" valuePropName="checked">
+                    <Switch/>
+                </Form.Item>
                 <Form.Item label="每次金额(元)" name="amount"
                            rules={[{required: true, message: '请输入金额'}]}>
                     <InputNumber min={1} precision={2} className="full-width" placeholder="如 1000"/>

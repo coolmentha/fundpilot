@@ -1,8 +1,10 @@
 import {useState} from 'react';
-import {App, Button, Card, Select, Space, Typography} from 'antd';
-import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
+import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
+import {DollarOutlined} from '@ant-design/icons';
+import {useDepositCapital, useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import {isQueryDataReady} from '../querySafety.js';
+import {money} from '../constants.js';
 
 const {Title, Text} = Typography;
 
@@ -28,7 +30,9 @@ export default function SettingsPage() {
     const {message} = App.useApp();
     const {data: config, isLoading, isError, refetch} = useUserConfig();
     const updateConfig = useUpdateUserConfig();
+    const depositCapital = useDepositCapital();
     const [selectedOverride, setSelectedOverride] = useState(null);
+    const [depositAmount, setDepositAmount] = useState(null);
     const selected = selectedOverride ?? config?.watchedIndices ?? [];
     const configReady = isQueryDataReady({data: config, isLoading, isError});
 
@@ -38,9 +42,37 @@ export default function SettingsPage() {
         message.success('关注指数已更新');
     };
 
+    const deposit = async () => {
+        if (!depositAmount || depositAmount <= 0) return;
+        await depositCapital.mutateAsync(depositAmount);
+        setDepositAmount(null);
+        message.success('外部入金已计入总资金池');
+    };
+
     return (
         <Card title={<Title level={4}>用户配置</Title>} style={{maxWidth: 600}}>
             <Space direction="vertical" className="full-width" size="large">
+                <div>
+                    <Text type="secondary" style={{display: 'block', marginBottom: 8}}>总资金池</Text>
+                    <Title level={3} style={{marginTop: 0, marginBottom: 12}}>
+                        {config?.totalCapital == null ? '尚未入金' : money(config.totalCapital)}
+                    </Title>
+                    <Space.Compact block>
+                        <InputNumber
+                            aria-label="外部入金金额"
+                            min={0.01}
+                            precision={2}
+                            value={depositAmount}
+                            onChange={setDepositAmount}
+                            placeholder="外部入金金额"
+                            className="full-width"
+                        />
+                        <Button type="primary" icon={<DollarOutlined/>}
+                                loading={depositCapital.isPending}
+                                disabled={!configReady || !depositAmount || depositAmount <= 0}
+                                onClick={deposit}>入金</Button>
+                    </Space.Compact>
+                </div>
                 <div>
                     <Text type="secondary" style={{display: 'block', marginBottom: 8}}>关注指数</Text>
                     <Text type="secondary" style={{display: 'block', marginBottom: 12, fontSize: 12}}>

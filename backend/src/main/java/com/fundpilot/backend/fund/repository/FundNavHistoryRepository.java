@@ -11,6 +11,13 @@ import java.util.Optional;
 
 public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEntity, Long> {
 
+    interface LatestNavProjection {
+        Long getFundId();
+        Instant getNavDate();
+        java.math.BigDecimal getNav();
+        java.math.BigDecimal getAccumulatedNav();
+    }
+
     /**
      * 全历史累计净值峰值(issue #9 ADR-0001:不落字段,实时派生)。
      * 用 (fund_id, nav_date) 索引 max 查询。
@@ -47,6 +54,13 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      * 取前 2:第 0 期为最近一期,第 1 期为上一期。
      */
     List<FundNavHistoryEntity> findTop2ByFundEntity_IdOrderByNavDateDesc(Long fundId);
+
+    @Query(value = "select fund_id as fundId, nav_date as navDate, nav, accumulated_nav as accumulatedNav " +
+            "from (select fund_id, nav_date, nav, accumulated_nav, " +
+            "row_number() over (partition by fund_id order by nav_date desc) as row_num " +
+            "from fund_nav_history where deleted_date is null and fund_id in (:fundIds)) ranked " +
+            "where row_num <= 2 order by fund_id, nav_date desc", nativeQuery = true)
+    List<LatestNavProjection> findLatestTwoByFundIds(@Param("fundIds") List<Long> fundIds);
 
     /** 查最近一期净值，账目/止盈收益使用单位净值，分析指标继续使用累计净值。 */
     Optional<FundNavHistoryEntity> findFirstByFundEntity_IdOrderByNavDateDesc(Long fundId);
