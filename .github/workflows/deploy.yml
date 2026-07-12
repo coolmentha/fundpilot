@@ -433,9 +433,12 @@ jobs:
               for i in $(seq 1 30); do
                 if run_before_total_deadline 15 docker exec "$candidate" \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
-                  printf 'GET /api/funds HTTP/1.1\r\nHost: localhost\r\nX-Admin-Key: %s\r\nConnection: close\r\n\r\n' \
-                    "$HEALTHCHECK_API_KEY" |
-                  run_before_total_deadline 15 docker exec -i "$candidate" nc 127.0.0.1 80 |
+                  printf '%s\n' "$HEALTHCHECK_API_KEY" |
+                  run_before_total_deadline 15 docker exec -i "$candidate" sh -c '
+                    IFS= read -r healthcheck_api_key
+                    printf "GET /api/funds HTTP/1.1\r\nHost: localhost\r\nX-Admin-Key: %s\r\nConnection: close\r\n\r\n" \
+                      "$healthcheck_api_key" | nc 127.0.0.1 80
+                  ' |
                     grep -q '"success":true'; then
                   run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
                   return 0
