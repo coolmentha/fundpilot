@@ -140,7 +140,6 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,ADMIN_API_KEY,DEPLOYMENT_TOKEN
-          script_stop: true
           script: |
             set -Eeuo pipefail
             umask 077
@@ -309,7 +308,7 @@ jobs:
               mv .env.tmp .env
             }
 
-            COMPOSE="docker compose -p fundpilot -f deploy/docker-compose.prod.yml"
+            COMPOSE=(docker compose --env-file "$VPS_PATH/.env" -p fundpilot -f deploy/docker-compose.prod.yml)
             DB_CONTAINER="fundpilot-db"
             BACKUP_DIR="$VPS_PATH/backups"
             BACKUP_FILE="$BACKUP_DIR/pre-$RELEASE_TAG.dump"
@@ -394,7 +393,7 @@ jobs:
             }
 
             backend_is_healthy() {
-              run_before_total_deadline 15 $COMPOSE exec -T backend \
+              run_before_total_deadline 15 "${COMPOSE[@]}" exec -T backend \
                 curl -sf --max-time 5 http://localhost:8080/actuator/health |
                 grep -q '"status":"UP"'
             }
@@ -406,7 +405,7 @@ jobs:
                 fi
                 sleep 2
               done
-              run_before_total_deadline 30 $COMPOSE logs --tail=50 backend || true
+              run_before_total_deadline 30 "${COMPOSE[@]}" logs --tail=50 backend || true
               return 1
             }
 
@@ -417,9 +416,9 @@ jobs:
                 "$FRONTEND_IMAGE" >/dev/null
               for i in $(seq 1 30); do
                 if run_before_total_deadline 15 docker exec "$candidate" \
-                    wget -q -T 5 -O /dev/null http://localhost/ &&
+                    wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
                   run_before_total_deadline 15 docker exec "$candidate" \
-                    wget -q -T 5 -O - http://localhost/api/funds |
+                    wget -q -T 5 -O - http://127.0.0.1/api/funds |
                     grep -q '"success":true'; then
                   run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
                   return 0
@@ -434,8 +433,8 @@ jobs:
             wait_for_release() {
               for i in $(seq 1 30); do
                 if backend_is_healthy &&
-                  run_before_total_deadline 15 $COMPOSE exec -T frontend \
-                    wget -q -T 5 -O /dev/null http://localhost/ &&
+                  run_before_total_deadline 15 "${COMPOSE[@]}" exec -T frontend \
+                    wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
                   curl -fsS --max-time 5 "$PUBLIC_URL/" >/dev/null &&
                   curl -fsS --max-time 5 "$PUBLIC_URL/api/funds" |
                     grep -q '"success":true'; then
@@ -443,7 +442,7 @@ jobs:
                 fi
                 sleep 2
               done
-              run_before_total_deadline 30 $COMPOSE logs --tail=50 backend frontend || true
+              run_before_total_deadline 30 "${COMPOSE[@]}" logs --tail=50 backend frontend || true
               return 1
             }
 
@@ -455,7 +454,7 @@ jobs:
                 fi
                 sleep 2
               done
-              run_before_total_deadline 30 $COMPOSE logs --tail=50 db || true
+              run_before_total_deadline 30 "${COMPOSE[@]}" logs --tail=50 db || true
               return 1
             }
 
@@ -512,14 +511,14 @@ jobs:
                     "$PREVIOUS_FRONTEND_IMAGE" || release_files_ok=0
                 fi
                 if [ "$release_files_ok" -eq 1 ] &&
-                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 300 $COMPOSE pull backend frontend &&
-                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d --remove-orphans &&
+                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 300 "${COMPOSE[@]}" pull backend frontend &&
+                  TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d --remove-orphans &&
                   wait_for_release; then
                   echo "rollback restored $PREVIOUS_RELEASE_TAG ($PREVIOUS_IMAGE_TAG)" >&2
                 else
                   echo "rollback application health check failed" >&2
                   timeout --foreground --kill-after=5s 120s \
-                    $COMPOSE stop backend frontend 2>/dev/null || true
+                    "${COMPOSE[@]}" stop backend frontend 2>/dev/null || true
                 fi
               else
                 echo "no restorable database or previous immutable tag; application remains stopped" >&2
@@ -570,11 +569,11 @@ jobs:
 
             # 维护窗口:先停止应用阻断写入,数据库保持在线以完成一致备份。
             if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
-              TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 120 $COMPOSE stop backend frontend
+              TAG="$PREVIOUS_IMAGE_TAG" run_before_total_deadline 120 "${COMPOSE[@]}" stop backend frontend
             else
-              TAG="$IMAGE_TAG" run_before_total_deadline 120 $COMPOSE stop backend frontend 2>/dev/null || true
+              TAG="$IMAGE_TAG" run_before_total_deadline 120 "${COMPOSE[@]}" stop backend frontend 2>/dev/null || true
             fi
-            TAG="${PREVIOUS_IMAGE_TAG:-$IMAGE_TAG}" run_before_total_deadline 180 $COMPOSE up -d db
+            TAG="${PREVIOUS_IMAGE_TAG:-$IMAGE_TAG}" run_before_total_deadline 180 "${COMPOSE[@]}" up -d db
             wait_for_database
             mkdir -p "$BACKUP_DIR"
             backup_tmp="$BACKUP_FILE.tmp"
@@ -598,18 +597,18 @@ jobs:
               printf 'DEPLOYMENT_TOKEN=%s\n' "$DEPLOYMENT_TOKEN"
             } > .deployed-state.next
             DATABASE_MAY_HAVE_CHANGED=1
-            TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d db backend
+            TAG="$IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d db backend
             wait_for_backend
             smoke_candidate_frontend
 
             write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
             mv .deployed-state.next .deployed-state
             stop_maintenance_watchdog
-            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d --force-recreate backend || ! wait_for_backend; then
+            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d --force-recreate backend || ! wait_for_backend; then
               echo "release committed but normal backend startup failed; database was not rolled back" >&2
               post_commit_abort
             fi
-            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 $COMPOSE up -d frontend || ! wait_for_release; then
+            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d frontend || ! wait_for_release; then
               echo "release committed but public frontend smoke test failed; database was not rolled back" >&2
               post_commit_abort
             fi
