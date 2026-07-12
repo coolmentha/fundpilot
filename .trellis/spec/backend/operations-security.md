@@ -43,6 +43,8 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 部署在同一 SSH 脚本中用上一 release 的 Compose 停止 frontend/backend、等待固定 `fundpilot-db` 容器、生成并校验 `pg_dump -Fc`。
 - 候选 backend 使用 `DEPLOYMENT_VALIDATION_MODE=true`：不注册 Scheduler，Pending 补偿和交易日历启动监听器不得写库。
 - 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
+- 容器内 Nginx 探活必须使用 `http://127.0.0.1/`，禁止使用可能优先解析到未监听 IPv6 回环的 `localhost`。
+- 远程 Compose 命令必须显式传 `--env-file "$VPS_PATH/.env"`；切换到上一 release 后仍从根目录环境文件读取数据库凭据，禁止依赖 Compose 随版本/工作目录变化的隐式 `.env` 搜索。
 - 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和 `/api/funds`。
 - 发布失败时先保持应用停止，恢复发布前数据库备份，再启动上一 tag；恢复失败或没有上一 tag 时保持应用停止并让工作流失败。
 - 提交后的正常 backend 或公网 frontend 启动失败时停止对外服务并报错，不得恢复旧数据库覆盖后台任务或用户写入。
