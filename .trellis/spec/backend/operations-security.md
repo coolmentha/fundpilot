@@ -48,6 +48,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 候选 backend 使用 `DEPLOYMENT_VALIDATION_MODE=true`：不注册 Scheduler，Pending 补偿和交易日历启动监听器不得写库。
 - 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和带 `X-Admin-Key` 的 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
 - 部署探活的 Key 必须通过 stdin 传给 HTTP 客户端，不得出现在 `curl`、`wget`、`docker` 或 `timeout` 的进程参数中；回滚探活必须从旧 `.env` 读取上一版本 Key，并兼容不要求 Key 的旧 release。
+- 候选前端的原始 HTTP 探活必须在容器内读取 stdin 中的 Key，再由容器内 `printf | nc` 构造请求；禁止在宿主机直接 `printf request | docker exec -i ... nc`，BusyBox `nc` 会因 Docker stdin EOF 提前关闭连接并让 Nginx 记录 `499`。
 - 容器内 Nginx 探活必须使用 `http://127.0.0.1/`，禁止使用可能优先解析到未监听 IPv6 回环的 `localhost`。
 - 远程 Compose 命令必须显式传 `--env-file "$VPS_PATH/.env"`；切换到上一 release 后仍从根目录环境文件读取数据库凭据，禁止依赖 Compose 随版本/工作目录变化的隐式 `.env` 搜索。
 - 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和带 `X-Admin-Key` 的 `/api/funds`。
