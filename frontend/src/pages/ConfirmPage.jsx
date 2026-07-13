@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {App, Button, Card, Form, InputNumber, Modal, Popconfirm, Space, Table, Typography} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
+import {Link} from 'react-router-dom';
 import {useConfirmOperation, useFunds, useIgnoreSignal, usePendingSignals} from '../api/hooks.js';
 import {datetime, text} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
@@ -56,7 +57,9 @@ export default function ConfirmPage() {
     };
 
     const columns = [
-        {title: '基金', width: 140, render: (_, r) => fundName(r.fundId)},
+        {title: '基金', width: 140, render: (_, r) => (
+            <Link to={`/funds/${r.fundId}`}>{fundName(r.fundId)}</Link>
+        )},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '原因', dataIndex: 'reason', render: text},
         {title: '建议量', width: 120, render: (_, r) => {
