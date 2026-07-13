@@ -415,7 +415,8 @@ jobs:
             }
 
             wait_for_backend() {
-              for i in $(seq 1 45); do
+              # 启动期行情预热在外部数据源超时时可能超过 90 秒，预留约 4 分钟完成健康检查。
+              for i in $(seq 1 120); do
                 if backend_is_healthy; then
                   return 0
                 fi
@@ -457,7 +458,8 @@ jobs:
             }
 
             wait_for_release() {
-              for i in $(seq 1 30); do
+              # 回滚和正式切换同样需要覆盖后端启动期外部调用超时。
+              for i in $(seq 1 120); do
                 if backend_is_healthy &&
                   run_before_total_deadline 15 "${COMPOSE[@]}" exec -T frontend \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
