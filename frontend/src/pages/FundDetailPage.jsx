@@ -65,6 +65,16 @@ export default function FundDetailPage() {
                         {fund.holdingAmount === null || fund.holdingAmount === undefined ? '-' : money(fund.holdingAmount)}
                     </span>
                 </Descriptions.Item>
+                <Descriptions.Item label="持仓份额">
+                    <span className="num-cell">
+                        {fund.holdingShares === null || fund.holdingShares === undefined
+                            ? '-'
+                            : Number(fund.holdingShares).toLocaleString('zh-CN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                            })}
+                    </span>
+                </Descriptions.Item>
                 <Descriptions.Item label="今日盈亏">
                     {fund.estimateFetchFailed
                         ? <span className="estimate-failure">估值拉取失败</span>
