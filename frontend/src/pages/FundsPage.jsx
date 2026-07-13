@@ -108,7 +108,8 @@ export default function FundsPage() {
 
     const columns = [
         {title: '代码', dataIndex: 'fundCode', width: 96},
-        {title: '名称', dataIndex: 'fundName', width: 180, ellipsis: true},
+        {title: '名称', dataIndex: 'fundName', width: 180, ellipsis: true,
+            render: (v, r) => <Link to={`/funds/${r.id}`}>{v}</Link>},
         {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},

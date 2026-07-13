@@ -40,9 +40,9 @@ export default function FundWatchlist() {
             title: '名称',
             dataIndex: 'fundName',
             ellipsis: true,
-            render: (v) => (
+            render: (v, r) => (
                 <span className="watchlist-name-cell">
-                    <span className="watchlist-name-text" title={v}>{v}</span>
+                    <Link className="watchlist-name-text" title={v} to={`/funds/${r.id}`}>{v}</Link>
                 </span>
             ),
         },
