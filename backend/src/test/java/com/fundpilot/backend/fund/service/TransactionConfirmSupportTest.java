@@ -60,6 +60,7 @@ class TransactionConfirmSupportTest {
         fund.setFundCode("001071");
         lenient().when(fundRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(fund));
         lenient().when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("1000000"));
+        lenient().when(fundPositionService.getUntrackedHoldingShares(1L)).thenReturn(BigDecimal.ZERO);
     }
 
     // ===== 申购费扣除 =====
@@ -247,6 +248,7 @@ class TransactionConfirmSupportTest {
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
         // 卖出确认前事实持仓为 100，超出 lot 的 50 来自 ADJUST_IN。
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        when(fundPositionService.getUntrackedHoldingShares(1L)).thenReturn(new BigDecimal("50"));
 
         FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
         support.onSellConfirmed(tx, new BigDecimal("1.6"));
@@ -254,6 +256,33 @@ class TransactionConfirmSupportTest {
         assertThat(tx.getFee()).isEqualByComparingTo("0.800");
         assertThat(tx.getAmount()).isEqualByComparingTo("159.200");
         assertThat(lot.getRemainingShares()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void onSellConfirmed_无lot且没有合法调增份额_抛INSUFFICIENT_LOTS() {
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of());
+
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
+
+        assertThatThrownBy(() -> support.onSellConfirmed(tx, new BigDecimal("1.6")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.INSUFFICIENT_LOTS.name());
+    }
+
+    @Test
+    void onSellConfirmed_无lot但全部为合法调增份额_按零费率确认() {
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        when(fundPositionService.getUntrackedHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of());
+
+        FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
+        support.onSellConfirmed(tx, new BigDecimal("1.6"));
+
+        assertThat(tx.getFee()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(tx.getAmount()).isEqualByComparingTo("160");
     }
 
     @Test

@@ -111,7 +111,7 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
-    void onApplicationReady_不在启动线程逐只刷新基金估值() {
+    void onApplicationReady_不在启动线程逐只刷新基金估值() throws Exception {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
         UserConfigService userConfigService = mock(UserConfigService.class);
@@ -120,6 +120,8 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, fundRepository, CLOCK);
 
+        assertThat(MarketRealtimeCache.class.getDeclaredMethod("onApplicationReady")
+                .isAnnotationPresent(Async.class)).isTrue();
         cache.onApplicationReady();
 
         verify(fundRepository, never()).findAll();

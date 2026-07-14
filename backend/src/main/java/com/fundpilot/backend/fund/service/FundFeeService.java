@@ -16,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -123,7 +122,6 @@ public class FundFeeService {
      * 刷新所有持仓(HOLDING)基金的费率。由 {@code FundFeeRefreshJob} 定时调用。
      * 逐个爬取(受 RateLimiter 2 req/s 限流),单只失败不影响其他。
      */
-    @Transactional(readOnly = true)
     public void refreshHoldingFunds() {
         List<FundEntity> funds = fundRepository.findByStatus(FundStatus.HOLDING);
         for (FundEntity fund : funds) {

@@ -151,20 +151,18 @@ public class EastmoneyClientConfig {
     /**
      * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
      * <p>降级顺序:中证指数公司(K 线主源,覆盖 CSI + 沪市中证编制指数,绕开 push2his IP 限流)
-     * → 东方财富(净值/字典主源 + 深交所指数 K 线兜底) → 同花顺(末位兜底);
+     * → 东方财富(净值/字典主源 + 深交所指数 K 线兜底);
      * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
      * <p>csindex 仅实现指数 K 线,净值/字典抛 {@link UnsupportedOperationException},
      * {@code MarketDataSourceChain#tryEach} 静默跳过该异常直接回退东方财富,不污染日志。
      *
      * @param csindex   中证指数公司数据源(K 线主源)
      * @param eastmoney 东方财富数据源(净值/字典主源,K 线兜底)
-     * @param thsClient 同花顺数据源(末位兜底)
      */
     @Bean
     public MarketDataSource marketDataSource(CsindexMarketDataSource csindex,
-                                             EastmoneyMarketDataSource eastmoney,
-                                             ThsClient thsClient) {
-        return new MarketDataSourceChain(java.util.List.of(csindex, eastmoney, thsClient));
+                                             EastmoneyMarketDataSource eastmoney) {
+        return new MarketDataSourceChain(java.util.List.of(csindex, eastmoney));
     }
 
     private EastmoneyClientConfig() {

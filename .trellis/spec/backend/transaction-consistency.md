@@ -16,6 +16,7 @@ List<FundTransactionEntity> TransactionConfirmService.confirm(Long transactionId
 List<FundTransactionEntity> TransactionCancelService.cancel(Long transactionId);
 FundTransactionEntity SignalOperationService.confirmOperation(Long fundId, Long signalLogId, ConfirmOperationRequest request);
 FundEntity FundPositionService.reconcileStatus(Long fundId);
+BigDecimal FundPositionService.getUntrackedHoldingShares(Long fundId);
 void TransactionConfirmSupport.onAdjustConfirmed(FundTransactionEntity tx);
 void TransactionConfirmSupport.onExistingPositionConfirmed(FundTransactionEntity tx, BigDecimal acquireCostPerShare);
 int TradingCalendarRepository.insertTradingDayIfAbsent(Instant calendarDate);
@@ -68,7 +69,7 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - 同一定投计划同一北京时间自然日由部分唯一索引最终兜底，Job 使用 `ON CONFLICT DO NOTHING` 原子生成。
 - DCA Job 只负责交易日门控、基金遍历和失败隔离；每只基金必须调用独立 Spring Bean 的 `@Transactional` Service，禁止同 Bean 自调用事务方法。
 - 行情抓取、信号生成、夜间净值确认等按基金遍历的定时批处理，每只基金必须通过 `RequiresNewTransactionExecutor` 或等价的代理 Bean 在独立事务中执行；单只失败只回滚当前基金并继续后续基金。
-- 卖出存在 lot 缺口时，只有卖出前事实持仓中确有未跟踪份额，缺口才按零赎回费降级。
+- 卖出存在 lot 缺口时，只有按 CONFIRMED 账本 FIFO 重放后确有剩余 `ADJUST_IN` 未跟踪份额，缺口才按零赎回费降级；普通买入存在但 open lot 全空属于账本损坏。
 - 所有 SELL 确认入口在消费 lot 前必须先悲观锁定基金行，再基于 CONFIRMED 交易汇总校验事实持仓；不得依赖请求前页面持仓、缓存持仓或仅校验 lot 总数。
 - 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST 与初始持仓同步确认）必须在基金行锁内校验总资金池与单基金上限。当前事实持仓市值使用本次交易日单位净值；累计净值不得用于仓位约束。
 - 外部入金只累加单用户 `totalCapital`，不归属基金、不创建交易、买入后也不从总池扣减。单基金 `maxPositionRatio` 只能在 `(0, 0.30]`，数据库 CHECK 与业务层必须同时兜底。
@@ -149,7 +150,7 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - `FundPositionService` 调用路径测试：确认/撤销后按 CONFIRMED 事实持仓重算状态。
 - `TransactionConfirmServiceStateTest`：CONFIRMED/PENDING 不重复调用 `onSellConfirmed`。
 - `TransactionCancelServiceStateTest`：关联腿已确认时拒绝撤销。
-- `TransactionConfirmSupportTest`：部分 lot 缺口、ADJUST_OUT、初始持仓 lot 且不重复扣费。
+- `TransactionConfirmSupportTest` / `FundPositionServiceUnitTest`：部分 lot 缺口、全空 lot 的合法 ADJUST_IN/损坏账本分支、账本 FIFO 重放、ADJUST_OUT、初始持仓 lot 且不重复扣费。
 - `PositionLimitServiceTest` / `FundServiceAutoFetchTest`：覆盖恰好等于上限、超过上限、未配置总池、初始持仓不可绕过和基金行锁。
 - `TradingCalendarSchemaIntegrationTest`：原子重复写返回 1/0，最大日期查询正确。
 - `TradingCalendarSyncServiceTest`：空表全量、非空增量和管理全量补写。
@@ -221,8 +222,8 @@ GET /api/funds/{fundId}/strategies/recommendation
 - `ACCUMULATING -> ARMED` records the current NAV and cannot sell on the same day.
 - A `TRIGGERED` cycle keeps its original actionable SignalLog; daily reruns must not replace it with NONE.
 - Both `NavConfirmService` and `TransactionConfirmService` call the lifecycle after confirming a trailing-stop transaction.
-- `TransactionCancelService` restores the matching cycle to `ARMED`.
-- Ignoring the matching trailing-stop signal restores the cycle to `ARMED` and clears `triggeredSignalId`.
+- `TransactionCancelService` restores the matching cycle to `ARMED`, clears `triggeredSignalId`, `cycleStartedAt`, and `cyclePeakNav`.
+- Ignoring the matching trailing-stop signal performs the same reset. The next `prepare` call records the current accumulated NAV as a new cycle peak and cannot sell on that call.
 - Mature shares are calculated per open `fund_lot`; a recent DCA lot cannot freeze older lots.
 
 ### 4. Validation & Error Matrix
@@ -232,21 +233,23 @@ GET /api/funds/{fundId}/strategies/recommendation
 | Missing fund category for recommendation | Reject strategy create/update | `FUND_CATEGORY_REQUIRED` |
 | Missing/out-of-range strategy ratio | Reject request | `STRATEGY_PARAM_INVALID` |
 | Take-profit transaction confirmed | Enter `COOLDOWN` | none |
-| Matching PENDING transaction cancelled | Restore `ARMED` | none |
-| Matching trailing-stop signal ignored | Restore `ARMED` | none |
+| Matching PENDING transaction cancelled | Restore `ARMED`, clear old cycle start/peak | none |
+| Matching trailing-stop signal ignored | Restore `ARMED`, clear old cycle start/peak | none |
 | Cost, NAV, or holding shares missing/non-positive | Do not arm take-profit | none |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: 60 mature shares + 20 recent shares + 20 untracked adjustment shares -> 80 shares are eligible.
 - Good: cooldown finishes while return is still above activation -> arm at today's NAV and wait for a new drawdown.
+- Good: cancel or ignore a triggered signal -> clear the old peak; the next evaluation arms at today's NAV without immediately repeating the same drawdown.
 - Base: user leaves a triggered signal unanswered -> keep one pending signal and do not create daily duplicates.
 - Bad: use the latest INVEST confirm time as a fund-wide lock -> daily DCA disables take-profit forever.
+- Bad: restore `ARMED` while keeping the old `cyclePeakNav` -> the same pullback generates another trailing-stop signal on the next day.
 
 ### 6. Tests Required
 
 - `TakeProfitPresetServiceTest`: assert all four category templates and custom detection.
-- `TakeProfitLifecycleServiceTest`: assert arming day, new high, mature lot calculation, confirm/cancel, and cooldown rearm.
+- `TakeProfitLifecycleServiceTest`: assert arming day, new high, mature lot calculation, confirm/cancel, cooldown rearm, cancel/ignore peak reset, and next-evaluation baseline rebuild.
 - `DisciplineStrategyServiceTest`: assert the four sell caps, logic-stop priority, and unit/accumulated NAV divergence.
 - `SignalGenerationServiceTest`: assert a triggered cycle preserves its actionable signal on rerun and take-profit receives same-row unit/accumulated NAV.
 - `SignalQueryServiceTest`: assert a range ending on day T excludes a signal at T+1 `00:00`.
@@ -261,6 +264,7 @@ lastBuy = latestConfirmedInvest();
 if (daysSince(lastBuy) < 5) return NONE; // freezes every old lot
 shares = holdingShares.multiply(new BigDecimal("0.25")); // repeats every day
 profitHarvestShares = floatingProfit.divide(snapshot.getCurrentNav()); // snapshot is accumulated NAV
+strategy.setTakeProfitPhase(ARMED); // old cyclePeakNav survives and repeats the same trigger
 ```
 
 #### Correct
@@ -272,4 +276,5 @@ profitHarvestShares = floatingProfit.divide(latestNav.getNav());
 pullback = cyclePeak.subtract(latestNav.getAccumulatedNav()).divide(cyclePeak);
 shares = min(profitHarvestShares, singleSellCapShares, matureShares, retentionCapShares);
 takeProfitLifecycleService.onTransactionConfirmed(tx);
+resetTriggeredCycle(strategy); // ARMED + clear signal/start/peak; next prepare records a new peak
 ```

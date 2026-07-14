@@ -100,7 +100,11 @@ export const text = (value) => labels[value] || (value === 0 ? '0' : (value || '
 export const money = (value) => Number(value || 0).toLocaleString('zh-CN', {
     style: 'currency', currency: 'CNY', maximumFractionDigits: 2,
 });
-export const percent = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`;
+export const percent = (value) => {
+    if (value === null || value === undefined) return '-';
+    const n = Number(value);
+    return Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : '-';
+};
 
 // 盈亏/涨跌配色(A 股惯例:正=红、负=绿、零/空=灰)。null 视为无数据。
 export const pnlColor = (value) => {
@@ -215,6 +219,7 @@ export const errorTitles = {
     STRATEGY_PARAM_INVALID: '策略参数不合法',
     DCA_PLAN_INVALID: '定投计划参数不合法',
     SIGNAL_OPERATION_VALUE_INVALID: '实际操作数值不合法',
+    OPENED_AT_IN_FUTURE: '建仓时间晚于当前时间',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',
     TRANSACTION_ALREADY_CANCELLED: '交易已撤销',
@@ -231,6 +236,8 @@ export const errorTitles = {
     NO_VALID_BACKTEST: '无有效回测',
     ILLEGAL_STATE_TRANSITION: '状态切换非法',
     INSUFFICIENT_HOLDING_SHARES: '持仓份额不足',
+    INSUFFICIENT_LOTS: '可用持仓批次不足',
+    FUND_HAS_PENDING_TRANSACTIONS: '基金存在待确认交易',
     // 寻优
     OPTIMIZATION_NO_VALID_PARAMS: '寻优未达标',
     // 数据源

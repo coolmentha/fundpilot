@@ -7,7 +7,8 @@ import KlineChart from '../components/KlineChart.jsx';
 
 const {Title} = Typography;
 
-const boolText = (v) => v ? '是' : '否';
+const boolText = (v) => v === null || v === undefined ? '-' : v ? '是' : '否';
+const decimalText = (v) => v === null || v === undefined ? '-' : Number(v).toFixed(4);
 
 /**
  * 基金详情 · 行情 tab。
@@ -33,7 +34,7 @@ export default function MarketTab({fundId, fundSubType}) {
                     !snapshot ? <EmptyState description="今日暂无行情快照(每日 14:50 落库)"/> : (
                         <Descriptions column={{xs: 1, sm: 2, md: 3}} bordered size="small">
                             <Descriptions.Item label="最近累计净值">
-                                <span className="num-cell">{Number(snapshot.currentNav ?? 0).toFixed(4)}</span>
+                                <span className="num-cell">{decimalText(snapshot.currentNav)}</span>
                             </Descriptions.Item>
                             <Descriptions.Item label="60 日新高">{boolText(snapshot.sixtyDayHigh)}</Descriptions.Item>
                             <Descriptions.Item label="单周跌幅">
