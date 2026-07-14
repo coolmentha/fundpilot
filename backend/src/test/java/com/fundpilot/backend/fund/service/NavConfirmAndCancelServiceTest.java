@@ -3,6 +3,7 @@ package com.fundpilot.backend.fund.service;
 import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
@@ -120,6 +121,16 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         persistNavToday(new BigDecimal("2.00"));
         FundTransactionEntity buy = persistTx(FundTransactionSource.INCREASE, new BigDecimal("2000"), new BigDecimal("1000"));
         buy.setStatus(FundTransactionStatus.CONFIRMED);
+        buy.setTradeDate(today);
+        buy.setConfirmTime(Instant.now());
+        FundLotEntity lot = new FundLotEntity();
+        lot.setFundEntity(fund);
+        lot.setAcquireTxId(buy.getId());
+        lot.setAcquireDate(today);
+        lot.setAcquireShares(new BigDecimal("1000"));
+        lot.setRemainingShares(new BigDecimal("1000"));
+        lot.setAcquireCostPerShare(new BigDecimal("2.00"));
+        entityManager.persist(lot);
         FundTransactionEntity sell = persistTx(FundTransactionSource.DECREASE, null, new BigDecimal("1000"));
         entityManager.flush();
 

@@ -78,8 +78,12 @@ public class TakeProfitLifecycleService {
             return TakeProfitEvaluation.disabled();
         }
 
-        if (strategy.getCyclePeakNav() == null
-                || currentAccumulatedNav.compareTo(strategy.getCyclePeakNav()) > 0) {
+        if (strategy.getCyclePeakNav() == null) {
+            arm(strategy, currentAccumulatedNav, today);
+            return TakeProfitEvaluation.disabled();
+        }
+
+        if (currentAccumulatedNav.compareTo(strategy.getCyclePeakNav()) > 0) {
             strategy.setCyclePeakNav(currentAccumulatedNav);
             return TakeProfitEvaluation.disabled();
         }
@@ -122,12 +126,11 @@ public class TakeProfitLifecycleService {
         if (!matchesTriggeredSignal(strategy, transaction)) {
             return;
         }
-        strategy.setTakeProfitPhase(TakeProfitPhase.ARMED);
-        strategy.setTriggeredSignalId(null);
+        resetTriggeredCycle(strategy);
         fundStrategyRepository.save(strategy);
     }
 
-    /** 忽略当前止盈信号等价于放弃本次执行，恢复 ARMED 等待新的回撤。 */
+    /** 忽略当前止盈信号等价于放弃本次执行，恢复 ARMED 并等待建立新峰值。 */
     public void onSignalIgnored(com.fundpilot.backend.signal.entity.SignalLogEntity signal) {
         if (signal.getReason() != SignalReason.TRAILING_STOP || signal.getFundStrategyEntity() == null) {
             return;
@@ -138,8 +141,7 @@ public class TakeProfitLifecycleService {
                 || !strategy.getTriggeredSignalId().equals(signal.getId())) {
             return;
         }
-        strategy.setTakeProfitPhase(TakeProfitPhase.ARMED);
-        strategy.setTriggeredSignalId(null);
+        resetTriggeredCycle(strategy);
         fundStrategyRepository.save(strategy);
     }
 
@@ -173,6 +175,13 @@ public class TakeProfitLifecycleService {
         strategy.setCycleStartedAt(today);
         strategy.setCyclePeakNav(currentAccumulatedNav);
         strategy.setTriggeredSignalId(null);
+    }
+
+    private static void resetTriggeredCycle(FundStrategyEntity strategy) {
+        strategy.setTakeProfitPhase(TakeProfitPhase.ARMED);
+        strategy.setTriggeredSignalId(null);
+        strategy.setCycleStartedAt(null);
+        strategy.setCyclePeakNav(null);
     }
 
     private static boolean isTrailingStopTransaction(FundTransactionEntity transaction) {

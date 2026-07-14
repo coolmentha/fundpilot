@@ -8,6 +8,7 @@ import com.fundpilot.backend.fund.entity.FundFeeEntity;
 import com.fundpilot.backend.fund.repository.FundFeeRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,6 +22,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FundFeeServiceTest {
+
+    @Test
+    void refreshHoldingFunds_不得在只读事务中刷新费率() throws Exception {
+        Transactional transactional = FundFeeService.class
+                .getMethod("refreshHoldingFunds")
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional == null || !transactional.readOnly()).isTrue();
+    }
 
     @Test
     void getFeeView_缓存缺失时即时爬取并返回新缓存() {

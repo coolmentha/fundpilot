@@ -164,6 +164,7 @@ public class MarketRealtimeCache {
      * <p>刷新失败不阻塞启动:记 warn,前端显示空态直到下次定时刷新。
      */
     @EventListener(ApplicationReadyEvent.class)
+    @Async
     public void onApplicationReady() {
         try {
             refreshRealtimeWithoutEstimates();

@@ -6,7 +6,7 @@ import feign.RequestLine;
 import java.util.List;
 
 /**
- * 同花顺(10jqka) Feign 客户端接口,实现 {@link MarketDataSource} 作为东方财富的降级数据源。
+ * 同花顺(10jqka)实验性 Feign 客户端接口。解析器未实现前不接入生产降级链。
  * <p>三条数据线对齐 {@link MarketDataSource}:
  * <ol>
  *   <li>基金净值历史 — 同花顺基金净值接口</li>

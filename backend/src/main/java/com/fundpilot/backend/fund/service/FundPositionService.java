@@ -1,5 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
@@ -15,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +54,37 @@ public class FundPositionService {
     /** PENDING 状态净在途份额(已下单待净值确认)。 */
     public BigDecimal getPendingShares(Long fundId) {
         return sumShares(fundTransactionRepository.findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.PENDING));
+    }
+
+    /**
+     * 当前未由收费 lot 跟踪的事实份额。按 CONFIRMED 账本重放 FIFO，只有 ADJUST_IN
+     * 产生未跟踪份额；卖出和 ADJUST_OUT 都先消耗普通买入份额，再消耗未跟踪份额。
+     */
+    public BigDecimal getUntrackedHoldingShares(Long fundId) {
+        List<FundTransactionEntity> confirmed = new ArrayList<>(
+                fundTransactionRepository.findByFundEntity_IdAndStatus(fundId, FundTransactionStatus.CONFIRMED));
+        confirmed.sort(Comparator
+                .comparing((FundTransactionEntity tx) ->
+                                TransactionTradeDate.resolveInstant(tx, tx.getConfirmTime()),
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(FundTransactionEntity::getId,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+
+        BigDecimal tracked = BigDecimal.ZERO;
+        BigDecimal untracked = BigDecimal.ZERO;
+        for (FundTransactionEntity tx : confirmed) {
+            BigDecimal shares = sharesOrZero(tx);
+            switch (tx.getSource()) {
+                case INCREASE, TRANSFER_IN, INVEST -> tracked = tracked.add(shares);
+                case ADJUST_IN -> untracked = untracked.add(shares);
+                case DECREASE, TRANSFER_OUT, ADJUST_OUT -> {
+                    BigDecimal trackedConsumed = tracked.min(shares);
+                    tracked = tracked.subtract(trackedConsumed);
+                    untracked = untracked.subtract(shares.subtract(trackedConsumed)).max(BigDecimal.ZERO);
+                }
+            }
+        }
+        return untracked;
     }
 
     /** 交易确认/撤销后按 CONFIRMED 事实账本统一重算基金状态。 */
@@ -118,15 +152,20 @@ public class FundPositionService {
         if (fund == null || fund.getOpenedAt() == null) {
             return getPeakNav(fundId);
         }
-        return fundNavHistoryRepository.findPeakAccumulatedNavSince(fundId, fund.getOpenedAt());
+        return fundNavHistoryRepository.findPeakAccumulatedNavSince(
+                fundId, ChinaTradingDate.toUtcDate(fund.getOpenedAt()));
     }
 
     private BigDecimal sumShares(List<FundTransactionEntity> transactions) {
         BigDecimal sum = BigDecimal.ZERO;
         for (FundTransactionEntity tx : transactions) {
-            sum = sum.add(tx.getShares().multiply(direction(tx.getSource())));
+            sum = sum.add(sharesOrZero(tx).multiply(direction(tx.getSource())));
         }
         return sum;
+    }
+
+    private BigDecimal sharesOrZero(FundTransactionEntity tx) {
+        return tx.getShares() != null ? tx.getShares() : BigDecimal.ZERO;
     }
 
     /** source → direction 映射:加仓类 +1,减仓类 -1,调增 +1,调减 -1。 */

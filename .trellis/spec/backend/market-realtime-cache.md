@@ -35,6 +35,7 @@ public MoneyFlowSnapshot getMoneyFlow();
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
+@Async public void onApplicationReady();                // 启动完成后后台预热实时行情
 @Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
 ```
 
@@ -97,8 +98,8 @@ N 个前端客户端共享同一份缓存。
 - 单只基金拉取失败不能中断其他基金，但必须删除该基金旧估值并标记失败。
 - 只接受 `estimateTime` 属于北京时间当天的快照；旧日期、空时间或无法解析的时间都按失败处理。
 - 后续本次成功拉到当天估值时覆盖缓存并清除失败状态。
-- 同步 `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
-- 独立的 `@Async ApplicationReadyEvent` 必须调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
+- 两个 `ApplicationReadyEvent` 监听器都必须标记 `@Async`；指数/板块/资金与基金估值的外部 I/O 均不得占用 readiness 事件线程。
+- 实时行情监听器调用 `refreshRealtimeWithoutEstimates()`；独立监听器调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 今日净值未落库且估值缓存缺失时，今日涨跌返回未知；禁止用 T-1 对 T-2 冒充今日值。
 
 ### 14:50 串行契约
@@ -130,7 +131,7 @@ N 个前端客户端共享同一份缓存。
 | 持仓基金存在估值失败 | `PortfolioSummaryView.estimateFetchFailedCount` 返回失败持仓数,前端明确显示失败而非普通 `-` |
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
-| 应用启动 | 同步预热指数/板块/资金；基金估值在后台异步预热，不阻塞健康检查 |
+| 应用启动 | 后台异步预热指数/板块/资金和基金估值；外部接口延迟不阻塞健康检查 |
 
 ---
 
@@ -140,6 +141,7 @@ N 个前端客户端共享同一份缓存。
 - **Good**:一次指数批量请求同时包含自选指数与沪深京固定市场,两个缓存独立投影
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
+- **Good**:东方财富启动预热超时,应用 readiness 仍可及时完成,缓存等待后台任务或下次定时刷新
 - **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
 - **Good**:14:50 第三批快照完成后才读取快照生成信号
 - **Base**:估值接口暂时失败且缓存为空,今日涨跌显示未知而不是昨日值
@@ -159,7 +161,7 @@ N 个前端客户端共享同一份缓存。
 - `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
 - 缓存层降级测试:指数/市场宽度等仍验证旧缓存保留；基金估值必须单独验证成功后空响应、异常、旧日期都会删除旧值。
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
-- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；同步启动事件不查询基金列表；异步启动事件带 `@Async` 并填充估值缓存。
+- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；两个启动事件都带 `@Async`，实时行情事件不查询基金列表，基金估值事件填充估值缓存。
 - `MarketRealtimeCacheTest`:固定 `Clock`,断言估值失败立即删除旧缓存并标记失败,旧日期拒收,后续成功清除失败状态。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
@@ -196,10 +198,10 @@ useQuery({
 ### Wrong:盘后重启后等待下一交易时段
 
 ```java
+@Async
 @EventListener(ApplicationReadyEvent.class)
 public void onApplicationReady() {
     refreshRealtimeWithoutEstimates();
-    // estimateCache 为空且 15:00 后 Job 不再运行,今日收益会缺数据。
 }
 
 return dailyChangePct(latestNav, previousNav); // T-1 vs T-2 是昨日涨跌

@@ -105,7 +105,7 @@ public class TransactionConfirmSupport {
      */
     public void onSellConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
-        BigDecimal holdingBefore = lockAndValidateSellShares(tx);
+        lockAndValidateSellShares(tx);
         FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
         List<RedemptionTier> ladder = fee.redemptionLadder();
 
@@ -115,20 +115,16 @@ public class TransactionConfirmSupport {
         List<FundLotEntity> touchedLots = new ArrayList<>();
 
         List<FundLotEntity> lots = fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(fundId);
-        if (lots.isEmpty()) {
-            // 无 lot 记录(历史数据未回填 / 测试场景):降级不扣赎回费,按原逻辑 amount = shares × nav。
-            // V14 迁移已回填生产数据,此处仅兜底边缘情况,记 warn 不阻断交易。
-            BigDecimal grossAmount = tx.getShares().multiply(navValue, MATH);
-            tx.setAmount(grossAmount);
-            tx.setFee(BigDecimal.ZERO);
-            tx.setFeeRate(null);
-            log.warn("卖出确认无 lot 记录 fund={} shares={},降级不扣赎回费", fundId, tx.getShares());
-            return;
-        }
         BigDecimal trackedShares = lots.stream()
                 .map(FundLotEntity::getRemainingShares)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal untrackedShares = holdingBefore.subtract(trackedShares).max(BigDecimal.ZERO);
+        BigDecimal requiredUntrackedShares = tx.getShares().subtract(trackedShares).max(BigDecimal.ZERO);
+        BigDecimal availableUntrackedShares = fundPositionService.getUntrackedHoldingShares(fundId);
+        if (requiredUntrackedShares.compareTo(availableUntrackedShares) > 0) {
+            throw ErrorCode.INSUFFICIENT_LOTS.toException(
+                    "可用 lot 份额不足,无法卖出 " + tx.getShares() + " 份,缺 "
+                            + requiredUntrackedShares + " 份,合法未跟踪份额 " + availableUntrackedShares);
+        }
 
         for (FundLotEntity lot : lots) {
             if (remaining.signum() <= 0) {
@@ -157,10 +153,6 @@ public class TransactionConfirmSupport {
         }
 
         if (remaining.signum() > 0) {
-            if (remaining.compareTo(untrackedShares) > 0) {
-                throw ErrorCode.INSUFFICIENT_LOTS.toException(
-                        "可用 lot 份额不足,无法卖出 " + tx.getShares() + " 份,缺 " + remaining + " 份");
-            }
             log.warn("卖出包含未跟踪调整份额 fund={} shares={} untracked={},未跟踪部分按零赎回费处理",
                     fundId, tx.getShares(), remaining);
         }
@@ -170,8 +162,12 @@ public class TransactionConfirmSupport {
         tx.setFee(totalFee);
         tx.setFeeRate(grossAmount.signum() > 0 ? totalFee.divide(grossAmount, MATH) : null);
 
-        fundLotRepository.saveAll(touchedLots);
-        fundLotRedemptionRepository.saveAll(redemptions);
+        if (!touchedLots.isEmpty()) {
+            fundLotRepository.saveAll(touchedLots);
+        }
+        if (!redemptions.isEmpty()) {
+            fundLotRedemptionRepository.saveAll(redemptions);
+        }
         log.info("卖出确认FIFO fund={} shares={} nav={} gross={} fee={} net={} lots={}",
                 fundId, tx.getShares(), navValue, grossAmount, totalFee, tx.getAmount(), redemptions.size());
     }

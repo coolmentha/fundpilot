@@ -130,6 +130,8 @@ class TakeProfitLifecycleServiceTest {
     void 止盈交易确认后进入COOLDOWN_撤销则恢复ARMED() {
         FundStrategyEntity strategy = strategy(TakeProfitPhase.TRIGGERED);
         strategy.setTriggeredSignalId(99L);
+        strategy.setCycleStartedAt(Instant.parse("2026-07-01T00:00:00Z"));
+        strategy.setCyclePeakNav(new BigDecimal("1.50"));
         SignalLogEntity signal = new SignalLogEntity();
         signal.setId(99L);
         signal.setReason(SignalReason.TRAILING_STOP);
@@ -150,12 +152,16 @@ class TakeProfitLifecycleServiceTest {
         transaction.setStatus(FundTransactionStatus.CANCELLED);
         service.onTransactionCancelled(transaction);
         assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
+        assertThat(strategy.getCycleStartedAt()).isNull();
+        assertThat(strategy.getCyclePeakNav()).isNull();
     }
 
     @Test
     void 忽略当前止盈信号_恢复ARMED并清除绑定() {
         FundStrategyEntity strategy = strategy(TakeProfitPhase.TRIGGERED);
         strategy.setTriggeredSignalId(99L);
+        strategy.setCycleStartedAt(Instant.parse("2026-07-01T00:00:00Z"));
+        strategy.setCyclePeakNav(new BigDecimal("1.50"));
         SignalLogEntity signal = new SignalLogEntity();
         signal.setId(99L);
         signal.setReason(SignalReason.TRAILING_STOP);
@@ -165,7 +171,23 @@ class TakeProfitLifecycleServiceTest {
 
         assertThat(strategy.getTakeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
         assertThat(strategy.getTriggeredSignalId()).isNull();
+        assertThat(strategy.getCycleStartedAt()).isNull();
+        assertThat(strategy.getCyclePeakNav()).isNull();
         verify(fundStrategyRepository).save(strategy);
+    }
+
+    @Test
+    void 恢复ARMED后首次评估只建立新峰值不重复触发() {
+        FundEntity fund = fund("1.00");
+        FundStrategyEntity strategy = strategy(TakeProfitPhase.ARMED);
+
+        TakeProfitEvaluation result = service.prepare(
+                fund, strategy, new BigDecimal("1.20"), new BigDecimal("1.20"),
+                new BigDecimal("100"), TODAY);
+
+        assertThat(result.evaluationEnabled()).isFalse();
+        assertThat(strategy.getCycleStartedAt()).isEqualTo(TODAY);
+        assertThat(strategy.getCyclePeakNav()).isEqualByComparingTo("1.20");
     }
 
     private FundEntity fund(String costPerShare) {
