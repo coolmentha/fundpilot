@@ -61,7 +61,7 @@ flowchart LR
     B --> C{当日单位净值是否存在}
     C -- 否 --> D[保持 PENDING]
     C -- 是 --> E{买入还是卖出}
-    E -- 买入 --> F[校验仓位上限并扣申购费]
+    E -- 买入 --> F[扣申购费]
     F --> G[计算份额并建立 FIFO lot]
     G --> H[加权更新成本单价]
     E -- 卖出 --> I[锁基金并校验 CONFIRMED 事实持仓]
@@ -117,10 +117,9 @@ flowchart LR
 | 已撤销交易再次确认或撤销 | `TRANSACTION_ALREADY_CANCELLED` |
 | 转换两腿进入非法半状态 | `ILLEGAL_STATE_TRANSITION` |
 | lot 缺口不是合法调整份额 | `INSUFFICIENT_LOTS` |
-| 买入确认未配置总资金池或超过上限 | `CAPITAL_POOL_NOT_CONFIGURED` / `POSITION_LIMIT_EXCEEDED` |
 
 ## 实现与验证入口
 
 - 实现：[FundTransactionService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundTransactionService.java)、[TransactionConfirmService](../../backend/src/main/java/com/fundpilot/backend/fund/service/TransactionConfirmService.java)、[TransactionCancelService](../../backend/src/main/java/com/fundpilot/backend/fund/service/TransactionCancelService.java)、[NavConfirmService](../../backend/src/main/java/com/fundpilot/backend/fund/service/NavConfirmService.java)、[TransactionConfirmSupport](../../backend/src/main/java/com/fundpilot/backend/fund/service/TransactionConfirmSupport.java)
 - 测试：[FundTransactionServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundTransactionServiceTest.java)、[TransactionConfirmServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/TransactionConfirmServiceTest.java)、[NavConfirmAndCancelServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/NavConfirmAndCancelServiceTest.java)、[TransactionConfirmSupportTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/TransactionConfirmSupportTest.java)
-- 相关决策：[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)、[ADR-0020](../adr/0020-capital-pool-and-position-limit.md)
+- 相关决策：[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

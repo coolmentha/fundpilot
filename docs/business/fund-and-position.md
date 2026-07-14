@@ -42,7 +42,7 @@ stateDiagram-v2
 
 1. 用户通过基金字典按代码或名称搜索候选。
 2. 选中候选后回填代码、名称、分类、子类型和跟踪指数。
-3. 后端校验基金身份、`FundCategory` 和单基金仓位上限。
+3. 后端校验基金身份、`FundCategory` 和仓位提醒线；仓位提醒只影响展示。
 4. 保存基金，初始状态为 `PENDING_HOLDING`。
 5. 发布 `FundCreatedEvent`，事务提交后由后台异步补充净值历史和行情指标。
 
@@ -55,11 +55,10 @@ stateDiagram-v2
 ```mermaid
 flowchart LR
     A[创建基金并填写入仓市值] --> B[拉取最近已公布单位净值]
-    B --> C[校验总资金池和单基金仓位上限]
-    C --> D[按入仓市值除以单位净值计算份额]
-    D --> E[写入 INCREASE / CONFIRMED 交易]
-    E --> F[建立 FIFO lot 和初始成本单价]
-    F --> G[基金状态变为 HOLDING]
+    B --> C[按入仓市值除以单位净值计算份额]
+    C --> D[写入 INCREASE / CONFIRMED 交易]
+    D --> E[建立 FIFO lot 和初始成本单价]
+    E --> F[基金状态变为 HOLDING]
 ```
 
 关键规则：
@@ -70,7 +69,7 @@ flowchart LR
 - `openedAt` 可选；未填写时使用当前时间，不能晚于当前时间。
 - 初始持仓同步确认，不等待夜间 `NavConfirmJob`。
 - 初始持仓建立 FIFO lot，但不重复计算申购费。
-- 缺少有效净值、未配置总资金池或超过仓位上限时，创建事务整体失败。
+- 缺少有效净值时，创建事务整体失败；仓位提醒不会阻断建仓。
 
 ## 持仓属性
 
@@ -94,11 +93,9 @@ flowchart LR
 | 成本单价非正 | `COST_PER_SHARE_INVALID` |
 | 建仓时间在未来 | `OPENED_AT_IN_FUTURE` |
 | 无有效单位净值 | `NAV_HISTORY_EMPTY` |
-| 总资金池未配置 | `CAPITAL_POOL_NOT_CONFIGURED` |
-| 买入后超过单基金上限 | `POSITION_LIMIT_EXCEEDED` |
 
 ## 实现与验证入口
 
 - 实现：[FundService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundService.java)、[FundPositionService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundPositionService.java)、[FundArchiveService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundArchiveService.java)
 - 测试：[FundServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceTest.java)、[FundServiceAutoFetchTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceAutoFetchTest.java)、[FundPositionServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundPositionServiceTest.java)
-- 相关决策：[ADR-0001](../adr/0001-derive-peak-navs-instead-of-storing.md)、[ADR-0012](../adr/0012-existing-position-onboarding.md)、[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0020](../adr/0020-capital-pool-and-position-limit.md)
+- 相关决策：[ADR-0001](../adr/0001-derive-peak-navs-instead-of-storing.md)、[ADR-0012](../adr/0012-existing-position-onboarding.md)、[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

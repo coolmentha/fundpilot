@@ -39,7 +39,8 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(view.fundCode()).isEqualTo("510300");
         assertThat(view.fundName()).isEqualTo("沪深300ETF");
         assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
-        assertThat(view.maxPositionRatio()).isEqualByComparingTo("0.30");
+        assertThat(view.positionWarningEnabled()).isTrue();
+        assertThat(view.positionWarningRatio()).isEqualByComparingTo("0.30");
     }
 
     @Test
@@ -81,16 +82,16 @@ class FundServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void update_仓位上限超过30百分比_抛POSITION_LIMIT_INVALID() {
+    void update_仓位提醒线超过100百分比_抛POSITION_WARNING_RATIO_INVALID() {
         FundEntity fund = persistFund(FundCategory.BROAD_BASE);
         entityManager.flush();
         FundCreateRequest request = new FundCreateRequest(
-                null, null, null, null, null,
-                new BigDecimal("0.31"), null, null, null);
+                null, null, null, null, null, null,
+                new BigDecimal("1.01"), null, null, null);
 
         assertThatThrownBy(() -> fundService.update(fund.getId(), request))
                 .isInstanceOf(BusinessException.class)
-                .extracting("code").isEqualTo(ErrorCode.POSITION_LIMIT_INVALID.name());
+                .extracting("code").isEqualTo(ErrorCode.POSITION_WARNING_RATIO_INVALID.name());
     }
 
     private FundEntity persistFund(FundCategory category) {

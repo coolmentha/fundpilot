@@ -47,8 +47,6 @@ class TransactionConfirmSupportTest {
     @Mock private FundLotRedemptionRepository fundLotRedemptionRepository;
     @Mock private FundPositionService fundPositionService;
     @Mock private FundRepository fundRepository;
-    @Mock private PositionLimitService positionLimitService;
-
     @InjectMocks private TransactionConfirmSupport support;
 
     private FundEntity fund;

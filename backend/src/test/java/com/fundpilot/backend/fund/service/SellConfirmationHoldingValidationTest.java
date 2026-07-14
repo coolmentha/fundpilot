@@ -17,10 +17,7 @@ import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.repository.SignalLogRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
-import com.fundpilot.backend.user.entity.UserConfigEntity;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,16 +37,7 @@ class SellConfirmationHoldingValidationTest extends AbstractIntegrationTest {
     @Autowired FundTransactionRepository fundTransactionRepository;
     @Autowired FundNavHistoryRepository fundNavHistoryRepository;
     @Autowired SignalLogRepository signalLogRepository;
-    @Autowired UserConfigRepository userConfigRepository;
     @Autowired JdbcTemplate jdbcTemplate;
-
-    @BeforeEach
-    void setUpUserConfig() {
-        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
-                .orElseGet(UserConfigEntity::new);
-        config.setTotalCapital(new BigDecimal("100000"));
-        userConfigRepository.save(config);
-    }
 
     @AfterEach
     void cleanUp() {

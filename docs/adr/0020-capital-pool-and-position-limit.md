@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Superseded by [ADR-0021](0021-dca-budget-and-position-warnings.md).
 
 ## Decision
 

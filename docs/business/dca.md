@@ -67,6 +67,17 @@ flowchart LR
 
 数据库使用原子插入兜底并发重跑，不能只做“先查后写”。
 
+## 月度预算总览
+
+基金列表按北京时间自然月展示全局定投现金流：
+
+- 已定投：本月所有未取消的 `INVEST`，包含手动/自动和 `PENDING`/`CONFIRMED`。
+- 未来计划：当前有效且启用计划在本月剩余实际执行日的金额；同一计划已有任意状态交易的日期不重复计算。
+- 预计定投：已定投与未来计划之和。
+- 当天只有在 14:55 前仍属于未来计划；月末休市顺延到下月时，金额归属实际执行月份。
+
+月度预算可空。未设置时仍显示三项金额但不显示进度或超额；设置后显示剩余或预计超出。预算只提示，不暂停计划、不阻止交易生成或净值确认。
+
 ## 净值确认时序
 
 ```text
@@ -97,6 +108,6 @@ flowchart LR
 
 ## 实现与验证入口
 
-- 实现：[DcaPlanService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaPlanService.java)、[DcaSuggestionService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaSuggestionService.java)、[DcaSuggestionJob](../../backend/src/main/java/com/fundpilot/backend/dca/job/DcaSuggestionJob.java)
-- 测试：[DcaPlanServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaPlanServiceTest.java)、[DcaSuggestionJobTest](../../backend/src/test/java/com/fundpilot/backend/dca/job/DcaSuggestionJobTest.java)、[DcaSuggestionJobTransactionTest](../../backend/src/test/java/com/fundpilot/backend/dca/job/DcaSuggestionJobTransactionTest.java)
-- 相关决策：[ADR-0016](../adr/0016-dca-config-auto-invest-not-signal.md)、[ADR-0018](../adr/0018-dca-take-profit-presets-and-cycle.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)
+- 实现：[DcaPlanService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaPlanService.java)、[DcaSuggestionService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaSuggestionService.java)、[DcaBudgetSummaryService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryService.java)、[DcaSuggestionJob](../../backend/src/main/java/com/fundpilot/backend/dca/job/DcaSuggestionJob.java)
+- 测试：[DcaPlanServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaPlanServiceTest.java)、[DcaSuggestionJobTest](../../backend/src/test/java/com/fundpilot/backend/dca/job/DcaSuggestionJobTest.java)、[DcaBudgetSummaryServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryServiceTest.java)
+- 相关决策：[ADR-0016](../adr/0016-dca-config-auto-invest-not-signal.md)、[ADR-0018](../adr/0018-dca-take-profit-presets-and-cycle.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

@@ -1,23 +1,31 @@
 import {useState} from 'react';
-import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography} from 'antd';
+import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography} from 'antd';
 import {DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import dayjs from 'dayjs';
 import {Link} from 'react-router-dom';
-import {useArchiveFund, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
-import {fundCategoryOptions, labels, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
+import {useArchiveFund, useDcaBudgetSummary, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
+import {fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
+import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
+import {buildFundPositionWarnings} from '../positionWarnings.js';
 
 const {Title} = Typography;
 
 // 新建表单初始值:基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
-    benchmarkIndexCode: '', maxPositionRatioPct: 30,
+    benchmarkIndexCode: '', positionWarningEnabled: true, positionWarningRatioPct: 30,
     initialMarketValue: null, costPerShare: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
     const {data: funds, isLoading, refetch} = useFunds();
+    const {
+        data: dcaBudgetSummary,
+        isLoading: isDcaBudgetLoading,
+        isError: isDcaBudgetError,
+        refetch: refetchDcaBudget,
+    } = useDcaBudgetSummary();
     const saveFund = useSaveFund();
     const archiveFund = useArchiveFund();
     const [open, setOpen] = useState(false);
@@ -26,6 +34,8 @@ export default function FundsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     // 监听入仓市值:有值时显示建仓提示和成本单价/建仓时间(渐进式揭示,只在用户填了才出现)
     const initialMarketValue = Form.useWatch('initialMarketValue', form);
+    const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
+    const rows = buildFundPositionWarnings(funds);
 
     // 字典搜索(仅新建时用;编辑时基金身份已固定)
     const {data: searchResults, isFetching: searching} = useFundSearch(searchQuery);
@@ -61,7 +71,8 @@ export default function FundsPage() {
             fundCategory: fund.fundCategory,
             fundSubType: fund.fundSubType,
             benchmarkIndexCode: fund.benchmarkIndexCode,
-            maxPositionRatioPct: Number(fund.maxPositionRatio ?? 0.3) * 100,
+            positionWarningEnabled: fund.positionWarningEnabled !== false,
+            positionWarningRatioPct: Number(fund.positionWarningRatio ?? 0.3) * 100,
         });
         setOpen(true);
     };
@@ -86,8 +97,8 @@ export default function FundsPage() {
         try {
             const values = await form.validateFields();
             // openedAt:DatePicker 返回 dayjs,提交前转 ISO 字符串(后端 Instant 解析);未选则不传(后端用 now)
-            const {maxPositionRatioPct, ...requestValues} = values;
-            const normalized = {...requestValues, maxPositionRatio: maxPositionRatioPct / 100};
+            const {positionWarningRatioPct, ...requestValues} = values;
+            const normalized = {...requestValues, positionWarningRatio: positionWarningRatioPct / 100};
             const body = values.openedAt
                 ? {...normalized, openedAt: values.openedAt.startOf('day').toISOString()}
                 : {...normalized, openedAt: null};
@@ -113,8 +124,23 @@ export default function FundsPage() {
         {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
-        {title: '仓位上限', dataIndex: 'maxPositionRatio', width: 96, align: 'right',
-            render: (v) => `${(Number(v ?? 0.3) * 100).toFixed(0)}%`},
+        {
+            title: '仓位提醒', width: 132, align: 'right',
+            render: (_, record) => {
+                if (record.positionRatio === null) return '-';
+                const warningText = record.positionWarningEnabled
+                    ? (record.positionWarningExceeded
+                        ? `已超 ${percent(record.positionWarningRatio)} 提醒线`
+                        : `提醒线 ${percent(record.positionWarningRatio)}`)
+                    : '提醒已关闭';
+                return (
+                    <div className={`position-warning-cell${record.positionWarningExceeded ? ' is-exceeded' : ''}`}>
+                        <strong>{percent(record.positionRatio)}</strong>
+                        <span>{warningText}</span>
+                    </div>
+                );
+            },
+        },
         {
             title: '今日涨跌/盈亏', width: 126, align: 'right',
             render: (_, r) => r.estimateFetchFailed ? (
@@ -162,11 +188,13 @@ export default function FundsPage() {
         <Space direction="vertical" size={16} className="full-width funds-page">
             <Card title={<Title level={4}>基金管理</Title>} extra={
                 <Space>
-                    <Button icon={<ReloadOutlined/>} onClick={() => refetch()}>刷新</Button>
+                    <Button icon={<ReloadOutlined/>} onClick={() => { refetch(); refetchDcaBudget(); }}>刷新</Button>
                     <Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建基金</Button>
                 </Space>
             }>
-                <Table rowKey="id" size="small" loading={isLoading} dataSource={funds} columns={columns}
+                <DcaBudgetOverview summary={dcaBudgetSummary} isLoading={isDcaBudgetLoading}
+                                   isError={isDcaBudgetError} onRetry={refetchDcaBudget}/>
+                <Table rowKey="id" size="small" loading={isLoading} dataSource={rows} columns={columns}
                        pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
@@ -221,10 +249,14 @@ export default function FundsPage() {
                                help="自动识别,可手动调整">
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
                     </Form.Item>
-                    <Form.Item label="仓位上限" name="maxPositionRatioPct"
-                               rules={[{required: true, message: '请输入仓位上限'},
-                                   {type: 'number', min: 0.01, max: 30, message: '仓位上限必须大于 0 且不超过 30%'}]}>
-                        <InputNumber min={0.01} max={30} precision={2} className="full-width"
+                    <Form.Item label="仓位提醒" name="positionWarningEnabled" valuePropName="checked">
+                        <Switch checkedChildren="开" unCheckedChildren="关"/>
+                    </Form.Item>
+                    <Form.Item label="提醒线" name="positionWarningRatioPct"
+                               rules={[{required: true, message: '请输入仓位提醒线'},
+                                   {type: 'number', min: 1, max: 100, message: '提醒线必须在 1% 到 100% 之间'}]}>
+                        <InputNumber min={1} max={100} precision={2} className="full-width"
+                                     disabled={!positionWarningEnabled}
                                      formatter={(value) => value === undefined || value === null ? '' : `${value}%`}
                                      parser={(value) => value?.replace('%', '')}/>
                     </Form.Item>

@@ -18,7 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 用户配置服务:管理单用户总资金池与关注指数列表。
+ * 用户配置服务:管理可选月度定投预算与关注指数列表。
  * Controller 只做 HTTP 路由,逻辑下沉到本层。返回 {@link UserConfigView} DTO。
  *
  * <p>未初始化时不抛错——行情展示不应被配置缺失阻塞,get() 返默认指数列表。
@@ -29,7 +29,7 @@ public class UserConfigService {
 
     /** 默认关注指数(用户未配置时兜底):上证指数 + 沪深300 + 创业板指。 */
     public static final String DEFAULT_WATCHED_INDICES = "1.000001,1.000300,0.399006";
-    private static final BigDecimal MAX_TOTAL_CAPITAL = new BigDecimal("99999999999.99999999");
+    private static final BigDecimal MAX_MONTHLY_DCA_BUDGET = new BigDecimal("99999999999.99999999");
 
     private final UserConfigRepository userConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -57,18 +57,20 @@ public class UserConfigService {
     }
 
     /**
-     * 更新关注指数列表(无则新建)。事务提交后发 {@link WatchedIndicesChangedEvent},
+     * 更新关注指数列表和可选月度预算(无则新建)。事务提交后发 {@link WatchedIndicesChangedEvent},
      * 让行情缓存即时重读新列表(不必等 30s cron;非交易时段 cron 不跑,全靠事件驱动)。
      * 发在 commit 后而非事务内,避免监听者读到未提交数据。
      */
     @Transactional
-    public UserConfigView update(List<String> watchedIndices) {
+    public UserConfigView update(List<String> watchedIndices, BigDecimal monthlyDcaBudget) {
+        validateMonthlyDcaBudget(monthlyDcaBudget);
         userConfigRepository.lockSingleton();
         List<UserConfigEntity> all = userConfigRepository.findAll();
         UserConfigEntity config = all.isEmpty() ? new UserConfigEntity() : all.get(0);
         if (watchedIndices != null) {
             config.setWatchedIndices(watchedIndices.isEmpty() ? null : String.join(",", watchedIndices));
         }
+        config.setMonthlyDcaBudget(monthlyDcaBudget);
         UserConfigView view = UserConfigView.from(userConfigRepository.save(config));
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -80,30 +82,22 @@ public class UserConfigService {
         return view;
     }
 
-    @Transactional
-    public UserConfigView deposit(BigDecimal amount) {
-        if (amount == null || amount.signum() <= 0 || amount.scale() > 8) {
-            throw new BusinessException(ErrorCode.DEPOSIT_AMOUNT_INVALID, "入金金额必须大于 0 且最多 8 位小数");
-        }
-        userConfigRepository.lockSingleton();
-        List<UserConfigEntity> all = userConfigRepository.findAll();
-        UserConfigEntity config = all.isEmpty() ? new UserConfigEntity() : all.get(0);
-        BigDecimal current = config.getTotalCapital() != null ? config.getTotalCapital() : BigDecimal.ZERO;
-        BigDecimal updated = current.add(amount);
-        if (updated.compareTo(MAX_TOTAL_CAPITAL) > 0) {
-            throw new BusinessException(ErrorCode.DEPOSIT_AMOUNT_INVALID, "总资金池金额超过系统可记录上限");
-        }
-        config.setTotalCapital(updated);
-        return UserConfigView.from(userConfigRepository.save(config));
+    @Transactional(readOnly = true)
+    public BigDecimal getMonthlyDcaBudget() {
+        return userConfigRepository.findAll().stream().findFirst()
+                .map(UserConfigEntity::getMonthlyDcaBudget)
+                .orElse(null);
     }
 
-    @Transactional(readOnly = true)
-    public BigDecimal requireTotalCapital() {
-        return userConfigRepository.findAll().stream().findFirst()
-                .map(UserConfigEntity::getTotalCapital)
-                .filter(value -> value.signum() > 0)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.CAPITAL_POOL_NOT_CONFIGURED, "请先在用户配置中录入外部入金"));
+    private void validateMonthlyDcaBudget(BigDecimal monthlyDcaBudget) {
+        if (monthlyDcaBudget == null) {
+            return;
+        }
+        if (monthlyDcaBudget.signum() <= 0 || monthlyDcaBudget.scale() > 8
+                || monthlyDcaBudget.compareTo(MAX_MONTHLY_DCA_BUDGET) > 0) {
+            throw new BusinessException(ErrorCode.MONTHLY_DCA_BUDGET_INVALID,
+                    "每月定投预算必须大于 0 且最多 8 位小数");
+        }
     }
 
     private static List<String> parseSecids(String raw) {

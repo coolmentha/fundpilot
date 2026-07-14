@@ -43,7 +43,6 @@ public class TransactionConfirmSupport {
     private final FundLotRedemptionRepository fundLotRedemptionRepository;
     private final FundPositionService fundPositionService;
     private final FundRepository fundRepository;
-    private final PositionLimitService positionLimitService;
 
     /**
      * 买入确认:扣申购费,算 shares,建 lot,加权更新 costPerShare。
@@ -54,7 +53,6 @@ public class TransactionConfirmSupport {
      */
     public void onBuyConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
-        positionLimitService.validatePurchase(fundId, tx.getAmount(), navValue);
         FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
         BigDecimal discountRate = fee.discountRate() != null ? fee.discountRate() : BigDecimal.ZERO;
 

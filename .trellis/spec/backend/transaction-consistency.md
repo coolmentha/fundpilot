@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-适用于信号回应、手工交易输入、夜间净值确认、基金状态重算、转换两腿状态、ADJUST/初始持仓 FIFO lot 和交易日历同步。任何改动触及 PENDING/CONFIRMED 状态、lot、定时任务或 DATE 存储时，必须按本契约检查。
+适用于信号回应、手工交易输入、夜间净值确认、基金状态重算、转换两腿状态、ADJUST/初始持仓 FIFO lot、定投预算摘要和交易日历同步。任何改动触及 PENDING/CONFIRMED 状态、lot、定时任务、DATE 存储或展示型风险提示时，必须按本契约检查。
 
 ## 2. Signatures
 
@@ -25,6 +25,8 @@ int TradingCalendarSyncService.sync();
 int TradingCalendarSyncService.syncFull();
 FundTransactionView FundTransactionService.createManual(Long fundId, ManualTransactionRequest request);
 boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
+DcaBudgetSummaryView DcaBudgetSummaryService.currentMonth();
+boolean DcaScheduleService.isFutureExecutionDay(FundDcaPlanEntity plan, Instant candidate, Instant now);
 List<FundNavHistoryEntity> FundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
     Long fundId, Instant startInclusive, Instant endExclusive);
 List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreaterThanEqualAndSignalDateLessThan(
@@ -35,8 +37,13 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 前端 `POST /api/funds/{fundId}/transactions`：买入类传正数 `amount`，卖出/调整类传正数 `shares`，转换可额外传 `targetFundId`；
 可选 `tradeDate: Instant` 表示真实交易发生时间，省略时后端使用当前时间。
 
+`PUT /api/user-config` 同时覆盖 `watchedIndices: string[]` 与可空 `monthlyDcaBudget: decimal`；
+`GET /api/dca/budget-summary` 返回 `monthlyBudget/investedAmount/futureAmount/projectedAmount/remainingAmount/overBudgetAmount`。
+
 数据库 `fund_transaction.trade_date TIMESTAMPTZ` 保存业务发生时间；`created_date` 继续由 Spring 审计维护。V16 用 `created_date` 回填存量行，
 并建立 `(fund_id, trade_date DESC) WHERE deleted_date IS NULL` 索引。
+V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将 `fund.max_position_ratio` 重命名为
+`position_warning_ratio` 并新增 `position_warning_enabled`，保留存量阈值。
 
 ## 3. Contracts
 
@@ -71,8 +78,11 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - 行情抓取、信号生成、夜间净值确认等按基金遍历的定时批处理，每只基金必须通过 `RequiresNewTransactionExecutor` 或等价的代理 Bean 在独立事务中执行；单只失败只回滚当前基金并继续后续基金。
 - 卖出存在 lot 缺口时，只有按 CONFIRMED 账本 FIFO 重放后确有剩余 `ADJUST_IN` 未跟踪份额，缺口才按零赎回费降级；普通买入存在但 open lot 全空属于账本损坏。
 - 所有 SELL 确认入口在消费 lot 前必须先悲观锁定基金行，再基于 CONFIRMED 交易汇总校验事实持仓；不得依赖请求前页面持仓、缓存持仓或仅校验 lot 总数。
-- 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST 与初始持仓同步确认）必须在基金行锁内校验总资金池与单基金上限。当前事实持仓市值使用本次交易日单位净值；累计净值不得用于仓位约束。
-- 外部入金只累加单用户 `totalCapital`，不归属基金、不创建交易、买入后也不从总池扣减。单基金 `maxPositionRatio` 只能在 `(0, 0.30]`，数据库 CHECK 与业务层必须同时兜底。
+- `monthlyDcaBudget` 是可选展示预算，不是余额或买入额度；预算为空时仍返回已定投、未来计划和预计定投，但剩余/超额为空。
+- 本月已定投统计北京时间自然月内所有非 CANCELLED 的 INVEST，包含手动/自动和 PENDING/CONFIRMED。
+- 本月未来计划只含 EFFECTIVE 且 enabled 的计划；当天仅在 14:55 前算未来，同一计划已有任意状态交易的实际执行日不得重复计入，月计划跨月顺延按实际月份归属。
+- `positionWarningEnabled/positionWarningRatio` 只比较当前 CONFIRMED 持仓市值占全部当前持仓市值的比例；关闭后仍可展示比例，不告警。任一已持仓基金当前市值未知时，所有比例都保持未知，禁止按可用子集重算。
+- 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST、初始持仓和转换转入腿）不得读取月度预算或仓位提醒字段，也不得因预算超额或占比超线抛业务错误。
 - ADJUST 分支先悲观锁基金行；`ADJUST_OUT` 不得超过 CONFIRMED 事实持仓，交易、lot 更新和 `reconcileStatus` 必须位于同一事务。
 - 交易日历使用数据库 `ON CONFLICT DO NOTHING` 原子插入，不使用“先查后插”实现幂等。
 - 日常 `sync()` 空表全量、非空表只写最大日期之后；管理 `syncFull()` 遍历全量以补历史缺口。
@@ -101,9 +111,10 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 | 日历日期已存在 | 返回 0，不抛异常 | 无 |
 | 手动确认缺少交易发生日净值 | 保持 PENDING，拒绝使用最新净值 | `NAV_HISTORY_EMPTY` |
 | SELL 份额超过锁后计算的 CONFIRMED 事实持仓 | 交易不确认，不消费 lot | `INSUFFICIENT_HOLDING_SHARES` |
-| 总资金池为空或非正 | 买入不确认 | `CAPITAL_POOL_NOT_CONFIGURED` |
-| 买入后市值超过 `totalCapital * maxPositionRatio` | 买入不确认 | `POSITION_LIMIT_EXCEEDED` |
-| 单基金上限非正或超过 30% | 拒绝创建/更新 | `POSITION_LIMIT_INVALID` |
+| 月度定投预算为空 | 返回金额摘要，不显示进度/超额 | 无 |
+| 月度定投预算非正或超过金额精度 | 拒绝配置更新 | `MONTHLY_DCA_BUDGET_INVALID` |
+| 仓位提醒线不在 `(0, 1]` | 拒绝基金创建/更新 | `POSITION_WARNING_RATIO_INVALID` |
+| 预计定投超预算或当前占比超提醒线 | 仅 UI 提示，交易继续生成/确认 | 无 |
 | 单只基金补偿失败 | 记录错误并继续其他基金 | 无 |
 
 ## 5. Good / Base / Bad Cases
@@ -118,6 +129,8 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - Good：同一信号并发回应时锁内只允许第一笔创建交易。
 - Good：基金 A 行情抓取失败并回滚，基金 B 仍在独立事务中成功落库。
 - Good：卖出确认锁定基金后重新汇总 CONFIRMED 事实持仓，拒绝并发请求造成的第二次超卖。
+- Good：转换转入腿具备当日单位净值后正常确认，即使未设置预算或基金当前占比超过提醒线。
+- Good：14:54 的当日计划计入未来金额，14:55 后由实际 INVEST 交易进入已定投；同一日期不重复相加。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
 - Base：50 份 open lot + 50 份 ADJUST_IN，卖 100 份时仅前 50 份计算赎回费。
 - Base：日历空表日常同步执行全量初始化，非空表只处理最大日期之后。
@@ -132,6 +145,7 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - Bad：在净值写入事务内同步确认，确认异常会把已抓到的净值一起回滚。
 - Bad：创建 PENDING 卖出时提前设 CLEARED，撤单后基金状态与事实持仓不一致。
 - Bad：先 `findAll()` 再 `save()` 日历，多实例会同时判定不存在并撞唯一索引。
+- Bad：在 `TransactionConfirmSupport` 或初始持仓创建中读取预算/提醒字段并拒绝买入，会把展示偏好错误升级为账本状态阻断。
 
 ## 6. Tests Required
 
@@ -151,7 +165,8 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 - `TransactionConfirmServiceStateTest`：CONFIRMED/PENDING 不重复调用 `onSellConfirmed`。
 - `TransactionCancelServiceStateTest`：关联腿已确认时拒绝撤销。
 - `TransactionConfirmSupportTest` / `FundPositionServiceUnitTest`：部分 lot 缺口、全空 lot 的合法 ADJUST_IN/损坏账本分支、账本 FIFO 重放、ADJUST_OUT、初始持仓 lot 且不重复扣费。
-- `PositionLimitServiceTest` / `FundServiceAutoFetchTest`：覆盖恰好等于上限、超过上限、未配置总池、初始持仓不可绕过和基金行锁。
+- `DcaBudgetSummaryServiceTest` / `DcaScheduleServiceTest`：覆盖 PENDING/CONFIRMED 计入、CANCELLED 排除、手动 INVEST、14:55 边界、已生成日期去重、跨月顺延、预算为空/剩余/超额。
+- `FundServiceAutoFetchTest` / `TransactionConfirmSupportTest` / 转换确认测试：覆盖初始持仓和所有买入确认不受预算/仓位提醒影响。
 - `TradingCalendarSchemaIntegrationTest`：原子重复写返回 1/0，最大日期查询正确。
 - `TradingCalendarSyncServiceTest`：空表全量、非空增量和管理全量补写。
 - `RequiresNewTransactionExecutorTest` 及各批处理 Service/Job 测试：断言每只基金使用 `REQUIRES_NEW`，单基金异常不回滚或阻断其他基金。
@@ -171,6 +186,7 @@ repository.existsByDcaPlanIdAndStatusAndCreatedDateBetween(id, PENDING, start, e
 repository.findByFundEntity_IdAndNavDateBetweenOrderByNavDateAsc(id, start, end); // Between 包含结束点
 for (FundEntity fund : funds) confirmOne(fund); // 外围大事务导致整批回滚
 onSellConfirmed(tx, nav); // 未锁基金、未按 CONFIRMED 事实持仓复核
+positionLimitService.validatePurchase(tx, nav); // 展示型提醒错误进入确认路径
 ```
 
 ### Correct
@@ -188,6 +204,7 @@ navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(id
 requiresNewTransactionExecutor.execute(() -> processFund(fundId)); // 每只基金独立提交/回滚
 fundRepository.findByIdForUpdate(fundId);
 validateAgainstConfirmedHolding(fundId, tx.getShares());
+dcaBudgetSummaryService.currentMonth(); // 预算只由只读摘要和 UI 消费
 ```
 
 ## Scenario: Fund NAV Date Normalization
