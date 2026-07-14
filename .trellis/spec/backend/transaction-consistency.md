@@ -190,6 +190,77 @@ fundRepository.findByIdForUpdate(fundId);
 validateAgainstConfirmedHolding(fundId, tx.getShares());
 ```
 
+## Scenario: Fund NAV Date Normalization
+
+### 1. Scope / Trigger
+
+- Trigger: changes to external NAV parsers, `FundNavSnapshot.navDate`, `fund_nav_history.nav_date`, NAV upsert logic, or migrations that rewrite NAV dates.
+
+### 2. Signatures
+
+```java
+List<FundNavSnapshot> EastmoneyJsParser.parseNavHistory(String rawJs);
+Instant ChinaTradingDate.toUtcDate(Instant source);
+```
+
+```sql
+fund_nav_history.nav_date TIMESTAMPTZ
+V21__normalize_fund_nav_dates.sql
+```
+
+### 3. Contracts
+
+- `FundNavSnapshot.navDate` is the UTC `00:00` label for the corresponding `Asia/Shanghai` natural date; it is not the source timestamp preserved verbatim.
+- External epoch values are normalized once at the parser boundary. Market services, repositories, and transaction confirmation consume the normalized contract and must not repeat source-specific conversion.
+- A source instant already at UTC `00:00` remains unchanged when it belongs to the same Beijing natural date.
+- V21 normalizes existing non-null NAV dates, soft-deletes duplicate active rows by `fund_id + normalized nav_date`, and recreates `uq_fund_nav_history_daily` in one Flyway transaction.
+- Duplicate retention order is: more complete `nav`/`accumulated_nav`, newer `updated_date`, then larger `id`.
+- The migration never changes transaction status. Startup/hourly compensation confirms PENDING transactions after migrated NAV rows become queryable.
+- Single-day transaction lookup remains the strict half-open interval `[dayStart, nextDayStart)`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior | Result |
+|---|---|---|
+| Eastmoney timestamp is Beijing midnight (`16:00Z` on the prior UTC date) | Normalize to the Beijing date's UTC `00:00` label | Snapshot accepted |
+| Timestamp is already the correct UTC `00:00` label | Keep the same label | Idempotent |
+| Multiple active rows normalize to one fund/day | Keep the ranked winner and soft-delete the rest | Unique active row |
+| `nav_date` is null in legacy data | Leave it null | Not indexed as a day |
+| Any V21 statement or index recreation fails | Roll back the whole Flyway migration | Application startup fails |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `2026-07-12T16:00:00Z` from Eastmoney becomes `2026-07-13T00:00:00Z`, so a July 13 transaction finds unit NAV `1.0407`.
+- Good: shifted and already-normalized rows collide; the complete row stays active and the incomplete row is soft-deleted.
+- Base: a UTC `00:00` snapshot stays unchanged and upsert remains idempotent.
+- Bad: persist `Instant.ofEpochMilli(x)` directly; transaction confirmation looks in the next UTC date bucket and leaves the transaction PENDING.
+- Bad: loosen the repository query to include the prior day; that hides corrupt storage and can use the wrong trading day's NAV.
+
+### 6. Tests Required
+
+- `EastmoneyJsParserNavHistoryTest`: assert real `16:00Z` epochs normalize to consecutive UTC `00:00` labels and already-normalized input is idempotent.
+- `EastmoneyClientIntegrationTest`: assert the HTTP client exposes the normalized snapshot contract.
+- `FundNavDateNormalizationMigrationTest`: migrate an isolated PostgreSQL schema from V20 to V21; assert normalized dates, duplicate soft-delete priority, unique-index enforcement, and strict Flyway validation.
+- Full backend test run must apply V21 on a fresh schema and pass Hibernate validation.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```java
+Instant date = Instant.ofEpochMilli(sourceEpoch); // persists prior-day 16:00Z
+```
+
+#### Correct
+
+```java
+Instant date = ChinaTradingDate.toUtcDate(Instant.ofEpochMilli(sourceEpoch));
+```
+
+```sql
+date_trunc('day', nav_date AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'UTC'
+```
+
 ## Scenario: DCA Take-Profit Lifecycle
 
 ### 1. Scope / Trigger

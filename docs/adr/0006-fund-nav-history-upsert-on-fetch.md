@@ -11,7 +11,8 @@
 - **A. 在 fetchOne 拉取后增量 upsert（已采纳）**：`MarketDataFetchService.fetchOne` 拉到 pingzhongdata
   净值序列后，调 `upsertNavHistory` 增量写入 `fund_nav_history`。按 fundId+navDate **应用层去重**——
   查已落库的 navDate 集合，filter 出新的 `saveAll`，避免违反 `uq_fund_nav_history_daily` 部分唯一索引
-  （每基金每交易日唯一）。首次全量落库（数百条），后续每日增量补最新一期。
+  （每基金每交易日唯一）。东方财富毫秒戳先在 `EastmoneyJsParser` 按北京时间自然日归一为 UTC 00:00
+  日期标签。首次全量落库（数百条），后续每日增量补最新一期。
 - **B. 独立 NavHistorySyncJob 单独拉取落库**：新建定时任务专拉净值序列落库，与行情指标拉取分离。
 - **C. DB ON CONFLICT upsert（native SQL）**：用 PostgreSQL `INSERT ... ON CONFLICT (fund_id, nav_date) DO UPDATE`
   原生 upsert，数据库层去重。
@@ -27,6 +28,9 @@
 3. 范围同步扩大——`fetchBatch` 遍历从 `findEffectiveFundIds`（仅 EFFECTIVE 策略基金）改为
    `fundRepository.findAll`（所有未软删基金，`@SQLRestriction` 自动过滤），让未建仓观察池基金也落净值历史，
    支撑 `FundPnlService` 算其今日涨跌（story 21）。
+4. 日期在数据源边界归一——东方财富用北京时间零点 epoch 表示净值日，直接转 `Instant` 会得到前一日
+   `16:00Z`，无法命中交易确认使用的 UTC 00:00 日期区间。解析器统一调用 `ChinaTradingDate.toUtcDate`，
+   服务层和仓储层不重复数据源专属转换。
 
 不选 B：`fetchOne` 已有数据，独立 job 再拉一次是重复外部请求。
 不选 C：JPA `saveAll` 不支持 ON CONFLICT，需写 native SQL 绕过 JPA，复杂度高于应用层去重；且去重量小，
@@ -47,3 +51,7 @@
 `upsertNavHistory` 用 `HashSet` contains 过滤已有日期，只 `saveAll` 新 snapshot。
 依赖 `uq_fund_nav_history_daily` 部分唯一索引（`fund_id, (nav_date AT TIME ZONE 'UTC')::date WHERE deleted_date IS NULL`，
 `V1__init_schema.sql`）兜底——应用层去重失败（并发等边缘情况）时数据库约束拦截。
+
+V21 将上线前已经按原始 `16:00Z` 保存的 `fund_nav_history.nav_date` 归一为对应北京时间自然日的
+UTC 00:00 标签。迁移在同一事务内暂时移除每日唯一索引、归一化、软删除同基金同日重复活动行，
+再恢复唯一索引；迁移失败时应用启动失败并整体回滚。

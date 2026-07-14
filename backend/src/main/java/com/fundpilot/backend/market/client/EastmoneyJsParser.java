@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.client;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 
@@ -47,8 +48,9 @@ public final class EastmoneyJsParser {
                 Value nw = netWorth.getArrayElement(i);
                 Value aw = acWorth.getArrayElement(i);
 
-                // netWorth 元素是对象 {x: 毫秒戳, y: 单位净值, ...};acWorth 元素是二元数组 [毫秒戳, 累计净值]
-                Instant date = Instant.ofEpochMilli(nw.getMember("x").asLong());
+                // 东方财富 x 表示北京时间自然日零点，统一转成该业务日的 UTC 00:00 日期标签。
+                Instant date = ChinaTradingDate.toUtcDate(
+                        Instant.ofEpochMilli(nw.getMember("x").asLong()));
                 BigDecimal nav = BigDecimal.valueOf(nw.getMember("y").asDouble());
                 BigDecimal accumulatedNav = BigDecimal.valueOf(aw.getArrayElement(1).asDouble());
                 result.add(new FundNavSnapshot(date, nav, accumulatedNav));
