@@ -31,7 +31,9 @@ class FundNavDateNormalizationMigrationTest extends AbstractIntegrationTest {
             migrateToV20();
             insertLegacyNavRows();
 
-            Flyway flyway = flyway().load();
+            Flyway flyway = flyway()
+                    .target(MigrationVersion.fromVersion("21"))
+                    .load();
             assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
 
             assertThat(activeNav(1L)).isEqualTo(new NavRow(

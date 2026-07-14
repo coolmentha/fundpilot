@@ -94,7 +94,7 @@ class UserConfigSchemaIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> {
             userConfigRepository.save(config);
             entityManager.flush();
-        }).isInstanceOf(org.hibernate.exception.ConstraintViolationException.class);
+        }).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     private UserConfigEntity existingOrNewConfig() {
