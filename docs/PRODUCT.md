@@ -3,6 +3,15 @@
 > 当前定位：场外公募基金的行情工作台与纪律执行平台。
 > 单用户场景；系统负责计算、提醒、记账和审计，真实申赎仍由用户在基金平台完成。
 
+详细业务流程：
+
+- [基金与持仓](business/fund-and-position.md)
+- [交易与记账](business/transactions-and-accounting.md)
+- [自动定投](business/dca.md)
+- [卖出纪律与信号](business/sell-discipline-and-signals.md)
+- [行情与盈亏](business/market-and-pnl.md)
+- [资金池与仓位限制](business/capital-and-position-limit.md)
+
 ## 一、产品边界
 
 FundPilot 解决三个问题：
@@ -26,7 +35,7 @@ FundPilot 解决三个问题：
 
 `FundEntity` 保存基金身份、分类、成本单价、单基金仓位上限和生命周期状态。仓位上限默认 30%，可向下调整但不能超过 30%。事实持仓不存冗余金额，始终由 CONFIRMED 交易份额聚合：
 
-- `PENDING_HOLDING`：没有正持仓。
+- `PENDING_HOLDING`：没有已确认交易。
 - `HOLDING`：CONFIRMED 净份额大于零。
 - `CLEARED`：曾有交易但净份额已归零。
 

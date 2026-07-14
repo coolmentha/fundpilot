@@ -1,43 +1,69 @@
-# Domain Docs
+# 领域文档指引
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+本文件说明 Agent 和开发者应如何读取、引用和维护 FundPilot 的业务文档。
 
-## Before exploring, read these
+## 阅读顺序
 
-- **`CONTEXT.md`** at the repo root — FundPilot 后端"基金纪律策略"领域语言词典。
-- **`docs/adr/`** — 已存在 ADR-0001（前高/持有期高点实时派生）、0002（东方财富真实数据源）、0003（反弹清空 0.5% 缓冲带）、0004（软删除从 @SoftDelete 改用 @SQLRestriction+@SQLDelete）、0005（基金字典落库缓存）、0006（fund_nav_history 在行情拉取时增量 upsert）。读与你接触领域相关的那些。
+开始分析业务前，按以下顺序读取：
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
+1. 根目录 [`CONTEXT.md`](../../CONTEXT.md)：领域术语、产品边界和跨模块核心契约。
+2. [`docs/business/`](../business/README.md)：当前业务流程、状态机、计算口径和失败语义。
+3. [`docs/adr/`](../adr/)：与你当前任务相关的决策记录。
+4. 当前代码和测试：验证文档描述是否仍与可执行行为一致。
 
-## File structure
+产品视角可先读 [`docs/PRODUCT.md`](../PRODUCT.md)。
 
-Single-context repo（FundPilot 当前布局）：
+## 权威性
 
-```
+发生冲突时，使用以下顺序：
+
+1. 当前代码与测试。
+2. 未被后续决策取代的 ADR。
+3. `CONTEXT.md`。
+4. `docs/business/`。
+5. `docs/PRODUCT.md`。
+6. 旧 PRD、旧架构设计和原始策略框架。
+
+不要因为旧文档更详细，就用旧方案覆盖当前实现。
+
+## 当前领域结构
+
+```text
 /
 ├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-derive-peak-navs-instead-of-storing.md
-│   ├── 0002-real-eastmoney-data-source.md
-│   ├── 0003-tier-clear-buffer.md
-│   ├── 0004-sql-restriction-instead-of-softdelete.md
-│   ├── 0005-fund-dict-table-cache.md
-│   └── 0006-fund-nav-history-upsert-on-fetch.md
-├── backend/
-│   └── docs/                            ← 设计文档（推荐架构方案 / 落地讨论 / 框架原文）
-└── frontend/
+├── docs/
+│   ├── PRODUCT.md
+│   ├── business/
+│   │   ├── README.md
+│   │   ├── fund-and-position.md
+│   │   ├── transactions-and-accounting.md
+│   │   ├── dca.md
+│   │   ├── sell-discipline-and-signals.md
+│   │   ├── market-and-pnl.md
+│   │   └── capital-and-position-limit.md
+│   └── adr/
+└── backend/
+    ├── 基金纪律策略框架.md
+    └── docs/
 ```
 
-> 备注：`backend/docs/` 下的设计文档是实现细节与状态机，不是领域上下文；`CONTEXT.md` 是领域语言词典，两者用途不同，读取时注意区分。
+`backend/基金纪律策略框架.md`、`backend/docs/` 和部分旧 PRD 是历史资料，正文中可能包含金字塔加仓、计划总仓位、回测寻优、BUILD/ADD 新信号或旧净值口径。它们只用于理解演进过程。
 
-## Use the glossary's vocabulary
+## 术语规则
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids（`CONTEXT.md` 里以 `_Avoid_:` 标记的禁用词不可使用，例如：用 `BUILD/ADD/SELL` 而不是 `DECREASE`；不要把 `peakNav` 落字段；用"事实账目份额永远实时算"的硬性原则）。
+- `SignalType` 表达策略建议，当前新信号只使用 `NONE/SELL`。
+- `FundTransactionSource` 表达账目份额变化，使用 `INCREASE/DECREASE/TRANSFER_IN/TRANSFER_OUT/INVEST/ADJUST_IN/ADJUST_OUT`。
+- 不要把 `SELL` 信号与 `DECREASE` 交易来源当成同一个概念。
+- `BUILD/ADD` 和 `CALIBRATED/CALIBRATION_FAILED` 是兼容遗留，不是当前主流程。
+- 事实持仓只由 CONFIRMED 交易份额聚合，PENDING 不进入持仓。
+- 单位净值用于记账和市值，累计净值用于复权分析和回撤。
+- 北京时间决定业务日，日期标签存为 UTC 00:00 `Instant`。
+- 常说的场外基金“7 天保护”在系统内按 5 个交易日计算；要明确是逐 lot 止盈保护、逻辑止损豁免，还是手动卖出绕过信号门控。
 
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs`).
+## 引用与更新
 
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0001（前高不落字段实时派生）— but worth reopening because…_
+- Issue、PRD、测试名和设计说明应使用 `CONTEXT.md` 与 `docs/business/` 中的术语。
+- 描述具体业务流程时，链接到唯一负责该主题的业务文档，避免在多个总览中复制完整规则。
+- 新决策或取舍写入 ADR；新的跨模块不变量更新 `CONTEXT.md`；详细流程变化更新对应 `docs/business/*.md`。
+- 行为变化时应同步检查代码注释、测试、业务文档和相关 ADR，不能只更新其中一处。
+- 若代码行为与未被取代的 ADR 冲突，必须明确指出，不得静默重写历史。
