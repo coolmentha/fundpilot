@@ -24,4 +24,6 @@ public interface FundDcaPlanRepository extends JpaRepository<FundDcaPlanEntity, 
     List<FundDcaPlanEntity> findByFundEntity_Id(Long fundId);
 
     Optional<FundDcaPlanEntity> findByFundEntity_IdAndStatus(Long fundId, DcaPlanStatus status);
+
+    List<FundDcaPlanEntity> findByStatusAndEnabledTrue(DcaPlanStatus status);
 }

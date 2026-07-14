@@ -203,12 +203,12 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 
 ## 手动交易
 
-**总资金池与单基金仓位上限（Capital Pool & Position Limit）**:
-外部入金只有一种语义：正数金额累加到单用户总资金池，不直接归属任何基金，也不自动生成交易。每只基金保存独立的
-`maxPositionRatio`，默认 30%，可向下调整但不能超过 30%；数据库 CHECK 与业务层共同保证该硬上限。所有买入类交易
-（INCREASE/TRANSFER_IN/INVEST，含初始持仓同步确认）在最终确认事务内先锁基金行，再按单位净值计算当前事实持仓市值，校验
-`当前持仓市值 + 本次投入 <= totalCapital * maxPositionRatio`。V20 不从历史交易猜测总资金池：存量持仓继续展示和卖出，首次外部入金前禁止新增买入确认。
-_Avoid_: 把入金直接分配给基金；把总池当可用现金余额随交易扣减；用该约束恢复已退役的金字塔自动加仓。
+**月度定投预算与仓位提醒（DCA Budget & Position Warning）**:
+`monthlyDcaBudget` 是用户可选的月度现金流提示线，不是余额、入金累计或买入额度。它按北京时间自然月比较所有未取消的
+`INVEST` 交易与当前有效计划的剩余实际执行日；未设置时仍展示已定投和未来计划，但不显示进度或超额。每只基金用
+`positionWarningEnabled` 和 `positionWarningRatio`（默认开启、30%，范围 1% 到 100%）提示当前确认持仓市值占全部确认持仓市值的比例。
+预算和提醒只影响 View/UI，绝不能进入 INCREASE/TRANSFER_IN/INVEST、初始持仓、转换或净值确认路径。
+_Avoid_: 将预算当可用现金、将提醒线变成 `BusinessException`、用 PENDING 或未来计划计算当前仓位比例。
 
 **手动交易（Manual Transaction）**:
 不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 7 类来源：

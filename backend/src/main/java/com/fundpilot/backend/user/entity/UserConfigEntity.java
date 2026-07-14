@@ -10,10 +10,7 @@ import org.hibernate.annotations.SQLDelete;
 import java.math.BigDecimal;
 
 /**
- * 单用户账户配置(单用户场景,不存 userId)。行情工作台转向后,只剩 {@code watchedIndices}——
- * 用户关注的大盘指数列表(secid 逗号分隔),供行情缓存层按需拉取。
- * <p>历史:曾存 {@code totalInvestableCapital}(总可投资金,总仓位≤80%硬约束的分母),
- * 平台转向行情后仓位管理移除,V9 迁移删除该列。
+ * 单用户账户配置(单用户场景,不存 userId)。保存关注指数和可选月度定投预算。
  */
 @Entity
 @Table(name = "user_config")
@@ -22,9 +19,9 @@ import java.math.BigDecimal;
 @Setter
 public class UserConfigEntity extends AbstractEntity {
 
-    /** 所有外部入金累加形成的账户总资金池；null 表示尚未初始化。 */
-    @Column(name = "total_capital")
-    private BigDecimal totalCapital;
+    /** 每月定投预算；null 表示仅展示定投金额而不比较预算。 */
+    @Column(name = "monthly_dca_budget")
+    private BigDecimal monthlyDcaBudget;
 
     /** 用户关注的大盘指数列表(secid 逗号分隔,如 "1.000001,1.000300,0.399006");null/空用默认列表。 */
     @Column(name = "watched_indices", length = 512)

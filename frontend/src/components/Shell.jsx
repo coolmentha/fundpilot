@@ -22,10 +22,10 @@ const {Header, Content, Sider} = Layout;
 const PAGE_META = {
     '/': {title: '行情工作台', subtitle: '实时行情与市场动态'},
     '/dashboard': {title: '策略概览', subtitle: '账户全局与今日待办(旧)'},
-    '/funds': {title: '我的基金', subtitle: '维护基金档案与计划仓位'},
+    '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
-    '/settings': {title: '用户配置', subtitle: '总资金池与行情偏好'},
+    '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
     '/monitor': {title: '监控', subtitle: '系统运行面板'},
 };

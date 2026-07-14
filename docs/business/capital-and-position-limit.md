@@ -1,90 +1,46 @@
-# 资金池与仓位限制
+# 定投预算与仓位提醒
 
 ## 业务目标与边界
 
-总资金池是单用户组合的风险预算分母，不是可用现金余额，也不按基金拆分。单基金仓位上限用于阻止新的买入确认继续扩大集中度。
+月度定投预算回答“本月已经和预计会投入多少”，单基金仓位提醒回答“当前持仓是否过度集中”。两者都是提示，不是可用现金余额、自动调仓规则或交易拦截条件。
 
-## 外部入金
+## 月度定投预算
 
-用户在配置页录入正数金额后：
-
-- 金额累加到唯一用户配置的 `totalCapital`。
-- 不创建交易。
-- 不直接归属任何基金。
-- 后续买入不会从总资金池扣减。
-- 当前不支持出金或从历史交易反推总资金池。
-
-因此 `totalCapital` 表达“愿意用于组合风险预算的总资金”，不是银行账户或基金平台余额。
-
-## 单基金仓位上限
-
-- 每只基金保存独立的 `maxPositionRatio`。
-- 默认值为 30%。
-- 合法范围是 `(0, 0.30]`。
-- 数据库 CHECK 和业务层同时保证硬上限。
-
-用户可以将某只基金上限调低，但不能超过系统 30% 硬上限。
-
-## 买入确认校验
-
-所有增加真实投入金额的确认路径都必须执行相同校验：
-
-- `INCREASE`
-- `TRANSFER_IN`
-- `INVEST`
-- 初始持仓同步确认
-
-`ADJUST_IN` 是账实份额修正，不表达新的投入金额，不进入本校验。
-
-```mermaid
-flowchart LR
-    A[买入准备确认] --> B[悲观锁定基金行]
-    B --> C[读取 totalCapital 和 maxPositionRatio]
-    C --> D[按 CONFIRMED 份额乘本次交易日单位净值计算当前市值]
-    D --> E[计算买入后预计市值]
-    E --> F{预计市值 <= totalCapital * maxPositionRatio}
-    F -- 是 --> G[继续扣费和确认]
-    F -- 否 --> H[拒绝确认]
-```
-
-公式：
+- 用户配置可空的 `monthlyDcaBudget`；保存直接覆盖旧值，清空后不再比较预算。
+- 摘要按北京时间自然月计算。已定投为所有未取消的 `INVEST`，包括手动/自动和 `PENDING`/`CONFIRMED`。
+- 未来计划为当前 `EFFECTIVE` 且 `enabled=true` 的计划在本月剩余实际执行日的金额。已为同一计划创建任意状态交易的日期不得重复预测。
+- 日计划、周计划和月计划复用 DCA 执行日规则；当天仅在 14:55 前算未来，月计划连续休市后按实际跨月执行日期归属。
+- 未设置预算时仍显示已定投、未来计划和预计定投；设置后才显示分段进度、剩余或超额。
 
 ```text
-当前事实市值 = CONFIRMED 净份额 * 本次交易日单位净值
-预计市值 = 当前事实市值 + 本次投入金额
-仓位上限金额 = totalCapital * maxPositionRatio
+本月预计定投 = 本月已定投 + 本月未来计划
+预算剩余 = max(月度预算 - 本月预计定投, 0)
+预计超出 = max(本月预计定投 - 月度预算, 0)
 ```
 
-校验使用单位净值。累计净值只适用于复权分析，不能用于仓位约束。
+超额只显示红色进度和明确文字，不能暂停计划、撤销交易或阻止确认。
 
-## 时机与并发
+## 单基金仓位提醒
 
-- 校验发生在最终确认事务中，不只发生在创建 PENDING 交易时。
-- 基金行必须先悲观锁定，防止两笔并发买入同时基于旧持仓通过。
-- 初始持仓同步确认也必须走相同校验，不能绕过风险预算。
-- 恰好等于上限允许确认，超过才拒绝。
+- 每只基金保存 `positionWarningEnabled` 和 `positionWarningRatio`，默认开启、30%，提醒线允许 1% 至 100%。
+- 当前占比只使用已确认事实持仓的当前市值：`该基金持仓市值 / 全部基金持仓市值`。
+- 任一已持仓基金的当前市值未知时，整组仓位占比都展示未知；不得按剩余可用基金重算一个部分组合的 100%。
+- 关闭后仍显示当前比例，但不显示超线告警；不实现定投后的预计占比。
 
-创建 PENDING 买入时允许总资金池暂未配置，因为它尚未改变事实持仓；最终确认前必须完成配置。
+## 非拦截约束
 
-## 存量数据
-
-系统不从历史交易推断 `totalCapital`。升级前已有持仓可以继续展示和卖出，但首次外部入金前，新的买入确认会被拒绝。
-
-这项约束不会恢复已退役的金字塔加仓或计划总仓位机制。
+`INCREASE`、`TRANSFER_IN`、`INVEST`、初始持仓、转换和净值确认均不得读取月度预算或仓位提醒字段。确认交易仍只受金额/份额有效性、交易日净值、事实持仓、FIFO lot 和状态机约束。
 
 ## 失败与错误
 
 | 场景 | 结果 |
 | --- | --- |
-| 入金为空、非正或精度非法 | `DEPOSIT_AMOUNT_INVALID` |
-| 入金后超过系统可记录上限 | `DEPOSIT_AMOUNT_INVALID` |
-| 单基金比例非正或超过 30% | `POSITION_LIMIT_INVALID` |
-| 买入确认时总资金池未配置 | `CAPITAL_POOL_NOT_CONFIGURED` |
-| 买入后预计市值超过上限 | `POSITION_LIMIT_EXCEEDED` |
-| 缺少有效单位净值 | `NAV_HISTORY_EMPTY` |
+| 月度预算为非正或超过金额精度 | `MONTHLY_DCA_BUDGET_INVALID` |
+| 仓位提醒线不在 `(0, 1]` | `POSITION_WARNING_RATIO_INVALID` |
+| 预算超额或仓位超提醒线 | 仅展示提示，不抛业务错误 |
 
 ## 实现与验证入口
 
-- 实现：[UserConfigService](../../backend/src/main/java/com/fundpilot/backend/user/service/UserConfigService.java)、[PositionLimitService](../../backend/src/main/java/com/fundpilot/backend/fund/service/PositionLimitService.java)、[TransactionConfirmSupport](../../backend/src/main/java/com/fundpilot/backend/fund/service/TransactionConfirmSupport.java)
-- 测试：[UserConfigServiceTest](../../backend/src/test/java/com/fundpilot/backend/user/service/UserConfigServiceTest.java)、[PositionLimitServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/PositionLimitServiceTest.java)、[FundServiceAutoFetchTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceAutoFetchTest.java)
-- 相关决策：[ADR-0020](../adr/0020-capital-pool-and-position-limit.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)
+- 实现：[DcaBudgetSummaryService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryService.java)、[DcaScheduleService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaScheduleService.java)、[UserConfigService](../../backend/src/main/java/com/fundpilot/backend/user/service/UserConfigService.java)
+- 测试：[DcaBudgetSummaryServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryServiceTest.java)、[DcaScheduleServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaScheduleServiceTest.java)、[FundServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceTest.java)
+- 相关决策：[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)

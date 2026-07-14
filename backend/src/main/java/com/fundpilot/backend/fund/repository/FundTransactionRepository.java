@@ -21,6 +21,11 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
         java.math.BigDecimal getHoldingShares();
     }
 
+    interface DcaTransactionDateProjection {
+        Long getDcaPlanId();
+        java.time.Instant getTradeDate();
+    }
+
     /**
      * 查所有指定状态的交易(issue #15 NavConfirmJob 遍历 PENDING 用)。
      */
@@ -82,6 +87,27 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
     boolean existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId,
                                                   java.time.Instant start,
                                                   java.time.Instant end);
+
+    /** 本月已定投:所有非取消 INVEST 交易，手动和自动定投均计入。 */
+    @Query("select coalesce(sum(t.amount), 0) from FundTransactionEntity t " +
+            "where t.source = :source and t.status <> :cancelled " +
+            "and coalesce(t.tradeDate, t.createdDate) >= :start " +
+            "and coalesce(t.tradeDate, t.createdDate) < :end")
+    java.math.BigDecimal sumAmountBySourceAndStatusNotAndTradeDateBetween(
+            @Param("source") FundTransactionSource source,
+            @Param("cancelled") FundTransactionStatus cancelled,
+            @Param("start") java.time.Instant start,
+            @Param("end") java.time.Instant end);
+
+    /** 自动计划已生成的任意状态交易都占用对应的实际执行日，预测不得重复计入。 */
+    @Query("select t.dcaPlanId as dcaPlanId, coalesce(t.tradeDate, t.createdDate) as tradeDate " +
+            "from FundTransactionEntity t where t.dcaPlanId in :planIds " +
+            "and coalesce(t.tradeDate, t.createdDate) >= :start " +
+            "and coalesce(t.tradeDate, t.createdDate) < :end")
+    List<DcaTransactionDateProjection> findDcaTransactionDates(
+            @Param("planIds") Collection<Long> planIds,
+            @Param("start") java.time.Instant start,
+            @Param("end") java.time.Instant end);
 
     /** 同一 SignalLog 只能生成一笔未软删交易。 */
     boolean existsBySignalLogEntity_Id(Long signalLogId);

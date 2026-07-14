@@ -30,7 +30,7 @@
 | [自动定投](dca.md) | 计划状态、执行日、幂等和净值确认时序 |
 | [卖出纪律与信号](sell-discipline-and-signals.md) | 策略版本、止盈周期、逻辑止损、信号回应和过期 |
 | [行情与盈亏](market-and-pnl.md) | 实时缓存、行情快照、净值落库、三态涨跌、盈亏和 K 线 |
-| [资金池与仓位限制](capital-and-position-limit.md) | 入金语义、风险预算和买入确认校验 |
+| [定投预算与仓位提醒](capital-and-position-limit.md) | 月度定投现金流提示与单基金集中度提醒 |
 
 ## 跨模块边界
 

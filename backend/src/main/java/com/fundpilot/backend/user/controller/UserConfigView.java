@@ -7,16 +7,16 @@ import java.util.List;
 import java.math.BigDecimal;
 
 /**
- * 用户配置视图 DTO:返回总资金池与关注指数列表。
+ * 用户配置视图 DTO:返回月度定投预算与关注指数列表。
  *
  * @param id              配置 ID
- * @param totalCapital    总资金池;null 表示尚未发生外部入金
+ * @param monthlyDcaBudget 可选月度定投预算;null 表示不比较预算
  * @param watchedIndices  关注的大盘指数 secid 列表(空列表表示未配置,用默认)
  * @param createdDate     创建时间
  */
 public record UserConfigView(
         Long id,
-        BigDecimal totalCapital,
+        BigDecimal monthlyDcaBudget,
         List<String> watchedIndices,
         Instant createdDate) {
 
@@ -26,7 +26,7 @@ public record UserConfigView(
         }
         return new UserConfigView(
                 config.getId(),
-                config.getTotalCapital(),
+                config.getMonthlyDcaBudget(),
                 config.getWatchedIndices() == null || config.getWatchedIndices().isBlank()
                         ? List.of() : List.of(config.getWatchedIndices().split(",")),
                 config.getCreatedDate());

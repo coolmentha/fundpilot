@@ -19,7 +19,8 @@ import java.time.Instant;
  * @param fundCategory         基金类型(宽基/行业/主动/混合)
  * @param fundSubType          基金子类型(ETF/INDEX/INDEX_ENHANCED/ACTIVE)
  * @param benchmarkIndexCode   跟踪指数代码(如 000300.SH)
- * @param maxPositionRatio     单基金仓位上限比例(可选,默认 30%,只能在 (0, 30%] 内调整)
+ * @param positionWarningEnabled 是否启用当前持仓占比提醒(可选,默认 true)
+ * @param positionWarningRatio 当前持仓占比提醒线(可选,默认 30%,范围为 (0, 100%])
  * @param initialMarketValue   入仓市值(可选):新建时录入已有持仓(当前市值口径),用 T-1 净值反算 shares;
  *                             null 表示不录持仓；非正数为非法输入
  * @param costPerShare         成本单价(可选,仅 initialMarketValue 有值时生效):不填默认 T-1 净值;>0 校验;
@@ -33,7 +34,8 @@ public record FundCreateRequest(
         FundCategory fundCategory,
         FundSubType fundSubType,
         String benchmarkIndexCode,
-        BigDecimal maxPositionRatio,
+        Boolean positionWarningEnabled,
+        BigDecimal positionWarningRatio,
         BigDecimal initialMarketValue,
         BigDecimal costPerShare,
         Instant openedAt) {
@@ -41,28 +43,37 @@ public record FundCreateRequest(
     /** 5 参数次构造:不录现有金额(走原 PENDING_HOLDING 流程)。维持现有调用方兼容。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, null, null);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, null, null, null);
     }
 
     /** 6 参数次构造:录入仓市值但不填建仓时间和成本单价(沿用现有调用方兼容)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialMarketValue) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, initialMarketValue, null, null);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialMarketValue, null, null);
     }
 
     /** 7 参数次构造:录入仓市值+建仓时间但不填成本单价(兼容老调用方)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialMarketValue, Instant openedAt) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, initialMarketValue, null, openedAt);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialMarketValue, null, openedAt);
     }
 
-    /** 8 参数次构造:兼容新增仓位上限前的完整建仓调用方。 */
+    /** 8 参数次构造:兼容新增仓位提醒前的完整建仓调用方。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialMarketValue, BigDecimal costPerShare, Instant openedAt) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
-                null, initialMarketValue, costPerShare, openedAt);
+                null, null, initialMarketValue, costPerShare, openedAt);
+    }
+
+    /** 兼容仓位提醒字段改名前的完整创建调用方。 */
+    public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
+                             FundSubType fundSubType, String benchmarkIndexCode,
+                             BigDecimal positionWarningRatio, BigDecimal initialMarketValue,
+                             BigDecimal costPerShare, Instant openedAt) {
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
+                null, positionWarningRatio, initialMarketValue, costPerShare, openedAt);
     }
 }
