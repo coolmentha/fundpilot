@@ -28,6 +28,7 @@ describe('API error titles', () => {
         expect(errorTitle('FUND_HAS_PENDING_TRANSACTIONS')).toBe('基金存在待确认交易');
         expect(errorTitle('MONTHLY_DCA_BUDGET_INVALID')).toBe('每月定投预算不合法');
         expect(errorTitle('POSITION_WARNING_RATIO_INVALID')).toBe('仓位提醒线不合法');
+        expect(errorTitle('DCA_PLAN_DELETE_REQUIRES_DRAFT')).toBe('请先停用定投计划');
     });
 });
 

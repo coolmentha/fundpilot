@@ -129,6 +129,17 @@ public class DcaPlanService {
         fundDcaPlanRepository.save(plan);
     }
 
+    /** 仅允许删除已停用计划；交易流水通过 dcaPlanId 保留历史来源。 */
+    @Transactional
+    public void delete(Long planId) {
+        FundDcaPlanEntity plan = requirePlan(planId);
+        if (plan.getStatus() != DcaPlanStatus.DRAFT) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_DELETE_REQUIRES_DRAFT,
+                    "请先停用定投计划再删除");
+        }
+        fundDcaPlanRepository.delete(plan);
+    }
+
     private FundDcaPlanEntity requirePlan(Long planId) {
         return fundDcaPlanRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DCA_PLAN_NOT_FOUND, "DcaPlan #" + planId + " 不存在"));

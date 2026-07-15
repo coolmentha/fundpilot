@@ -7,8 +7,14 @@ vi.mock('./client.js', () => ({
     del: vi.fn(),
 }));
 
-import {post} from './client.js';
-import {invalidateDcaBudgetSummary, invalidateSignalQueries, requestAdminAction} from './hooks.js';
+import {del, post} from './client.js';
+import {
+    deleteDcaPlan,
+    invalidateDcaBudgetSummary,
+    invalidateDcaPlanQueries,
+    invalidateSignalQueries,
+    requestAdminAction,
+} from './hooks.js';
 
 describe('signal query invalidation', () => {
     it('refreshes pending, today, and range queries after a signal response', () => {
@@ -50,5 +56,25 @@ describe('DCA budget summary', () => {
         invalidateDcaBudgetSummary(queryClient);
 
         expect(queryClient.invalidateQueries).toHaveBeenCalledWith({queryKey: ['dca-budget-summary']});
+    });
+});
+
+describe('DCA plan deletion', () => {
+    it('uses DELETE for the selected plan', () => {
+        deleteDcaPlan(7);
+
+        expect(del).toHaveBeenCalledWith('/api/dca-plans/7');
+    });
+
+    it('invalidates all plan projections and budget summary', () => {
+        const queryClient = {invalidateQueries: vi.fn()};
+
+        invalidateDcaPlanQueries(queryClient);
+
+        expect(queryClient.invalidateQueries.mock.calls).toEqual([
+            [{queryKey: ['dca-plans']}],
+            [{queryKey: ['dca-active']}],
+            [{queryKey: ['dca-budget-summary']}],
+        ]);
     });
 });

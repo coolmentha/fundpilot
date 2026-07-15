@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {App, Button, Dropdown, Space, Table, Tag, Tooltip, Typography} from 'antd';
 import {
     CheckCircleOutlined,
+    DeleteOutlined,
     EditOutlined,
     MoreOutlined,
     PauseCircleOutlined,
@@ -13,13 +14,14 @@ import {
     useDcaBudgetSummary,
     useDcaManagementPlans,
     useDcaPlanAction,
+    useDeleteDcaPlan,
     useUpdateDcaPlan,
 } from '../api/hooks.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import {date, money, text} from '../constants.js';
-import {dcaPlanState, dcaScheduleText} from '../dcaPlan.js';
+import {canDeleteDcaPlan, dcaPlanState, dcaScheduleText} from '../dcaPlan.js';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
 
 const {Text} = Typography;
@@ -29,6 +31,7 @@ const actionCopy = {
     retire: ['停用计划', '停用后计划保留，可随时重新激活。'],
     pause: ['暂停自动定投', '暂停后不会生成新的定投交易。'],
     resume: ['恢复自动定投', '恢复后将按当前计划继续生成交易。'],
+    delete: ['删除计划', '删除后不可恢复，已有交易流水和待确认交易不受影响。'],
 };
 
 export default function DcaManagementPage() {
@@ -37,6 +40,7 @@ export default function DcaManagementPage() {
     const budgetQuery = useDcaBudgetSummary();
     const updatePlan = useUpdateDcaPlan();
     const planAction = useDcaPlanAction();
+    const deletePlan = useDeleteDcaPlan();
     const [editing, setEditing] = useState(null);
 
     const onEdit = async (values) => {
@@ -52,8 +56,13 @@ export default function DcaManagementPage() {
             content,
             okText: title,
             cancelText: '取消',
+            okButtonProps: action === 'delete' ? {danger: true} : undefined,
             onOk: async () => {
-                await planAction.mutateAsync({id: plan.id, action});
+                if (action === 'delete') {
+                    await deletePlan.mutateAsync(plan.id);
+                } else {
+                    await planAction.mutateAsync({id: plan.id, action});
+                }
                 message.success(`${title}成功`);
             },
         });
@@ -61,12 +70,21 @@ export default function DcaManagementPage() {
 
     const actionItems = (plan) => {
         if (plan.status !== 'EFFECTIVE') {
-            return [{
-                key: 'activate',
-                icon: <CheckCircleOutlined/>,
-                label: '激活',
-                onClick: () => confirmAction(plan, 'activate'),
-            }];
+            return [
+                {
+                    key: 'activate',
+                    icon: <CheckCircleOutlined/>,
+                    label: '激活',
+                    onClick: () => confirmAction(plan, 'activate'),
+                },
+                ...(canDeleteDcaPlan(plan) ? [{
+                    key: 'delete',
+                    danger: true,
+                    icon: <DeleteOutlined/>,
+                    label: '删除',
+                    onClick: () => confirmAction(plan, 'delete'),
+                }] : []),
+            ];
         }
         return [
             {

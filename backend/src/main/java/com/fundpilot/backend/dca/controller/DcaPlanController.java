@@ -3,6 +3,7 @@ package com.fundpilot.backend.dca.controller;
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.dca.service.DcaPlanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,6 +68,12 @@ public class DcaPlanController {
     @PostMapping("/api/dca-plans/{id}/resume")
     public ApiResponse<Void> resume(@PathVariable Long id) {
         dcaPlanService.setEnabled(id, true);
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/api/dca-plans/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        dcaPlanService.delete(id);
         return ApiResponse.ok(null);
     }
 

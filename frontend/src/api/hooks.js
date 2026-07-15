@@ -130,13 +130,14 @@ export function useActiveDcaPlan(fundId) {
         enabled: !!fundId,
     });
 }
+export function invalidateDcaPlanQueries(queryClient) {
+    queryClient.invalidateQueries({queryKey: ['dca-plans']});
+    queryClient.invalidateQueries({queryKey: ['dca-active']});
+    invalidateDcaBudgetSummary(queryClient);
+}
 const useInvalidateDcaPlans = () => {
     const qc = useQueryClient();
-    return () => {
-        qc.invalidateQueries({queryKey: ['dca-plans']});
-        qc.invalidateQueries({queryKey: ['dca-active']});
-        invalidateDcaBudgetSummary(qc);
-    };
+    return () => invalidateDcaPlanQueries(qc);
 };
 export function useCreateDcaPlan(fundId) {
     const onSuccess = useInvalidateDcaPlans(fundId);
@@ -155,6 +156,13 @@ export function useDcaPlanAction(fundId) {
         mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
         onSuccess,
     });
+}
+export function deleteDcaPlan(id) {
+    return del(`/api/dca-plans/${id}`);
+}
+export function useDeleteDcaPlan() {
+    const onSuccess = useInvalidateDcaPlans();
+    return useMutation({mutationFn: deleteDcaPlan, onSuccess});
 }
 
 export function useDcaBudgetSummary() {
