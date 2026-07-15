@@ -32,8 +32,7 @@ public class DcaPlanForecastService {
 
     @Transactional(readOnly = true)
     public BigDecimal currentMonthRemainingAmount() {
-        List<FundDcaPlanEntity> plans = fundDcaPlanRepository
-                .findByStatusAndEnabledTrue(DcaPlanStatus.EFFECTIVE);
+        List<FundDcaPlanEntity> plans = fundDcaPlanRepository.findAllWithFund();
         Map<Long, List<Instant>> datesByPlan = currentMonthExecutionDates(plans);
         return plans.stream()
                 .map(plan -> plan.getAmount().multiply(BigDecimal.valueOf(
