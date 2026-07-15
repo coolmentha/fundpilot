@@ -205,7 +205,7 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 
 **月度定投预算与仓位提醒（DCA Budget & Position Warning）**:
 `monthlyDcaBudget` 是用户可选的月度现金流提示线，不是余额、入金累计或买入额度。它按北京时间自然月比较所有未取消的
-`INVEST` 交易与当前有效计划的剩余实际执行日；未设置时仍展示已定投和未来计划，但不显示进度或超额。每只基金用
+`INVEST` 交易与当前有效计划尚未生成交易的本月实际执行日；未设置时仍展示已定投和本月剩余预计，但不显示进度或超额。每只基金用
 `positionWarningEnabled` 和 `positionWarningRatio`（默认开启、30%，范围 1% 到 100%）提示当前确认持仓市值占全部确认持仓市值的比例。
 预算和提醒只影响 View/UI，绝不能进入 INCREASE/TRANSFER_IN/INVEST、初始持仓、转换或净值确认路径。
 _Avoid_: 将预算当可用现金、将提醒线变成 `BusinessException`、用 PENDING 或未来计划计算当前仓位比例。

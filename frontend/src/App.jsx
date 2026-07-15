@@ -9,6 +9,7 @@ import ConfirmPage from './pages/ConfirmPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import MonitorPage from './pages/MonitorPage.jsx';
+import DcaManagementPage from './pages/DcaManagementPage.jsx';
 
 export default function App() {
     return (
@@ -18,6 +19,7 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage/>}/>
                 <Route path="/funds" element={<FundsPage/>}/>
                 <Route path="/funds/:fundId" element={<FundDetailPage/>}/>
+                <Route path="/dca" element={<DcaManagementPage/>}/>
                 <Route path="/signals" element={<SignalsPage/>}/>
                 <Route path="/confirm" element={<ConfirmPage/>}/>
                 <Route path="/settings" element={<SettingsPage/>}/>

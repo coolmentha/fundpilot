@@ -116,6 +116,13 @@ export function useDcaPlans(fundId) {
         enabled: !!fundId,
     });
 }
+export function useDcaManagementPlans() {
+    return useQuery({
+        queryKey: ['dca-plans', 'all'],
+        queryFn: () => get('/api/dca-plans'),
+        ...realtimeQueryOptions,
+    });
+}
 export function useActiveDcaPlan(fundId) {
     return useQuery({
         queryKey: ['dca-active', fundId],
@@ -123,11 +130,11 @@ export function useActiveDcaPlan(fundId) {
         enabled: !!fundId,
     });
 }
-const useInvalidateDcaPlans = (fundId) => {
+const useInvalidateDcaPlans = () => {
     const qc = useQueryClient();
     return () => {
-        qc.invalidateQueries({queryKey: ['dca-plans', fundId]});
-        qc.invalidateQueries({queryKey: ['dca-active', fundId]});
+        qc.invalidateQueries({queryKey: ['dca-plans']});
+        qc.invalidateQueries({queryKey: ['dca-active']});
         invalidateDcaBudgetSummary(qc);
     };
 };

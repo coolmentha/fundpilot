@@ -11,17 +11,9 @@ import {
 import {money, text, datetime} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
+import {dcaScheduleText} from '../dcaPlan.js';
 
 const {Text} = Typography;
-
-const WEEK_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-
-const scheduleText = (r) => {
-    if (r.frequency === 'DAILY') return '每个交易日';
-    if (r.frequency === 'WEEKLY') return WEEK_NAMES[r.dayOfWeek] || '-';
-    if (r.frequency === 'MONTHLY') return `每月${r.dayOfMonth}号`;
-    return '-';
-};
 
 /**
  * 基金详情 · 定投计划 tab。用户配置一次,系统在定投日 14:55 自动生成 INVEST 交易。
@@ -56,7 +48,7 @@ export default function FundDcaTab({fundId}) {
     const columns = [
         {title: '状态', dataIndex: 'status', width: 120, render: (v) => <StatusTag value={v}/>},
         {title: '频率', dataIndex: 'frequency', width: 100, render: (v) => text(v)},
-        {title: '定投日', key: 'schedule', width: 120, render: (_, r) => scheduleText(r)},
+        {title: '定投日', key: 'schedule', width: 120, render: (_, r) => dcaScheduleText(r)},
         {title: '金额', dataIndex: 'amount', width: 140, render: (v) => money(v)},
         {
             title: '启用', dataIndex: 'enabled', width: 80,
@@ -66,8 +58,7 @@ export default function FundDcaTab({fundId}) {
         {
             title: '操作', width: 240, render: (_, r) => (
                 <Space wrap size="small">
-                    {r.status !== 'EFFECTIVE' &&
-                        <Button size="small" onClick={() => { setEditing(r); setModalOpen(true); }}>编辑</Button>}
+                    <Button size="small" onClick={() => { setEditing(r); setModalOpen(true); }}>编辑</Button>
                     {r.status !== 'EFFECTIVE' &&
                         <Popconfirm title="激活此定投计划？" onConfirm={() => doAction(r.id, 'activate')}>
                             <Button size="small" type="primary">激活</Button>
@@ -94,7 +85,7 @@ export default function FundDcaTab({fundId}) {
                 <Card className="data-card" size="small" title="当前生效定投计划">
                     <Space wrap>
                         <StatusTag value={active.status}/>
-                        <Text>{text(active.frequency)} · {scheduleText(active)} · {money(active.amount)}</Text>
+                        <Text>{text(active.frequency)} · {dcaScheduleText(active)} · {money(active.amount)}</Text>
                     </Space>
                 </Card>
             )}

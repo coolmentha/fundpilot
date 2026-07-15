@@ -15,13 +15,18 @@ import java.util.Map;
 
 /**
  * 定投计划 Controller:CRUD + 状态机。
- * <p>6 个端点:list/create/update/activate/retire/active。逻辑下沉 Service,返回 View DTO。
+ * <p>提供按基金和全局计划列表、创建、更新与状态操作。逻辑下沉 Service,返回 View DTO。
  */
 @RestController
 @RequiredArgsConstructor
 public class DcaPlanController {
 
     private final DcaPlanService dcaPlanService;
+
+    @GetMapping("/api/dca-plans")
+    public ApiResponse<List<DcaPlanManagementView>> listAll() {
+        return ApiResponse.ok(dcaPlanService.listManagementView());
+    }
 
     @GetMapping("/api/funds/{fundId}/dca-plans")
     public ApiResponse<List<FundDcaPlanView>> listByFund(@PathVariable Long fundId) {
@@ -37,7 +42,7 @@ public class DcaPlanController {
 
     @PutMapping("/api/dca-plans/{id}")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody DcaPlanRequest request) {
-        dcaPlanService.updateDraft(id, request);
+        dcaPlanService.update(id, request);
         return ApiResponse.ok(null);
     }
 

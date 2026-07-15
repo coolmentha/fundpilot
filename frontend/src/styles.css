@@ -1134,6 +1134,79 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     gap: 0 16px;
 }
 
+/* ===== 定投管理 ===== */
+.dca-management-page {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.dca-plan-list {
+    min-width: 0;
+}
+
+.dca-plan-list .section-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.dca-plan-list .section-heading h2 {
+    margin: 0 0 2px;
+    font-size: 16px;
+    line-height: 1.4;
+}
+
+.dca-plan-fund,
+.dca-plan-detail,
+.dca-plan-remaining {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dca-plan-fund a,
+.dca-plan-detail span {
+    overflow-wrap: anywhere;
+}
+
+.dca-plan-fund .ant-typography,
+.dca-plan-detail .ant-typography,
+.dca-plan-remaining .ant-typography {
+    font-size: 12px;
+}
+
+.dca-plan-mobile-status {
+    display: none;
+}
+
+.dca-plan-remaining strong {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+}
+
+.dca-plan-dates {
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
+
+.dca-plan-row-inactive > td {
+    opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+    .dca-plan-list .ant-table-cell {
+        padding-inline: 6px !important;
+    }
+
+    .dca-plan-mobile-status {
+        display: inline;
+    }
+}
+
 @media (max-width: 640px) {
     .strategy-form-grid {
         grid-template-columns: minmax(0, 1fr);

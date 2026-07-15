@@ -39,13 +39,13 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
             </div>
             <div className="dca-budget-stats">
                 <div><span>已定投</span><strong>{money(progress.investedAmount)}</strong></div>
-                <div><span>未来计划</span><strong>{money(progress.futureAmount)}</strong></div>
-                <div><span>预计定投</span><strong>{money(progress.projectedAmount)}</strong></div>
+                <div><span>本月剩余预计</span><strong>{money(progress.futureAmount)}</strong></div>
+                <div><span>全月预计</span><strong>{money(progress.projectedAmount)}</strong></div>
             </div>
             {progress.hasBudget && (
                 <>
                     <div className="dca-budget-progress" role="progressbar"
-                         aria-label={`本月预计定投 ${money(progress.projectedAmount)}，预算 ${money(progress.monthlyBudget)}`}
+                         aria-label={`本月全月预计 ${money(progress.projectedAmount)}，预算 ${money(progress.monthlyBudget)}`}
                          aria-valuemin={0} aria-valuemax={progress.scale} aria-valuenow={progress.projectedAmount}
                          style={progressStyle}>
                         <span className="dca-budget-progress-invested" style={{width: `${progress.investedPercent}%`}}/>
@@ -54,7 +54,7 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
                     </div>
                     <div className="dca-budget-legend">
                         <span>已定投 {money(progress.investedAmount)}</span>
-                        <span>未来计划 {money(progress.futureAmount)}</span>
+                        <span>本月剩余预计 {money(progress.futureAmount)}</span>
                         <span className={progress.isOverBudget ? 'dca-budget-overage' : ''}>{budgetStatus}</span>
                     </div>
                 </>

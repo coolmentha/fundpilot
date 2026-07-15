@@ -54,12 +54,12 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void updateDraft_DRAFT_状态可改() {
+    void update_DRAFT_状态可改() {
         FundEntity fund = persistFund();
         Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
         dcaPlanService.retire(planId); // EFFECTIVE → DRAFT 才可改
 
-        dcaPlanService.updateDraft(planId, new DcaPlanRequest(
+        dcaPlanService.update(planId, new DcaPlanRequest(
                 false, new BigDecimal("2000"), DcaFrequency.MONTHLY, null, 15));
 
         FundDcaPlanEntity saved = fundDcaPlanRepository.findById(planId).orElseThrow();
@@ -72,12 +72,15 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void updateDraft_EFFECTIVE_状态抛_IllegalStateTransition() {
+    void update_EFFECTIVE_状态可直接修改且保持生效() {
         FundEntity fund = persistFund();
         Long planId = dcaPlanService.create(fund.getId(), weeklyRequest()); // 新建即 EFFECTIVE
 
-        assertThatThrownBy(() -> dcaPlanService.updateDraft(planId, weeklyRequest(new BigDecimal("2000"))))
-                .isInstanceOf(IllegalStateTransitionException.class);
+        dcaPlanService.update(planId, weeklyRequest(new BigDecimal("2000")));
+
+        FundDcaPlanEntity saved = fundDcaPlanRepository.findById(planId).orElseThrow();
+        assertThat(saved.getAmount()).isEqualByComparingTo("2000");
+        assertThat(saved.getStatus()).isEqualTo(DcaPlanStatus.EFFECTIVE);
     }
 
     @Test

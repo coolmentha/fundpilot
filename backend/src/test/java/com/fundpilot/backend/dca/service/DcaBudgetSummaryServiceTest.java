@@ -123,12 +123,15 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
     }
 
     private DcaBudgetSummaryService summaryAt(Instant now) {
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        DcaPlanForecastService forecastService = new DcaPlanForecastService(
+                fundDcaPlanRepository, fundTransactionRepository, dcaScheduleService, clock);
         return new DcaBudgetSummaryService(
                 userConfigService,
-                fundDcaPlanRepository,
                 fundTransactionRepository,
                 dcaScheduleService,
-                Clock.fixed(now, ZoneOffset.UTC));
+                forecastService,
+                clock);
     }
 
     private void saveBudget(String value) {
