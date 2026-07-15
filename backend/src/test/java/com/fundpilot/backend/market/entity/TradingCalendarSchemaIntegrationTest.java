@@ -78,6 +78,8 @@ class TradingCalendarSchemaIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Transactional
     void findMaxCalendarDate_返回当前最大日期() {
+        tradingCalendarRepository.deleteAll();
+        entityManager.flush();
         tradingCalendarRepository.insertTradingDayIfAbsent(Instant.parse("2026-07-08T00:00:00Z"));
         tradingCalendarRepository.insertTradingDayIfAbsent(Instant.parse("2026-07-10T00:00:00Z"));
 
