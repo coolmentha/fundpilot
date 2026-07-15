@@ -1,11 +1,14 @@
 package com.fundpilot.backend.market.client;
 
 import feign.Feign;
+import feign.Request;
 import feign.RequestInterceptor;
 import feign.Retryer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
 
 /**
  * ThsClient(同花顺)的 Feign 配置,作为东方财富的降级数据源(issue #7)。
@@ -25,7 +28,11 @@ public class ThsClientConfig {
 
     /** 默认不重试(让降级链控制)。 */
     public static Retryer retryer() {
-        return new Retryer.Default(100, 1000, 0);
+        return Retryer.NEVER_RETRY;
+    }
+
+    public static Request.Options options() {
+        return new Request.Options(Duration.ofSeconds(1), Duration.ofSeconds(3), true);
     }
 
     /**
@@ -38,7 +45,28 @@ public class ThsClientConfig {
         return Feign.builder()
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(ThsClient.class, baseUrl);
+    }
+
+    @Bean
+    public ThsFundInfoClient thsFundInfoClient(
+            @Value("${ths.fund-info-base-url:https://fund.10jqka.com.cn}") String baseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(ThsFundInfoClient.class, baseUrl);
+    }
+
+    @Bean
+    public ThsIndexClient thsIndexClient(
+            @Value("${ths.index-base-url:https://d.10jqka.com.cn}") String baseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(ThsIndexClient.class, baseUrl);
     }
 
     private ThsClientConfig() {

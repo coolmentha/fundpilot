@@ -1,19 +1,20 @@
 package com.fundpilot.backend.market.client;
 
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.Value;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 东方财富 JS 字面量响应解析器(基于 GraalVM JavaScript 引擎)。
+ * 东方财富 JS 字面量响应解析器。
  * <p>三个数据线的 JS 解析方法:{@link #parseNavHistory(String)},
  * {@link #parseFundDict(String)}, {@link #parseIndexKline(String)}。
- * 每个方法构建独立 {@link Context}(线程不安全,每次新开)。
+ * JS 变量只做受限结构提取，再交给 Jackson 解析，不执行远端脚本。
  */
 public final class EastmoneyJsParser {
 
@@ -28,32 +29,41 @@ public final class EastmoneyJsParser {
      * @return 按日期升序的净值快照列表;任一数组为空则返空列表
      */
     public static List<FundNavSnapshot> parseNavHistory(String rawJs) {
-        try (Context context = Context.create("js")) {
-            context.eval("js", rawJs);
-
-            Value netWorth = context.getBindings("js").getMember("Data_netWorthTrend");
-            Value acWorth = context.getBindings("js").getMember("Data_ACWorthTrend");
-
-            if (!netWorth.hasArrayElements() || !acWorth.hasArrayElements()) {
+        String netWorthJson = ScriptPayloadExtractor.assignedValue(rawJs, "Data_netWorthTrend");
+        String accumulatedJson = ScriptPayloadExtractor.assignedValue(rawJs, "Data_ACWorthTrend");
+        if (netWorthJson == null || accumulatedJson == null) {
+            return List.of();
+        }
+        try {
+            JsonNode netWorth = MAPPER.readTree(netWorthJson);
+            JsonNode accumulated = MAPPER.readTree(accumulatedJson);
+            if (!netWorth.isArray() || netWorth.isEmpty() || !accumulated.isArray()) {
                 return List.of();
             }
-            int size = (int) netWorth.getArraySize();
-            if (size == 0 || (int) acWorth.getArraySize() != size) {
-                return List.of();
+
+            Map<Long, BigDecimal> accumulatedByTimestamp = new HashMap<>();
+            for (JsonNode row : accumulated) {
+                if (row.isArray() && row.size() >= 2 && row.get(0).canConvertToLong() && row.get(1).isNumber()) {
+                    accumulatedByTimestamp.put(row.get(0).longValue(), row.get(1).decimalValue());
+                }
             }
 
-            List<FundNavSnapshot> result = new ArrayList<>(size);
-            for (int i = 0; i < size; i++) {
-                Value nw = netWorth.getArrayElement(i);
-                Value aw = acWorth.getArrayElement(i);
-
-                // netWorth 元素是对象 {x: 毫秒戳, y: 单位净值, ...};acWorth 元素是二元数组 [毫秒戳, 累计净值]
-                Instant date = Instant.ofEpochMilli(nw.getMember("x").asLong());
-                BigDecimal nav = BigDecimal.valueOf(nw.getMember("y").asDouble());
-                BigDecimal accumulatedNav = BigDecimal.valueOf(aw.getArrayElement(1).asDouble());
-                result.add(new FundNavSnapshot(date, nav, accumulatedNav));
+            List<FundNavSnapshot> result = new ArrayList<>(netWorth.size());
+            for (JsonNode row : netWorth) {
+                JsonNode timestampNode = row.path("x");
+                JsonNode navNode = row.path("y");
+                if (!timestampNode.canConvertToLong() || !navNode.isNumber()) {
+                    continue;
+                }
+                long timestamp = timestampNode.longValue();
+                BigDecimal accumulatedNav = accumulatedByTimestamp.get(timestamp);
+                if (accumulatedNav != null) {
+                    result.add(new FundNavSnapshot(Instant.ofEpochMilli(timestamp), navNode.decimalValue(), accumulatedNav));
+                }
             }
             return List.copyOf(result);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("基金净值 JS 解析失败", e);
         }
     }
 
@@ -66,31 +76,36 @@ public final class EastmoneyJsParser {
      * @return 全量基金条目列表
      */
     public static List<FundDictEntry> parseFundDict(String rawJs) {
-        try (Context context = Context.create("js")) {
-            context.eval("js", rawJs);
-            Value arr = context.getBindings("js").getMember("r");
-            if (!arr.hasArrayElements()) {
+        String json = ScriptPayloadExtractor.assignedValue(rawJs, "r");
+        if (json == null) {
+            return List.of();
+        }
+        try {
+            JsonNode rows = MAPPER.readTree(json);
+            if (!rows.isArray()) {
                 return List.of();
             }
-            int size = (int) arr.getArraySize();
-            List<FundDictEntry> result = new ArrayList<>(size);
-            for (int i = 0; i < size; i++) {
-                Value row = arr.getArrayElement(i);
+            List<FundDictEntry> result = new ArrayList<>(rows.size());
+            for (JsonNode row : rows) {
+                if (!row.isArray() || row.size() < 4) {
+                    continue;
+                }
                 result.add(new FundDictEntry(
-                        row.getArrayElement(0).asString(),
-                        row.getArrayElement(2).asString(),
-                        row.getArrayElement(3).asString()
+                        row.get(0).asText(),
+                        row.get(2).asText(),
+                        row.get(3).asText()
                 ));
             }
             return List.copyOf(result);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("基金字典 JS 解析失败", e);
         }
     }
 
     /**
      * 解析 push2his.eastmoney.com 指数 K 线 JSON 响应,提取 {@code data.klines} 中的 OHLCV 字符串数组,
      * 每行 CSV 格式 {@code yyyy-MM-dd,open,close,high,low,volume,...}。
-     * <p>用 Jackson 解析 JSON(响应是标准 JSON,Jackson 比 GraalVM JS 的 JSON.parse 对大响应更可靠),
-     * 仅净值/字典两条线因是 JS 字面量才用 GraalVM。
+     * <p>用 Jackson 解析 JSON；净值/字典的变量赋值响应同样先做结构提取再交 Jackson。
      *
      * @param rawJson push2his 响应文本(JSON)
      * @return 按日期升序的 K 线柱线集合
@@ -396,11 +411,4 @@ public final class EastmoneyJsParser {
 
     private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    /**
-     * 把 Java 字符串转成 JS 字符串字面量(转义反斜杠和引号),供 {@code JSON.parse(...)} 调用。
-     */
-    private static String jsStringLiteral(String s) {
-        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r") + "\"";
-    }
 }

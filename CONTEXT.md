@@ -104,9 +104,9 @@ _Avoid_: 并行推进（B 选项，集成返工风险）；分层交付（C 选�
 ## 行情数据源
 
 **行情源（MarketData Source）**:
-东方财富/天天基金公开接口。本期就接入真实实现，不走半自动灌入。三条数据线：基金净值历史（`pingzhongdata.js` 的
+东方财富/天天基金为主源，同花顺为真实降级源；指数 K 线优先中证指数公司。本期接入真实实现，不走半自动灌入。三条数据线：基金净值历史（`pingzhongdata.js` 的
 `Data_netWorthTrend` / `Data_ACWorthTrend`）、基金字典（`fundcode_search.js` 全量约 2 万条）、指数 K 线（
-`push2his.eastmoney.com`，用于量能指标）。
+`push2his.eastmoney.com`，用于量能指标）。东方财富变量赋值响应只做受限结构提取后交 Jackson，不执行远端 JS；净值/字典空结果继续降级到同花顺。全部手工 Feign client 使用 1s 连接、3s 读取超时，不自动重试；东方财富限流最多等待 1s。
 _Avoid_: "本期半自动灌入"的旧定位（已升级为真实接入）
 
 **基金子类型（fundSubType）**:
@@ -152,12 +152,12 @@ _Avoid_: 本期引入 Redis（增加基础设施复杂度）
 _Avoid_: 汇总用户自选指数（成分重叠且口径随配置变化）；任一市场缺失时仍发布部分合计；把平盘加入红绿两段比例
 
 **盘中估值（Intraday Estimate）**:
-三态今日涨跌「盘中/待公布态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。交易时段后台每 30 秒刷新全部未软删基金（含观察池）的内存缓存；应用启动完成后还会异步预热一次，保证盘后重启仍能取得当日最后估值。请求链只读缓存，不落库——估值是短时态数据，当日实际净值落库后失效。gszzl 基于单位净值，但涨跌幅是比例，同日不除权时与累计净值涨跌幅一致，直接用作估算涨跌幅无口径问题。估值只接受 `gztime` 属于北京时间当天的本次成功响应；拉取异常、空响应、解析为空或旧日期时立即删除同进程旧估值并标记失败，前端明确显示「估值拉取失败」，不得回退旧缓存、前一交易日估值或 T-1 对 T-2。
+三态今日涨跌「盘中/待公布态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。交易时段后台每 30 秒刷新全部未软删基金（含观察池）的内存缓存；应用启动完成后还会异步预热一次。请求链只读缓存，不落库。估值状态为 `NOT_ATTEMPTED/AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`：只有 TIMEOUT/PARSE_ERROR 显示「估值拉取失败」，空响应、旧日期、货币基金和 REIT 显示中性「暂无估值」。任何非 AVAILABLE 状态都删除旧估值，不得回退旧缓存、前一交易日估值或 T-1 对 T-2。
 _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值是短时态）；用 gsz 算绝对盈亏（单位净值口径，分红基金失真，用市值×涨跌幅比例规避）
 
 **当晚净值确认（Daily Nav Confirm）**:
-让三态今日涨跌「盘后实际值」生效的机制。场外基金当日净值收盘后约 20:00 才公布（14:50 定时任务拉到的是 T-1 昨日净值）。每晚 20:00-23:00 每分钟轮询所有基金，查 fund_nav_history 最近 navDate ≠ 今天（未确认）→ fundgz 判 jzrq 是否 = 今天（轻量判定已公布）→ 是则调 pingzhongdata 拿累计净值落库。已确认跳过（天然停止条件，全部确认后空跑）。用 fundgz 判定 + pingzhongdata 落库双接口，保证落累计净值而非单位净值。
-_Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值失真）；已确认基金重复拉取（浪费请求）
+让三态今日涨跌「盘后实际值」生效的机制。每晚 20:00-23:00 每 5 分钟轮询普通基金，事务外拉取净值历史，筛选 `remote navDate > local latest`，再在短事务内重新校验并幂等落库。不得依赖 fundgz.jzrq，也不要求新净值日期等于今天，因此 FOF/QDII 的滞后公布日期可以按真实 navDate 入库。货币基金和 REIT 本期不走普通净值模型。
+_Avoid_: 用 fundgz 作为净值发布门卫；把外部请求放在数据库事务内；只接受 navDate=今天而漏掉滞后基金
 
 **K 线图（Kline Chart）**:
 行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(MarketDataFetchService 每日算 VolumeState 时顺便落库,零额外请求)渲染日 K,
@@ -170,7 +170,7 @@ _Avoid_: 用 fundgz 的 dwjz（单位净值）落库（分红基金累计净值�
 借鉴 akshare `stock_zh_index_hist_csindex`,指数日 K 主源改为中证指数公司官方接口
 `www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=...&endDate=...`(返回 OHLCV JSON,不封 IP、不要求 Referer)。
 `CsindexMarketDataSource` 置于 `MarketDataSourceChain` 链首 [csindex, eastmoney, ths]:CSI 主题指数(930xxx,如 930713 中证人工智能)
-与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。
+与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。csindex 或 eastmoney 失败/空结果后由同花顺 `d.10jqka.com.cn/v6/line/.../last.js` 兜底最近日线。
 csindex 仅提供日 K,周/月 K 在源内聚合(`CsindexJsParser.aggregate`,语义同 KlineService)。secid "2.930713"/"1.000300" 剥前缀取裸代码调 csindex。
 深交所指数(399xxx)csindex 返空 data → 抛异常让链回退 eastmoney。csindex 不支持基金净值/字典,抛 `UnsupportedOperationException`,
 `MarketDataSourceChain.tryEach` 对该异常静默跳过(不污染日志),直接回退 eastmoney。详见 ADR-0017。

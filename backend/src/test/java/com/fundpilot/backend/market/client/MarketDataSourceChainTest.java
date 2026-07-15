@@ -20,6 +20,7 @@ class MarketDataSourceChainTest {
     static class StubSource implements MarketDataSource {
         String name;
         boolean fail;
+        boolean empty;
         String receivedKlt;
         String receivedLmt;
 
@@ -48,6 +49,7 @@ class MarketDataSourceChainTest {
             receivedKlt = klt;
             receivedLmt = lmt;
             if (fail) throw new RuntimeException(name + " 失败");
+            if (empty) return new IndexKline(List.of());
             return new IndexKline(List.of(new IndexKline.Bar(
                     Instant.parse("2026-01-01T00:00:00Z"),
                     java.math.BigDecimal.ONE, java.math.BigDecimal.TEN,
@@ -96,5 +98,18 @@ class MarketDataSourceChainTest {
         chain.fetchIndexKlineWithPeriod("2.930713", "103", "400");
 
         assertThat(source.receivedKlt).isEqualTo("103");
+    }
+
+    @Test
+    void fetchIndexKlineWithPeriod_首个_source_返回空结果时_降级到下一个() {
+        StubSource emptySource = new StubSource("empty", false);
+        emptySource.empty = true;
+        StubSource okSource = new StubSource("ok", false);
+        MarketDataSourceChain chain = new MarketDataSourceChain(List.of(emptySource, okSource));
+
+        IndexKline result = chain.fetchIndexKlineWithPeriod("1.000300", "101", "400");
+
+        assertThat(result.bars()).hasSize(1);
+        assertThat(okSource.receivedKlt).isEqualTo("101");
     }
 }

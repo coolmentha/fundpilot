@@ -1,6 +1,10 @@
 spring:
   application:
     name: fundpilot-backend
+  task:
+    scheduling:
+      pool:
+        size: 2
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/fundpilot}
     username: ${DB_USERNAME:fundpilot}

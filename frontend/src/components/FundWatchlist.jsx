@@ -3,7 +3,7 @@ import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link, useNavigate} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
 import {signedMoney, signedPercent, compactMoney, pnlColor, text} from '../constants.js';
-import {buildFundWatchlistRows} from '../querySafety.js';
+import {buildFundWatchlistRows, estimateStatusText} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -60,7 +60,8 @@ export default function FundWatchlist() {
             sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
             defaultSortOrder: 'descend',
             render: (v, r) => {
-                if (r.estimateFetchFailed) return <span className="estimate-failure">估值拉取失败</span>;
+                const statusText = estimateStatusText(r.estimateStatus);
+                if (statusText) return <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{statusText}</span>;
                 if (v === null || v === undefined) return <span className="muted">-</span>;
                 const color = pnlColor(v);
                 const isUp = Number(v) > 0;
@@ -91,8 +92,8 @@ export default function FundWatchlist() {
             width: 132,
             align: 'right',
             responsive: ['sm'],
-            render: (v, r) => r.estimateFetchFailed
-                ? <span className="estimate-failure">估值拉取失败</span>
+            render: (v, r) => estimateStatusText(r.estimateStatus)
+                ? <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(r.estimateStatus)}</span>
                 : v !== null && v !== undefined
                     ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
                     : <span className="muted">-</span>,

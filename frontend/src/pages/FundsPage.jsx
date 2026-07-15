@@ -7,6 +7,7 @@ import {Link} from 'react-router-dom';
 import {useArchiveFund, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
 import {fundCategoryOptions, labels, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
+import {estimateStatusText} from '../querySafety.js';
 
 const {Title} = Typography;
 
@@ -116,8 +117,8 @@ export default function FundsPage() {
             render: (v) => `${(Number(v ?? 0.3) * 100).toFixed(0)}%`},
         {
             title: '今日涨跌/盈亏', width: 126, align: 'right',
-            render: (_, r) => r.estimateFetchFailed ? (
-                <span className="estimate-failure">估值拉取失败</span>
+            render: (_, r) => estimateStatusText(r.estimateStatus) ? (
+                <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(r.estimateStatus)}</span>
             ) : (
                 <div className="pnl-cell">
                     <div style={{color: pnlColor(r.dailyChangePct)}}>

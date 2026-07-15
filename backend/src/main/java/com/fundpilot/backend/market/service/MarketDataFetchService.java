@@ -73,10 +73,7 @@ public class MarketDataFetchService {
                 continue;
             }
             try {
-                requiresNewTransactionExecutor.execute(() -> {
-                    fetchOne(fundId);
-                    return null;
-                });
+                fetchOne(fundId);
                 success++;
             } catch (RuntimeException ex) {
                 failure++;
@@ -97,12 +94,11 @@ public class MarketDataFetchService {
 
     /**
      * 拉取单只基金的历史净值落库(issue #37):供 {@code FundService.create} 建基金后自动拉取。
-     * <p>由独立入口直接调用时开启事务；批处理路径通过
-     * {@link RequiresNewTransactionExecutor} 为每只基金建立独立事务。
+     * <p>外部拉取与指标计算在事务外；最终净值、K 线和 snapshot 通过
+     * {@link RequiresNewTransactionExecutor} 在单基金短事务内落库。
      *
      * @param fundId 基金 id
      */
-    @org.springframework.transaction.annotation.Transactional
     public void fetchOneFund(Long fundId) {
         fetchOne(fundId);
     }
@@ -110,6 +106,10 @@ public class MarketDataFetchService {
     private void fetchOne(Long fundId) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+        if (!FundMarketDataCapability.supportsStandardNav(fund)) {
+            log.debug("fund_id={} 当前产品不支持普通净值模型,跳过行情指标拉取", fundId);
+            return;
+        }
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());
 
         List<FundNavSnapshot> navHistory = marketDataSource.fetchNavHistory(fund.getFundCode());
@@ -119,8 +119,6 @@ public class MarketDataFetchService {
         List<BigDecimal> accumulatedNav = navHistory.stream()
                 .map(FundNavSnapshot::accumulatedNav)
                 .toList();
-
-        upsertNavHistory(fund, navHistory);
 
         MarketIndicatorSnapshotEntity template = new MarketIndicatorSnapshotEntity();
         template.setFundEntity(fund);
@@ -145,33 +143,41 @@ public class MarketDataFetchService {
         com.fundpilot.backend.fund.service.support.WeeklyDropCalculator.calculate(accumulatedNav)
                 .ifPresent(template::setWeeklyDropPercent);
 
-        if (fund.getBenchmarkIndexCode() != null && !fund.getBenchmarkIndexCode().isBlank()) {
+        IndexKline indexKline = null;
+        String indexCode = fund.getBenchmarkIndexCode();
+        if (indexCode != null && !indexCode.isBlank()) {
             try {
                 // benchmarkIndexCode 是 "000300.SH" 人类可读格式,转 secid "1.000300" 调东方财富接口
-                String secid = SecidFormat.fromIndexCode(fund.getBenchmarkIndexCode())
-                        .orElse(fund.getBenchmarkIndexCode());
-                IndexKline kline = marketDataSource.fetchIndexKline(secid, INDEX_KLINE_RANGE);
-                VolumeStateCalculator.calculate(kline).ifPresent(template::setVolumeState);
-                // 顺便把已拉的日 K 落 index_kline 缓存(零额外请求),供 KlineService 渲染日/周/月 K,
-                // 避免图表按需拉 push2his 触发 IP 限流。按 index_code+trade_date 去重只插缺失。
-                upsertIndexKline(fund.getBenchmarkIndexCode(), kline);
+                String secid = SecidFormat.fromIndexCode(indexCode).orElse(indexCode);
+                indexKline = marketDataSource.fetchIndexKline(secid, INDEX_KLINE_RANGE);
+                VolumeStateCalculator.calculate(indexKline).ifPresent(template::setVolumeState);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());
             }
         }
-
-        snapshotService.upsert(template);
+        IndexKline fetchedIndexKline = indexKline;
+        requiresNewTransactionExecutor.execute(() -> {
+            FundEntity managedFund = fundRepository.findById(fundId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+            template.setFundEntity(managedFund);
+            upsertNavHistory(managedFund, navHistory);
+            if (fetchedIndexKline != null) {
+                upsertIndexKline(indexCode, fetchedIndexKline);
+            }
+            snapshotService.upsert(template);
+            return null;
+        });
     }
 
     /**
      * 净值历史落库(issue #23):把 pingzhongdata 拉到的净值序列增量写入 fund_nav_history。
-     * <p>按 fundId+navDate 去重——查已落库的 navDate 集合,只插不存在的,避免违反
-     * uq_fund_nav_history_daily 部分唯一索引。首次全量落库,后续每日增量补最新一期。
+     * <p>按本地最新 navDate 增量写入，避免每日读取全量历史日期集合。
      */
     private void upsertNavHistory(FundEntity fund, List<FundNavSnapshot> navHistory) {
-        Set<Instant> existing = new HashSet<>(fundNavHistoryRepository.findNavDatesByFundEntity_Id(fund.getId()));
+        Instant latest = fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(fund.getId())
+                .map(FundNavHistoryEntity::getNavDate).orElse(Instant.MIN);
         List<FundNavHistoryEntity> toInsert = navHistory.stream()
-                .filter(s -> !existing.contains(s.navDate()))
+                .filter(s -> s.navDate() != null && s.navDate().isAfter(latest))
                 .map(s -> {
                     FundNavHistoryEntity entity = new FundNavHistoryEntity();
                     entity.setFundEntity(fund);

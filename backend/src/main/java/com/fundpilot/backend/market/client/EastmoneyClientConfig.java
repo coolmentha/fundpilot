@@ -10,8 +10,10 @@ import feign.Feign;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import com.fundpilot.backend.market.service.MarketDataMetrics;
 
 import java.io.IOException;
+import java.time.Duration;
 
 /**
  * EastmoneyClient 的 Feign 配置:速率限流 + Referer/UA 请求头拦截器。
@@ -26,6 +28,7 @@ public class EastmoneyClientConfig {
 
     /** 东方财富 IP 限速约每秒 2-3 次,统一取 2 次/秒(全客户端共享一个桶)。 */
     private static final long PERMITS_PER_SECOND = 2;
+    private static final Duration RATE_LIMIT_MAX_WAIT = Duration.ofSeconds(1);
     /** 共享速率限流器,全客户端单例。 */
     private static final RateLimiter SHARED_LIMITER = RateLimiter.perSecond(PERMITS_PER_SECOND);
 
@@ -43,7 +46,11 @@ public class EastmoneyClientConfig {
 
     /** 默认不重试(让调用方控制降级策略)。 */
     public static Retryer retryer() {
-        return new Retryer.Default(100, 1000, 0);
+        return Retryer.NEVER_RETRY;
+    }
+
+    public static Request.Options options() {
+        return new Request.Options(Duration.ofSeconds(1), Duration.ofSeconds(3), true);
     }
 
     /**
@@ -58,6 +65,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(EastmoneyClient.class, baseUrl);
     }
 
@@ -72,6 +80,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(EastmoneyKlineClient.class, klineBaseUrl);
     }
 
@@ -86,6 +95,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(EastmoneyFundGzClient.class, gzBaseUrl);
     }
 
@@ -101,6 +111,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(EastmoneyPush2Client.class, push2BaseUrl);
     }
 
@@ -115,6 +126,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(EastmoneyFundFeeClient.class, fundf10BaseUrl);
     }
 
@@ -130,6 +142,7 @@ public class EastmoneyClientConfig {
         return Feign.builder()
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(CsindexClient.class, csindexBaseUrl);
     }
 
@@ -145,6 +158,7 @@ public class EastmoneyClientConfig {
                 .client(new RateLimitedClient(SHARED_LIMITER))
                 .requestInterceptor(requestInterceptor())
                 .retryer(retryer())
+                .options(options())
                 .target(SinaTradingCalendarClient.class, sinaBaseUrl);
     }
 
@@ -163,8 +177,9 @@ public class EastmoneyClientConfig {
     @Bean
     public MarketDataSource marketDataSource(CsindexMarketDataSource csindex,
                                              EastmoneyMarketDataSource eastmoney,
-                                             ThsClient thsClient) {
-        return new MarketDataSourceChain(java.util.List.of(csindex, eastmoney, thsClient));
+                                             ThsMarketDataSource ths,
+                                             MarketDataMetrics metrics) {
+        return new MarketDataSourceChain(java.util.List.of(csindex, eastmoney, ths), metrics);
     }
 
     private EastmoneyClientConfig() {
@@ -184,7 +199,9 @@ public class EastmoneyClientConfig {
 
         @Override
         public Response execute(Request request, Request.Options options) throws IOException {
-            rateLimiter.acquire();
+            if (!rateLimiter.acquire(RATE_LIMIT_MAX_WAIT)) {
+                throw new IOException("东方财富限流等待超过 1 秒");
+            }
             return delegate.execute(request, options);
         }
     }

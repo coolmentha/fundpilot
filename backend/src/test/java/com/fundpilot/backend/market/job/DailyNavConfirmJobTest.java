@@ -15,5 +15,6 @@ class DailyNavConfirmJobTest {
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
 
         assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");
+        assertThat(scheduled.cron()).isEqualTo("0 */5 20-22 * * MON-FRI");
     }
 }

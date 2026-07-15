@@ -47,4 +47,14 @@ public final class RateLimiter {
             throw new IllegalStateException("限流等待被中断", e);
         }
     }
+
+    /** 在最大等待时间内消费令牌，超时返回 false。 */
+    public boolean acquire(Duration maxWait) {
+        try {
+            return bucket.asBlocking().tryConsume(1, maxWait);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("限流等待被中断", e);
+        }
+    }
 }

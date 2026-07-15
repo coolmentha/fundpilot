@@ -121,6 +121,22 @@ After implementation:
 - [ ] Checked that derived state points back to the source event identifier
       (`seq`, `id`, `version`) instead of inventing a second cursor
 
+### External Data Source Status Checklist
+
+When an external source feeds a backend cache and user-visible state:
+
+- [ ] Define separate states for not attempted, empty/unsupported, stale, timeout,
+      parse error, and available data; do not collapse them into one failure boolean
+- [ ] Verify empty collections and empty payload objects continue the source chain
+      instead of being treated as successful terminal results
+- [ ] Keep transport/parse classification in the backend and pass a stable enum to
+      the UI; the UI must not infer failure only from a missing value
+- [ ] Check unsupported product types before entering a generic source protocol
+- [ ] Put external waits outside database transactions and recheck idempotency facts
+      inside the final short write transaction
+- [ ] Add one live smoke for every real fallback protocol, plus deterministic parser
+      and source-chain tests for CI
+
 ---
 
 ## Cross-Platform Template Consistency

@@ -129,7 +129,7 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- GraalVM JS 引擎:解析东方财富 JS 字面量响应(用户决定偏离 issue「避免重度依赖」原文) -->
+        <!-- GraalVM JS 引擎:仅用于新浪 KLC 交易日历解码。东方财富/同花顺响应不得执行远端 JS。 -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>js-community</artifactId>
@@ -143,7 +143,7 @@
             <version>5.4.0</version>
             <scope>test</scope>
         </dependency>
-        <!-- GraalVM Polyglot API:js-community 传递依赖 scope=runtime,编译不可见,显式引 compile -->
+        <!-- 新浪交易日历解析器编译期使用 Polyglot API。 -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>polyglot</artifactId>

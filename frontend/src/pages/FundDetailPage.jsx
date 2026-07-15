@@ -10,6 +10,7 @@ import MarketTab from './FundMarketTab.jsx';
 import FundTransactionTab from './FundTransactionTab.jsx';
 import FundDcaTab from './FundDcaTab.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
+import {estimateStatusText} from '../querySafety.js';
 
 const {Title, Text} = Typography;
 
@@ -53,8 +54,8 @@ export default function FundDetailPage() {
                     </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日涨跌">
-                    {fund.estimateFetchFailed
-                        ? <span className="estimate-failure">估值拉取失败</span>
+                    {estimateStatusText(fund.estimateStatus)
+                        ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
                         : <span style={{color: pnlColor(fund.dailyChangePct)}}>
                             {signedPercent(fund.dailyChangePct)}
                             {fund.isEstimated && <span className="estimate-tag">估</span>}
@@ -66,8 +67,8 @@ export default function FundDetailPage() {
                     </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="今日盈亏">
-                    {fund.estimateFetchFailed
-                        ? <span className="estimate-failure">估值拉取失败</span>
+                    {estimateStatusText(fund.estimateStatus)
+                        ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
                         : <span style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</span>}
                 </Descriptions.Item>
                 <Descriptions.Item label="总盈亏">

@@ -33,6 +33,8 @@ public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
+public EstimateStatus getEstimateStatus(String code);
+public Map<String, EstimateStatus> getEstimateStatuses(List<String> codes);
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
 @Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
@@ -44,6 +46,9 @@ public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市�
 @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
 public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 ```
+
+`FundView` 新增 `estimateStatus: NOT_ATTEMPTED|AVAILABLE|UNAVAILABLE|STALE|TIMEOUT|PARSE_ERROR`；
+兼容字段 `estimateFetchFailed` 仅在 `TIMEOUT/PARSE_ERROR` 时为 true。
 
 ---
 
@@ -60,6 +65,18 @@ public void refreshRealtime();  // 内部 isTradingHours() 二次过滤
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
 N 个前端客户端共享同一份缓存。
+
+调度线程池固定 `spring.task.scheduling.pool.size=2`。`MarketRealtimeRefreshJob` 用 `AtomicBoolean`
+禁止同一任务重入；上一轮未完成时跳过本轮，不排队堆积。
+
+### 外部调用预算与降级链
+
+- 手工 Feign client 统一 `connectTimeout=1s/readTimeout=3s`，`Retryer.NEVER_RETRY`。
+- 东方财富共享限流器单次最多等待 1 秒；超时进入下一个数据源。
+- 净值/字典：东方财富 -> 同花顺；指数 K 线：中证指数公司 -> 东方财富 -> 同花顺。
+- `null`、空 Collection、空 `IndexKline.bars` 均记为 `empty` 并继续降级；`UnsupportedOperationException` 记为 `unsupported`。
+- 同花顺净值需要单位/累计两次请求并按日期关联；字典使用 `fund.10jqka.com.cn/data/Net/info/...`；K 线使用 `d.10jqka.com.cn/v6/line/.../last.js`。
+- 外部请求必须在数据库事务外；只把最终增量落库放进短事务。
 
 ### 东方财富字段缩放契约
 
@@ -94,9 +111,10 @@ N 个前端客户端共享同一份缓存。
 
 - `refreshFundEstimates()` 遍历 `FundRepository.findAll()`，覆盖全部未软删基金。
 - `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
-- 单只基金拉取失败不能中断其他基金，但必须删除该基金旧估值并标记失败。
-- 只接受 `estimateTime` 属于北京时间当天的快照；旧日期、空时间或无法解析的时间都按失败处理。
-- 后续本次成功拉到当天估值时覆盖缓存并清除失败状态。
+- 单只基金结果必须区分 `AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`，不能把空响应和超时压成同一布尔值。
+- 只接受 `estimateTime` 属于北京时间当天的快照；旧日期为 `STALE`，空响应/产品不提供为 `UNAVAILABLE`，时间格式损坏为 `PARSE_ERROR`。
+- 货币基金和 REIT 本期不进入普通估值/净值源，状态为 `UNAVAILABLE`，前端显示中性“暂无估值”。
+- 后续本次成功拉到当天估值时覆盖缓存并置为 `AVAILABLE`。
 - 同步 `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
 - 独立的 `@Async ApplicationReadyEvent` 必须调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 今日净值未落库且估值缓存缺失时，今日涨跌返回未知；禁止用 T-1 对 T-2 冒充今日值。
@@ -114,9 +132,11 @@ N 个前端客户端共享同一份缓存。
 | 条件 | 行为 |
 |------|------|
 | 指数/市场宽度/板块/资金接口超时或失败 | 保留对应旧缓存 + 记 warn(不抛异常) |
-| 单只基金估值拉取异常/空响应/解析为空 | 删除该基金旧估值,标记 `estimateFetchFailed`,不影响其他基金 |
-| 单只基金 `estimateTime` 非北京时间当天 | 删除该基金旧估值,标记 `estimateFetchFailed` |
-| 失败后重新拉到当天有效估值 | 覆盖估值缓存并清除 `estimateFetchFailed` |
+| 单只基金估值空响应/产品不支持 | 删除旧估值，`estimateStatus=UNAVAILABLE`，不标记失败 |
+| 单只基金 `estimateTime` 非北京时间当天 | 删除旧估值，`estimateStatus=STALE`，不标记失败 |
+| 单只基金连接/读取超时 | 删除旧估值，`estimateStatus=TIMEOUT`，`estimateFetchFailed=true` |
+| 单只基金响应结构损坏 | 删除旧估值，`estimateStatus=PARSE_ERROR`，`estimateFetchFailed=true` |
+| 后续重新拉到当天有效估值 | 覆盖缓存，`estimateStatus=AVAILABLE`，清除失败状态 |
 | 指数/市场宽度/板块/资金缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
 | 基金估值尚未完成首次尝试 | 今日估值未知,不提前声称拉取失败 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
@@ -131,6 +151,8 @@ N 个前端客户端共享同一份缓存。
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
 | 应用启动 | 同步预热指数/板块/资金；基金估值在后台异步预热，不阻塞健康检查 |
+| 晚间净值远端日期晚于本地最新日期 | 不要求等于今天，在短事务内增量落库 |
+| FOF/QDII 新净值仍滞后今天 | 按真实 navDate 落库，不受 fundgz 状态阻断 |
 
 ---
 
@@ -141,9 +163,13 @@ N 个前端客户端共享同一份缓存。
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
 - **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
+- **Good**:货币基金/REIT 不调用普通估值源，页面中性显示“暂无估值”
+- **Good**:东方财富净值空结果后，同花顺单位/累计净值按日期关联成功返回
 - **Good**:14:50 第三批快照完成后才读取快照生成信号
 - **Base**:估值接口暂时失败且缓存为空,今日涨跌显示未知而不是昨日值
 - **Bad**:fundgz 返回昨日 `gztime`,仍继续作为今日估值使用
+- **Bad**:数据源返回空集合时直接结束降级链，导致真实备用源永远不执行
+- **Bad**:用 fundgz.jzrq 必须等于今天作为净值入库门卫，导致 QDII/FOF 漏更新
 - **Bad**:估值缓存已失效,收益服务仍用上一期已公布净值计算当前持仓市值/总盈亏
 - **Bad**:今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
@@ -159,8 +185,12 @@ N 个前端客户端共享同一份缓存。
 - `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
 - 缓存层降级测试:指数/市场宽度等仍验证旧缓存保留；基金估值必须单独验证成功后空响应、异常、旧日期都会删除旧值。
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
-- `MarketRealtimeCacheTest`:断言持仓与观察池基金都调用 `fetchEstimate`；同步启动事件不查询基金列表；异步启动事件带 `@Async` 并填充估值缓存。
-- `MarketRealtimeCacheTest`:固定 `Clock`,断言估值失败立即删除旧缓存并标记失败,旧日期拒收,后续成功清除失败状态。
+- `MarketRealtimeCacheTest`:断言持仓与观察池普通基金都调用 `fetchEstimateResult`；货币基金/REIT 不调用并置 `UNAVAILABLE`。
+- `MarketRealtimeCacheTest`:固定 `Clock`,断言超时/解析错误为失败，空响应/旧日期为中性状态，后续成功恢复 `AVAILABLE`。
+- `ThsJsParserTest` / `ThsMarketDataSourceIntegrationTest`:断言净值双请求日期关联、字典 JSONP、K 线 callback、指数代码映射。
+- `MarketDataSourceChainTest`:断言空 Collection/空 K 线继续降级，全失败抛 `MARKET_DATA_ALL_SOURCES_FAILED`。
+- `ExternalClientConfigTest`:断言 connect=1s/read=3s；`RateLimiterTest` 断言最大等待预算。
+- `DailyNavConfirmServiceTest`:断言不依赖 fundgz，FOF/QDII 滞后日期仍可增量入库。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
 - `FundPnlServiceTest`:断言估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
@@ -228,14 +258,12 @@ fundEstimateService.fetchEstimate(code)
 ### Correct:基金估值按本轮结果替换并校验自然日
 
 ```java
-FundEstimateSnapshot snapshot = fundEstimateService.fetchEstimate(code).orElse(null);
-if (isEstimateForToday(snapshot)) {
-    estimateCache.put(code, snapshot);
-    estimateFetchFailures.remove(code);
-} else {
-    estimateCache.remove(code);
-    estimateFetchFailures.add(code);
+FundEstimateResult result = fundEstimateService.fetchEstimateResult(code);
+EstimateStatus status = classifyFreshness(result);
+if (status == EstimateStatus.AVAILABLE) {
+    estimateCache.put(code, result.snapshot());
 }
+estimateStatuses.put(code, status);
 ```
 
 ### Wrong:按自选指数汇总市场宽度

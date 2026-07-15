@@ -2,6 +2,8 @@ package com.fundpilot.backend.market.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -29,5 +31,17 @@ class RateLimiterTest {
 
         // 第 3 次无令牌,被节流(非阻塞返 false,不等下一个令牌)
         assertThat(limiter.tryAcquire()).isFalse();
+    }
+
+    @Test
+    void acquire_令牌耗尽后在预算内返回_false() {
+        RateLimiter limiter = RateLimiter.perSecond(1);
+        assertThat(limiter.tryAcquire()).isTrue();
+
+        long startedAt = System.nanoTime();
+        boolean acquired = limiter.acquire(Duration.ofMillis(30));
+
+        assertThat(acquired).isFalse();
+        assertThat(Duration.ofNanos(System.nanoTime() - startedAt)).isLessThan(Duration.ofMillis(500));
     }
 }

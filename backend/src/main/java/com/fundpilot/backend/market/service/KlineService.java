@@ -17,7 +17,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
@@ -60,7 +59,6 @@ public class KlineService {
     private final IndexKlineRepository indexKlineRepository;
     private final MarketDataSource marketDataSource;
 
-    @Transactional(readOnly = true)
     public KlineView getKline(Long fundId, String period) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + fundId));

@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {buildFundWatchlistRows, isQueryDataReady} from './querySafety.js';
+import {buildFundWatchlistRows, estimateStatusText, isQueryDataReady} from './querySafety.js';
 
 describe('query safety guards', () => {
     it('requires successfully loaded query data before enabling destructive actions', () => {
@@ -29,5 +29,20 @@ describe('query safety guards', () => {
         expect(row.isEstimated).toBe(false);
         expect(row.estimateFetchFailed).toBe(true);
         expect(row.estimateTime).toBeUndefined();
+    });
+
+    it('keeps unsupported estimates neutral instead of reporting a fetch failure', () => {
+        const [row] = buildFundWatchlistRows([{
+            id: 1,
+            fundCode: '000009',
+            fundName: '测试货币基金',
+            estimateStatus: 'UNAVAILABLE',
+            estimateFetchFailed: false,
+        }], {}, {estimatesFetched: true, estimatesError: false});
+
+        expect(row.changePct).toBeNull();
+        expect(row.estimateFetchFailed).toBe(false);
+        expect(row.estimateStatus).toBe('UNAVAILABLE');
+        expect(estimateStatusText(row.estimateStatus)).toBe('暂无估值');
     });
 });

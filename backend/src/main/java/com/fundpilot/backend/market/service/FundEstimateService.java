@@ -24,21 +24,40 @@ public class FundEstimateService {
     private static final Logger log = LoggerFactory.getLogger(FundEstimateService.class);
 
     private final EastmoneyFundGzClient eastmoneyFundGzClient;
+    private final MarketDataMetrics metrics;
 
     /**
      * @param fundCode 基金代码
      * @return 盘中估值快照(含估算涨跌幅);拉取失败或解析失败返 empty
      */
     public Optional<FundEstimateSnapshot> fetchEstimate(String fundCode) {
+        return Optional.ofNullable(fetchEstimateResult(fundCode).snapshot());
+    }
+
+    public FundEstimateResult fetchEstimateResult(String fundCode) {
+        long startedAt = System.nanoTime();
         if (fundCode == null || fundCode.isBlank()) {
-            return Optional.empty();
+            metrics.record("EastmoneyFundGzClient", "fetchEstimate", "empty", startedAt);
+            return FundEstimateResult.unavailable();
         }
         try {
             String raw = eastmoneyFundGzClient.fetchGzRaw(fundCode);
-            return Optional.ofNullable(EastmoneyJsParser.parseFundGz(raw));
+            FundEstimateSnapshot snapshot = EastmoneyJsParser.parseFundGz(raw);
+            metrics.record("EastmoneyFundGzClient", "fetchEstimate",
+                    snapshot == null ? "empty" : "success", startedAt);
+            return snapshot == null ? FundEstimateResult.unavailable() : FundEstimateResult.available(snapshot);
+        } catch (IllegalStateException ex) {
+            metrics.record("EastmoneyFundGzClient", "fetchEstimate", "parse_error", startedAt);
+            log.warn("解析基金 {} 盘中估值失败: {}", fundCode, ex.getMessage());
+            return FundEstimateResult.failed(EstimateStatus.PARSE_ERROR);
+        } catch (feign.RetryableException ex) {
+            metrics.record("EastmoneyFundGzClient", "fetchEstimate", "timeout", startedAt);
+            log.warn("拉取基金 {} 盘中估值超时: {}", fundCode, ex.getMessage());
+            return FundEstimateResult.failed(EstimateStatus.TIMEOUT);
         } catch (RuntimeException ex) {
-            log.warn("拉取基金 {} 盘中估值失败,降级返 empty: {}", fundCode, ex.getMessage());
-            return Optional.empty();
+            metrics.record("EastmoneyFundGzClient", "fetchEstimate", "failure", startedAt);
+            log.warn("拉取基金 {} 盘中估值不可用: {}", fundCode, ex.getMessage());
+            return FundEstimateResult.unavailable();
         }
     }
 }

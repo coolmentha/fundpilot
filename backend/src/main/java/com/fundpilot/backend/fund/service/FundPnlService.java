@@ -13,6 +13,8 @@ import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
+import com.fundpilot.backend.market.service.EstimateStatus;
+import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -68,7 +70,7 @@ public class FundPnlService {
         Long fundId = fund.getId();
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
-        return computeForFund(fund, latestTwo, rawShares, null);
+        return computeForFund(fund, latestTwo, rawShares, null, null);
     }
 
     /** 列表/组合批量聚合，固定三次批量读取，避免逐基金 N+1。 */
@@ -93,6 +95,8 @@ public class FundPnlService {
                 .filter(code -> code != null && !code.isBlank()).distinct().toList();
         Map<String, FundEstimateSnapshot> estimates = fundCodes.isEmpty()
                 ? Map.of() : marketRealtimeCache.getEstimates(fundCodes);
+        Map<String, EstimateStatus> estimateStatuses = fundCodes.isEmpty()
+                ? Map.of() : marketRealtimeCache.getEstimateStatuses(fundCodes);
 
         Map<Long, Pnl> result = new LinkedHashMap<>();
         for (FundEntity fund : funds) {
@@ -100,29 +104,38 @@ public class FundPnlService {
                     fund,
                     navsByFund.getOrDefault(fund.getId(), List.of()),
                     sharesByFund.getOrDefault(fund.getId(), BigDecimal.ZERO),
-                    estimates));
+                    estimates, estimateStatuses));
         }
         return result;
     }
 
     private Pnl computeForFund(FundEntity fund, List<FundNavHistoryEntity> latestTwo,
-                               BigDecimal rawShares, Map<String, FundEstimateSnapshot> batchEstimates) {
+                               BigDecimal rawShares, Map<String, FundEstimateSnapshot> batchEstimates,
+                               Map<String, EstimateStatus> batchEstimateStatuses) {
         BigDecimal latestAccumulatedNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousAccumulatedNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
         BigDecimal latestUnitNav = latestTwo.size() >= 1 ? latestTwo.get(0).getNav() : null;
         BigDecimal previousUnitNav = latestTwo.size() >= 2 ? latestTwo.get(1).getNav() : null;
         boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
+        boolean standardNavSupported = FundMarketDataCapability.supportsStandardNav(fund);
 
         // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)只读实时缓存,不在 GET 请求里打外部接口
-        Optional<FundEstimateSnapshot> estimate = todayNavConfirmed
+        Optional<FundEstimateSnapshot> estimate = todayNavConfirmed || !standardNavSupported
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode(), batchEstimates);
-        DailyChangeResult changeResult = DailyChangeResolver.resolve(
-                clock.instant(), todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate);
+        DailyChangeResult changeResult = standardNavSupported || todayNavConfirmed
+                ? DailyChangeResolver.resolve(
+                        clock.instant(), todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate)
+                : new DailyChangeResult(null, false);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
-        boolean estimateFetchFailed = !todayNavConfirmed
-                && marketRealtimeCache.hasEstimateFetchFailed(fund.getFundCode());
+        EstimateStatus estimateStatus = todayNavConfirmed ? EstimateStatus.AVAILABLE
+                : !standardNavSupported ? EstimateStatus.UNAVAILABLE
+                : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
+        if (standardNavSupported && dailyChangePct != null && !estimateStatus.isFailure()) {
+            estimateStatus = EstimateStatus.AVAILABLE;
+        }
+        boolean estimateFetchFailed = estimateStatus.isFailure();
 
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
@@ -135,13 +148,12 @@ public class FundPnlService {
         BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
         // 当日净值已确认时使用实际值;未确认时必须有今日涨跌才能推算当前净值。
         // 估值失败/缺失时不能拿上一期已公布净值冒充当前市值和总盈亏。
-        BigDecimal pnlNav = todayNavConfirmed
-                ? latestUnitNav
-                : estimateFetchFailed ? null : estimatedUnitNav(latestUnitNav, dailyChangePct);
+        BigDecimal pnlNav = todayNavConfirmed ? latestUnitNav
+                : isEstimated ? estimatedUnitNav(latestUnitNav, dailyChangePct) : null;
         BigDecimal holdingAmount = computeHoldingAmount(holdingShares, pnlNav);
         BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, pnlNav, costPerShare);
 
-        return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed,
+        return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed, estimateStatus,
                 holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
 
@@ -158,6 +170,21 @@ public class FundPnlService {
         Map<String, FundEstimateSnapshot> estimates = batchEstimates != null
                 ? batchEstimates : marketRealtimeCache.getEstimates(List.of(fundCode));
         return Optional.ofNullable(estimates.get(fundCode));
+    }
+
+    private EstimateStatus getEstimateStatus(String fundCode, Map<String, EstimateStatus> batchStatuses) {
+        if (fundCode == null || fundCode.isBlank()) {
+            return EstimateStatus.NOT_ATTEMPTED;
+        }
+        if (batchStatuses != null && batchStatuses.containsKey(fundCode)) {
+            return batchStatuses.get(fundCode);
+        }
+        EstimateStatus status = marketRealtimeCache.getEstimateStatus(fundCode);
+        if (status != null) {
+            return status;
+        }
+        return marketRealtimeCache.hasEstimateFetchFailed(fundCode)
+                ? EstimateStatus.TIMEOUT : EstimateStatus.NOT_ATTEMPTED;
     }
 
     /** 当日净值是否已落库:最近一期 navDate 是否达到北京时间今天对应的 UTC 日期标签。 */
@@ -220,7 +247,7 @@ public class FundPnlService {
     }
 
     private Pnl emptyPnl() {
-        return new Pnl(null, false, false, null, null, null, null);
+        return new Pnl(null, false, false, EstimateStatus.NOT_ATTEMPTED, null, null, null, null);
     }
 
     /**
@@ -229,6 +256,7 @@ public class FundPnlService {
      * @param dailyChangePct 今日涨跌幅(三态:盘前0/盘中估值/盘后实际)
      * @param isEstimated    是否估算态(true=盘中 fundgz 估算)
      * @param estimateFetchFailed 当日净值未确认且最近一次估值拉取失败
+     * @param estimateStatus 估值或当日净值可用状态
      * @param holdingShares  持仓份额
      * @param holdingAmount  持仓市值(份额 × 最近净值;估算态用昨日净值×(1+涨跌幅)推算)
      * @param dailyPnl       今日盈亏(昨日市值 × 今日涨跌幅)
@@ -238,6 +266,7 @@ public class FundPnlService {
             BigDecimal dailyChangePct,
             boolean isEstimated,
             boolean estimateFetchFailed,
+            EstimateStatus estimateStatus,
             BigDecimal holdingShares,
             BigDecimal holdingAmount,
             BigDecimal dailyPnl,

@@ -12,6 +12,7 @@ import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
 import com.fundpilot.backend.market.client.SectorSnapshot;
 import com.fundpilot.backend.user.event.WatchedIndicesChangedEvent;
 import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -67,6 +67,7 @@ public class MarketRealtimeCache {
     private final FundEstimateService fundEstimateService;
     private final UserConfigService userConfigService;
     private final FundRepository fundRepository;
+    private final MarketDataMetrics marketDataMetrics;
     private final Clock clock;
 
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
@@ -75,7 +76,7 @@ public class MarketRealtimeCache {
     private volatile List<SectorSnapshot> sectorCache = List.of();
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
-    private final Set<String> estimateFetchFailures = ConcurrentHashMap.newKeySet();
+    private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
 
     /** 读指数缓存(已按用户关注列表过滤,顺序按请求 secid 顺序)。 */
     public List<IndexRealtimeSnapshot> getIndices() {
@@ -113,15 +114,25 @@ public class MarketRealtimeCache {
 
     /** 当前进程最近一次刷新该基金估值是否失败。 */
     public boolean hasEstimateFetchFailed(String fundCode) {
-        return fundCode != null && estimateFetchFailures.contains(fundCode);
+        return getEstimateStatus(fundCode).isFailure();
+    }
+
+    public EstimateStatus getEstimateStatus(String fundCode) {
+        return fundCode == null ? EstimateStatus.NOT_ATTEMPTED
+                : estimateStatuses.getOrDefault(fundCode, EstimateStatus.NOT_ATTEMPTED);
+    }
+
+    public Map<String, EstimateStatus> getEstimateStatuses(List<String> fundCodes) {
+        if (fundCodes == null || fundCodes.isEmpty()) {
+            return Map.of();
+        }
+        return fundCodes.stream().collect(Collectors.toMap(Function.identity(), this::getEstimateStatus));
     }
 
     /**
      * 全量刷新五类缓存——由 {@code MarketRealtimeRefreshJob} 在交易时段定时调用。
-     * 任一类失败不影响其他类(独立 try-catch)。加 @Transactional(readOnly=true)
-     * 以复用 JPA 上下文读 FundRepository(行情展示需要拉基金列表算估值)。
+     * 任一类失败不影响其他类(独立 try-catch)。外部请求不由数据库事务包裹。
      */
-    @Transactional(readOnly = true)
     public void refreshAll() {
         refreshIndices();
         refreshSectors();
@@ -132,7 +143,6 @@ public class MarketRealtimeCache {
     /**
      * 仅刷新指数、市场宽度、板块、资金四类(不含基金估值)。
      */
-    @Transactional(readOnly = true)
     public void refreshRealtimeWithoutEstimates() {
         refreshIndices();
         refreshSectors();
@@ -145,7 +155,6 @@ public class MarketRealtimeCache {
      * (东方财富盘后仍可返回收盘数据)。仅刷新指数,板块/资金/估值由各自周期维护。
      */
     @EventListener
-    @Transactional(readOnly = true)
     public void onWatchedIndicesChanged(@SuppressWarnings("unused") WatchedIndicesChangedEvent event) {
         refreshIndices();
     }
@@ -179,13 +188,14 @@ public class MarketRealtimeCache {
      */
     @Async
     @EventListener(ApplicationReadyEvent.class)
-    @Transactional(readOnly = true)
     public void warmFundEstimatesAfterReady() {
         refreshFundEstimates();
         log.info("基金估值缓存异步启动预热完成");
     }
 
     private void refreshIndices() {
+        long startedAt = System.nanoTime();
+        String result = "success";
         try {
             List<String> watchedSecids = userConfigService.getWatchedIndices();
             Set<String> requestedSecids = new LinkedHashSet<>(watchedSecids);
@@ -205,30 +215,61 @@ public class MarketRealtimeCache {
             if (breadth != null) {
                 breadthCache = breadth;
             }
+            if (snapshotsBySecid.isEmpty() && breadth == null) {
+                result = "empty";
+            }
         } catch (RuntimeException e) {
+            result = metricResult(e);
             log.warn("指数实时行情与市场宽度刷新失败,保留旧缓存: {}", e.getMessage());
+        } finally {
+            marketDataMetrics.record("EastmoneyPush2Client", "fetchIndices", result, startedAt);
         }
     }
 
     private void refreshSectors() {
+        long startedAt = System.nanoTime();
+        String result = "success";
         try {
             String raw = push2Client.fetchSectorListRaw("f3");
             sectorCache = EastmoneyJsParser.parseSectorList(raw);
+            if (sectorCache.isEmpty()) {
+                result = "empty";
+            }
         } catch (RuntimeException e) {
+            result = metricResult(e);
             log.warn("行业板块刷新失败,保留旧缓存: {}", e.getMessage());
+        } finally {
+            marketDataMetrics.record("EastmoneyPush2Client", "fetchSectors", result, startedAt);
         }
     }
 
     private void refreshMoneyFlow() {
+        long startedAt = System.nanoTime();
+        String result = "success";
         try {
             String raw = push2Client.fetchNorthboundRaw();
             MoneyFlowSnapshot snapshot = EastmoneyJsParser.parseNorthbound(raw);
             if (snapshot != null) {
                 moneyFlowCache = snapshot;
+            } else {
+                result = "empty";
             }
         } catch (RuntimeException e) {
+            result = metricResult(e);
             log.warn("北向资金刷新失败,保留旧缓存: {}", e.getMessage());
+        } finally {
+            marketDataMetrics.record("EastmoneyPush2Client", "fetchMoneyFlow", result, startedAt);
         }
+    }
+
+    private static String metricResult(RuntimeException exception) {
+        if (exception instanceof feign.RetryableException) {
+            return "timeout";
+        }
+        if (exception instanceof IllegalStateException) {
+            return "parse_error";
+        }
+        return "failure";
     }
 
     /**
@@ -241,16 +282,22 @@ public class MarketRealtimeCache {
             List<FundEntity> funds = fundRepository.findAll();
             for (FundEntity fund : funds) {
                 String fundCode = fund.getFundCode();
+                if (!FundMarketDataCapability.supportsStandardNav(fund)) {
+                    invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
+                    continue;
+                }
                 try {
-                    FundEstimateSnapshot snapshot = fundEstimateService.fetchEstimate(fundCode).orElse(null);
-                    if (isEstimateForToday(snapshot)) {
+                    FundEstimateResult result = fundEstimateService.fetchEstimateResult(fundCode);
+                    FundEstimateSnapshot snapshot = result.snapshot();
+                    EstimateStatus status = classifyFreshness(result);
+                    if (status == EstimateStatus.AVAILABLE) {
                         estimateCache.put(fundCode, snapshot);
-                        estimateFetchFailures.remove(fundCode);
+                        estimateStatuses.put(fundCode, EstimateStatus.AVAILABLE);
                     } else {
-                        invalidateEstimate(fundCode);
+                        invalidateEstimate(fundCode, status);
                     }
                 } catch (RuntimeException e) {
-                    invalidateEstimate(fundCode);
+                    invalidateEstimate(fundCode, EstimateStatus.PARSE_ERROR);
                     log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
                 }
             }
@@ -259,24 +306,30 @@ public class MarketRealtimeCache {
         }
     }
 
-    private boolean isEstimateForToday(FundEstimateSnapshot snapshot) {
+    private EstimateStatus classifyFreshness(FundEstimateResult result) {
+        if (result.status() != EstimateStatus.AVAILABLE) {
+            return result.status();
+        }
+        FundEstimateSnapshot snapshot = result.snapshot();
         if (snapshot == null || snapshot.estimatedChangePct() == null || snapshot.estimateTime() == null) {
-            return false;
+            return EstimateStatus.UNAVAILABLE;
         }
         try {
             LocalDateTime estimateTime = LocalDateTime.parse(snapshot.estimateTime(), ESTIMATE_TIME_FORMATTER);
-            return ChinaTradingDate.toUtcDate(estimateTime.atZone(ChinaTradingDate.ZONE).toInstant())
+            boolean today = ChinaTradingDate.toUtcDate(estimateTime.atZone(ChinaTradingDate.ZONE).toInstant())
                     .equals(ChinaTradingDate.toUtcDate(clock.instant()));
+            return today ? EstimateStatus.AVAILABLE : EstimateStatus.STALE;
         } catch (DateTimeParseException e) {
-            return false;
+            return EstimateStatus.PARSE_ERROR;
         }
     }
 
-    private void invalidateEstimate(String fundCode) {
+    private void invalidateEstimate(String fundCode, EstimateStatus status) {
         if (fundCode == null) {
             return;
         }
         estimateCache.remove(fundCode);
-        estimateFetchFailures.add(fundCode);
+        estimateStatuses.put(fundCode, status);
     }
+
 }

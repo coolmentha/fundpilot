@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 行情实时数据缓存刷新定时任务(行情工作台)。
@@ -39,6 +40,7 @@ public class MarketRealtimeRefreshJob {
     private final MarketRealtimeCache cache;
     private final TradingCalendarRepository tradingCalendarRepository;
     private final Clock clock;
+    private final AtomicBoolean refreshing = new AtomicBoolean(false);
 
     /**
      * 交易时段每 30 秒触发一次,内部判断是否真的在交易时段。
@@ -49,10 +51,16 @@ public class MarketRealtimeRefreshJob {
         if (!isTradingHours()) {
             return;
         }
+        if (!refreshing.compareAndSet(false, true)) {
+            log.info("上一轮行情缓存刷新尚未完成,跳过本轮");
+            return;
+        }
         try {
             cache.refreshAll();
         } catch (RuntimeException e) {
             log.warn("行情缓存刷新周期异常: {}", e.getMessage());
+        } finally {
+            refreshing.set(false);
         }
     }
 

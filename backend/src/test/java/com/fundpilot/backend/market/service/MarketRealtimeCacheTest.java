@@ -2,6 +2,7 @@ package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
@@ -16,7 +17,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -44,7 +44,7 @@ class MarketRealtimeCacheTest {
                 ]}}
                 """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshRealtimeWithoutEstimates();
 
@@ -79,7 +79,7 @@ class MarketRealtimeCacheTest {
                         ]}}
                         """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -98,16 +98,16 @@ class MarketRealtimeCacheTest {
         FundEntity holding = fund("510300", FundStatus.HOLDING);
         FundEntity watching = fund("159825", FundStatus.PENDING_HOLDING);
         when(fundRepository.findAll()).thenReturn(List.of(holding, watching));
-        when(estimateService.fetchEstimate("510300")).thenReturn(Optional.empty());
-        when(estimateService.fetchEstimate("159825")).thenReturn(Optional.empty());
+        when(estimateService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.unavailable());
+        when(estimateService.fetchEstimateResult("159825")).thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshAll();
 
         verify(fundRepository).findAll();
-        verify(estimateService).fetchEstimate("510300");
-        verify(estimateService).fetchEstimate("159825");
+        verify(estimateService).fetchEstimateResult("510300");
+        verify(estimateService).fetchEstimateResult("159825");
     }
 
     @Test
@@ -118,12 +118,12 @@ class MarketRealtimeCacheTest {
         FundRepository fundRepository = mock(FundRepository.class);
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.onApplicationReady();
 
         verify(fundRepository, never()).findAll();
-        verify(estimateService, never()).fetchEstimate(org.mockito.ArgumentMatchers.anyString());
+        verify(estimateService, never()).fetchEstimateResult(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -136,9 +136,9 @@ class MarketRealtimeCacheTest {
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 15:00", "2026-07-09");
         when(fundRepository.findAll()).thenReturn(List.of(fund));
-        when(estimateService.fetchEstimate("510300")).thenReturn(Optional.of(snapshot));
+        when(estimateService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.available(snapshot));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         var method = MarketRealtimeCache.class.getMethod("warmFundEstimatesAfterReady");
 
@@ -149,7 +149,7 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
-    void refreshAll_成功后空响应会删除旧估值并标记失败() {
+    void refreshAll_成功后空响应会删除旧估值并标记不可用() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
         UserConfigService userConfigService = mock(UserConfigService.class);
@@ -159,17 +159,18 @@ class MarketRealtimeCacheTest {
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
-        when(estimateService.fetchEstimate("510300"))
-                .thenReturn(Optional.of(snapshot))
-                .thenReturn(Optional.empty());
+        when(estimateService.fetchEstimateResult("510300"))
+                .thenReturn(FundEstimateResult.available(snapshot))
+                .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshAll();
         cache.refreshAll();
 
         assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
-        assertThat(cache.hasEstimateFetchFailed("510300")).isTrue();
+        assertThat(cache.hasEstimateFetchFailed("510300")).isFalse();
+        assertThat(cache.getEstimateStatus("510300")).isEqualTo(EstimateStatus.UNAVAILABLE);
     }
 
     @Test
@@ -183,11 +184,11 @@ class MarketRealtimeCacheTest {
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
-        when(estimateService.fetchEstimate("510300"))
-                .thenReturn(Optional.of(snapshot))
+        when(estimateService.fetchEstimateResult("510300"))
+                .thenReturn(FundEstimateResult.available(snapshot))
                 .thenThrow(new IllegalStateException("timeout"));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshAll();
         cache.refreshAll();
@@ -209,21 +210,43 @@ class MarketRealtimeCacheTest {
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
-        when(estimateService.fetchEstimate("510300"))
-                .thenReturn(Optional.of(stale))
-                .thenReturn(Optional.of(current));
+        when(estimateService.fetchEstimateResult("510300"))
+                .thenReturn(FundEstimateResult.available(stale))
+                .thenReturn(FundEstimateResult.available(current));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
 
         cache.refreshAll();
 
         assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
-        assertThat(cache.hasEstimateFetchFailed("510300")).isTrue();
+        assertThat(cache.hasEstimateFetchFailed("510300")).isFalse();
+        assertThat(cache.getEstimateStatus("510300")).isEqualTo(EstimateStatus.STALE);
 
         cache.refreshAll();
 
         assertThat(cache.getEstimates(List.of("510300"))).containsEntry("510300", current);
         assertThat(cache.hasEstimateFetchFailed("510300")).isFalse();
+    }
+
+    @Test
+    void refreshAll_货币基金直接标记不可用且不调用普通估值源() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("000009", FundStatus.HOLDING);
+        fund.setFundName("易方达天天理财货币A");
+        fund.setInvestmentTarget(InvestmentTarget.MONEY_MARKET);
+        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+
+        cache.refreshAll();
+
+        verify(estimateService, never()).fetchEstimateResult(org.mockito.ArgumentMatchers.anyString());
+        assertThat(cache.getEstimateStatus("000009")).isEqualTo(EstimateStatus.UNAVAILABLE);
+        assertThat(cache.hasEstimateFetchFailed("000009")).isFalse();
     }
 
     private static FundEntity fund(String code, FundStatus status) {

@@ -8,7 +8,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * issue #6 验收:pingzhongdata.js GraalVM JS 解析 → {@link FundNavSnapshot} 列表。
+ * issue #6 验收:pingzhongdata.js 结构提取 + Jackson 解析 → {@link FundNavSnapshot} 列表。
  * <p>固化样本模拟真实响应,验证 {@code Data_netWorthTrend} (nav) +
  * {@code Data_ACWorthTrend} (accumulatedNav) 被正确解析。
  */
@@ -43,5 +43,30 @@ class EastmoneyJsParserNavHistoryTest {
                 var Data_ACWorthTrend = [];
                 """;
         assertThat(EastmoneyJsParser.parseNavHistory(empty)).isEmpty();
+    }
+
+    @Test
+    void parseNavHistory_按时间戳关联累计净值_不依赖数组位置() {
+        String shifted = """
+                var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000},{"x":1719273600000,"y":1.0100}];
+                var Data_ACWorthTrend = [[1719273600000,2.0200],[1719187200000,2.0000]];
+                """;
+
+        List<FundNavSnapshot> snapshots = EastmoneyJsParser.parseNavHistory(shifted);
+
+        assertThat(snapshots).hasSize(2);
+        assertThat(snapshots.get(0).accumulatedNav()).isEqualByComparingTo("2.0000");
+        assertThat(snapshots.get(1).accumulatedNav()).isEqualByComparingTo("2.0200");
+    }
+
+    @Test
+    void parseNavHistory_忽略字符串中的方括号并提取完整数组() {
+        String nested = """
+                var ignored = "[not an array]";
+                var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000,"unitMoney":"每份[测试]"}];
+                var Data_ACWorthTrend = [[1719187200000,2.0000]];
+                """;
+
+        assertThat(EastmoneyJsParser.parseNavHistory(nested)).hasSize(1);
     }
 }

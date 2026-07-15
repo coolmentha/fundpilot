@@ -7,7 +7,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * issue #6 验收:fundcode_search.js GraalVM JS 解析 → {@link FundDictEntry} 列表。
+ * issue #6 验收:fundcode_search.js 结构提取 + Jackson 解析 → {@link FundDictEntry} 列表。
  * <p>固化样本模拟真实响应(5 元组:[fundCode, 拼音缩写, fundName(中文), 类型描述, 拼音全称]),
  * 验证 {@code [0]} 代码、{@code [2]} 中文名、{@code [3]} 类型描述被正确提取。
  */

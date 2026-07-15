@@ -41,6 +41,7 @@ public class JobMetricsAspect {
             sample.stop(Timer.builder("job_duration_seconds")
                     .tag("job", job)
                     .tag("result", result)
+                    .publishPercentileHistogram()
                     .register(meterRegistry));
             Counter.builder("job_execution_total")
                     .tag("job", job)
