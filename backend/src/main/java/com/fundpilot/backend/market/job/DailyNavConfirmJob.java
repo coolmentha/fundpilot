@@ -1,9 +1,15 @@
 package com.fundpilot.backend.market.job;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.fund.service.support.TradingCalendarService;
 import com.fundpilot.backend.market.service.DailyNavConfirmService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Instant;
 
 /**
  * 当晚净值确认定时任务(issue #39):20:00-23:00 每分钟轮询,
@@ -12,13 +18,26 @@ import org.springframework.stereotype.Component;
  * 已确认的基金跳过(天然停止条件),全部确认后该分钟空跑。
  */
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class DailyNavConfirmJob {
 
     private final DailyNavConfirmService dailyNavConfirmService;
+    private final TradingCalendarService tradingCalendarService;
+    private final Clock clock;
 
     @Scheduled(cron = "0 * 20-22 * * MON-FRI", zone = "Asia/Shanghai")
     public void confirmTodayNav() {
         dailyNavConfirmService.confirmTodayNav();
+    }
+
+    /** 跨夜补拉上一交易日净值，覆盖 23:00 后公布或晚间临时拉取失败。 */
+    @Scheduled(cron = "0 */10 0-9 * * *", zone = "Asia/Shanghai")
+    public void catchUpPreviousTradingDayNav() {
+        Instant today = ChinaTradingDate.toUtcDate(clock.instant());
+        tradingCalendarService.latestTradingDayBefore(today)
+                .ifPresentOrElse(
+                        dailyNavConfirmService::confirmNavForDate,
+                        () -> log.warn("上一交易日净值补拉跳过:交易日历缺少 {} 之前的交易日", today));
     }
 }

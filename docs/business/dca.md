@@ -20,6 +20,7 @@ stateDiagram-v2
 - `DRAFT` 可编辑但不会执行。
 - `EFFECTIVE` 可直接修改参数；修改只影响尚未生成的未来交易，历史交易保持不变。
 - `enabled=false` 只暂停当前生效计划，不改变其状态；恢复后继续按原周期执行。
+- 管理页将底层组合投影为单一用户状态：`EFFECTIVE + enabled=true` 显示“运行中”，`EFFECTIVE + enabled=false` 显示“已暂停”，`DRAFT` 显示“已停用”。
 
 ## 频率与参数
 
@@ -85,6 +86,7 @@ flowchart LR
 ```text
 14:55 自动生成 INVEST/PENDING
     -> 当晚 20:00-22:59 轮询并落库当日净值
+    -> 次日 00:00-09:59 每 10 分钟补拉上一交易日缺失净值
     -> 次日 03:00 按交易自身 tradeDate 确认 PENDING 交易
     -> 扣申购费、计算份额、建立 lot、更新成本和持仓状态
 ```

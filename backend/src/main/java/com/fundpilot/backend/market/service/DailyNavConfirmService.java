@@ -15,7 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -43,18 +45,24 @@ public class DailyNavConfirmService {
     private final MarketDataSource marketDataSource;
     private final ApplicationEventPublisher eventPublisher;
     private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
+    private final Clock clock;
 
     /**
      * 遍历所有基金,确认当日净值落库。供 {@code DailyNavConfirmJob} 每分钟调用。
      */
     public void confirmTodayNav() {
-        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
+        confirmNavForDate(ChinaTradingDate.toUtcDate(clock.instant()));
+    }
+
+    /** 确认指定交易日净值，供晚间当日轮询与次日上午跨夜补拉共用。 */
+    public void confirmNavForDate(Instant targetDate) {
+        Instant normalizedTargetDate = ChinaTradingDate.toUtcDate(targetDate);
         List<Long> fundIds = fundRepository.findAll().stream().map(FundEntity::getId).toList();
         int confirmed = 0;
         int skipped = 0;
         for (Long fundId : fundIds) {
             try {
-                if (requiresNewTransactionExecutor.execute(() -> confirmOne(fundId, today))) {
+                if (requiresNewTransactionExecutor.execute(() -> confirmOne(fundId, normalizedTargetDate))) {
                     confirmed++;
                 } else {
                     skipped++;
@@ -64,24 +72,25 @@ public class DailyNavConfirmService {
                 skipped++;
             }
         }
-        log.info("当日净值确认完成:新落库 {} 只,跳过 {} 只", confirmed, skipped);
+        log.info("交易日 {} 净值确认完成:新落库 {} 只,跳过 {} 只",
+                normalizedTargetDate, confirmed, skipped);
     }
 
     /**
      * @return true=本次新落库了当日净值;false=已确认或未公布,跳过
      */
-    private boolean confirmOne(Long fundId, Instant today) {
+    private boolean confirmOne(Long fundId, Instant targetDate) {
         FundEntity fund = fundRepository.findById(fundId).orElse(null);
         if (fund == null) {
             return false;
         }
-        // 已确认(最近 navDate = 今天)→ 跳过
-        if (isTodayNavConfirmed(fund.getId(), today)) {
+        // 指定交易日净值已落库 → 跳过
+        if (isNavConfirmed(fund.getId(), targetDate)) {
             return false;
         }
-        // fundgz 判定:jzrq 是否 = 今天(已公布)
+        // fundgz 判定:jzrq 是否 = 目标交易日(已公布)
         Optional<FundEstimateSnapshot> estimate = fundEstimateService.fetchEstimate(fund.getFundCode());
-        if (estimate.isEmpty() || !isJzrqToday(estimate.get(), today)) {
+        if (estimate.isEmpty() || !isBaseNavDate(estimate.get(), targetDate)) {
             return false; // 未公布,跳过
         }
         // 已公布 → pingzhongdata 拿累计净值落库
@@ -89,21 +98,23 @@ public class DailyNavConfirmService {
         if (navHistory == null || navHistory.isEmpty()) {
             return false;
         }
+        if (navHistory.stream().noneMatch(snapshot -> targetDate.equals(snapshot.navDate()))) {
+            return false;
+        }
         upsertNavHistory(fund, navHistory);
         return true;
     }
 
-    /** 最近一期 navDate 是否 = 今天(已确认)。 */
-    private boolean isTodayNavConfirmed(Long fundId, Instant today) {
-        List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
-        if (latestTwo.isEmpty()) {
-            return false;
-        }
-        return latestTwo.get(0).getNavDate().equals(today);
+    /** 指定日期净值是否已确认。 */
+    private boolean isNavConfirmed(Long fundId, Instant targetDate) {
+        return !fundNavHistoryRepository
+                .findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
+                        fundId, targetDate, targetDate.plus(1, ChronoUnit.DAYS))
+                .isEmpty();
     }
 
-    /** fundgz 的 jzrq(基准净值日期)是否 = 今天(说明当日净值已公布)。 */
-    private boolean isJzrqToday(FundEstimateSnapshot estimate, Instant today) {
+    /** fundgz 的 jzrq(基准净值日期)是否 = 目标交易日。 */
+    private boolean isBaseNavDate(FundEstimateSnapshot estimate, Instant targetDate) {
         String baseNavDate = estimate.baseNavDate();
         if (baseNavDate == null || baseNavDate.isBlank()) {
             return false;
@@ -111,7 +122,7 @@ public class DailyNavConfirmService {
         try {
             // jzrq 格式 "2026-06-28" 或 Instant.toString,统一转为 UTC 00:00 日期标签。
             Instant jzrq = Instant.parse(baseNavDate.substring(0, 10) + "T00:00:00Z");
-            return jzrq.equals(today);
+            return jzrq.equals(targetDate);
         } catch (RuntimeException ex) {
             return false;
         }

@@ -18,9 +18,8 @@ import {
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
-import StatusTag from '../components/StatusTag.jsx';
 import {date, money, text} from '../constants.js';
-import {dcaScheduleText} from '../dcaPlan.js';
+import {dcaPlanState, dcaScheduleText} from '../dcaPlan.js';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
 
 const {Text} = Typography;
@@ -93,7 +92,7 @@ export default function DcaManagementPage() {
                     <Link to={`/funds/${plan.fundId}`}>{plan.fundName}</Link>
                     <Text type="secondary">{plan.fundCode}</Text>
                     <Text type="secondary" className="dca-plan-mobile-status">
-                        {text(plan.status)}{plan.status === 'EFFECTIVE' && !plan.enabled ? ' · 已暂停' : ''}
+                        {dcaPlanState(plan).label}
                     </Text>
                 </div>
             ),
@@ -124,12 +123,10 @@ export default function DcaManagementPage() {
         },
         {
             title: '状态', key: 'state', width: 96, responsive: ['sm'],
-            render: (_, plan) => (
-                <Space direction="vertical" size={2}>
-                    <StatusTag value={plan.status}/>
-                    {plan.status === 'EFFECTIVE' && !plan.enabled && <Tag>已暂停</Tag>}
-                </Space>
-            ),
+            render: (_, plan) => {
+                const state = dcaPlanState(plan);
+                return <Tag color={state.color}>{state.label}</Tag>;
+            },
         },
         {
             title: '操作', key: 'actions', width: 72,

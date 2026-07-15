@@ -12,6 +12,7 @@ int NavConfirmService.confirmPendingTransactionsIsolated(Instant tradeDayUtc);
 int NavConfirmService.confirmPendingTransactionsForFund(Long fundId);
 int PendingTransactionCompensationService.compensateAll();
 int PendingTransactionCompensationService.compensateFund(Long fundId);
+void DailyNavConfirmService.confirmNavForDate(Instant targetDate);
 List<FundTransactionEntity> TransactionConfirmService.confirm(Long transactionId);
 List<FundTransactionEntity> TransactionCancelService.cancel(Long transactionId);
 FundTransactionEntity SignalOperationService.confirmOperation(Long fundId, Long signalLogId, ConfirmOperationRequest request);
@@ -62,6 +63,9 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - 净值历史新增行提交后发布 `FundNavUpdatedEvent`，`AFTER_COMMIT` 监听器按基金推进 PENDING 交易，确认失败不得回滚净值。
 - 应用启动时和每小时第 5 分钟运行待确认补偿；按基金使用独立事务，单只失败不阻断其他基金。
 - `NavConfirmJob`、`DailyNavConfirmJob` 和补偿 Job 的 cron 必须显式声明 `zone = "Asia/Shanghai"`。
+- `DailyNavConfirmJob` 晚间 20:00-22:59 确认当日净值；次日 00:00-09:59 每 10 分钟通过交易日历定位上一交易日并调用 `confirmNavForDate(targetDate)` 补拉。不得用前一自然日替代上一交易日。
+- 指定日期净值幂等检查必须使用目标日半开区间查询；跨夜补拉不能继续把 fundgz 的 `jzrq` 固定与当前自然日比较。
+- fundgz 的 `jzrq` 命中目标日后，净值历史响应仍必须实际包含目标日期才能视为确认成功并发布 `FundNavUpdatedEvent`。
 - SignalLog 回应必须校验路径基金归属，并在悲观锁内检查未软删关联交易，保证同一信号只生成一笔交易。
 - 当日已有信号关联交易时，管理员重跑必须保留原信号并停止覆盖；只有未回应信号允许覆盖重算。
 - 生效策略正常评估但未满足卖出条件时返回 `NO_SELL_TRIGGER`，不能返回 `NO_STRATEGY`。
@@ -122,6 +126,9 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 | 仓位提醒线不在 `(0, 1]` | 拒绝基金创建/更新 | `POSITION_WARNING_RATIO_INVALID` |
 | 预计定投超预算或当前占比超提醒线 | 仅 UI 提示，交易继续生成/确认 | 无 |
 | 单只基金补偿失败 | 记录错误并继续其他基金 | 无 |
+| 上一交易日净值已存在 | 跨夜补拉直接跳过，不访问外部净值历史 | 无 |
+| 交易日历找不到上一交易日 | 本轮补拉跳过并记录告警 | 无 |
+| fundgz 已更新但净值历史尚无目标日期 | 本轮跳过，后续继续重试，不发布更新事件 | 无 |
 
 ## 5. Good / Base / Bad Cases
 
@@ -132,6 +139,8 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Good：已回应的逻辑止损信号重跑后保留原信号和原交易。
 - Good：03:00 时周五净值缺失，周五下午历史净值补齐后由提交后事件立即确认，不等待下周一。
 - Good：应用在 cron 后启动，启动补偿扫描确认所有已具备交易日净值的历史 PENDING。
+- Good：基金净值在 23:10 才公布，次日 00:20 补拉上一交易日并发布 `FundNavUpdatedEvent`。
+- Good：周一凌晨补拉通过交易日历定位上周五，不查询周日净值。
 - Good：同一信号并发回应时锁内只允许第一笔创建交易。
 - Good：基金 A 行情抓取失败并回滚，基金 B 仍在独立事务中成功落库。
 - Good：卖出确认锁定基金后重新汇总 CONFIRMED 事实持仓，拒绝并发请求造成的第二次超卖。
@@ -156,13 +165,14 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Bad：先 `findAll()` 再 `save()` 日历，多实例会同时判定不存在并撞唯一索引。
 - Bad：在 `TransactionConfirmSupport` 或初始持仓创建中读取预算/提醒字段并拒绝买入，会把展示偏好错误升级为账本状态阻断。
 - Bad：管理页按基金循环调用 `/api/funds/{id}/dca-plans`，形成 N+1 请求并让摘要与逐计划日期使用两套预测逻辑。
+- Bad：次日上午重新调用 `confirmTodayNav()`，fundgz 的 `jzrq=昨天` 永远无法通过“等于今天”的判断。
 
 ## 6. Tests Required
 
 - `ChinaTradingDateTest` / `NavConfirmJobTest`：覆盖北京时间凌晨与前一自然日标签。
 - `PendingTransactionCompensationJobTest`：覆盖启动补偿、每小时 cron 和上海时区。
 - `PendingTransactionCompensationServiceTest`：覆盖按基金去重、单只失败隔离和继续确认其他基金。
-- `DailyNavConfirmServiceEventTest` / `MarketDataFetchServiceDateTest`：断言新增净值后发布 `FundNavUpdatedEvent`。
+- `DailyNavConfirmJobTest` / `DailyNavConfirmServiceEventTest` / `DailyNavConfirmServiceTest`：覆盖上海时区、上一交易日定位、跨夜指定日期补拉、目标日期幂等和发布 `FundNavUpdatedEvent`。
 - `NavConfirmServiceStateTest`：覆盖交易自身日期、周末旧交易、缺净值保持 PENDING 和转换两腿原子确认。
 - `NavConfirmAndCancelServiceTest` / `SellConfirmationHoldingValidationTest`：覆盖结束点排除、手动/自动/转换卖出的锁后事实持仓校验和并发超卖保护。
 - `FundTransactionServiceTest`：覆盖历史 `tradeDate`、未来日期拒绝和转换两腿日期一致。
@@ -200,6 +210,7 @@ for (FundEntity fund : funds) confirmOne(fund); // 外围大事务导致整批�
 onSellConfirmed(tx, nav); // 未锁基金、未按 CONFIRMED 事实持仓复核
 positionLimitService.validatePurchase(tx, nav); // 展示型提醒错误进入确认路径
 funds.stream().map(fund -> get("/api/funds/" + fund.id() + "/dca-plans")); // 管理页 N+1 且自行重算剩余金额
+dailyNavConfirmService.confirmTodayNav(); // 次日上午仍按今天校验，无法补拉昨天净值
 ```
 
 ### Correct
@@ -220,6 +231,8 @@ fundRepository.findByIdForUpdate(fundId);
 validateAgainstConfirmedHolding(fundId, tx.getShares());
 dcaBudgetSummaryService.currentMonth(); // 预算只由只读摘要和 UI 消费
 dcaPlanForecastService.currentMonthExecutionDates(plans); // 摘要和全局计划列表共用逐计划预测
+tradingCalendarService.latestTradingDayBefore(today)
+        .ifPresent(dailyNavConfirmService::confirmNavForDate); // 跨夜补拉显式目标交易日
 ```
 
 ## Scenario: Fund NAV Date Normalization
