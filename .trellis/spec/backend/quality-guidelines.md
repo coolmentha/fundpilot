@@ -15,6 +15,25 @@ Applies to Java code under `backend/src/main/java` and its tests. The hard rules
 - External-source failures log enough context for diagnosis and either follow the documented degradation contract or throw the source-chain business error.
 - Integration tests prepare their own required singleton business configuration. They must not depend on another test class's committed rows or replace explicit negative coverage with a global default fixture.
 
+### Shared-Schema Aggregate Tests
+
+Tests that assert a table-wide aggregate such as `MAX`, `COUNT`, or an exact full-table result must own the complete dataset they inspect. Clear the table and flush before inserting the expected rows. A non-transactional test that commits rows must clean every table it writes, including shared lookup tables such as `trading_calendar`.
+
+```java
+// Wrong: assumes no previous test committed a later calendar row.
+repository.insertTradingDayIfAbsent(JULY_10);
+assertThat(repository.findMaxCalendarDate()).contains(JULY_10);
+
+// Correct: establishes the aggregate's complete input inside this test transaction.
+repository.deleteAll();
+entityManager.flush();
+repository.insertTradingDayIfAbsent(JULY_8);
+repository.insertTradingDayIfAbsent(JULY_10);
+assertThat(repository.findMaxCalendarDate()).contains(JULY_10);
+```
+
+Run the affected test after a known row-producing test and in the full suite. Passing only in isolation is not sufficient evidence for shared-schema aggregate tests.
+
 ## Forbidden Patterns
 
 ```java
