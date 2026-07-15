@@ -27,6 +27,7 @@ int TradingCalendarSyncService.syncFull();
 FundTransactionView FundTransactionService.createManual(Long fundId, ManualTransactionRequest request);
 boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
 DcaBudgetSummaryView DcaBudgetSummaryService.currentMonth();
+void DcaPlanService.delete(Long planId);
 Map<Long, List<Instant>> DcaPlanForecastService.currentMonthExecutionDates(List<FundDcaPlanEntity> plans);
 List<FundDcaPlanEntity> FundDcaPlanRepository.findAllWithFund();
 boolean DcaScheduleService.isFutureExecutionDay(FundDcaPlanEntity plan, Instant candidate, Instant now);
@@ -43,6 +44,7 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 `PUT /api/user-config` 同时覆盖 `watchedIndices: string[]` 与可空 `monthlyDcaBudget: decimal`；
 `GET /api/dca/budget-summary` 返回 `monthlyBudget/investedAmount/futureAmount/projectedAmount/remainingAmount/overBudgetAmount`。
 `GET /api/dca-plans` 返回全部计划及基金信息，并附当前月剩余次数、金额和预计执行日期。
+`DELETE /api/dca-plans/{id}` 仅软删除 DRAFT 计划。
 
 数据库 `fund_transaction.trade_date TIMESTAMPTZ` 保存业务发生时间；`created_date` 继续由 Spring 审计维护。V16 用 `created_date` 回填存量行，
 并建立 `(fund_id, trade_date DESC) WHERE deleted_date IS NULL` 索引。
@@ -90,6 +92,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - 本月剩余预计只含 EFFECTIVE 且 enabled 的计划；当天仅在 14:55 前算未来，同一计划已有任意状态交易的实际执行日不得重复计入，月计划跨月顺延按实际月份归属。
 - 预算摘要和全局计划列表必须共用 `DcaPlanForecastService`，并从 `FundDcaPlanRepository.findAllWithFund()` 取得同一可见计划集合；关联基金已软删除的历史计划不得进入摘要。计划列表的剩余金额合计必须等于摘要 `futureAmount`。
 - EFFECTIVE 与 DRAFT 计划都允许修改参数；修改只影响尚未生成的未来交易，不改写历史 PENDING/CONFIRMED/CANCELLED。
+- 只有 DRAFT 计划允许软删除；EFFECTIVE 无论 enabled 为 true 或 false 都返回 `DCA_PLAN_DELETE_REQUIRES_DRAFT`。删除不得删除、取消或改写历史/待确认交易，`FundTransactionEntity.dcaPlanId` 保持原值。
 - `positionWarningEnabled/positionWarningRatio` 只比较当前 CONFIRMED 持仓市值占全部当前持仓市值的比例；关闭后仍可展示比例，不告警。任一已持仓基金当前市值未知时，所有比例都保持未知，禁止按可用子集重算。
 - 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST、初始持仓和转换转入腿）不得读取月度预算或仓位提醒字段，也不得因预算超额或占比超线抛业务错误。
 - ADJUST 分支先悲观锁基金行；`ADJUST_OUT` 不得超过 CONFIRMED 事实持仓，交易、lot 更新和 `reconcileStatus` 必须位于同一事务。
@@ -109,6 +112,8 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 | 手动交易 `tradeDate` 晚于当前时间 | 拒绝创建 | `MANUAL_TRANSACTION_FIELD_REQUIRED` |
 | 定投金额非正、频率为空、周计划日不在 1..5、月计划日不在 1..28 | 拒绝创建/更新/激活 | `DCA_PLAN_INVALID` |
 | EFFECTIVE 或 DRAFT 计划参数合法 | 原计划原状态更新，只影响未来未生成交易 | 无 |
+| 删除 DRAFT 计划 | 软删除计划，默认查询不可见，交易保留 | 无 |
+| 删除 EFFECTIVE 计划 | 拒绝删除，须先停用 | `DCA_PLAN_DELETE_REQUIRES_DRAFT` |
 | 信号回应实际金额或份额为零/负数 | 拒绝回应 | `SIGNAL_OPERATION_VALUE_INVALID` |
 | 转换转入已确认、转出仍待确认 | 拒绝继续确认 | `ILLEGAL_STATE_TRANSITION` |
 | 转换关联腿已确认，撤销另一腿 | 拒绝半撤销 | `TRANSACTION_ALREADY_CONFIRMED` |
@@ -149,6 +154,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Good：全局计划列表逐计划剩余金额之和等于预算摘要 `futureAmount`，CANCELLED 日期在两处都不重复预测。
 - Good：关联基金已软删除但计划仍为 EFFECTIVE/enabled 时，fetch join 同时将该计划排除在管理列表和预算摘要之外。
 - Good：直接修改 EFFECTIVE 计划金额后，历史交易金额不变，后续尚未生成日期使用新金额。
+- Good：删除 DRAFT 后计划列表不再展示，但历史 CONFIRMED/PENDING/CANCELLED 交易仍保留原 `dcaPlanId`。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
 - Base：50 份 open lot + 50 份 ADJUST_IN，卖 100 份时仅前 50 份计算赎回费。
 - Base：日历空表日常同步执行全量初始化，非空表只处理最大日期之后。
@@ -166,6 +172,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Bad：在 `TransactionConfirmSupport` 或初始持仓创建中读取预算/提醒字段并拒绝买入，会把展示偏好错误升级为账本状态阻断。
 - Bad：管理页按基金循环调用 `/api/funds/{id}/dca-plans`，形成 N+1 请求并让摘要与逐计划日期使用两套预测逻辑。
 - Bad：次日上午重新调用 `confirmTodayNav()`，fundgz 的 `jzrq=昨天` 永远无法通过“等于今天”的判断。
+- Bad：前端隐藏 EFFECTIVE 的删除按钮，但后端 DELETE 不校验状态，直接请求仍可删除运行中计划。
 
 ## 6. Tests Required
 
@@ -179,7 +186,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `SignalOperationServiceUnitTest` / `SignalOperationServiceTest`：覆盖归属、重复回应、SELL 关联、PENDING 状态和非正实际值。
 - `SignalQueryServiceTest`：已回应信号不再出现在 pending 列表。
 - `SignalGenerationServiceTest` / `FundTransactionRepositoryTest`：无买入记录仍落信号，较新卖出不覆盖最近买入时间，已回应信号重跑不覆盖。
-- `DcaPlanServiceTest` / `DcaSuggestionJobTest`：覆盖 EFFECTIVE 直接更新、参数范围、月末跨月顺延和 PENDING/CONFIRMED/CANCELLED 全状态幂等。
+- `DcaPlanServiceDeleteUnitTest` / `DcaPlanServiceTest` / `DcaSuggestionJobTest`：覆盖 EFFECTIVE 直接更新、仅 DRAFT 软删除、删除后交易保留、参数范围、月末跨月顺延和 PENDING/CONFIRMED/CANCELLED 全状态幂等。
 - `DcaPlanForecastServiceTest` / `DcaBudgetSummaryServiceTest`：覆盖逐计划日期、任意状态交易去重、停用/暂停过滤、摘要使用 `findAllWithFund()` 可见计划集合，以及逐计划金额与摘要口径一致。
 - `DisciplineStrategyServiceTest`：覆盖生效策略未触发卖出返回 `NO_SELL_TRIGGER`。
 - `FundPositionService` 调用路径测试：确认/撤销后按 CONFIRMED 事实持仓重算状态。
@@ -211,6 +218,7 @@ onSellConfirmed(tx, nav); // 未锁基金、未按 CONFIRMED 事实持仓复核
 positionLimitService.validatePurchase(tx, nav); // 展示型提醒错误进入确认路径
 funds.stream().map(fund -> get("/api/funds/" + fund.id() + "/dca-plans")); // 管理页 N+1 且自行重算剩余金额
 dailyNavConfirmService.confirmTodayNav(); // 次日上午仍按今天校验，无法补拉昨天净值
+fundDcaPlanRepository.delete(plan); // 未校验 DRAFT，运行中计划可被直接删除
 ```
 
 ### Correct
@@ -233,6 +241,8 @@ dcaBudgetSummaryService.currentMonth(); // 预算只由只读摘要和 UI 消费
 dcaPlanForecastService.currentMonthExecutionDates(plans); // 摘要和全局计划列表共用逐计划预测
 tradingCalendarService.latestTradingDayBefore(today)
         .ifPresent(dailyNavConfirmService::confirmNavForDate); // 跨夜补拉显式目标交易日
+if (plan.getStatus() != DRAFT) throw DCA_PLAN_DELETE_REQUIRES_DRAFT;
+fundDcaPlanRepository.delete(plan); // @SQLDelete 软删，历史交易不动
 ```
 
 ## Scenario: Fund NAV Date Normalization

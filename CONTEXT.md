@@ -247,6 +247,7 @@ _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）�
 dayOfWeek(1=周一..5=周五) / dayOfMonth(1-28,月定投日,封顶 28) / status。**新建即激活**:create 直接落 EFFECTIVE
 (同基金已有 EFFECTIVE 则回退 DRAFT)。状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE,
 同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
+只有 `DRAFT` 计划允许软删除；运行中或已暂停的 EFFECTIVE 必须先停用。删除计划不删除或改写任何历史/待确认交易，交易保留原 `dcaPlanId` 作为来源记录。
 
 **DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
 日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行

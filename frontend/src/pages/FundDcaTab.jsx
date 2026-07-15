@@ -1,17 +1,18 @@
 import {useState} from 'react';
 import {App, Button, Card, Popconfirm, Space, Table, Tag, Typography} from 'antd';
-import {PlusOutlined} from '@ant-design/icons';
+import {DeleteOutlined, PlusOutlined} from '@ant-design/icons';
 import {
     useActiveDcaPlan,
     useCreateDcaPlan,
     useDcaPlanAction,
     useDcaPlans,
+    useDeleteDcaPlan,
     useUpdateDcaPlan,
 } from '../api/hooks.js';
 import {money, text, datetime} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
-import {dcaScheduleText} from '../dcaPlan.js';
+import {canDeleteDcaPlan, dcaScheduleText} from '../dcaPlan.js';
 
 const {Text} = Typography;
 
@@ -26,6 +27,7 @@ export default function FundDcaTab({fundId}) {
     const createPlan = useCreateDcaPlan(fundId);
     const updatePlan = useUpdateDcaPlan(fundId);
     const planAction = useDcaPlanAction(fundId);
+    const deletePlan = useDeleteDcaPlan();
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -43,6 +45,10 @@ export default function FundDcaTab({fundId}) {
     const doAction = async (planId, action) => {
         await planAction.mutateAsync({id: planId, action});
         message.success(`操作完成：${action}`);
+    };
+    const doDelete = async (planId) => {
+        await deletePlan.mutateAsync(planId);
+        message.success('定投计划已删除');
     };
 
     const columns = [
@@ -73,6 +79,13 @@ export default function FundDcaTab({fundId}) {
                     {r.status === 'EFFECTIVE' &&
                         <Popconfirm title="停用此定投计划？" onConfirm={() => doAction(r.id, 'retire')}>
                             <Button size="small">停用</Button>
+                        </Popconfirm>}
+                    {canDeleteDcaPlan(r) &&
+                        <Popconfirm title="删除此定投计划？"
+                                    description="删除后不可恢复，已有交易流水和待确认交易不受影响。"
+                                    okButtonProps={{danger: true}}
+                                    onConfirm={() => doDelete(r.id)}>
+                            <Button size="small" danger icon={<DeleteOutlined/>}>删除</Button>
                         </Popconfirm>}
                 </Space>
             ),

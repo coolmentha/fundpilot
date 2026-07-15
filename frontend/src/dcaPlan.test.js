@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {dcaPlanState, dcaScheduleText} from './dcaPlan.js';
+import {canDeleteDcaPlan, dcaPlanState, dcaScheduleText} from './dcaPlan.js';
 
 describe('DCA plan display', () => {
     it.each([
@@ -17,5 +17,11 @@ describe('DCA plan display', () => {
         [{status: 'DRAFT', enabled: true}, {label: '已停用'}],
     ])('formats state %o', (plan, expected) => {
         expect(dcaPlanState(plan)).toEqual(expected);
+    });
+
+    it('only allows deleting stopped plans', () => {
+        expect(canDeleteDcaPlan({status: 'DRAFT'})).toBe(true);
+        expect(canDeleteDcaPlan({status: 'EFFECTIVE', enabled: true})).toBe(false);
+        expect(canDeleteDcaPlan({status: 'EFFECTIVE', enabled: false})).toBe(false);
     });
 });

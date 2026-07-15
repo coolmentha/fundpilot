@@ -21,6 +21,7 @@ stateDiagram-v2
 - `EFFECTIVE` 可直接修改参数；修改只影响尚未生成的未来交易，历史交易保持不变。
 - `enabled=false` 只暂停当前生效计划，不改变其状态；恢复后继续按原周期执行。
 - 管理页将底层组合投影为单一用户状态：`EFFECTIVE + enabled=true` 显示“运行中”，`EFFECTIVE + enabled=false` 显示“已暂停”，`DRAFT` 显示“已停用”。
+- 只有“已停用”计划允许删除。删除使用软删除，计划不再出现在默认查询中，但已有 `PENDING/CONFIRMED/CANCELLED` 交易及其 `dcaPlanId` 保持不变。
 
 ## 频率与参数
 
@@ -109,6 +110,8 @@ flowchart LR
 | 同日已有任意状态交易 | 跳过，不报错 |
 | 单只基金生成失败 | 记录错误并继续其他基金 |
 | 交易日净值缺失 | 保持 PENDING |
+| 删除运行中或已暂停计划 | `DCA_PLAN_DELETE_REQUIRES_DRAFT`，须先停用 |
+| 删除已停用计划 | 软删除计划，历史交易保持不变 |
 
 ## 实现与验证入口
 

@@ -12,3 +12,7 @@ export function dcaPlanState(plan) {
     if (!plan.enabled) return {label: '已暂停'};
     return {label: '运行中', color: 'green'};
 }
+
+export function canDeleteDcaPlan(plan) {
+    return plan?.status === 'DRAFT';
+}
