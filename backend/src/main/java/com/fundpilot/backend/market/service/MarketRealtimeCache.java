@@ -166,13 +166,13 @@ public class MarketRealtimeCache {
      * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
      * {@code indexCache} 初始空,工作台显示「暂无关注指数」直到用户重新配置触发
      * {@link WatchedIndicesChangedEvent}。启动时刷一次,盘后/周末也能展示收盘数据
-     * (东方财富盘后返回收盘值)。同一请求还会预热固定沪深京市场宽度。基金估值请求数随基金数量增长,
-     * 留给交易时段 30s 任务刷新,
-     * 避免 ApplicationReadyEvent 阻塞应用启动。
+     * (东方财富盘后返回收盘值)。同一请求还会预热固定沪深京市场宽度。基金估值请求数随基金数量增长，
+     * 由独立异步监听器预热，避免 ApplicationReadyEvent 阻塞应用启动。
      *
      * <p>刷新失败不阻塞启动:记 warn,前端显示空态直到下次定时刷新。
      */
     @EventListener(ApplicationReadyEvent.class)
+    @Async
     public void onApplicationReady() {
         try {
             refreshRealtimeWithoutEstimates();

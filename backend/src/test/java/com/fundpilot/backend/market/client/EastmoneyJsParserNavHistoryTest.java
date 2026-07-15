@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EastmoneyJsParserNavHistoryTest {
 
     private static final String SAMPLE = """
-            var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000,"equityReturn":0.0,"unitMoney":""},{"x":1719273600000,"y":1.0100,"equityReturn":0.01,"unitMoney":""}];
-            var Data_ACWorthTrend = [[1719187200000,2.0000],[1719273600000,2.0200]];
+            var Data_netWorthTrend = [{"x":1783872000000,"y":1.0000,"equityReturn":0.0,"unitMoney":""},{"x":1783958400000,"y":1.0100,"equityReturn":0.01,"unitMoney":""}];
+            var Data_ACWorthTrend = [[1783872000000,2.0000],[1783958400000,2.0200]];
             """;
 
     @Test
@@ -26,12 +26,12 @@ class EastmoneyJsParserNavHistoryTest {
         assertThat(snapshots).hasSize(2);
 
         FundNavSnapshot first = snapshots.get(0);
-        assertThat(first.navDate()).isEqualTo(Instant.parse("2024-06-24T00:00:00Z"));
+        assertThat(first.navDate()).isEqualTo(Instant.parse("2026-07-13T00:00:00Z"));
         assertThat(first.nav()).isEqualByComparingTo("1.0000");
         assertThat(first.accumulatedNav()).isEqualByComparingTo("2.0000");
 
         FundNavSnapshot second = snapshots.get(1);
-        assertThat(second.navDate()).isEqualTo(Instant.parse("2024-06-25T00:00:00Z"));
+        assertThat(second.navDate()).isEqualTo(Instant.parse("2026-07-14T00:00:00Z"));
         assertThat(second.nav()).isEqualByComparingTo("1.0100");
         assertThat(second.accumulatedNav()).isEqualByComparingTo("2.0200");
     }
@@ -68,5 +68,19 @@ class EastmoneyJsParserNavHistoryTest {
                 """;
 
         assertThat(EastmoneyJsParser.parseNavHistory(nested)).hasSize(1);
+    }
+
+    @Test
+    void parseNavHistoryKeepsUtcMidnightDateLabel() {
+        String utcMidnight = """
+                var Data_netWorthTrend = [{"x":1783900800000,"y":1.0407}];
+                var Data_ACWorthTrend = [[1783900800000,1.0407]];
+                """;
+
+        List<FundNavSnapshot> snapshots = EastmoneyJsParser.parseNavHistory(utcMidnight);
+
+        assertThat(snapshots).singleElement()
+                .extracting(FundNavSnapshot::navDate)
+                .isEqualTo(Instant.parse("2026-07-13T00:00:00Z"));
     }
 }

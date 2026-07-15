@@ -1,7 +1,6 @@
 package com.fundpilot.backend.market.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
-import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,10 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 行情实时数据查询 Controller(行情工作台)。
@@ -53,13 +50,8 @@ public class MarketRealtimeController {
      * @return code → 估值视图;缓存未命中的 code 不在 map 中(前端降级显示「-」)
      */
     @GetMapping("/funds/estimates")
-    public ApiResponse<Map<String, FundEstimateView>> estimates(@RequestParam("codes") String codes) {
-        List<String> codeList = codes == null || codes.isBlank()
-                ? List.of()
-                : Arrays.stream(codes.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
-        Map<String, FundEstimateSnapshot> estimates = cache.getEstimates(codeList);
-        return ApiResponse.ok(estimates.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> FundEstimateView.from(e.getValue()))));
+    public ApiResponse<Map<String, FundEstimateView>> estimates(@RequestParam("codes") List<String> codes) {
+        return ApiResponse.ok(FundEstimateView.from(cache.getEstimates(codes)));
     }
 
     /** 行业板块涨跌排行(前端 30s 轮询)。 */

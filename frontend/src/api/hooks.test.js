@@ -7,8 +7,14 @@ vi.mock('./client.js', () => ({
     del: vi.fn(),
 }));
 
-import {post} from './client.js';
-import {depositCapital, invalidateSignalQueries, requestAdminAction} from './hooks.js';
+import {del, post} from './client.js';
+import {
+    deleteDcaPlan,
+    invalidateDcaBudgetSummary,
+    invalidateDcaPlanQueries,
+    invalidateSignalQueries,
+    requestAdminAction,
+} from './hooks.js';
 
 describe('signal query invalidation', () => {
     it('refreshes pending, today, and range queries after a signal response', () => {
@@ -43,10 +49,32 @@ describe('admin actions', () => {
     });
 });
 
-describe('capital pool', () => {
-    it('posts external deposits to the singleton capital pool endpoint', () => {
-        depositCapital(2500.5);
+describe('DCA budget summary', () => {
+    it('invalidates the global monthly summary after related mutations', () => {
+        const queryClient = {invalidateQueries: vi.fn()};
 
-        expect(post).toHaveBeenLastCalledWith('/api/user-config/deposits', {amount: 2500.5});
+        invalidateDcaBudgetSummary(queryClient);
+
+        expect(queryClient.invalidateQueries).toHaveBeenCalledWith({queryKey: ['dca-budget-summary']});
+    });
+});
+
+describe('DCA plan deletion', () => {
+    it('uses DELETE for the selected plan', () => {
+        deleteDcaPlan(7);
+
+        expect(del).toHaveBeenCalledWith('/api/dca-plans/7');
+    });
+
+    it('invalidates all plan projections and budget summary', () => {
+        const queryClient = {invalidateQueries: vi.fn()};
+
+        invalidateDcaPlanQueries(queryClient);
+
+        expect(queryClient.invalidateQueries.mock.calls).toEqual([
+            [{queryKey: ['dca-plans']}],
+            [{queryKey: ['dca-active']}],
+            [{queryKey: ['dca-budget-summary']}],
+        ]);
     });
 });

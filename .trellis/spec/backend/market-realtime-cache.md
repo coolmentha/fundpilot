@@ -37,6 +37,7 @@ public EstimateStatus getEstimateStatus(String code);
 public Map<String, EstimateStatus> getEstimateStatuses(List<String> codes);
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
+@Async public void onApplicationReady();                // 启动完成后后台预热实时行情
 @Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
 ```
 
@@ -115,8 +116,8 @@ N 个前端客户端共享同一份缓存。
 - 只接受 `estimateTime` 属于北京时间当天的快照；旧日期为 `STALE`，空响应/产品不提供为 `UNAVAILABLE`，时间格式损坏为 `PARSE_ERROR`。
 - 货币基金和 REIT 本期不进入普通估值/净值源，状态为 `UNAVAILABLE`，前端显示中性“暂无估值”。
 - 后续本次成功拉到当天估值时覆盖缓存并置为 `AVAILABLE`。
-- 同步 `ApplicationReadyEvent` 只调用 `refreshRealtimeWithoutEstimates()`；不得在启动线程按基金数执行 fundgz 请求。
-- 独立的 `@Async ApplicationReadyEvent` 必须调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
+- 两个 `ApplicationReadyEvent` 监听器都必须标记 `@Async`；指数/板块/资金与基金估值的外部 I/O 均不得占用 readiness 事件线程。
+- 实时行情监听器调用 `refreshRealtimeWithoutEstimates()`；独立监听器调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 今日净值未落库且估值缓存缺失时，今日涨跌返回未知；禁止用 T-1 对 T-2 冒充今日值。
 
 ### 14:50 串行契约
@@ -150,7 +151,7 @@ N 个前端客户端共享同一份缓存。
 | 持仓基金存在估值失败 | `PortfolioSummaryView.estimateFetchFailedCount` 返回失败持仓数,前端明确显示失败而非普通 `-` |
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
-| 应用启动 | 同步预热指数/板块/资金；基金估值在后台异步预热，不阻塞健康检查 |
+| 应用启动 | 后台异步预热指数/板块/资金和基金估值；外部接口延迟不阻塞健康检查 |
 | 晚间净值远端日期晚于本地最新日期 | 不要求等于今天，在短事务内增量落库 |
 | FOF/QDII 新净值仍滞后今天 | 按真实 navDate 落库，不受 fundgz 状态阻断 |
 
@@ -162,6 +163,7 @@ N 个前端客户端共享同一份缓存。
 - **Good**:一次指数批量请求同时包含自选指数与沪深京固定市场,两个缓存独立投影
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
+- **Good**:东方财富启动预热超时,应用 readiness 仍可及时完成,缓存等待后台任务或下次定时刷新
 - **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
 - **Good**:货币基金/REIT 不调用普通估值源，页面中性显示“暂无估值”
 - **Good**:东方财富净值空结果后，同花顺单位/累计净值按日期关联成功返回
@@ -187,10 +189,11 @@ N 个前端客户端共享同一份缓存。
 - `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签。
 - `MarketRealtimeCacheTest`:断言持仓与观察池普通基金都调用 `fetchEstimateResult`；货币基金/REIT 不调用并置 `UNAVAILABLE`。
 - `MarketRealtimeCacheTest`:固定 `Clock`,断言超时/解析错误为失败，空响应/旧日期为中性状态，后续成功恢复 `AVAILABLE`。
+- `MarketRealtimeCacheTest`:断言两个启动事件都带 `@Async`，实时行情事件不查询基金列表，基金估值事件填充估值缓存。
 - `ThsJsParserTest` / `ThsMarketDataSourceIntegrationTest`:断言净值双请求日期关联、字典 JSONP、K 线 callback、指数代码映射。
 - `MarketDataSourceChainTest`:断言空 Collection/空 K 线继续降级，全失败抛 `MARKET_DATA_ALL_SOURCES_FAILED`。
 - `ExternalClientConfigTest`:断言 connect=1s/read=3s；`RateLimiterTest` 断言最大等待预算。
-- `DailyNavConfirmServiceTest`:断言不依赖 fundgz，FOF/QDII 滞后日期仍可增量入库。
+- `DailyNavConfirmServiceTest`:断言不依赖 fundgz，FOF/QDII 滞后日期仍可增量入库，次日上午可按指定交易日跨夜补拉。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言今日净值未落库且估值为空时返回未知，不使用 T-1 对 T-2。
 - `FundPnlServiceTest`:断言估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
@@ -226,10 +229,10 @@ useQuery({
 ### Wrong:盘后重启后等待下一交易时段
 
 ```java
+@Async
 @EventListener(ApplicationReadyEvent.class)
 public void onApplicationReady() {
     refreshRealtimeWithoutEstimates();
-    // estimateCache 为空且 15:00 后 Job 不再运行,今日收益会缺数据。
 }
 
 return dailyChangePct(latestNav, previousNav); // T-1 vs T-2 是昨日涨跌

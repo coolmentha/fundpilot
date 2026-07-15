@@ -20,7 +20,7 @@ import java.time.Instant;
 @Getter
 @Setter
 public class FundEntity extends AbstractEntity {
-    public static final BigDecimal DEFAULT_MAX_POSITION_RATIO = new BigDecimal("0.30");
+    public static final BigDecimal DEFAULT_POSITION_WARNING_RATIO = new BigDecimal("0.30");
     private String fundCode;
 
     private String fundName;
@@ -61,8 +61,12 @@ public class FundEntity extends AbstractEntity {
      */
     private BigDecimal costPerShare;
 
-    /** 单基金仓位上限比例，可向下调整，但数据库硬限制不超过 30%。 */
-    @Column(name = "max_position_ratio", nullable = false)
-    private BigDecimal maxPositionRatio = DEFAULT_MAX_POSITION_RATIO;
+    /** 是否展示该基金的当前持仓占比提醒。 */
+    @Column(name = "position_warning_enabled", nullable = false)
+    private boolean positionWarningEnabled = true;
+
+    /** 单基金当前持仓占比提醒线；仅提示，范围为 (0, 1]。 */
+    @Column(name = "position_warning_ratio", nullable = false)
+    private BigDecimal positionWarningRatio = DEFAULT_POSITION_WARNING_RATIO;
 
 }

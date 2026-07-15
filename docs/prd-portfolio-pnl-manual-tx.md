@@ -1,3 +1,5 @@
+> **历史资料**：本文是组合盈亏与手动交易功能的早期 PRD，正文包含后来被 ADR-0015、ADR-0019 和 ADR-0020 取代的计划仓位及净值口径。当前规则请查看 [领域上下文](../CONTEXT.md) 和 [业务逻辑文档](business/README.md)。
+
 ## Problem Statement
 
 作为 FundPilot 的个人投资者用户，我在日常使用中发现四个体验断层：

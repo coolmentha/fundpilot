@@ -3,9 +3,7 @@ package com.fundpilot.backend.market.client;
 import feign.Param;
 import feign.RequestLine;
 
-/**
- * 同花顺基金净值 raw client。
- */
+/** 同花顺基金净值 raw client。 */
 public interface ThsClient {
 
     /**

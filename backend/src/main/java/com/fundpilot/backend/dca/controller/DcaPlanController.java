@@ -3,6 +3,7 @@ package com.fundpilot.backend.dca.controller;
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.dca.service.DcaPlanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,13 +16,18 @@ import java.util.Map;
 
 /**
  * 定投计划 Controller:CRUD + 状态机。
- * <p>6 个端点:list/create/update/activate/retire/active。逻辑下沉 Service,返回 View DTO。
+ * <p>提供按基金和全局计划列表、创建、更新与状态操作。逻辑下沉 Service,返回 View DTO。
  */
 @RestController
 @RequiredArgsConstructor
 public class DcaPlanController {
 
     private final DcaPlanService dcaPlanService;
+
+    @GetMapping("/api/dca-plans")
+    public ApiResponse<List<DcaPlanManagementView>> listAll() {
+        return ApiResponse.ok(dcaPlanService.listManagementView());
+    }
 
     @GetMapping("/api/funds/{fundId}/dca-plans")
     public ApiResponse<List<FundDcaPlanView>> listByFund(@PathVariable Long fundId) {
@@ -37,7 +43,7 @@ public class DcaPlanController {
 
     @PutMapping("/api/dca-plans/{id}")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody DcaPlanRequest request) {
-        dcaPlanService.updateDraft(id, request);
+        dcaPlanService.update(id, request);
         return ApiResponse.ok(null);
     }
 
@@ -62,6 +68,12 @@ public class DcaPlanController {
     @PostMapping("/api/dca-plans/{id}/resume")
     public ApiResponse<Void> resume(@PathVariable Long id) {
         dcaPlanService.setEnabled(id, true);
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/api/dca-plans/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        dcaPlanService.delete(id);
         return ApiResponse.ok(null);
     }
 

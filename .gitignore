@@ -36,3 +36,4 @@ pnpm-debug.log*
 # Local native binaries
 *.dll
 .zcode/
+.research_tmp

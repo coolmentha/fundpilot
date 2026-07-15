@@ -3,6 +3,15 @@
 > 当前定位：场外公募基金的行情工作台与纪律执行平台。
 > 单用户场景；系统负责计算、提醒、记账和审计，真实申赎仍由用户在基金平台完成。
 
+详细业务流程：
+
+- [基金与持仓](business/fund-and-position.md)
+- [交易与记账](business/transactions-and-accounting.md)
+- [自动定投](business/dca.md)
+- [卖出纪律与信号](business/sell-discipline-and-signals.md)
+- [行情与盈亏](business/market-and-pnl.md)
+- [定投预算与仓位提醒](business/capital-and-position-limit.md)
+
 ## 一、产品边界
 
 FundPilot 解决三个问题：
@@ -16,7 +25,7 @@ FundPilot 解决三个问题：
 - 不推荐买哪只基金。
 - 不自动向基金公司下单。
 - 不再生成 BUILD/ADD 买入信号。
-- 不再维护金字塔档位、计划总仓位分配、回测或参数寻优。总资金池仅作为仓位风险预算分母，不恢复金字塔加仓。
+- 不再维护金字塔档位、计划总仓位分配、回测或参数寻优。
 
 历史 `BUILD/ADD` 枚举和值仅为读取存量 SignalLog 保留，不代表当前产品能力。
 
@@ -24,9 +33,9 @@ FundPilot 解决三个问题：
 
 ### 2.1 基金与事实持仓
 
-`FundEntity` 保存基金身份、分类、成本单价、单基金仓位上限和生命周期状态。仓位上限默认 30%，可向下调整但不能超过 30%。事实持仓不存冗余金额，始终由 CONFIRMED 交易份额聚合：
+`FundEntity` 保存基金身份、分类、成本单价、单基金仓位提醒和生命周期状态。仓位提醒默认开启、提醒线为 30%，每只基金可在 1% 至 100% 间调整或关闭。事实持仓不存冗余金额，始终由 CONFIRMED 交易份额聚合：
 
-- `PENDING_HOLDING`：没有正持仓。
+- `PENDING_HOLDING`：没有已确认交易。
 - `HOLDING`：CONFIRMED 净份额大于零。
 - `CLEARED`：曾有交易但净份额已归零。
 
@@ -76,7 +85,7 @@ FundPilot 解决三个问题：
 - `costPerShare`：用户真实成本单价，不填时使用最近一期单位净值。
 - `openedAt`：大致建仓时间，仅影响持有期分析起点。
 
-初始持仓同步确认并创建 FIFO open lot；无净值历史或未配置总资金池时拒绝创建持仓，且不得绕过单基金仓位上限。
+初始持仓同步确认并创建 FIFO open lot；无净值历史时拒绝创建持仓。仓位提醒只影响后续显示，不阻断建仓。
 
 ### 4.2 基金详情
 
@@ -92,6 +101,8 @@ FundPilot 解决三个问题：
 - 同一基金同时最多一份 `EFFECTIVE` 计划。
 
 14:55 的 `DcaSuggestionJob` 在交易日自动生成 `INVEST/PENDING` 交易。相同计划在同一北京时间自然日只能生成一次，CONFIRMED 或 CANCELLED 都视为本期已处理。
+
+基金列表和定投管理页展示本月已定投、本月剩余预计和全月预计。用户可在设置页配置可选月度预算，超额只提示，不改变计划或交易状态。
 
 ## 六、卖出纪律
 
@@ -128,7 +139,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 
 ## 八、用户配置与管理
 
-`/settings` 管理关注指数和总资金池。外部入金只能以正数累加到总池，不直接归属基金、不生成交易，也不因后续买入扣减。所有买入确认按“当前持仓市值 + 本次投入 ≤ 总资金池 × 单基金上限”校验。
+`/settings` 管理关注指数和可选每月定投预算。预算直接覆盖或清空，用于基金列表的本月现金流提示；所有买入、转换和净值确认均不受它影响。
 
 `/admin` 提供行情刷新、信号生成、净值确认、基金字典和交易日历同步等管理操作。自动信号生成和自动定投必须同时受北京时间与交易日历约束。
 
@@ -149,7 +160,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 |---|---|
 | 基金 | `/api/funds`、`/api/funds/{id}`、`/api/funds/search` |
 | 策略 | `/api/funds/{id}/strategies`、`/api/strategies/{id}/activate` |
-| 定投 | `/api/funds/{id}/dca-plans`、`/api/dca-plans/{id}/activate` |
+| 定投 | `/api/dca-plans`、`/api/funds/{id}/dca-plans`、`/api/dca-plans/{id}/activate`、`/api/dca/budget-summary` |
 | 信号 | `/api/funds/{id}/signals/today`、`/api/signals/pending` |
 | 信号回应 | `/api/funds/{id}/operations`、`/api/funds/{id}/signals/{signalId}/ignore` |
 | 交易 | `/api/funds/{id}/transactions`、`/api/transactions/{id}/confirm` |
@@ -163,5 +174,6 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 - ADR-0016：定投是自动执行，不是信号。
 - ADR-0018：定投止盈参数模板和周期状态机。
 - ADR-0019：单位净值用于账目，累计净值用于复权分析。
+- ADR-0021：月度定投预算和仓位提醒替代硬资金池限制。
 
 领域术语与边界以根目录 `CONTEXT.md` 为准；技术实现细节以 `.trellis/spec/`、ADR 和当前代码为准。

@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,18 +70,15 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void 远端没有晚于本地的日期_不重复落库() {
+    void 已确认基金_指定日期已存在_跳过不重复拉取() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
         // 已落库今日净值(已确认)
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         persistNav(fund, today, "1.0200");
-        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
-                new FundNavSnapshot(today, new BigDecimal("1.0200"), new BigDecimal("1.0200"))));
-
         dailyNavConfirmService.confirmTodayNav();
 
-        verify(marketDataSource).fetchNavHistory(fundCode);
+        verify(marketDataSource, never()).fetchNavHistory(fundCode);
         assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
     }
 
@@ -99,6 +97,23 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
 
         assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
                 .extracting(FundNavHistoryEntity::getNavDate).contains(yesterday);
+    }
+
+    @Test
+    void 缺失上一交易日净值_按指定日期补拉并落库() {
+        String fundCode = uniqueCode();
+        FundEntity fund = persistFund(fundCode);
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
+        Instant previousTradingDay = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
+        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
+                new FundNavSnapshot(previousTradingDay, new BigDecimal("1.0100"),
+                        new BigDecimal("1.0100"))));
+
+        dailyNavConfirmService.confirmNavForDate(previousTradingDay);
+
+        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
+                .extracting(FundNavHistoryEntity::getNavDate)
+                .contains(previousTradingDay);
     }
 
     private FundEntity persistFund(String code) {

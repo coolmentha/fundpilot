@@ -42,14 +42,14 @@ class EastmoneyClientIntegrationTest {
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setBody("""
-                        var Data_netWorthTrend = [{"x":1719187200000,"y":1.0000}];
-                        var Data_ACWorthTrend = [[1719187200000,2.0000]];
+                        var Data_netWorthTrend = [{"x":1783872000000,"y":1.0000}];
+                        var Data_ACWorthTrend = [[1783872000000,2.0000]];
                         """));
 
         List<FundNavSnapshot> result = client.fetchNavHistory("000001");
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).navDate()).isEqualTo(Instant.parse("2024-06-24T00:00:00Z"));
+        assertThat(result.get(0).navDate()).isEqualTo(Instant.parse("2026-07-13T00:00:00Z"));
 
         RecordedRequest req = mockWebServer.takeRequest();
         assertThat(req.getPath()).contains("000001");

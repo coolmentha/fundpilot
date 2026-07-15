@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fundpilot.backend.common.ChinaTradingDate;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -58,7 +59,8 @@ public final class EastmoneyJsParser {
                 long timestamp = timestampNode.longValue();
                 BigDecimal accumulatedNav = accumulatedByTimestamp.get(timestamp);
                 if (accumulatedNav != null) {
-                    result.add(new FundNavSnapshot(Instant.ofEpochMilli(timestamp), navNode.decimalValue(), accumulatedNav));
+                    Instant date = ChinaTradingDate.toUtcDate(Instant.ofEpochMilli(timestamp));
+                    result.add(new FundNavSnapshot(date, navNode.decimalValue(), accumulatedNav));
                 }
             }
             return List.copyOf(result);

@@ -69,6 +69,33 @@ class FundPositionServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void PENDING买入尚未按净值换算份额_在途份额按零处理() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity pendingBuy = new FundTransactionEntity();
+        pendingBuy.setFundEntity(fund);
+        pendingBuy.setSource(FundTransactionSource.INCREASE);
+        pendingBuy.setStatus(FundTransactionStatus.PENDING);
+        pendingBuy.setAmount(new BigDecimal("1000"));
+        fundTransactionRepository.save(pendingBuy);
+
+        assertThat(fundPositionService.getPendingShares(fund.getId()))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @Transactional
+    void 未跟踪份额_按确认账本FIFO重放识别ADJUST_IN余额() {
+        FundEntity fund = persistFund();
+        tx(fund, FundTransactionSource.INCREASE, "100", FundTransactionStatus.CONFIRMED);
+        tx(fund, FundTransactionSource.ADJUST_IN, "50", FundTransactionStatus.CONFIRMED);
+        tx(fund, FundTransactionSource.DECREASE, "120", FundTransactionStatus.CONFIRMED);
+
+        assertThat(fundPositionService.getUntrackedHoldingShares(fund.getId()))
+                .isEqualByComparingTo(new BigDecimal("30"));
+    }
+
+    @Test
+    @Transactional
     void CANCELLED_行不计入持仓也不计入在途() {
         FundEntity fund = persistFund();
         tx(fund, FundTransactionSource.INCREASE, "100", FundTransactionStatus.CONFIRMED);
@@ -219,6 +246,19 @@ class FundPositionServiceTest extends AbstractIntegrationTest {
         // 持仓期内峰值 = 1.40(1.80 在 openedAt 之前,排除)
         assertThat(peakNav).hasValueSatisfying(v ->
                 assertThat(v).isEqualByComparingTo(new BigDecimal("1.40")));
+    }
+
+    @Test
+    @Transactional
+    void holdingPeriodPeakNav_建仓当天净值标签早于具体建仓时刻_仍计入峰值() {
+        FundEntity fund = persistFund();
+        fund.setOpenedAt(Instant.parse("2025-02-01T06:30:00Z"));
+        fundRepository.save(fund);
+        navHistory(fund, Instant.parse("2025-02-01T00:00:00Z"), "1.50", "1.50");
+        navHistory(fund, Instant.parse("2025-02-02T00:00:00Z"), "1.20", "1.20");
+
+        assertThat(fundPositionService.getHoldingPeriodPeakNav(fund.getId()))
+                .hasValueSatisfying(v -> assertThat(v).isEqualByComparingTo("1.50"));
     }
 
     @Test

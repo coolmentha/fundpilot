@@ -48,7 +48,6 @@ public class FundService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundTransactionRepository fundTransactionRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
-    private final PositionLimitService positionLimitService;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
@@ -95,7 +94,8 @@ public class FundService {
                 : (fallback != null ? fallback.fundCategory() : null));
         fund.setBenchmarkIndexCode(request.benchmarkIndexCode() != null ? request.benchmarkIndexCode()
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
-        fund.setMaxPositionRatio(PositionLimitService.normalizeRatio(request.maxPositionRatio()));
+        fund.setPositionWarningEnabled(request.positionWarningEnabled() == null || request.positionWarningEnabled());
+        fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
 
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
@@ -151,8 +151,6 @@ public class FundService {
             throw new BusinessException(ErrorCode.COST_PER_SHARE_INVALID, "成本单价必须大于 0");
         }
 
-        positionLimitService.validatePurchase(fund.getId(), initialMarketValue, navValue);
-
         // 建仓交易:INCREASE(对齐 handleBuild),同步确认(反算 shares/nav/confirmTime)
         FundTransactionEntity tx = new FundTransactionEntity();
         tx.setFundEntity(fund);
@@ -199,8 +197,11 @@ public class FundService {
         if (request.benchmarkIndexCode() != null) {
             fund.setBenchmarkIndexCode(request.benchmarkIndexCode());
         }
-        if (request.maxPositionRatio() != null) {
-            fund.setMaxPositionRatio(PositionLimitService.normalizeRatio(request.maxPositionRatio()));
+        if (request.positionWarningEnabled() != null) {
+            fund.setPositionWarningEnabled(request.positionWarningEnabled());
+        }
+        if (request.positionWarningRatio() != null) {
+            fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
         }
         return FundView.from(fundRepository.save(fund));
     }
@@ -219,6 +220,15 @@ public class FundService {
         if (fundCategory == null) {
             throw new BusinessException(ErrorCode.FUND_CATEGORY_REQUIRED, "基金类型不能为空(阻塞默认档位查询)");
         }
+    }
+
+    private BigDecimal normalizePositionWarningRatio(BigDecimal ratio) {
+        BigDecimal value = ratio != null ? ratio : FundEntity.DEFAULT_POSITION_WARNING_RATIO;
+        if (value.signum() <= 0 || value.compareTo(BigDecimal.ONE) > 0) {
+            throw new BusinessException(ErrorCode.POSITION_WARNING_RATIO_INVALID,
+                    "仓位提醒线必须大于 0 且不超过 100%");
+        }
+        return value;
     }
 
     private FundEntity requireFund(Long id) {

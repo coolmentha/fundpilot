@@ -15,10 +15,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.service.MarketDataFetchService;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
-import com.fundpilot.backend.user.entity.UserConfigEntity;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -64,17 +61,6 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
     @Autowired
     EntityManager entityManager;
-
-    @Autowired
-    UserConfigRepository userConfigRepository;
-
-    @BeforeEach
-    void setUpUserConfig() {
-        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
-                .orElseGet(UserConfigEntity::new);
-        config.setTotalCapital(new BigDecimal("100000"));
-        userConfigRepository.save(config);
-    }
 
     @Test
     void create_建基金后异步调用fetchOneFund拉取净值() {
@@ -219,24 +205,18 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void create_录现有金额但未配置总资金池_抛CAPITAL_POOL_NOT_CONFIGURED且基金不落库() {
-        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst().orElseThrow();
-        config.setTotalCapital(null);
-        userConfigRepository.saveAndFlush(config);
+    void create_录现有金额_未配置月度预算仍同步确认() {
         doAnswer(inv -> {
             Long fundId = inv.getArgument(0);
             persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
             return null;
         }).when(marketDataFetchService).fetchOneFund(anyLong());
-        long before = fundRepository.count();
 
-        assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
-                "161739", "未入金基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
-                new BigDecimal("3000"))))
-                .isInstanceOf(BusinessException.class)
-                .extracting("code").isEqualTo(ErrorCode.CAPITAL_POOL_NOT_CONFIGURED.name());
+        FundView view = fundService.create(new FundCreateRequest(
+                "161739", "无预算基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
+                new BigDecimal("3000")));
 
-        assertThat(fundRepository.count()).isEqualTo(before);
+        assertThat(fundRepository.findById(view.id()).orElseThrow().getStatus()).isEqualTo(FundStatus.HOLDING);
     }
 
     @Test

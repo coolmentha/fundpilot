@@ -152,12 +152,12 @@ _Avoid_: 本期引入 Redis（增加基础设施复杂度）
 _Avoid_: 汇总用户自选指数（成分重叠且口径随配置变化）；任一市场缺失时仍发布部分合计；把平盘加入红绿两段比例
 
 **盘中估值（Intraday Estimate）**:
-三态今日涨跌「盘中/待公布态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。交易时段后台每 30 秒刷新全部未软删基金（含观察池）的内存缓存；应用启动完成后还会异步预热一次。请求链只读缓存，不落库。估值状态为 `NOT_ATTEMPTED/AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`：只有 TIMEOUT/PARSE_ERROR 显示「估值拉取失败」，空响应、旧日期、货币基金和 REIT 显示中性「暂无估值」。任何非 AVAILABLE 状态都删除旧估值，不得回退旧缓存、前一交易日估值或 T-1 对 T-2。
+三态今日涨跌「盘中/待公布态」的数据源。来自东方财富 fundgz 接口（`fundgz.1234567.com.cn/js/{code}.js`），返回盘中估算净值（gsz）与估算涨跌幅（gszzl）。交易时段后台每 30 秒刷新全部未软删基金（含观察池）的内存缓存；应用启动完成后行情外部请求全部异步预热，保证盘后重启仍能取得当日最后估值且不阻塞 readiness。请求链只读缓存，不落库。估值状态为 `NOT_ATTEMPTED/AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`：只有 TIMEOUT/PARSE_ERROR 显示「估值拉取失败」，空响应、旧日期、货币基金和 REIT 显示中性「暂无估值」。任何非 AVAILABLE 状态都删除旧估值，不得回退旧缓存、前一交易日估值或 T-1 对 T-2。
 _Avoid_: 把估算净值落 fund_nav_history（那是已结算净值表，估值是短时态）；用 gsz 算绝对盈亏（单位净值口径，分红基金失真，用市值×涨跌幅比例规避）
 
 **当晚净值确认（Daily Nav Confirm）**:
-让三态今日涨跌「盘后实际值」生效的机制。每晚 20:00-23:00 每 5 分钟轮询普通基金，事务外拉取净值历史，筛选 `remote navDate > local latest`，再在短事务内重新校验并幂等落库。不得依赖 fundgz.jzrq，也不要求新净值日期等于今天，因此 FOF/QDII 的滞后公布日期可以按真实 navDate 入库。货币基金和 REIT 本期不走普通净值模型。
-_Avoid_: 用 fundgz 作为净值发布门卫；把外部请求放在数据库事务内；只接受 navDate=今天而漏掉滞后基金
+让三态今日涨跌「盘后实际值」生效的机制。每晚 20:00-22:59 每 5 分钟轮询普通基金，事务外拉取净值历史，筛选 `local latest < remote navDate <= target date`，再在短事务内重新校验并幂等落库。不得依赖 fundgz.jzrq，也不要求新净值日期等于今天，因此 FOF/QDII 的滞后公布日期可以按真实 navDate 入库。若晚间仍未公布或请求失败，次日 00:00-09:59 每 10 分钟按交易日历补拉上一交易日。货币基金和 REIT 本期不走普通净值模型。
+_Avoid_: 用 fundgz 作为净值发布门卫；把外部请求放在数据库事务内；只接受 navDate=今天而漏掉滞后基金；跨夜补拉仍固定与“今天”比较
 
 **K 线图（Kline Chart）**:
 行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(MarketDataFetchService 每日算 VolumeState 时顺便落库,零额外请求)渲染日 K,
@@ -203,12 +203,12 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 
 ## 手动交易
 
-**总资金池与单基金仓位上限（Capital Pool & Position Limit）**:
-外部入金只有一种语义：正数金额累加到单用户总资金池，不直接归属任何基金，也不自动生成交易。每只基金保存独立的
-`maxPositionRatio`，默认 30%，可向下调整但不能超过 30%；数据库 CHECK 与业务层共同保证该硬上限。所有买入类交易
-（INCREASE/TRANSFER_IN/INVEST，含初始持仓同步确认）在最终确认事务内先锁基金行，再按单位净值计算当前事实持仓市值，校验
-`当前持仓市值 + 本次投入 <= totalCapital * maxPositionRatio`。V20 不从历史交易猜测总资金池：存量持仓继续展示和卖出，首次外部入金前禁止新增买入确认。
-_Avoid_: 把入金直接分配给基金；把总池当可用现金余额随交易扣减；用该约束恢复已退役的金字塔自动加仓。
+**月度定投预算与仓位提醒（DCA Budget & Position Warning）**:
+`monthlyDcaBudget` 是用户可选的月度现金流提示线，不是余额、入金累计或买入额度。它按北京时间自然月比较所有未取消的
+`INVEST` 交易与当前有效计划尚未生成交易的本月实际执行日；未设置时仍展示已定投和本月剩余预计，但不显示进度或超额。每只基金用
+`positionWarningEnabled` 和 `positionWarningRatio`（默认开启、30%，范围 1% 到 100%）提示当前确认持仓市值占全部确认持仓市值的比例。
+预算和提醒只影响 View/UI，绝不能进入 INCREASE/TRANSFER_IN/INVEST、初始持仓、转换或净值确认路径。
+_Avoid_: 将预算当可用现金、将提醒线变成 `BusinessException`、用 PENDING 或未来计划计算当前仓位比例。
 
 **手动交易（Manual Transaction）**:
 不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 7 类来源：
@@ -246,6 +246,7 @@ _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）�
 dayOfWeek(1=周一..5=周五) / dayOfMonth(1-28,月定投日,封顶 28) / status。**新建即激活**:create 直接落 EFFECTIVE
 (同基金已有 EFFECTIVE 则回退 DRAFT)。状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE,
 同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
+只有 `DRAFT` 计划允许软删除；运行中或已暂停的 EFFECTIVE 必须先停用。删除计划不删除或改写任何历史/待确认交易，交易保留原 `dcaPlanId` 作为来源记录。
 
 **DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
 日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行

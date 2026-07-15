@@ -59,10 +59,6 @@ export default function DcaPlanFormModal({open, editing, onOk, onCancel, confirm
                         <InputNumber min={1} max={28} className="full-width" placeholder="如 15"/>
                     </Form.Item>
                 )}
-                <p style={{color: '#888', fontSize: 12}}>
-                    新建后立即生效:系统在每个交易日 14:55 自动生成 INVEST 交易(PENDING),次日凌晨确认份额。
-                    日定投每个交易日执行;周定投按所选星期;月定投按所选日期,遇节假日顺延到下一交易日。
-                </p>
             </Form>
         </Modal>
     );

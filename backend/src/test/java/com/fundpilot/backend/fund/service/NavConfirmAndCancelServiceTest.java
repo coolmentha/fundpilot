@@ -3,6 +3,7 @@ package com.fundpilot.backend.fund.service;
 import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
@@ -10,8 +11,6 @@ import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
-import com.fundpilot.backend.user.entity.UserConfigEntity;
-import com.fundpilot.backend.user.repository.UserConfigRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,18 +34,12 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     @Autowired NavConfirmService navConfirmService;
     @Autowired TransactionCancelService transactionCancelService;
     @Autowired EntityManager entityManager;
-    @Autowired UserConfigRepository userConfigRepository;
 
     private FundEntity fund;
     private Instant today;
 
     @BeforeEach
     void setUp() {
-        UserConfigEntity config = userConfigRepository.findAll().stream().findFirst()
-                .orElseGet(UserConfigEntity::new);
-        config.setTotalCapital(new BigDecimal("100000"));
-        userConfigRepository.save(config);
-
         today = ChinaTradingDate.toUtcDate(Instant.now());
         fund = new FundEntity();
         fund.setFundCode("510300");
@@ -120,6 +113,16 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
         persistNavToday(new BigDecimal("2.00"));
         FundTransactionEntity buy = persistTx(FundTransactionSource.INCREASE, new BigDecimal("2000"), new BigDecimal("1000"));
         buy.setStatus(FundTransactionStatus.CONFIRMED);
+        buy.setTradeDate(today);
+        buy.setConfirmTime(Instant.now());
+        FundLotEntity lot = new FundLotEntity();
+        lot.setFundEntity(fund);
+        lot.setAcquireTxId(buy.getId());
+        lot.setAcquireDate(today);
+        lot.setAcquireShares(new BigDecimal("1000"));
+        lot.setRemainingShares(new BigDecimal("1000"));
+        lot.setAcquireCostPerShare(new BigDecimal("2.00"));
+        entityManager.persist(lot);
         FundTransactionEntity sell = persistTx(FundTransactionSource.DECREASE, null, new BigDecimal("1000"));
         entityManager.flush();
 

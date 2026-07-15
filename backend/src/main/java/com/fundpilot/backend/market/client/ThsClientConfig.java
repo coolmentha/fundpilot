@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * ThsClient(同花顺)的 Feign 配置,作为东方财富的降级数据源(issue #7)。
+ * 同花顺 Feign 客户端配置，提供基金净值、基金字典和指数 K 线真实降级源。
  * <p>加同花顺 Referer/UA 请求头;不重试(让 {@link MarketDataSourceChain} 控制降级)。
  * <p>Feign {@code url} 通过 {@code ths.base-url} 配置,默认指向同花顺服务。
  */
@@ -36,7 +36,7 @@ public class ThsClientConfig {
     }
 
     /**
-     * 注册 {@link ThsClient} 为 Spring Bean,供 {@code MarketDataSourceChain} 降级使用。
+     * 注册 {@link ThsClient} 为 Spring Bean，提供单位净值与累计净值原始响应。
      *
      * @param baseUrl 同花顺服务基础地址,由 {@code ths.base-url} 配置
      */

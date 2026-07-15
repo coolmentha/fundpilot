@@ -1,6 +1,7 @@
 package com.fundpilot.backend.dca.service;
 
 import com.fundpilot.backend.dca.controller.DcaPlanRequest;
+import com.fundpilot.backend.dca.controller.DcaPlanManagementView;
 import com.fundpilot.backend.dca.controller.FundDcaPlanView;
 import com.fundpilot.backend.dca.entity.FundDcaPlanEntity;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
@@ -15,7 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -30,6 +33,7 @@ public class DcaPlanService {
 
     private final FundDcaPlanRepository fundDcaPlanRepository;
     private final FundRepository fundRepository;
+    private final DcaPlanForecastService dcaPlanForecastService;
 
     @Transactional
     public Long create(Long fundId, DcaPlanRequest request) {
@@ -47,11 +51,8 @@ public class DcaPlanService {
     }
 
     @Transactional
-    public void updateDraft(Long planId, DcaPlanRequest request) {
+    public void update(Long planId, DcaPlanRequest request) {
         FundDcaPlanEntity plan = requirePlan(planId);
-        if (plan.getStatus() == DcaPlanStatus.EFFECTIVE) {
-            throw new IllegalStateTransitionException(plan.getStatus().name(), "草稿(非生效态,可改参数)");
-        }
         applyRequest(plan, request);
         validateAndNormalize(plan);
         fundDcaPlanRepository.save(plan);
@@ -65,6 +66,22 @@ public class DcaPlanService {
     @Transactional(readOnly = true)
     public List<FundDcaPlanView> listByFundView(Long fundId) {
         return listByFund(fundId).stream().map(FundDcaPlanView::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DcaPlanManagementView> listManagementView() {
+        List<FundDcaPlanEntity> plans = fundDcaPlanRepository.findAllWithFund().stream()
+                .sorted(Comparator
+                        .comparing((FundDcaPlanEntity plan) -> plan.getStatus() != DcaPlanStatus.EFFECTIVE)
+                        .thenComparing(plan -> !Boolean.TRUE.equals(plan.getEnabled()))
+                        .thenComparing(plan -> plan.getFundEntity().getFundName())
+                        .thenComparing(FundDcaPlanEntity::getId))
+                .toList();
+        Map<Long, List<Instant>> datesByPlan = dcaPlanForecastService.currentMonthExecutionDates(plans);
+        return plans.stream()
+                .map(plan -> DcaPlanManagementView.from(
+                        plan, datesByPlan.getOrDefault(plan.getId(), List.of())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +127,17 @@ public class DcaPlanService {
         }
         plan.setEnabled(enabled);
         fundDcaPlanRepository.save(plan);
+    }
+
+    /** 仅允许删除已停用计划；交易流水通过 dcaPlanId 保留历史来源。 */
+    @Transactional
+    public void delete(Long planId) {
+        FundDcaPlanEntity plan = requirePlan(planId);
+        if (plan.getStatus() != DcaPlanStatus.DRAFT) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_DELETE_REQUIRES_DRAFT,
+                    "请先停用定投计划再删除");
+        }
+        fundDcaPlanRepository.delete(plan);
     }
 
     private FundDcaPlanEntity requirePlan(Long planId) {

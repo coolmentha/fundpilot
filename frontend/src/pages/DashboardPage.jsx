@@ -24,7 +24,9 @@ export default function DashboardPage() {
     const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
 
     const pendingColumns = [
-        {title: '基金', width: 160, render: (_, r) => fundName(r.fundId)},
+        {title: '基金', width: 160, render: (_, r) => (
+            <Link to={`/funds/${r.fundId}`}>{fundName(r.fundId)}</Link>
+        )},
         {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '建议量', width: 130, render: (_, r) => {
@@ -41,7 +43,8 @@ export default function DashboardPage() {
 
     const holdingColumns = [
         {title: '代码', dataIndex: 'fundCode', width: 110},
-        {title: '名称', dataIndex: 'fundName', ellipsis: true},
+        {title: '名称', dataIndex: 'fundName', ellipsis: true,
+            render: (v, r) => <Link to={`/funds/${r.id}`}>{v}</Link>},
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
         {
             title: '', width: 90, render: (_, r) => (

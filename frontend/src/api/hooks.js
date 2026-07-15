@@ -116,6 +116,13 @@ export function useDcaPlans(fundId) {
         enabled: !!fundId,
     });
 }
+export function useDcaManagementPlans() {
+    return useQuery({
+        queryKey: ['dca-plans', 'all'],
+        queryFn: () => get('/api/dca-plans'),
+        ...realtimeQueryOptions,
+    });
+}
 export function useActiveDcaPlan(fundId) {
     return useQuery({
         queryKey: ['dca-active', fundId],
@@ -123,12 +130,14 @@ export function useActiveDcaPlan(fundId) {
         enabled: !!fundId,
     });
 }
-const useInvalidateDcaPlans = (fundId) => {
+export function invalidateDcaPlanQueries(queryClient) {
+    queryClient.invalidateQueries({queryKey: ['dca-plans']});
+    queryClient.invalidateQueries({queryKey: ['dca-active']});
+    invalidateDcaBudgetSummary(queryClient);
+}
+const useInvalidateDcaPlans = () => {
     const qc = useQueryClient();
-    return () => {
-        qc.invalidateQueries({queryKey: ['dca-plans', fundId]});
-        qc.invalidateQueries({queryKey: ['dca-active', fundId]});
-    };
+    return () => invalidateDcaPlanQueries(qc);
 };
 export function useCreateDcaPlan(fundId) {
     const onSuccess = useInvalidateDcaPlans(fundId);
@@ -147,6 +156,25 @@ export function useDcaPlanAction(fundId) {
         mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
         onSuccess,
     });
+}
+export function deleteDcaPlan(id) {
+    return del(`/api/dca-plans/${id}`);
+}
+export function useDeleteDcaPlan() {
+    const onSuccess = useInvalidateDcaPlans();
+    return useMutation({mutationFn: deleteDcaPlan, onSuccess});
+}
+
+export function useDcaBudgetSummary() {
+    return useQuery({
+        queryKey: ['dca-budget-summary'],
+        queryFn: () => get('/api/dca/budget-summary'),
+        ...realtimeQueryOptions,
+    });
+}
+
+export function invalidateDcaBudgetSummary(queryClient) {
+    queryClient.invalidateQueries({queryKey: ['dca-budget-summary']});
 }
 
 // ===== 信号 =====
@@ -214,6 +242,7 @@ export function useCancelTransaction() {
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
             qc.invalidateQueries({queryKey: ['funds']});
+            invalidateDcaBudgetSummary(qc);
         },
     });
 }
@@ -224,6 +253,7 @@ export function useConfirmTransaction() {
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
             qc.invalidateQueries({queryKey: ['funds']});
+            invalidateDcaBudgetSummary(qc);
         },
     });
 }
@@ -235,6 +265,7 @@ export function useCreateManualTransaction(fundId) {
             // 转换模式会在另一只基金建转入腿,需刷新全部基金摘要;非转换也刷新当前基金流水
             qc.invalidateQueries({queryKey: ['fund-transactions', fundId]});
             qc.invalidateQueries({queryKey: ['funds']});
+            invalidateDcaBudgetSummary(qc);
         },
     });
 }
@@ -252,20 +283,9 @@ export function useUpdateUserConfig() {
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['user-config']});
             qc.invalidateQueries({queryKey: ['market', 'indices']});
+            invalidateDcaBudgetSummary(qc);
         },
     });
-}
-
-export function useDepositCapital() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: depositCapital,
-        onSuccess: () => qc.invalidateQueries({queryKey: ['user-config']}),
-    });
-}
-
-export function depositCapital(amount) {
-    return post('/api/user-config/deposits', {amount});
 }
 
 // ===== 行情 =====

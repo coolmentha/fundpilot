@@ -3,6 +3,8 @@ package com.fundpilot.backend.market.controller;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 基金盘中估值视图 DTO(行情工作台基金列表的实时涨跌列)。
@@ -19,5 +21,10 @@ public record FundEstimateView(
     public static FundEstimateView from(FundEstimateSnapshot s) {
         return s == null ? null
                 : new FundEstimateView(s.estimatedChangePct(), s.estimateTime(), s.baseNavDate());
+    }
+
+    public static Map<String, FundEstimateView> from(Map<String, FundEstimateSnapshot> snapshots) {
+        return snapshots.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> from(entry.getValue())));
     }
 }

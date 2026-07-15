@@ -1,5 +1,6 @@
 package com.fundpilot.backend.market.service;
 
+import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -36,19 +38,27 @@ public class DailyNavConfirmService {
     private final MarketDataSource marketDataSource;
     private final ApplicationEventPublisher eventPublisher;
     private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
+    private final Clock clock;
 
     /**
      * 遍历所有基金,增量确认已公布净值。供 {@code DailyNavConfirmJob} 每 5 分钟调用。
      */
     public void confirmTodayNav() {
+        confirmNavForDate(ChinaTradingDate.toUtcDate(clock.instant()));
+    }
+
+    /** 确认指定交易日净值，供晚间当日轮询与次日上午跨夜补拉共用。 */
+    public void confirmNavForDate(Instant targetDate) {
+        Instant normalizedTargetDate = ChinaTradingDate.toUtcDate(targetDate);
         List<FundTarget> funds = fundRepository.findAll().stream()
-                .map(fund -> new FundTarget(fund.getId(), fund.getFundCode(), fund.getFundName(), fund.getInvestmentTarget()))
+                .map(fund -> new FundTarget(fund.getId(), fund.getFundCode(), fund.getFundName(),
+                        fund.getInvestmentTarget()))
                 .toList();
         int confirmed = 0;
         int skipped = 0;
         for (FundTarget fund : funds) {
             try {
-                if (confirmOne(fund)) {
+                if (confirmOne(fund, normalizedTargetDate)) {
                     confirmed++;
                 } else {
                     skipped++;
@@ -58,24 +68,30 @@ public class DailyNavConfirmService {
                 skipped++;
             }
         }
-        log.info("当日净值确认完成:新落库 {} 只,跳过 {} 只", confirmed, skipped);
+        log.info("交易日 {} 净值确认完成:新落库 {} 只,跳过 {} 只",
+                normalizedTargetDate, confirmed, skipped);
     }
 
     /**
      * @return true=本次新落库了净值;false=无更新或当前产品不支持普通净值,跳过
      */
-    private boolean confirmOne(FundTarget fund) {
+    private boolean confirmOne(FundTarget fund, Instant targetDate) {
         if (!FundMarketDataCapability.supportsStandardNav(fund.target(), fund.name())) {
             return false;
         }
         Instant localLatest = fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(fund.id())
                 .map(FundNavHistoryEntity::getNavDate).orElse(Instant.MIN);
+        if (!localLatest.isBefore(targetDate)) {
+            return false;
+        }
         List<FundNavSnapshot> navHistory = marketDataSource.fetchNavHistory(fund.code());
         if (navHistory == null || navHistory.isEmpty()) {
             return false;
         }
         List<FundNavSnapshot> candidates = navHistory.stream()
-                .filter(snapshot -> snapshot.navDate() != null && snapshot.navDate().isAfter(localLatest))
+                .filter(snapshot -> snapshot.navDate() != null
+                        && snapshot.navDate().isAfter(localLatest)
+                        && !snapshot.navDate().isAfter(targetDate))
                 .sorted(Comparator.comparing(FundNavSnapshot::navDate))
                 .toList();
         if (candidates.isEmpty()) {

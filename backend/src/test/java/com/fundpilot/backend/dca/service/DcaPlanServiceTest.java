@@ -9,13 +9,18 @@ import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundTransactionEntity;
+import com.fundpilot.backend.fund.enums.FundTransactionSource;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +42,9 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
     @Autowired
     FundRepository fundRepository;
 
+    @Autowired
+    FundTransactionRepository fundTransactionRepository;
+
     @Test
     @Transactional
     void create_新建即激活为_EFFECTIVE() {
@@ -54,12 +62,12 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void updateDraft_DRAFT_状态可改() {
+    void update_DRAFT_状态可改() {
         FundEntity fund = persistFund();
         Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
         dcaPlanService.retire(planId); // EFFECTIVE → DRAFT 才可改
 
-        dcaPlanService.updateDraft(planId, new DcaPlanRequest(
+        dcaPlanService.update(planId, new DcaPlanRequest(
                 false, new BigDecimal("2000"), DcaFrequency.MONTHLY, null, 15));
 
         FundDcaPlanEntity saved = fundDcaPlanRepository.findById(planId).orElseThrow();
@@ -72,12 +80,15 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void updateDraft_EFFECTIVE_状态抛_IllegalStateTransition() {
+    void update_EFFECTIVE_状态可直接修改且保持生效() {
         FundEntity fund = persistFund();
         Long planId = dcaPlanService.create(fund.getId(), weeklyRequest()); // 新建即 EFFECTIVE
 
-        assertThatThrownBy(() -> dcaPlanService.updateDraft(planId, weeklyRequest(new BigDecimal("2000"))))
-                .isInstanceOf(IllegalStateTransitionException.class);
+        dcaPlanService.update(planId, weeklyRequest(new BigDecimal("2000")));
+
+        FundDcaPlanEntity saved = fundDcaPlanRepository.findById(planId).orElseThrow();
+        assertThat(saved.getAmount()).isEqualByComparingTo("2000");
+        assertThat(saved.getStatus()).isEqualTo(DcaPlanStatus.EFFECTIVE);
     }
 
     @Test
@@ -190,6 +201,47 @@ class DcaPlanServiceTest extends AbstractIntegrationTest {
                 new DcaPlanRequest(true, BigDecimal.ZERO, DcaFrequency.WEEKLY, 1, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.DCA_PLAN_INVALID.name());
+    }
+
+    @Test
+    @Transactional
+    void delete_DRAFT_软删除计划且保留历史交易() {
+        FundEntity fund = persistFund();
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+        dcaPlanService.retire(planId);
+        FundTransactionEntity transaction = new FundTransactionEntity();
+        transaction.setFundEntity(fund);
+        transaction.setDcaPlanId(planId);
+        transaction.setSource(FundTransactionSource.INVEST);
+        transaction.setStatus(FundTransactionStatus.CONFIRMED);
+        transaction.setTradeDate(Instant.parse("2026-07-14T00:00:00Z"));
+        Long transactionId = fundTransactionRepository.save(transaction).getId();
+
+        dcaPlanService.delete(planId);
+
+        assertThat(fundDcaPlanRepository.findById(planId)).isEmpty();
+        assertThat(fundTransactionRepository.findById(transactionId)).get()
+                .extracting(FundTransactionEntity::getDcaPlanId).isEqualTo(planId);
+    }
+
+    @Test
+    @Transactional
+    void delete_EFFECTIVE_拒绝并返回专用错误码() {
+        FundEntity fund = persistFund();
+        Long planId = dcaPlanService.create(fund.getId(), weeklyRequest());
+
+        assertThatThrownBy(() -> dcaPlanService.delete(planId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.DCA_PLAN_DELETE_REQUIRES_DRAFT.name());
+        assertThat(fundDcaPlanRepository.findById(planId)).isPresent();
+    }
+
+    @Test
+    @Transactional
+    void delete_不存在计划_返回_NOT_FOUND() {
+        assertThatThrownBy(() -> dcaPlanService.delete(Long.MAX_VALUE))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.DCA_PLAN_NOT_FOUND.name());
     }
 
     private FundEntity persistFund() {
