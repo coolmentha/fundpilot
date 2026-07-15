@@ -27,6 +27,7 @@ FundTransactionView FundTransactionService.createManual(Long fundId, ManualTrans
 boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
 DcaBudgetSummaryView DcaBudgetSummaryService.currentMonth();
 Map<Long, List<Instant>> DcaPlanForecastService.currentMonthExecutionDates(List<FundDcaPlanEntity> plans);
+List<FundDcaPlanEntity> FundDcaPlanRepository.findAllWithFund();
 boolean DcaScheduleService.isFutureExecutionDay(FundDcaPlanEntity plan, Instant candidate, Instant now);
 List<FundNavHistoryEntity> FundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
     Long fundId, Instant startInclusive, Instant endExclusive);
@@ -83,7 +84,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `monthlyDcaBudget` 是可选展示预算，不是余额或买入额度；预算为空时仍返回已定投、未来计划和预计定投，但剩余/超额为空。
 - 本月已定投统计北京时间自然月内所有非 CANCELLED 的 INVEST，包含手动/自动和 PENDING/CONFIRMED。
 - 本月剩余预计只含 EFFECTIVE 且 enabled 的计划；当天仅在 14:55 前算未来，同一计划已有任意状态交易的实际执行日不得重复计入，月计划跨月顺延按实际月份归属。
-- 预算摘要和全局计划列表必须共用 `DcaPlanForecastService`；计划列表的剩余金额合计必须等于摘要 `futureAmount`。
+- 预算摘要和全局计划列表必须共用 `DcaPlanForecastService`，并从 `FundDcaPlanRepository.findAllWithFund()` 取得同一可见计划集合；关联基金已软删除的历史计划不得进入摘要。计划列表的剩余金额合计必须等于摘要 `futureAmount`。
 - EFFECTIVE 与 DRAFT 计划都允许修改参数；修改只影响尚未生成的未来交易，不改写历史 PENDING/CONFIRMED/CANCELLED。
 - `positionWarningEnabled/positionWarningRatio` 只比较当前 CONFIRMED 持仓市值占全部当前持仓市值的比例；关闭后仍可展示比例，不告警。任一已持仓基金当前市值未知时，所有比例都保持未知，禁止按可用子集重算。
 - 所有买入确认入口（INCREASE/TRANSFER_IN/INVEST、初始持仓和转换转入腿）不得读取月度预算或仓位提醒字段，也不得因预算超额或占比超线抛业务错误。
@@ -137,6 +138,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Good：转换转入腿具备当日单位净值后正常确认，即使未设置预算或基金当前占比超过提醒线。
 - Good：14:54 的当日计划计入未来金额，14:55 后由实际 INVEST 交易进入已定投；同一日期不重复相加。
 - Good：全局计划列表逐计划剩余金额之和等于预算摘要 `futureAmount`，CANCELLED 日期在两处都不重复预测。
+- Good：关联基金已软删除但计划仍为 EFFECTIVE/enabled 时，fetch join 同时将该计划排除在管理列表和预算摘要之外。
 - Good：直接修改 EFFECTIVE 计划金额后，历史交易金额不变，后续尚未生成日期使用新金额。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
 - Base：50 份 open lot + 50 份 ADJUST_IN，卖 100 份时仅前 50 份计算赎回费。
@@ -168,7 +170,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `SignalQueryServiceTest`：已回应信号不再出现在 pending 列表。
 - `SignalGenerationServiceTest` / `FundTransactionRepositoryTest`：无买入记录仍落信号，较新卖出不覆盖最近买入时间，已回应信号重跑不覆盖。
 - `DcaPlanServiceTest` / `DcaSuggestionJobTest`：覆盖 EFFECTIVE 直接更新、参数范围、月末跨月顺延和 PENDING/CONFIRMED/CANCELLED 全状态幂等。
-- `DcaPlanForecastServiceTest` / `DcaBudgetSummaryServiceTest`：覆盖逐计划日期、任意状态交易去重、停用/暂停过滤，以及逐计划金额与摘要口径一致。
+- `DcaPlanForecastServiceTest` / `DcaBudgetSummaryServiceTest`：覆盖逐计划日期、任意状态交易去重、停用/暂停过滤、摘要使用 `findAllWithFund()` 可见计划集合，以及逐计划金额与摘要口径一致。
 - `DisciplineStrategyServiceTest`：覆盖生效策略未触发卖出返回 `NO_SELL_TRIGGER`。
 - `FundPositionService` 调用路径测试：确认/撤销后按 CONFIRMED 事实持仓重算状态。
 - `TransactionConfirmServiceStateTest`：CONFIRMED/PENDING 不重复调用 `onSellConfirmed`。
@@ -192,6 +194,7 @@ fund.setStatus(CLEARED); // PENDING 阶段提前改事实状态
 if (!existing.contains(date)) repository.save(entity); // 并发竞态
 tx.setCreatedDate(request.tradeDate()); // 审计字段会被保存流程覆盖
 repository.existsByDcaPlanIdAndStatusAndCreatedDateBetween(id, PENDING, start, end); // 确认/撤销后可重复生成
+fundDcaPlanRepository.findByStatusAndEnabledTrue(EFFECTIVE); // 摘要会包含关联基金已归档、管理页不可见的计划
 repository.findByFundEntity_IdAndNavDateBetweenOrderByNavDateAsc(id, start, end); // Between 包含结束点
 for (FundEntity fund : funds) confirmOne(fund); // 外围大事务导致整批回滚
 onSellConfirmed(tx, nav); // 未锁基金、未按 CONFIRMED 事实持仓复核
@@ -210,6 +213,7 @@ fundPositionService.reconcileStatus(fundId); // 只在确认/撤销后按事实�
 repository.insertTradingDayIfAbsent(date); // INSERT ... ON CONFLICT DO NOTHING
 eventPublisher.publishEvent(new FundNavUpdatedEvent(fundId)); // AFTER_COMMIT 再推进交易
 repository.existsByDcaPlanIdAndTradeDateBetween(id, start, end); // 任意状态均防重
+fundDcaPlanRepository.findAllWithFund(); // 摘要与管理页共享关联基金可见的计划集合
 navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(id, start, end); // [start, end)
 requiresNewTransactionExecutor.execute(() -> processFund(fundId)); // 每只基金独立提交/回滚
 fundRepository.findByIdForUpdate(fundId);

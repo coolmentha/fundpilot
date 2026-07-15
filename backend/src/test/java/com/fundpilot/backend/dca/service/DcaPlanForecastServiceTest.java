@@ -52,14 +52,13 @@ class DcaPlanForecastServiceTest {
     }
 
     @Test
-    void currentMonthRemainingAmount_任意状态交易都占用本期日期() {
+    void currentMonthRemainingAmount_使用管理页可见计划集合且任意状态交易都占用本期日期() {
         FundDcaPlanEntity plan = activePlan(7L, "200");
         FundTransactionRepository.DcaTransactionDateProjection occurrence =
                 mock(FundTransactionRepository.DcaTransactionDateProjection.class);
         when(occurrence.getDcaPlanId()).thenReturn(7L);
         when(occurrence.getTradeDate()).thenReturn(Instant.parse("2026-07-13T06:55:00Z"));
-        when(fundDcaPlanRepository.findByStatusAndEnabledTrue(DcaPlanStatus.EFFECTIVE))
-                .thenReturn(List.of(plan));
+        when(fundDcaPlanRepository.findAllWithFund()).thenReturn(List.of(plan));
         when(dcaScheduleService.startOfBusinessDay(NOW)).thenReturn(DAY_START);
         when(dcaScheduleService.startOfNextMonth(NOW)).thenReturn(Instant.parse("2026-07-13T16:00:00Z"));
         when(fundTransactionRepository.findDcaTransactionDates(
@@ -67,6 +66,7 @@ class DcaPlanForecastServiceTest {
                 .thenReturn(List.of(occurrence));
 
         assertThat(service.currentMonthRemainingAmount()).isEqualByComparingTo("0");
+        verify(fundDcaPlanRepository).findAllWithFund();
         verify(dcaScheduleService, never()).isFutureExecutionDay(any(), any(), any());
     }
 
