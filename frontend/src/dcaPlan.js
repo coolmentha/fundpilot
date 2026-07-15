@@ -6,3 +6,9 @@ export function dcaScheduleText(plan) {
     if (plan?.frequency === 'MONTHLY') return plan.dayOfMonth ? `每月${plan.dayOfMonth}号` : '-';
     return '-';
 }
+
+export function dcaPlanState(plan) {
+    if (plan?.status !== 'EFFECTIVE') return {label: '已停用'};
+    if (!plan.enabled) return {label: '已暂停'};
+    return {label: '运行中', color: 'green'};
+}

@@ -81,7 +81,7 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void 已确认基金_最近navDate今天_跳过不重复拉取() {
+    void 已确认基金_指定日期已存在_跳过不重复拉取() {
         String fundCode = uniqueCode();
         FundEntity fund = persistFund(fundCode);
         // 已落库今日净值(已确认)
@@ -110,6 +110,26 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
 
         // 净值未公布,不拉 pingzhongdata
         verify(marketDataSource, never()).fetchNavHistory(anyString());
+    }
+
+    @Test
+    void 缺失上一交易日净值_按指定日期补拉并落库() {
+        String fundCode = uniqueCode();
+        FundEntity fund = persistFund(fundCode);
+        Instant today = ChinaTradingDate.toUtcDate(Instant.now());
+        Instant previousTradingDay = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
+        when(fundEstimateService.fetchEstimate(fundCode)).thenReturn(Optional.of(
+                new FundEstimateSnapshot(new BigDecimal("0.01"), "yesterday 20:00",
+                        previousTradingDay.toString())));
+        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
+                new FundNavSnapshot(previousTradingDay, new BigDecimal("1.0100"),
+                        new BigDecimal("1.0100"))));
+
+        dailyNavConfirmService.confirmNavForDate(previousTradingDay);
+
+        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
+                .extracting(FundNavHistoryEntity::getNavDate)
+                .contains(previousTradingDay);
     }
 
     private FundEntity persistFund(String code) {
