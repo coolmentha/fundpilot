@@ -102,7 +102,7 @@ FundPilot 解决三个问题：
 
 14:55 的 `DcaSuggestionJob` 在交易日自动生成 `INVEST/PENDING` 交易。相同计划在同一北京时间自然日只能生成一次，CONFIRMED 或 CANCELLED 都视为本期已处理。
 
-基金列表顶部展示本月已定投、未来计划和预计定投。用户可在设置页配置可选月度预算，超额只提示，不改变计划或交易状态。
+基金列表和定投管理页展示本月已定投、本月剩余预计和全月预计。用户可在设置页配置可选月度预算，超额只提示，不改变计划或交易状态。
 
 ## 六、卖出纪律
 
@@ -160,7 +160,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 |---|---|
 | 基金 | `/api/funds`、`/api/funds/{id}`、`/api/funds/search` |
 | 策略 | `/api/funds/{id}/strategies`、`/api/strategies/{id}/activate` |
-| 定投 | `/api/funds/{id}/dca-plans`、`/api/dca-plans/{id}/activate`、`/api/dca/budget-summary` |
+| 定投 | `/api/dca-plans`、`/api/funds/{id}/dca-plans`、`/api/dca-plans/{id}/activate`、`/api/dca/budget-summary` |
 | 信号 | `/api/funds/{id}/signals/today`、`/api/signals/pending` |
 | 信号回应 | `/api/funds/{id}/operations`、`/api/funds/{id}/signals/{signalId}/ignore` |
 | 交易 | `/api/funds/{id}/transactions`、`/api/transactions/{id}/confirm` |

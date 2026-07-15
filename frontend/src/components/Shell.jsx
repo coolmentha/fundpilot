@@ -9,6 +9,7 @@ import {
     EllipsisOutlined,
     LogoutOutlined,
     StockOutlined,
+    CalendarOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
@@ -23,6 +24,7 @@ const PAGE_META = {
     '/': {title: '行情工作台', subtitle: '实时行情与市场动态'},
     '/dashboard': {title: '策略概览', subtitle: '账户全局与今日待办(旧)'},
     '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
+    '/dca': {title: '定投管理', subtitle: '计划配置与本月剩余预计'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
     '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
     '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
@@ -42,6 +44,7 @@ const NAV_GROUPS = [
             {key: '/signals', icon: <BarChartOutlined/>, label: '交易信号'},
             {key: '/confirm', icon: <ThunderboltOutlined/>, label: '操作确认', badge: true},
             {key: '/funds', icon: <FundOutlined/>, label: '我的基金'},
+            {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
         ],
     },
     {
@@ -62,6 +65,7 @@ const BOTTOM_NAV = [
     {key: '/confirm', icon: <ThunderboltOutlined/>, label: '确认', badge: true},
 ];
 const BOTTOM_MORE = [
+    {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
     {key: '/monitor', icon: <StockOutlined/>, label: '监控'},
