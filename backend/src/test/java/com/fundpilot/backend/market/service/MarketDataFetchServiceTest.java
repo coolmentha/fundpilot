@@ -21,6 +21,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -62,6 +63,9 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    TransactionTemplate transactionTemplate;
 
     @AfterEach
     void cleanUp() {
@@ -167,6 +171,25 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
 
         List<FundNavHistoryEntity> rows = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
         assertThat(rows).hasSize(261); // 无策略基金也落库,story 21 数据侧
+    }
+
+    @Test
+    void fetchOneFund_加入创建事务_可读取未提交基金并落库() {
+        mockNavHistory();
+        mockIndexKline();
+
+        Long fundId = transactionTemplate.execute(status -> {
+            FundEntity fund = new FundEntity();
+            fund.setFundCode("017093");
+            fund.setFundName("事务可见性测试基金");
+            fund.setBenchmarkIndexCode("1.000300");
+            fundRepository.save(fund);
+
+            marketDataFetchService.fetchOneFund(fund.getId());
+            return fund.getId();
+        });
+
+        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fundId)).hasSize(261);
     }
 
     private void mockNavHistory() {

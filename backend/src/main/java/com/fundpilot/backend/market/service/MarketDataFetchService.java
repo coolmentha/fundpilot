@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -30,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 行情指标拉取编排服务(issue #7):每日 14:30/14:40/14:50 三批拉取所有未软删基金
@@ -156,7 +158,7 @@ public class MarketDataFetchService {
             }
         }
         IndexKline fetchedIndexKline = indexKline;
-        requiresNewTransactionExecutor.execute(() -> {
+        Supplier<Void> persist = () -> {
             FundEntity managedFund = fundRepository.findById(fundId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
             template.setFundEntity(managedFund);
@@ -166,7 +168,13 @@ public class MarketDataFetchService {
             }
             snapshotService.upsert(template);
             return null;
-        });
+        };
+        // 新建基金时须加入外层事务，否则 REQUIRES_NEW 看不到尚未提交的 fund 行。
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            persist.get();
+        } else {
+            requiresNewTransactionExecutor.execute(persist);
+        }
     }
 
     /**
