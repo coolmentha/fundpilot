@@ -232,7 +232,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void 单基金_盘前估值预热失败_也不复用上一期净值计算当前市值() {
+    void 单基金_估值预热失败_不复用上一期净值计算当前市值() {
         FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
         navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
         navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
@@ -244,7 +244,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
-        assertThat(pnl.dailyChangePct()).isZero();
+        assertThat(pnl.dailyChangePct()).isNull();
         assertThat(pnl.holdingAmount()).isNull();
         assertThat(pnl.totalPnl()).isNull();
         assertThat(pnl.estimateFetchFailed()).isTrue();

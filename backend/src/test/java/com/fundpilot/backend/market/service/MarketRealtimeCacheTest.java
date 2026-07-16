@@ -111,6 +111,26 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
+    void refreshFundEstimates_只刷新基金估值() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("270042", FundStatus.HOLDING);
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(estimateService.fetchEstimateResult("270042")).thenReturn(FundEstimateResult.unavailable());
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+
+        cache.refreshFundEstimates();
+
+        verify(estimateService).fetchEstimateResult("270042");
+        verify(push2Client, never()).fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString());
+        verify(push2Client, never()).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyString());
+        verify(push2Client, never()).fetchNorthboundRaw();
+    }
+
+    @Test
     void onApplicationReady_不在启动线程逐只刷新基金估值() throws Exception {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);

@@ -52,8 +52,8 @@ public class FundPnlService {
 
     /**
      * 聚合单基金的涨跌与盈亏(三态,issue #38)。
-     * <p>今日涨跌经 {@link DailyChangeResolver} 三态判定(盘前0/盘中估值/盘后实际),
-     * 今日盈亏 = 昨日市值 × 今日涨跌幅,总盈亏盘后用落库净值算 / 盘中估算(详见 PRD #34 / ADR-0008)。
+     * <p>今日涨跌经 {@link DailyChangeResolver} 三态判定(估值前0/当日估值/净值实际),
+     * 今日盈亏 = 最近确认市值 × 今日涨跌幅,总盈亏按最近确认净值 / 当日估值 / 实际净值切换(详见 ADR-0008)。
      *
      * @param fundId 基金 ID
      * @return 六字段(均可为 null,除 isEstimated)封装的 Pnl
@@ -119,19 +119,19 @@ public class FundPnlService {
         boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
         boolean standardNavSupported = FundMarketDataCapability.supportsStandardNav(fund);
 
-        // 三态判定:盘后(当日净值落库)用落库净值;盘中(未落库)只读实时缓存,不在 GET 请求里打外部接口
+        // 三态判定只读实时缓存,不在 GET 请求里打外部接口。
+        EstimateStatus estimateStatus = todayNavConfirmed ? EstimateStatus.AVAILABLE
+                : !standardNavSupported ? EstimateStatus.UNAVAILABLE
+                : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
         Optional<FundEstimateSnapshot> estimate = todayNavConfirmed || !standardNavSupported
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode(), batchEstimates);
         DailyChangeResult changeResult = standardNavSupported || todayNavConfirmed
                 ? DailyChangeResolver.resolve(
-                        clock.instant(), todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate)
+                        todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate, estimateStatus)
                 : new DailyChangeResult(null, false);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
-        EstimateStatus estimateStatus = todayNavConfirmed ? EstimateStatus.AVAILABLE
-                : !standardNavSupported ? EstimateStatus.UNAVAILABLE
-                : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
         if (standardNavSupported && dailyChangePct != null && !estimateStatus.isFailure()) {
             estimateStatus = EstimateStatus.AVAILABLE;
         }
@@ -144,11 +144,12 @@ public class FundPnlService {
         // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
         // 非估计态:dailyChangePct = (latest-previous)/previous,基准是 previousNav
         // 估计态:dailyChangePct = fundgz.gszzl,基准是 latestNav(最新已公布净值)
-        BigDecimal dailyPnlBaseNav = isEstimated ? latestUnitNav : previousUnitNav;
+        boolean usesLatestConfirmedNav = !todayNavConfirmed && !isEstimated && dailyChangePct != null;
+        BigDecimal dailyPnlBaseNav = isEstimated || usesLatestConfirmedNav ? latestUnitNav : previousUnitNav;
         BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
         // 当日净值已确认时使用实际值;未确认时必须有今日涨跌才能推算当前净值。
         // 估值失败/缺失时不能拿上一期已公布净值冒充当前市值和总盈亏。
-        BigDecimal pnlNav = todayNavConfirmed ? latestUnitNav
+        BigDecimal pnlNav = todayNavConfirmed || usesLatestConfirmedNav ? latestUnitNav
                 : isEstimated ? estimatedUnitNav(latestUnitNav, dailyChangePct) : null;
         BigDecimal holdingAmount = computeHoldingAmount(holdingShares, pnlNav);
         BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, pnlNav, costPerShare);
@@ -157,7 +158,7 @@ public class FundPnlService {
                 holdingShares, holdingAmount, dailyPnl, totalPnl);
     }
 
-    /** 从实时缓存读取 fundgz 盘中估值;缓存未命中降级返 empty。 */
+    /** 从实时缓存读取 fundgz 当日估值;缓存未命中降级返 empty。 */
     private Optional<FundEstimateSnapshot> getCachedEstimate(String fundCode) {
         return getCachedEstimate(fundCode, null);
     }
@@ -253,8 +254,8 @@ public class FundPnlService {
     /**
      * 单基金盈亏结果(字段均可为 null,除 isEstimated;对应 FundView 可空字段)。
      *
-     * @param dailyChangePct 今日涨跌幅(三态:盘前0/盘中估值/盘后实际)
-     * @param isEstimated    是否估算态(true=盘中 fundgz 估算)
+     * @param dailyChangePct 今日涨跌幅(三态:估值前0/当日估值/净值实际)
+     * @param isEstimated    是否估算态(true=fundgz 估算)
      * @param estimateFetchFailed 当日净值未确认且最近一次估值拉取失败
      * @param estimateStatus 估值或当日净值可用状态
      * @param holdingShares  持仓份额
