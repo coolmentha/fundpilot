@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
  *   <li>{@link #breadthCache} 沪深京股票涨跌家数(30s 刷新)</li>
  *   <li>{@link #sectorCache} 行业板块涨跌 + 主力资金(30s 刷新)</li>
  *   <li>{@link #moneyFlowCache} 北向资金(30s 刷新)</li>
- *   <li>{@link #estimateCache} 基金盘中估值(交易时段 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
+ *   <li>{@link #estimateCache} 基金当日估值(主要市场覆盖窗口 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
  * </ul>
  *
  * <p>降级策略:指数/市场宽度/板块/资金刷新失败保留旧缓存。基金估值不同:它是当天短时态数据,
@@ -274,10 +274,11 @@ public class MarketRealtimeCache {
 
     /**
      * 刷新基金估值:遍历所有未软删基金(含观察池),逐个拉 fundgz。
-     * <p>盘中估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
+     * <p>当日估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
      * 本轮失败、空响应或非当天数据会失效该基金旧缓存,防止旧估值冒充今日数据。
+     * <p>本方法不触发指数、市场宽度、板块或资金请求,供境外市场扩展时段的定时任务复用。
      */
-    private void refreshFundEstimates() {
+    public void refreshFundEstimates() {
         try {
             List<FundEntity> funds = fundRepository.findAll();
             for (FundEntity fund : funds) {

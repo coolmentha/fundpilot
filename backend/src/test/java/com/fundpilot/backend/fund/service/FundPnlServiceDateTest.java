@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.service.EstimateStatus;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +34,7 @@ class FundPnlServiceDateTest {
     @Mock MarketRealtimeCache marketRealtimeCache;
 
     @Test
-    void 北京时间凌晨不把昨日净值认作今日已确认() {
+    void QDII北京时间凌晨已有当日估值_使用估值() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
@@ -49,12 +50,13 @@ class FundPnlServiceDateTest {
         when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of(
                 "510300", new FundEstimateSnapshot(new BigDecimal("0.01"),
                         "2026-07-07 00:30", "2026-07-06")));
+        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.AVAILABLE);
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
 
         verify(marketRealtimeCache).getEstimates(List.of("510300"));
-        assertThat(pnl.isEstimated()).isFalse();
-        assertThat(pnl.dailyChangePct()).isZero();
+        assertThat(pnl.isEstimated()).isTrue();
+        assertThat(pnl.dailyChangePct()).isEqualByComparingTo("0.01");
     }
 
     @Test
@@ -71,6 +73,7 @@ class FundPnlServiceDateTest {
         when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of(
                 "510300", new FundEstimateSnapshot(new BigDecimal("0.0123"),
                         "2026-07-10 15:00", "2026-07-09")));
+        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.AVAILABLE);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
@@ -92,12 +95,38 @@ class FundPnlServiceDateTest {
                         nav("2026-07-09T00:00:00Z", "1.20"),
                         nav("2026-07-08T00:00:00Z", "1.10")));
         when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.UNAVAILABLE);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
 
         assertThat(pnl.dailyChangePct()).isNull();
         assertThat(pnl.dailyPnl()).isNull();
+    }
+
+    @Test
+    void 当日估值尚未出现_使用最近确认净值计算持仓() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-10T00:00:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock);
+        FundEntity fund = fund();
+        fund.setCostPerShare(new BigDecimal("1.10"));
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(
+                        nav("2026-07-09T00:00:00Z", "1.20"),
+                        nav("2026-07-08T00:00:00Z", "1.10")));
+        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.STALE);
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund);
+
+        assertThat(pnl.dailyChangePct()).isZero();
+        assertThat(pnl.isEstimated()).isFalse();
+        assertThat(pnl.holdingAmount()).isEqualByComparingTo("120.00");
+        assertThat(pnl.dailyPnl()).isZero();
+        assertThat(pnl.totalPnl()).isEqualByComparingTo("10.00");
     }
 
     private static FundEntity fund() {

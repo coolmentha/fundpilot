@@ -30,7 +30,7 @@ import java.time.Instant;
  * @param costPerShare         持仓成本单价(每份成本,ADR-0013;可空——无持仓时为 null)
  * @param positionWarningEnabled 是否启用当前持仓占比提醒
  * @param positionWarningRatio 当前持仓占比提醒线,仅用于展示提示
- * @param dailyChangePct       今日涨跌幅(三态:盘前0/盘中估值/盘后实际,issue #38;可空——无净值历史时为 null)
+ * @param dailyChangePct       今日涨跌幅(三态:估值前0/当日估值/净值实际,issue #38;可空——无净值历史时为 null)
  * @param isEstimated          是否估算态(true=盘中 fundgz 估算,issue #38)
  * @param estimateFetchFailed  当日净值未确认且最近一次估值拉取失败
  * @param estimateStatus       估值/当日净值状态
