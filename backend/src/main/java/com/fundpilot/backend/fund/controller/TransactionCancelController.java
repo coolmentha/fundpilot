@@ -3,8 +3,10 @@ package com.fundpilot.backend.fund.controller;
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.fund.service.TransactionCancelService;
 import com.fundpilot.backend.fund.service.TransactionConfirmService;
+import com.fundpilot.backend.fund.service.FundTransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +22,13 @@ public class TransactionCancelController {
 
     private final TransactionCancelService transactionCancelService;
     private final TransactionConfirmService transactionConfirmService;
+    private final FundTransactionService fundTransactionService;
+
+    /** 跨基金待处理交易工作台。 */
+    @GetMapping("/api/transactions/pending")
+    public ApiResponse<List<FundTransactionView>> pending() {
+        return ApiResponse.ok(fundTransactionService.listPending());
+    }
 
     @PostMapping("/api/transactions/{id}/cancel")
     public ApiResponse<List<FundTransactionView>> cancel(@PathVariable Long id) {

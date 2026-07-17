@@ -31,6 +31,11 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
      */
     List<FundTransactionEntity> findByStatus(FundTransactionStatus status);
 
+    /** 全局待处理交易，按业务交易时间倒序，供操作确认工作台使用。 */
+    @Query("select t from FundTransactionEntity t where t.status = :status " +
+            "order by coalesce(t.tradeDate, t.createdDate) desc, t.createdDate desc")
+    List<FundTransactionEntity> findByStatusOrderByTradeDateDesc(@Param("status") FundTransactionStatus status);
+
     /**
      * 按 fund_id + status 查交易行,供 {@code FundPositionService} 聚合持仓/在途份额。
      * 软删行由 {@code @SQLRestriction} 自动过滤。

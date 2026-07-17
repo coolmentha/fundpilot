@@ -1,5 +1,5 @@
 import {App, Button, Card, Popconfirm, Space, Typography} from 'antd';
-import {DatabaseOutlined, ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons';
+import {DashboardOutlined, DatabaseOutlined, ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {useAdminAction} from '../api/hooks.js';
 
 const {Title, Text} = Typography;
@@ -23,6 +23,12 @@ export default function AdminPage() {
                     手动触发定时任务（日常由后端 @Scheduled 自动执行，此处用于调试/补跑）。
                 </Text>
                 <Space direction="vertical" size="middle" className="full-width">
+                    <Card size="small" title="系统监控" extra={
+                        <Button href="/grafana/d/spring-boot-overview/spring-boot-overview"
+                                target="_blank" icon={<DashboardOutlined/>}>打开 Grafana</Button>
+                    }>
+                        <Text type="secondary">在 Grafana 查看服务指标、任务运行状态和日志。</Text>
+                    </Card>
                     <Card size="small" title="信号生成" extra={
                         <Popconfirm title="生成今日信号？未回应信号将按最新行情重算。" onConfirm={() =>
                             run('generate', () => '信号生成完成')}>

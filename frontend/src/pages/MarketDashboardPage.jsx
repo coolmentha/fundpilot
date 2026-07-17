@@ -4,7 +4,7 @@ import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import MoneyFlow from '../components/MoneyFlow.jsx';
 import {Link} from 'react-router-dom';
-import {usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
+import {usePendingTransactions, usePortfolioSummary} from '../api/hooks.js';
 
 /**
  * 行情工作台(首页)。
@@ -21,7 +21,7 @@ import {usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
  */
 export default function MarketDashboardPage() {
     const {data: summary} = usePortfolioSummary();
-    const {data: pending} = usePendingSignals();
+    const {data: pending} = usePendingTransactions();
     const unknownCount = Math.max(
         (summary?.holdingFundCount ?? 0) - (summary?.risingFundCount ?? 0) - (summary?.fallingFundCount ?? 0), 0);
 

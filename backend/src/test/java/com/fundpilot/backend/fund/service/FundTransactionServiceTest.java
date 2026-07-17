@@ -79,6 +79,31 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
+    void listPending_跨基金只返回待处理交易且按交易时间倒序() {
+        FundEntity fundA = persistFund();
+        FundEntity fundB = new FundEntity();
+        fundB.setFundCode("161725");
+        fundB.setFundName("招商白酒");
+        fundB.setStatus(FundStatus.HOLDING);
+        fundRepository.save(fundB);
+        FundTransactionEntity older = persistTx(fundA, FundTransactionSource.INCREASE, "1000");
+        older.setTradeDate(Instant.parse("2026-07-16T00:00:00Z"));
+        FundTransactionEntity newer = persistTx(fundB, FundTransactionSource.DECREASE, "500");
+        newer.setTradeDate(Instant.parse("2026-07-17T00:00:00Z"));
+        FundTransactionEntity confirmed = persistTx(fundA, FundTransactionSource.INVEST, "200");
+        confirmed.setStatus(FundTransactionStatus.CONFIRMED);
+        fundTransactionRepository.flush();
+
+        List<FundTransactionView> rows = fundTransactionService.listPending();
+
+        assertThat(rows).extracting(FundTransactionView::id)
+                .containsExactly(newer.getId(), older.getId());
+        assertThat(rows).extracting(FundTransactionView::status)
+                .containsOnly(FundTransactionStatus.PENDING);
+    }
+
+    @Test
+    @Transactional
     void createManual_买入类写amount_份额null_状态PENDING_无关联信号() {
         FundEntity fund = persistFund();
         ManualTransactionRequest req = new ManualTransactionRequest(

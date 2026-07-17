@@ -8,7 +8,6 @@ import SignalsPage from './pages/SignalsPage.jsx';
 import ConfirmPage from './pages/ConfirmPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
-import MonitorPage from './pages/MonitorPage.jsx';
 import DcaManagementPage from './pages/DcaManagementPage.jsx';
 
 export default function App() {
@@ -24,7 +23,6 @@ export default function App() {
                 <Route path="/confirm" element={<ConfirmPage/>}/>
                 <Route path="/settings" element={<SettingsPage/>}/>
                 <Route path="/admin" element={<AdminPage/>}/>
-                <Route path="/monitor" element={<MonitorPage/>}/>
                 <Route path="*" element={<Navigate to="/" replace/>}/>
             </Route>
         </Routes>

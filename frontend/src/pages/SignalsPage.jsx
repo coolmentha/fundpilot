@@ -1,12 +1,20 @@
 import {useState} from 'react';
-import {Button, Card, DatePicker, Select, Space, Table, Typography} from 'antd';
+import {App, Button, Card, DatePicker, Form, InputNumber, Modal, Popconfirm, Select, Space, Table, Typography} from 'antd';
 import {useSearchParams} from 'react-router-dom';
 import {ReloadOutlined} from '@ant-design/icons';
-import {useFunds, useSignalsRange, useSignalsToday} from '../api/hooks.js';
+import {
+    useConfirmOperation,
+    useFunds,
+    useIgnoreSignal,
+    usePendingSignals,
+    useSignalsRange,
+    useSignalsToday,
+} from '../api/hooks.js';
 import {datetime, text} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
+import {isQueryDataReady} from '../querySafety.js';
 
 const {Title, Text} = Typography;
 const {RangePicker} = DatePicker;
@@ -27,10 +35,18 @@ const signalColumns = (extraCol) => [
 ];
 
 export default function SignalsPage() {
+    const {message} = App.useApp();
     const [params, setParams] = useSearchParams();
     const fundIdParam = params.get('fundId');
     const fundId = fundIdParam ? Number(fundIdParam) : null;
-    const {data: funds} = useFunds();
+    const {data: funds, isLoading: fundsLoading, isError: fundsError} = useFunds();
+    const {data: pendingSignals, isLoading: pendingLoading, isError: pendingError,
+        refetch: refetchPending} = usePendingSignals();
+    const [modal, setModal] = useState({open: false, signal: null});
+    const [form] = Form.useForm();
+    const confirmOp = useConfirmOperation(modal.signal?.fundId);
+    const ignoreSignal = useIgnoreSignal();
+    const fundsReady = isQueryDataReady({data: funds, isLoading: fundsLoading, isError: fundsError});
     const {
         data: todaySignal,
         isLoading: todayLoading,
@@ -51,9 +67,61 @@ export default function SignalsPage() {
         value: String(f.id),
         label: `${f.fundCode} · ${f.fundName}`,
     }));
+    const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
+    const holdingShares = (id) => Number(funds?.find((fund) => fund.id === id)?.holdingShares || 0);
+    const openConfirm = (signal) => {
+        const isSell = signal.signalType === 'SELL';
+        const maxShares = holdingShares(signal.fundId);
+        setModal({open: true, signal});
+        form.setFieldsValue({
+            actualAmount: isSell ? undefined : signal.suggestedMeasure?.value,
+            actualShares: isSell && maxShares > 0
+                ? Math.min(Number(signal.suggestedMeasure?.value || 0), maxShares) : undefined,
+        });
+    };
+    const submit = async () => {
+        if (modal.signal?.signalType === 'SELL' && !fundsReady) return;
+        const values = await form.validateFields();
+        await confirmOp.mutateAsync({
+            signalLogId: modal.signal.id,
+            actualAmount: values.actualAmount ?? null,
+            actualShares: values.actualShares ?? null,
+        });
+        message.success('信号已采纳，待确认交易已生成');
+        setModal({open: false, signal: null});
+    };
+    const pendingActionColumn = {
+        title: '操作', width: 150, render: (_, signal) => (
+            <Space size={0}>
+                <Button type="link" size="small"
+                        disabled={signal.signalType === 'SELL' && !fundsReady}
+                        onClick={() => openConfirm(signal)}>采纳</Button>
+                <Popconfirm title="忽略本次信号？" onConfirm={async () => {
+                    await ignoreSignal.mutateAsync({fundId: signal.fundId, signalId: signal.id});
+                    message.success('信号已忽略');
+                }}>
+                    <Button type="link" size="small">忽略</Button>
+                </Popconfirm>
+            </Space>
+        ),
+    };
+    const isSell = modal.signal?.signalType === 'SELL';
+    const currentHoldingShares = holdingShares(modal.signal?.fundId);
 
     return (
         <Space direction="vertical" size={16} className="full-width">
+            <Card title={<Title level={4}>待处理信号</Title>}
+                  extra={<Button icon={<ReloadOutlined/>} onClick={() => refetchPending()}>刷新</Button>}>
+                {pendingError ? <QueryErrorState onRetry={refetchPending} description="待处理信号加载失败"/> : (
+                    <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pendingSignals || []}
+                           columns={[
+                               {title: '基金', width: 180, render: (_, row) => fundName(row.fundId)},
+                               ...signalColumns(pendingActionColumn),
+                           ]}
+                           pagination={false} scroll={{x: 1050}}
+                           locale={{emptyText: <EmptyState description="暂无待处理信号"/>}}/>
+                )}
+            </Card>
             <Card title={<Title level={4}>今日信号</Title>}
                   extra={<Button icon={<ReloadOutlined/>} onClick={() => setParams({})}>清空筛选</Button>}>
                 <Space style={{marginBottom: 16}}>
@@ -88,6 +156,30 @@ export default function SignalsPage() {
                     )}
                 </Card>
             )}
+            <Modal title="采纳交易信号" open={modal.open}
+                   onCancel={() => setModal({open: false, signal: null})}
+                   onOk={submit} confirmLoading={confirmOp.isPending}
+                   okButtonProps={{disabled: isSell && !fundsReady}} destroyOnHidden>
+                <Form form={form} layout="vertical">
+                    {isSell ? (
+                        <Form.Item label={`实际卖出份额（当前持仓 ${currentHoldingShares.toFixed(2)} 份）`}
+                                   name="actualShares" rules={[
+                                       {required: true, message: '请输入份额'},
+                                       {validator: (_, value) => value <= currentHoldingShares
+                                           ? Promise.resolve()
+                                           : Promise.reject(new Error('卖出份额不能超过当前持仓'))},
+                                   ]}>
+                            <InputNumber min={0.000001} max={currentHoldingShares || undefined}
+                                         precision={6} className="full-width"/>
+                        </Form.Item>
+                    ) : (
+                        <Form.Item label="实际下单金额" name="actualAmount"
+                                   rules={[{required: true, message: '请输入金额'}]}>
+                            <InputNumber min={0.01} precision={2} className="full-width" prefix="¥"/>
+                        </Form.Item>
+                    )}
+                </Form>
+            </Modal>
         </Space>
     );
 }

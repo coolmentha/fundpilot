@@ -228,6 +228,13 @@ export function useFundTransactions(fundId) {
         enabled: !!fundId,
     });
 }
+export function usePendingTransactions() {
+    return useQuery({
+        queryKey: ['transactions-pending'],
+        queryFn: () => get('/api/transactions/pending'),
+        ...realtimeQueryOptions,
+    });
+}
 export function useFundFeeRates(fundId) {
     return useQuery({
         queryKey: ['fund-fee-rates', fundId],
@@ -241,6 +248,7 @@ export function useCancelTransaction() {
         mutationFn: (id) => post(`/api/transactions/${id}/cancel`),
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['transactions-pending']});
             qc.invalidateQueries({queryKey: ['funds']});
             invalidateDcaBudgetSummary(qc);
         },
@@ -252,6 +260,7 @@ export function useConfirmTransaction() {
         mutationFn: (id) => post(`/api/transactions/${id}/confirm`),
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['transactions-pending']});
             qc.invalidateQueries({queryKey: ['funds']});
             invalidateDcaBudgetSummary(qc);
         },

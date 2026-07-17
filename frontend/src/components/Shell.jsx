@@ -8,12 +8,11 @@ import {
     LineChartOutlined,
     EllipsisOutlined,
     LogoutOutlined,
-    StockOutlined,
     CalendarOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
-import {usePendingSignals} from '../api/hooks.js';
+import {usePendingTransactions} from '../api/hooks.js';
 import {useState} from 'react';
 import {useSiteAuth} from '../auth/SiteAuthContext.js';
 
@@ -26,10 +25,9 @@ const PAGE_META = {
     '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
     '/dca': {title: '定投管理', subtitle: '计划配置与本月剩余预计'},
     '/signals': {title: '交易信号', subtitle: '查看今日与历史信号'},
-    '/confirm': {title: '操作确认', subtitle: '对未回应信号执行确认'},
+    '/confirm': {title: '操作确认', subtitle: '处理所有待确认交易'},
     '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
-    '/monitor': {title: '监控', subtitle: '系统运行面板'},
 };
 
 // 导航重组(行情工作台转向):行情 → 策略 → 系统。首页 = 行情工作台。
@@ -51,7 +49,6 @@ const NAV_GROUPS = [
         key: 'system', label: '系统', children: [
             {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
             {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
-            {key: '/monitor', icon: <StockOutlined/>, label: '监控'},
         ],
     },
 ];
@@ -68,7 +65,6 @@ const BOTTOM_MORE = [
     {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
-    {key: '/monitor', icon: <StockOutlined/>, label: '监控'},
 ];
 
 const useSelectedKey = () => {
@@ -81,7 +77,7 @@ export default function Shell() {
     const {logout} = useSiteAuth();
     const navigate = useNavigate();
     const selected = useSelectedKey();
-    const {data: pending} = usePendingSignals();
+    const {data: pending} = usePendingTransactions();
     const pendingCount = pending?.length ?? 0;
     const [moreOpen, setMoreOpen] = useState(false);
 

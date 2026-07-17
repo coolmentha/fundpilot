@@ -40,6 +40,13 @@ public class FundTransactionService {
                 .toList();
     }
 
+    /** 查全部待处理交易，供跨基金操作确认工作台使用。 */
+    public List<FundTransactionView> listPending() {
+        return fundTransactionRepository.findByStatusOrderByTradeDateDesc(FundTransactionStatus.PENDING).stream()
+                .map(FundTransactionView::from)
+                .toList();
+    }
+
     /**
      * 手动录入一笔交易(issue #18 手动交易)。绕过信号(signalLog=null),status=PENDING,
      * 交易日净值落库后回填另一侧并转 CONFIRMED。手动卖出不卡 7 天硬约束。
