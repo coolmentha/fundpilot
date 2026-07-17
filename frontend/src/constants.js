@@ -211,7 +211,7 @@ export const errorTitles = {
     FUND_CATEGORY_REQUIRED: '缺少基金类型',
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
     COST_PER_SHARE_INVALID: '成本单价不合法',
-    INITIAL_MARKET_VALUE_INVALID: '初始持仓市值不合法',
+    INITIAL_HOLDING_SHARES_INVALID: '初始持仓份额不合法',
     MONTHLY_DCA_BUDGET_INVALID: '每月定投预算不合法',
     POSITION_WARNING_RATIO_INVALID: '仓位提醒线不合法',
     STRATEGY_PARAM_INVALID: '策略参数不合法',

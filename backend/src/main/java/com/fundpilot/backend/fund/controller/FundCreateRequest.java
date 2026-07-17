@@ -21,11 +21,10 @@ import java.time.Instant;
  * @param benchmarkIndexCode   跟踪指数代码(如 000300.SH)
  * @param positionWarningEnabled 是否启用当前持仓占比提醒(可选,默认 true)
  * @param positionWarningRatio 当前持仓占比提醒线(可选,默认 30%,范围为 (0, 100%])
- * @param initialMarketValue   入仓市值(可选):新建时录入已有持仓(当前市值口径),用 T-1 净值反算 shares;
- *                             null 表示不录持仓；非正数为非法输入
- * @param costPerShare         成本单价(可选,仅 initialMarketValue 有值时生效):不填默认 T-1 净值;>0 校验;
+ * @param initialHoldingShares 持有份额(可选):新建时录入已有持仓;null 表示不录持仓；非正数为非法输入
+ * @param costPerShare         成本单价(可选,仅 initialHoldingShares 有值时生效):不填默认 T-1 净值;>0 校验;
  *                             存入 FundEntity.costPerShare 作为初始成本基准(ADR-0013)
- * @param openedAt             建仓时间(可选,仅 initialMarketValue 有值时生效):用户记得的大致建仓时点,
+ * @param openedAt             建仓时间(可选,仅 initialHoldingShares 有值时生效):用户记得的大致建仓时点,
  *                             影响移动止盈的持仓期高点起算;null 则用 now。须 ≤ 今天
  */
 public record FundCreateRequest(
@@ -36,44 +35,44 @@ public record FundCreateRequest(
         String benchmarkIndexCode,
         Boolean positionWarningEnabled,
         BigDecimal positionWarningRatio,
-        BigDecimal initialMarketValue,
+        BigDecimal initialHoldingShares,
         BigDecimal costPerShare,
         Instant openedAt) {
 
-    /** 5 参数次构造:不录现有金额(走原 PENDING_HOLDING 流程)。维持现有调用方兼容。 */
+    /** 5 参数次构造:不录现有份额(走原 PENDING_HOLDING 流程)。维持现有调用方兼容。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, null, null, null);
     }
 
-    /** 6 参数次构造:录入仓市值但不填建仓时间和成本单价(沿用现有调用方兼容)。 */
+    /** 6 参数次构造:录入持有份额但不填建仓时间和成本单价(沿用现有调用方兼容)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
-                             BigDecimal initialMarketValue) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialMarketValue, null, null);
+                             BigDecimal initialHoldingShares) {
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, null);
     }
 
-    /** 7 参数次构造:录入仓市值+建仓时间但不填成本单价(兼容老调用方)。 */
+    /** 7 参数次构造:录入持有份额+建仓时间但不填成本单价(兼容老调用方)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
-                             BigDecimal initialMarketValue, Instant openedAt) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialMarketValue, null, openedAt);
+                             BigDecimal initialHoldingShares, Instant openedAt) {
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, openedAt);
     }
 
     /** 8 参数次构造:兼容新增仓位提醒前的完整建仓调用方。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
-                             BigDecimal initialMarketValue, BigDecimal costPerShare, Instant openedAt) {
+                             BigDecimal initialHoldingShares, BigDecimal costPerShare, Instant openedAt) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
-                null, null, initialMarketValue, costPerShare, openedAt);
+                null, null, initialHoldingShares, costPerShare, openedAt);
     }
 
     /** 兼容仓位提醒字段改名前的完整创建调用方。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
-                             BigDecimal positionWarningRatio, BigDecimal initialMarketValue,
+                             BigDecimal positionWarningRatio, BigDecimal initialHoldingShares,
                              BigDecimal costPerShare, Instant openedAt) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
-                null, positionWarningRatio, initialMarketValue, costPerShare, openedAt);
+                null, positionWarningRatio, initialHoldingShares, costPerShare, openedAt);
     }
 }

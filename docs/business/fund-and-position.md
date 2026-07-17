@@ -50,12 +50,12 @@ stateDiagram-v2
 
 ## 初始持仓录入
 
-新建时填写 `initialMarketValue` 表示用户已经持有该基金，系统按历史仓位盘点处理：
+新建时填写 `initialHoldingShares` 表示用户已经持有该基金，系统按历史仓位盘点处理：
 
 ```mermaid
 flowchart LR
-    A[创建基金并填写入仓市值] --> B[拉取最近已公布单位净值]
-    B --> C[按入仓市值除以单位净值计算份额]
+    A[创建基金并填写持有份额] --> B[拉取最近已公布单位净值]
+    B --> C[按份额乘单位净值计算核算金额]
     C --> D[写入 INCREASE / CONFIRMED 交易]
     D --> E[建立 FIFO lot 和初始成本单价]
     E --> F[基金状态变为 HOLDING]
@@ -63,8 +63,8 @@ flowchart LR
 
 关键规则：
 
-- `initialMarketValue` 必须大于 0。
-- 使用最近一期已公布的单位净值反算份额，不使用 `openedAt` 对应历史净值。
+- `initialHoldingShares` 必须大于 0，直接作为事实持仓份额。
+- 使用最近一期已公布的单位净值计算初始交易核算金额，不使用 `openedAt` 对应历史净值。
 - `costPerShare` 可选；未填写时使用同一单位净值，填写时必须大于 0。
 - `openedAt` 可选；未填写时使用当前时间，不能晚于当前时间。
 - 初始持仓同步确认，不等待夜间 `NavConfirmJob`。
@@ -89,7 +89,7 @@ flowchart LR
 | --- | --- |
 | 代码和名称都为空 | `MISSING_FUND_IDENTITY` |
 | 基金类型为空 | `FUND_CATEGORY_REQUIRED` |
-| 入仓市值非正 | `INITIAL_MARKET_VALUE_INVALID` |
+| 持有份额非正 | `INITIAL_HOLDING_SHARES_INVALID` |
 | 成本单价非正 | `COST_PER_SHARE_INVALID` |
 | 建仓时间在未来 | `OPENED_AT_IN_FUTURE` |
 | 无有效单位净值 | `NAV_HISTORY_EMPTY` |

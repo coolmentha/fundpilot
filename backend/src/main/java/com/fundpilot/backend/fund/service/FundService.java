@@ -64,12 +64,12 @@ public class FundService {
     /**
      * 新建基金;类型字段优先用请求带入值,缺省时按 fundName 兜底识别。
      * <p>fundCode/fundName 二选一即可(CONTEXT.md「基金字典搜索」);两者都缺 → 业务异常。
-     * <p><b>初始持仓录入(ADR-0012)</b>:initialMarketValue 有值时走建仓路径——FundStatus→HOLDING、
-     * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认(反算 shares、置 CONFIRMED),
-     * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重"现有金额是历史持仓"
-     * (用已公布净值,不等 NavConfirmJob)。无净值可反算则报错不让建(同步确认的硬前提)。
-     * <p>initialMarketValue 为 null → 走原 PENDING_HOLDING 流程；非正数拒绝。
-     * <p>@Transactional:initialMarketValue 路径需写基金+交易原子。同步建仓必须取得净值，
+     * <p><b>初始持仓录入(ADR-0012)</b>:initialHoldingShares 有值时走建仓路径——FundStatus→HOLDING、
+     * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认,
+     * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重已有持仓盘点语义
+     * (用已公布净值核算金额,不等 NavConfirmJob)。无净值可核算则报错不让建(同步确认的硬前提)。
+     * <p>initialHoldingShares 为 null → 走原 PENDING_HOLDING 流程；非正数拒绝。
+     * <p>@Transactional:initialHoldingShares 路径需写基金+交易原子。同步建仓必须取得净值，
      * 行情拉取失败时整个创建事务失败，避免返回一个没有可核算份额的半成品基金。
      */
     @Transactional
@@ -78,8 +78,8 @@ public class FundService {
                 && (request.fundName() == null || request.fundName().isBlank())) {
             throw new BusinessException(ErrorCode.MISSING_FUND_IDENTITY, "基金代码和名称至少填一个");
         }
-        if (request.initialMarketValue() != null && request.initialMarketValue().signum() <= 0) {
-            throw new BusinessException(ErrorCode.INITIAL_MARKET_VALUE_INVALID, "初始持仓市值必须大于 0");
+        if (request.initialHoldingShares() != null && request.initialHoldingShares().signum() <= 0) {
+            throw new BusinessException(ErrorCode.INITIAL_HOLDING_SHARES_INVALID, "初始持仓份额必须大于 0");
         }
         FundEntity fund = new FundEntity();
         fund.setFundCode(request.fundCode());
@@ -100,10 +100,10 @@ public class FundService {
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
 
-        // initialMarketValue 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后(同步确认需已公布净值反算)
-        if (request.initialMarketValue() != null) {
+        // initialHoldingShares 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后生成交易核算金额。
+        if (request.initialHoldingShares() != null) {
             marketDataFetchService.fetchOneFund(saved.getId());
-            openWithExistingPosition(saved, request.initialMarketValue(), request.costPerShare(), request.openedAt());
+            openWithExistingPosition(saved, request.initialHoldingShares(), request.costPerShare(), request.openedAt());
         } else {
             eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));
         }
@@ -113,20 +113,19 @@ public class FundService {
 
     /**
      * 初始持仓建仓(ADR-0012 + ADR-0013):用最近一期已公布净值同步确认一条 INCREASE 交易 + FundStatus→HOLDING。
-     * 状态流转对齐 {@code SignalOperationService.handleBuild},但确认时机同步
-     * (现有金额是当前市值口径,用已公布净值反算 shares,不等 NavConfirmJob)。
+     * 状态流转对齐 {@code SignalOperationService.handleBuild},但确认时机同步，不等 NavConfirmJob。
      *
      * <p>costPerShare:用户填的成本单价(可 null,不填默认 T-1 净值;>0 校验);存入 FundEntity.costPerShare。
      * <p>openedAt:用户填的大致建仓时点(影响移动止盈持仓期高点起算),null 则用 now;须 ≤ 今天。
      *
-     * @param initialMarketValue 入仓市值(当前市值口径)
+     * @param initialHoldingShares 实际持有份额
      * @param costPerShare       成本单价(可 null,默认 T-1 净值)
      * @param openedAt           建仓时间(可 null)
-     * @throws BusinessException 无净值历史可反算时抛 {@link ErrorCode#NAV_HISTORY_EMPTY};
+     * @throws BusinessException 无净值历史可核算时抛 {@link ErrorCode#NAV_HISTORY_EMPTY};
      *                           openedAt 晚于今天抛 {@link ErrorCode#OPENED_AT_IN_FUTURE};
      *                           costPerShare ≤ 0 抛参数校验错
      */
-    private void openWithExistingPosition(FundEntity fund, BigDecimal initialMarketValue,
+    private void openWithExistingPosition(FundEntity fund, BigDecimal initialHoldingShares,
                                           BigDecimal costPerShare, Instant openedAt) {
         Instant now = Instant.now();
         // openedAt 未来校验:不允许晚于今天(用户手滑填未来日期)
@@ -140,7 +139,7 @@ public class FundService {
         if (recent.isEmpty() || recent.get(0).getNav() == null
                 || recent.get(0).getNav().signum() <= 0) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
-                    "基金 " + fund.getId() + " 无净值历史,无法确认现有金额持仓,请先补净值或稍后建仓");
+                    "基金 " + fund.getId() + " 无净值历史,无法确认现有份额持仓,请先补净值或稍后建仓");
         }
         BigDecimal navValue = recent.get(0).getNav();
         Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
@@ -151,12 +150,12 @@ public class FundService {
             throw new BusinessException(ErrorCode.COST_PER_SHARE_INVALID, "成本单价必须大于 0");
         }
 
-        // 建仓交易:INCREASE(对齐 handleBuild),同步确认(反算 shares/nav/confirmTime)
+        // 建仓交易:INCREASE(对齐 handleBuild),直接保存事实份额，金额按最近净值核算。
         FundTransactionEntity tx = new FundTransactionEntity();
         tx.setFundEntity(fund);
         tx.setSource(FundTransactionSource.INCREASE);
-        tx.setAmount(initialMarketValue);
-        tx.setShares(initialMarketValue.divide(navValue, MATH));
+        tx.setAmount(initialHoldingShares.multiply(navValue, MATH));
+        tx.setShares(initialHoldingShares);
         tx.setNav(navValue);
         tx.setConfirmTime(effectiveOpenedAt);
         tx.setTradeDate(effectiveOpenedAt);
@@ -170,8 +169,8 @@ public class FundService {
         fund.setOpenedAt(effectiveOpenedAt);
         fund.setCostPerShare(effectiveCostPerShare);
         fundRepository.save(fund);
-        log.info("初始持仓建仓 fund={} initialMarketValue={} nav={} shares={} costPerShare={} openedAt={} confirmTime={}",
-                 fund.getId(), initialMarketValue, navValue, tx.getShares(), effectiveCostPerShare, effectiveOpenedAt,
+        log.info("初始持仓建仓 fund={} shares={} nav={} amount={} costPerShare={} openedAt={} confirmTime={}",
+                 fund.getId(), initialHoldingShares, navValue, tx.getAmount(), effectiveCostPerShare, effectiveOpenedAt,
                  tx.getConfirmTime());
     }
 

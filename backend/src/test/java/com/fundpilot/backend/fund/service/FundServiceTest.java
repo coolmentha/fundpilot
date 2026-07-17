@@ -55,14 +55,14 @@ class FundServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void create_初始持仓市值非正数_抛异常() {
+    void create_初始持仓份额非正数_抛异常() {
         FundCreateRequest request = new FundCreateRequest(
                 "510300", "沪深300ETF", FundCategory.BROAD_BASE, FundSubType.ETF, null,
                 BigDecimal.ZERO);
 
         assertThatThrownBy(() -> fundService.create(request))
                 .isInstanceOf(BusinessException.class)
-                .extracting("code").isEqualTo(ErrorCode.INITIAL_MARKET_VALUE_INVALID.name());
+                .extracting("code").isEqualTo(ErrorCode.INITIAL_HOLDING_SHARES_INVALID.name());
     }
 
     @Test

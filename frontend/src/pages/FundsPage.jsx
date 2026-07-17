@@ -13,10 +13,10 @@ import {buildFundPositionWarnings} from '../positionWarnings.js';
 
 const {Title} = Typography;
 
-// 新建表单初始值:基金身份由搜索框选中后带入。initialMarketValue/costPerShare/openedAt 默认空。
+// 新建表单初始值:基金身份由搜索框选中后带入。已有持仓字段默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
     benchmarkIndexCode: '', positionWarningEnabled: true, positionWarningRatioPct: 30,
-    initialMarketValue: null, costPerShare: null, openedAt: null};
+    initialHoldingShares: null, costPerShare: null, openedAt: null};
 
 export default function FundsPage() {
     const {message} = App.useApp();
@@ -33,8 +33,7 @@ export default function FundsPage() {
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
-    // 监听入仓市值:有值时显示建仓提示和成本单价/建仓时间(渐进式揭示,只在用户填了才出现)
-    const initialMarketValue = Form.useWatch('initialMarketValue', form);
+    const initialHoldingShares = Form.useWatch('initialHoldingShares', form);
     const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
     const rows = buildFundPositionWarnings(funds);
 
@@ -262,25 +261,25 @@ export default function FundsPage() {
                                      parser={(value) => value?.replace('%', '')}/>
                     </Form.Item>
                     {!editing && (
-                        <Form.Item label="入仓市值（可选）" name="initialMarketValue"
-                                   help="现有持仓的当前市值(按最新净值反算份额)。不填则建空仓基金"
-                                   rules={[{type: 'number', min: 0.01, message: '入仓市值必须大于 0'}]}>
-                            <InputNumber min={0.01} precision={2} className="full-width" placeholder="已有持仓市值,不填则空仓"
+                        <Form.Item label="持有份额（可选）" name="initialHoldingShares"
+                                   help="现有持仓的实际份额。不填则创建空仓基金"
+                                   rules={[{type: 'number', min: 0.0001, message: '持有份额必须大于 0'}]}>
+                            <InputNumber min={0.0001} precision={4} className="full-width" placeholder="已有持仓份额,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                          parser={(v) => v.replace(/,/g, '')}/>
                         </Form.Item>
                     )}
-                    {!editing && initialMarketValue > 0 && (
+                    {!editing && initialHoldingShares > 0 && (
                         <Alert type="info" showIcon style={{marginTop: -8}}
-                               message={`将用 T-1 净值反算份额,建仓后基金状态变为"持仓中"`}
+                               message="将按持有份额建立初始持仓"
                                description={
                                    <div>
-                                       <p>入仓市值 {initialMarketValue.toLocaleString()} 元会作为首笔持仓录入。</p>
-                                       <p>交易确认后成本单价会自动加权更新,无需手动维护。</p>
+                                        <p>{initialHoldingShares.toLocaleString()} 份会直接记入事实持仓。</p>
+                                        <p>首笔流水金额按最近确认净值核算，当前市值随行情变化。</p>
                                    </div>
                                }/>
                     )}
-                    {!editing && initialMarketValue > 0 && (
+                    {!editing && initialHoldingShares > 0 && (
                         <Form.Item label="成本单价（可选）" name="costPerShare"
                                    help="持仓成本价(每份)。不填默认用 T-1 净值作为初始成本价">
                             <InputNumber min={0.0001} precision={4} className="full-width" placeholder="不填则用净值,填 0 无效"
@@ -288,7 +287,7 @@ export default function FundsPage() {
                                          parser={(v) => v.replace(/,/g, '')}/>
                         </Form.Item>
                     )}
-                    {!editing && initialMarketValue > 0 && (
+                    {!editing && initialHoldingShares > 0 && (
                         <Form.Item label="建仓时间（可选）" name="openedAt"
                                    help="用户记得的大致建仓时点,影响移动止盈的高点起算;不填则用当前时间">
                             <DatePicker className="full-width" placeholder="选填,默认当前时间"
