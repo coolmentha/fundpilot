@@ -32,6 +32,7 @@ export default function FundWatchlist() {
         {
             title: '基金',
             dataIndex: 'fundName',
+            width: 260,
             ellipsis: true,
             render: (v, r) => (
                 <span className="watchlist-name-cell">
@@ -42,17 +43,18 @@ export default function FundWatchlist() {
             ),
         },
         {
-            title: '持仓市值', dataIndex: 'holdingAmount', width: 140, align: 'right',
+            title: '持仓市值', dataIndex: 'holdingAmount', width: 130, align: 'right',
             render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{money(v)}</span>,
         },
         {
-            title: '仓位', dataIndex: 'allocationPct', width: 90, align: 'right',
+            title: '仓位', dataIndex: 'allocationPct', width: 80, align: 'right',
             render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{v.toFixed(1)}%</span>,
         },
         {
             title: '涨跌幅',
             dataIndex: 'changePct',
-            width: 140,
+            width: 110,
+            align: 'right',
             sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
             defaultSortOrder: 'descend',
             render: (v, r) => {
@@ -75,7 +77,7 @@ export default function FundWatchlist() {
         {
             title: '当日收益',
             dataIndex: 'dailyPnl',
-            width: 132,
+            width: 120,
             align: 'right',
             responsive: ['sm'],
             render: (v, r) => estimateStatusText(r.estimateStatus)
@@ -85,7 +87,7 @@ export default function FundWatchlist() {
                     : <span className="muted">-</span>,
         },
         {
-            title: '数据状态', width: 130,
+            title: '数据状态', width: 110, align: 'right',
             render: (_, r) => <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>
                 {estimateStatusText(r.estimateStatus) || (r.isEstimated ? '盘中估值' : '净值已确认')}
             </span>,
@@ -130,7 +132,8 @@ export default function FundWatchlist() {
             />
             <aside className="allocation-panel" aria-label="仓位构成">
                 <div className="allocation-title"><strong>仓位构成</strong><span>100%</span></div>
-                {displayRows.filter((r) => r.allocationPct != null).map((r) => (
+                {displayRows.filter((r) => r.allocationPct != null)
+                    .sort((a, b) => b.allocationPct - a.allocationPct).map((r) => (
                     <div className="allocation-item" key={r.id}>
                         <div><span title={r.fundName}>{r.fundName}</span><strong>{r.allocationPct.toFixed(1)}%</strong></div>
                         <div className="allocation-bar"><i style={{width: `${r.allocationPct}%`}}/></div>

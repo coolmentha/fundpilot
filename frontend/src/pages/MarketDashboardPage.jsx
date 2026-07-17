@@ -40,7 +40,7 @@ export default function MarketDashboardPage() {
 
             <section className="dashboard-section watchlist-section" aria-label="自选基金行情">
                 <div className="section-header">
-                    <h3 className="section-title">自选基金与我的持仓</h3>
+                    <h3 className="section-title">我的持仓</h3>
                 </div>
                 <FundWatchlist/>
             </section>

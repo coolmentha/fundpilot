@@ -758,7 +758,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .fund-watchlist .ant-table-content > table {
     width: 100% !important;
-    min-width: 900px;
+    min-width: 810px;
     table-layout: fixed !important;
 }
 
