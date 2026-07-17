@@ -3,7 +3,7 @@ package com.fundpilot.backend.fund.service.support;
 import java.math.BigDecimal;
 
 /**
- * 组合盈亏汇总结果(issue #18 概览页盈亏 KPI,CONTEXT.md「概览页盈亏 KPI」)。
+ * 组合仓位与盈亏汇总结果(issue #18 概览页盈亏 KPI,CONTEXT.md「概览页盈亏 KPI」)。
  * <p>上涨/下跌与盈利/亏损是两个独立维度(故事 24):
  * <ul>
  *   <li>rising/falling 按今日涨跌幅符号(今日视角)</li>
@@ -11,7 +11,12 @@ import java.math.BigDecimal;
  * </ul>
  * 一只基金可能今日上涨但整体亏损,两个维度独立计数不混用。
  *
- * @param dailyPnlTotal       今日盈亏合计(所有持仓基金今日盈亏之和；任一持仓缺失时为 null)
+ * @param holdingAmountTotal  全部持仓市值(使用当前估值或最近确认净值)
+ * @param dailyPnlTotal       已覆盖持仓的今日盈亏合计
+ * @param dailyChangePct      已覆盖持仓按昨日市值加权的今日涨跌幅
+ * @param totalPnlTotal       全部可计算持仓的总盈亏
+ * @param holdingFundCount    持仓基金总数
+ * @param dailyCoveredFundCount 有当日涨跌数据的持仓基金数
  * @param risingFundCount     上涨基金数(今日涨跌幅 > 0)
  * @param fallingFundCount    下跌基金数(今日涨跌幅 < 0)
  * @param profitableFundCount 盈利基金数(总盈亏 > 0)
@@ -20,7 +25,12 @@ import java.math.BigDecimal;
  * @param estimateFetchFailedCount 估值拉取失败的持仓基金数(当日净值已确认的不计)
  */
 public record PortfolioSummary(
+        BigDecimal holdingAmountTotal,
         BigDecimal dailyPnlTotal,
+        BigDecimal dailyChangePct,
+        BigDecimal totalPnlTotal,
+        int holdingFundCount,
+        int dailyCoveredFundCount,
         int risingFundCount,
         int fallingFundCount,
         int profitableFundCount,

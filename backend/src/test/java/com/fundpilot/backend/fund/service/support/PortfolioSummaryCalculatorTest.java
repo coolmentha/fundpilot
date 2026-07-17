@@ -24,7 +24,7 @@ class PortfolioSummaryCalculatorTest {
         List<BigDecimal> dailyPnls = list("60", "-20", "30");
         List<BigDecimal> totalPnls = list("300", "-200", "100");
 
-        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, list("1060", "980", "1030"), dailyPnls, totalPnls);
 
         assertThat(summary.dailyPnlTotal()).isCloseTo(new BigDecimal("70"), within(new BigDecimal("0.01")));
         assertThat(summary.risingFundCount()).isEqualTo(2);
@@ -41,7 +41,7 @@ class PortfolioSummaryCalculatorTest {
         List<BigDecimal> dailyPnls = list("40");
         List<BigDecimal> totalPnls = list("-150");
 
-        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, list("1040"), dailyPnls, totalPnls);
 
         assertThat(summary.risingFundCount()).isEqualTo(1);
         assertThat(summary.fallingFundCount()).isZero();
@@ -50,22 +50,24 @@ class PortfolioSummaryCalculatorTest {
     }
 
     @Test
-    void 聚合_任一今日盈亏未知_全仓今日收益也未知() {
-        // 第二只基金今日盈亏未知时,不能把其按 0 处理后把部分合计标成全仓收益。
+    void 聚合_任一今日盈亏未知_显示其余收益并报告覆盖数() {
         List<BigDecimal> changePcts = list("0.05", null);
         List<BigDecimal> dailyPnls = list("60", null);
         List<BigDecimal> totalPnls = list("300", null);
 
-        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, list("1060", "900"), dailyPnls, totalPnls);
 
-        assertThat(summary.dailyPnlTotal()).isNull();
+        assertThat(summary.dailyPnlTotal()).isEqualByComparingTo("60");
+        assertThat(summary.holdingAmountTotal()).isEqualByComparingTo("1960");
+        assertThat(summary.dailyCoveredFundCount()).isEqualTo(1);
+        assertThat(summary.holdingFundCount()).isEqualTo(2);
         assertThat(summary.risingFundCount()).isEqualTo(1);
         assertThat(summary.profitableFundCount()).isEqualTo(1);
     }
 
     @Test
     void 聚合_空列表_全部归零() {
-        PortfolioSummary summary = FundPnlCalculator.summarize(List.of(), List.of(), List.of());
+        PortfolioSummary summary = FundPnlCalculator.summarize(List.of(), List.of(), List.of(), List.of());
 
         assertThat(summary.dailyPnlTotal()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(summary.risingFundCount()).isZero();

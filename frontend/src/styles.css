@@ -512,7 +512,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .market-dashboard {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     width: 100%;
     min-width: 0;
 }
@@ -521,8 +521,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     min-width: 0;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 16px;
+    border-radius: 6px;
+    padding: 14px 16px;
     box-shadow: var(--shadow-sm);
 }
 
@@ -549,7 +549,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 /* —— 组合总览 —— */
 .portfolio-overview-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 1.2fr) repeat(2, minmax(140px, 0.8fr)) minmax(300px, 1.6fr);
+    grid-template-columns: 1.2fr repeat(3, 1fr) 1.35fr;
     gap: 12px;
 }
 
@@ -565,7 +565,22 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .portfolio-overview-card.primary { --overview-accent: var(--color-warning); }
 .portfolio-overview-card.up { --overview-accent: var(--color-danger); }
 .portfolio-overview-card.down { --overview-accent: var(--color-success); }
+.portfolio-overview-card.total { --overview-accent: var(--color-warning); }
 .portfolio-overview-card.breadth { --overview-accent: var(--color-info); }
+
+.valuation-notice {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 9px 12px;
+    color: #f3cf78;
+    background: rgba(250, 173, 20, 0.09);
+    border: 1px solid rgba(250, 173, 20, 0.35);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.valuation-notice strong { color: var(--color-text); white-space: nowrap; }
 
 .overview-label {
     display: flex;
@@ -764,6 +779,48 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.fund-watchlist .watchlist-name-text strong,
+.fund-watchlist .watchlist-name-text small { display: block; }
+.fund-watchlist .watchlist-name-text small { margin-top: 2px; color: var(--color-muted); font-size: 11px; font-weight: 400; }
+
+.watchlist-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 12px;
+}
+
+.allocation-panel {
+    padding: 12px 14px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.allocation-title,
+.allocation-item > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.allocation-title { margin-bottom: 14px; }
+.allocation-title span { color: var(--color-muted); }
+.allocation-item { margin-bottom: 12px; font-size: 12px; }
+.allocation-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.allocation-bar { height: 6px; margin-top: 5px; overflow: hidden; background: var(--color-border); border-radius: 3px; }
+.allocation-bar i { display: block; height: 100%; background: var(--color-info); border-radius: inherit; }
+
+.dashboard-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dashboard-status-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 60px;
+    padding: 12px 16px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+.distribution-values { display: flex; gap: 16px; }
+.pnl-up { color: var(--color-danger); }
+.pnl-down { color: var(--color-success); }
 
 .estimate-tag {
     display: inline-block;
@@ -998,6 +1055,9 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     .bottom-grid {
         grid-template-columns: 1fr;
     }
+    .portfolio-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .portfolio-overview-card.breadth { grid-column: 1 / -1; }
+    .watchlist-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -1019,6 +1079,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     .index-card {
         min-width: 140px;
     }
+    .dashboard-status-grid { grid-template-columns: 1fr; }
+    .valuation-notice { flex-direction: column; gap: 3px; }
 }
 
 @media (max-width: 420px) {
@@ -1038,6 +1100,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     .overview-value {
         font-size: 22px;
     }
+    .dashboard-status-item { align-items: flex-start; flex-direction: column; }
 }
 
 /* ===== K 线图 ===== */

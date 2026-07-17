@@ -153,10 +153,10 @@ N 个前端客户端共享同一份缓存。
 | 任一市场或家数字段缺失 | 保留旧 `breadthCache`;首次无缓存时接口 data=null |
 | 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
 | 今日净值未落库且状态为 `STALE/NOT_ATTEMPTED` | 今日涨跌为 0，当前市值/总盈亏使用最近确认净值，不计算昨日涨跌 |
-| 今日净值未落库且状态为 `UNAVAILABLE` | 今日涨跌/盈亏返回未知，不回退昨日涨跌或最近确认净值 |
-| 今日净值未落库且最近一次估值失败 | `FundView.estimateFetchFailed=true`;当前持仓市值/总盈亏也返回未知 |
+| 今日净值未落库且状态为 `UNAVAILABLE` | 今日涨跌/盈亏返回未知；持仓市值/总盈亏使用最近确认净值 |
+| 今日净值未落库且最近一次估值失败 | `FundView.estimateFetchFailed=true`;持仓市值/总盈亏使用最近确认净值 |
 | 今日净值已落库但估值曾失败 | 使用实际净值,`estimateFetchFailed=false` |
-| 任一持仓今日盈亏未知 | 全仓 `dailyPnlTotal` 返回 null，不展示部分合计；非估值失败原因可显示 `-` |
+| 任一持仓今日盈亏未知 | `dailyPnlTotal` 汇总其余可用持仓，`dailyCoveredFundCount` 标明覆盖数；无任何覆盖时返回 null |
 | 持仓基金存在估值失败 | `PortfolioSummaryView.estimateFetchFailedCount` 返回失败持仓数,前端明确显示失败而非普通 `-` |
 | 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |

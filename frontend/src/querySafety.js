@@ -36,7 +36,9 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             estimateStatus,
             estimateTime: estimate?.estimateTime,
             holdingShares: fund.holdingShares,
+            holdingAmount: fund.holdingAmount,
             dailyPnl: fund.dailyPnl,
+            totalPnl: fund.totalPnl,
             status: fund.status,
         };
     });

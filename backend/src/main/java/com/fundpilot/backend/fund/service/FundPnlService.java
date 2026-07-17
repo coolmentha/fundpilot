@@ -151,8 +151,10 @@ public class FundPnlService {
         // 估值失败/缺失时不能拿上一期已公布净值冒充当前市值和总盈亏。
         BigDecimal pnlNav = todayNavConfirmed || usesLatestConfirmedNav ? latestUnitNav
                 : isEstimated ? estimatedUnitNav(latestUnitNav, dailyChangePct) : null;
-        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, pnlNav);
-        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, pnlNav, costPerShare);
+        // 当日估值不可用时,总仓位仍按最近确认净值展示;仅今日收益保持未知。
+        BigDecimal positionNav = pnlNav != null ? pnlNav : latestUnitNav;
+        BigDecimal holdingAmount = computeHoldingAmount(holdingShares, positionNav);
+        BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, positionNav, costPerShare);
 
         return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed, estimateStatus,
                 holdingShares, holdingAmount, dailyPnl, totalPnl);
@@ -226,6 +228,7 @@ public class FundPnlService {
         List<FundEntity> holdingFunds = fundRepository.findByStatus(FundStatus.HOLDING);
         Map<Long, Pnl> pnlByFund = computeForFunds(holdingFunds);
         List<BigDecimal> changePcts = new ArrayList<>();
+        List<BigDecimal> holdingAmounts = new ArrayList<>();
         List<BigDecimal> dailyPnls = new ArrayList<>();
         List<BigDecimal> totalPnls = new ArrayList<>();
         boolean isEstimated = false;
@@ -233,6 +236,7 @@ public class FundPnlService {
         for (FundEntity fund : holdingFunds) {
             Pnl pnl = pnlByFund.get(fund.getId());
             changePcts.add(pnl.dailyChangePct());
+            holdingAmounts.add(pnl.holdingAmount());
             dailyPnls.add(pnl.dailyPnl());
             totalPnls.add(pnl.totalPnl());
             // 组合只要包含任一盘中估算基金,前端就需要整体标记为估算态。
@@ -241,9 +245,11 @@ public class FundPnlService {
                 estimateFetchFailedCount++;
             }
         }
-        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, dailyPnls, totalPnls);
+        PortfolioSummary summary = FundPnlCalculator.summarize(changePcts, holdingAmounts, dailyPnls, totalPnls);
         // summarize 是纯数值聚合,估算态来自服务层的三态判定,因此在这里回填。
-        return new PortfolioSummary(summary.dailyPnlTotal(), summary.risingFundCount(), summary.fallingFundCount(),
+        return new PortfolioSummary(summary.holdingAmountTotal(), summary.dailyPnlTotal(), summary.dailyChangePct(),
+                summary.totalPnlTotal(), summary.holdingFundCount(), summary.dailyCoveredFundCount(),
+                summary.risingFundCount(), summary.fallingFundCount(),
                 summary.profitableFundCount(), summary.losingFundCount(), isEstimated, estimateFetchFailedCount);
     }
 

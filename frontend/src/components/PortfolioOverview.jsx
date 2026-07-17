@@ -1,7 +1,7 @@
 import {Skeleton} from 'antd';
-import {ArrowDownOutlined, ArrowUpOutlined, BarChartOutlined, WalletOutlined} from '@ant-design/icons';
+import {BarChartOutlined, PercentageOutlined, RiseOutlined, WalletOutlined} from '@ant-design/icons';
 import {useMarketBreadth, usePortfolioSummary} from '../api/hooks.js';
-import {pnlColor, signedMoney} from '../constants.js';
+import {money, pnlColor, signedMoney, signedPercent} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -33,9 +33,9 @@ export default function PortfolioOverview() {
 
     const dailyPnlTotal = summary?.dailyPnlTotal;
     const estimateFetchFailedCount = summary?.estimateFetchFailedCount ?? 0;
-    const estimateFetchFailed = estimateFetchFailedCount > 0;
-    const risingFundCount = summary?.risingFundCount ?? 0;
-    const fallingFundCount = summary?.fallingFundCount ?? 0;
+    const holdingFundCount = summary?.holdingFundCount ?? 0;
+    const coveredFundCount = summary?.dailyCoveredFundCount ?? 0;
+    const missingEstimateCount = Math.max(holdingFundCount - coveredFundCount, estimateFetchFailedCount);
     const risingStockCount = breadth?.risingCount;
     const fallingStockCount = breadth?.fallingCount;
     const hasBreadth = Number.isFinite(risingStockCount)
@@ -50,35 +50,46 @@ export default function PortfolioOverview() {
         : '沪深京股票涨跌数据暂不可用';
 
     return (
+        <>
+            {missingEstimateCount > 0 && (
+                <div className="valuation-notice" role="status">
+                    <strong>{missingEstimateCount} 只基金暂无当日估值</strong>
+                    <span>今日收益与涨跌幅按其余 {coveredFundCount} 只计算；总持仓使用最近确认净值。</span>
+                </div>
+            )}
         <div className="portfolio-overview-grid" role="list" aria-label="组合收益与市场宽度总览">
             <div className="portfolio-overview-card primary" role="listitem">
                 <div className="overview-label">
                     <WalletOutlined/>
-                    <span>全仓收益</span>
+                    <span>总持仓市值</span>
                 </div>
-                <div className={`overview-value${estimateFetchFailed ? ' failure' : ''}`}
-                     style={estimateFetchFailed ? undefined : {color: pnlColor(dailyPnlTotal)}}>
-                    {estimateFetchFailed ? '估值拉取失败' : signedMoney(dailyPnlTotal)}
-                </div>
-                <div className="overview-hint muted">
-                    {estimateFetchFailed ? `${estimateFetchFailedCount} 只持仓基金` : '今日合计'}
-                </div>
+                <div className="overview-value">{money(summary?.holdingAmountTotal)}</div>
+                <div className="overview-hint muted">全部 {holdingFundCount} 只持仓</div>
             </div>
             <div className="portfolio-overview-card up" role="listitem">
                 <div className="overview-label">
-                    <ArrowUpOutlined/>
-                    <span>上涨基金</span>
+                    <RiseOutlined/>
+                    <span>今日收益</span>
                 </div>
-                <div className="overview-value">{risingFundCount}</div>
-                <div className="overview-hint muted">只</div>
+                <div className="overview-value" style={{color: pnlColor(dailyPnlTotal)}}>{signedMoney(dailyPnlTotal)}</div>
+                <div className="overview-hint muted">已覆盖 {coveredFundCount} / {holdingFundCount} 只</div>
             </div>
             <div className="portfolio-overview-card down" role="listitem">
                 <div className="overview-label">
-                    <ArrowDownOutlined/>
-                    <span>下跌基金</span>
+                    <PercentageOutlined/>
+                    <span>全仓涨跌幅</span>
                 </div>
-                <div className="overview-value">{fallingFundCount}</div>
-                <div className="overview-hint muted">只</div>
+                <div className="overview-value" style={{color: pnlColor(summary?.dailyChangePct)}}>
+                    {signedPercent(summary?.dailyChangePct)}
+                </div>
+                <div className="overview-hint muted">按已覆盖持仓加权</div>
+            </div>
+            <div className="portfolio-overview-card total" role="listitem">
+                <div className="overview-label"><WalletOutlined/><span>总盈亏</span></div>
+                <div className="overview-value" style={{color: pnlColor(summary?.totalPnlTotal)}}>
+                    {signedMoney(summary?.totalPnlTotal)}
+                </div>
+                <div className="overview-hint muted">按全部可计算持仓</div>
             </div>
             <div className="portfolio-overview-card breadth" role="listitem">
                 <div className="overview-label">
@@ -108,5 +119,6 @@ export default function PortfolioOverview() {
                 </div>
             </div>
         </div>
+        </>
     );
 }

@@ -94,25 +94,33 @@ public final class FundPnlCalculator {
     /**
      * 组合盈亏聚合(issue #18 概览页):汇总一组基金的今日盈亏合计与涨跌/盈亏基金计数。
      * <p>三个列表按基金一一对应(同一下标为同一只基金的三项指标)。
-     * 任一持仓的今日盈亏缺失时,全仓今日盈亏也返回 null,避免把部分合计冒充全仓值。
+     * 今日盈亏只汇总有当日数据的持仓,并通过覆盖数明确部分口径。
      * 上涨/下跌按今日涨跌幅符号,盈利/亏损按总盈亏符号——两维度独立(故事 24)。
      *
      * @param dailyChangePcts 各基金今日涨跌幅(可含 null)
-     * @param dailyPnls        各基金今日盈亏(可含 null；任一 null 时合计为未知)
+     * @param holdingAmounts   各基金当前持仓市值(可含 null)
+     * @param dailyPnls        各基金今日盈亏(可含 null)
      * @param totalPnls        各基金总盈亏(可含 null)
      * @return 五指标汇总
      */
     public static PortfolioSummary summarize(
-            List<BigDecimal> dailyChangePcts, List<BigDecimal> dailyPnls, List<BigDecimal> totalPnls) {
+            List<BigDecimal> dailyChangePcts, List<BigDecimal> holdingAmounts,
+            List<BigDecimal> dailyPnls, List<BigDecimal> totalPnls) {
+        BigDecimal holdingAmountTotal = BigDecimal.ZERO;
         BigDecimal dailyPnlTotal = BigDecimal.ZERO;
-        boolean dailyPnlComplete = true;
+        BigDecimal dailyPnlBaseTotal = BigDecimal.ZERO;
+        BigDecimal totalPnlTotal = BigDecimal.ZERO;
+        int dailyCovered = 0;
         int rising = 0, falling = 0, profitable = 0, losing = 0;
         for (int i = 0; i < dailyPnls.size(); i++) {
+            BigDecimal holdingAmount = i < holdingAmounts.size() ? holdingAmounts.get(i) : null;
+            if (holdingAmount != null) {
+                holdingAmountTotal = holdingAmountTotal.add(holdingAmount, MATH);
+            }
             BigDecimal dailyPnl = dailyPnls.get(i);
             if (dailyPnl != null) {
                 dailyPnlTotal = dailyPnlTotal.add(dailyPnl, MATH);
-            } else {
-                dailyPnlComplete = false;
+                dailyCovered++;
             }
             // changePcts/totalPnls 可能短于 dailyPnls;越界视作该基金该指标未知。
             BigDecimal changePct = i < dailyChangePcts.size() ? dailyChangePcts.get(i) : null;
@@ -120,16 +128,24 @@ public final class FundPnlCalculator {
                 int sign = changePct.signum();
                 if (sign > 0) rising++;
                 else if (sign < 0) falling++;
+                if (holdingAmount != null && BigDecimal.ONE.add(changePct, MATH).signum() != 0) {
+                    dailyPnlBaseTotal = dailyPnlBaseTotal.add(
+                            holdingAmount.divide(BigDecimal.ONE.add(changePct, MATH), MATH), MATH);
+                }
             }
             // 总盈亏计数独立于今日涨跌:今日上涨但整体亏损时,两个维度都要各自计数。
             BigDecimal totalPnl = i < totalPnls.size() ? totalPnls.get(i) : null;
             if (totalPnl != null) {
+                totalPnlTotal = totalPnlTotal.add(totalPnl, MATH);
                 int sign = totalPnl.signum();
                 if (sign > 0) profitable++;
                 else if (sign < 0) losing++;
             }
         }
-        return new PortfolioSummary(dailyPnlComplete ? dailyPnlTotal : null,
-                rising, falling, profitable, losing, false, 0);
+        BigDecimal dailyChangePct = dailyPnlBaseTotal.signum() == 0
+                ? null : dailyPnlTotal.divide(dailyPnlBaseTotal, MATH);
+        BigDecimal coveredDailyPnlTotal = dailyCovered == 0 && !dailyPnls.isEmpty() ? null : dailyPnlTotal;
+        return new PortfolioSummary(holdingAmountTotal, coveredDailyPnlTotal, dailyChangePct, totalPnlTotal,
+                dailyPnls.size(), dailyCovered, rising, falling, profitable, losing, false, 0);
     }
 }

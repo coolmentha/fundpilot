@@ -191,7 +191,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void 组合聚合_估值拉取失败_不使用上一期净值冒充当前值() {
+    void 组合聚合_估值拉取失败_总仓位使用最近确认净值且今日收益未知() {
         FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
         navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
         navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
@@ -205,10 +205,12 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
         assertThat(pnl.dailyChangePct()).isNull();
         assertThat(pnl.dailyPnl()).isNull();
-        assertThat(pnl.holdingAmount()).isNull();
-        assertThat(pnl.totalPnl()).isNull();
+        assertThat(pnl.holdingAmount()).isEqualByComparingTo("1853.4000");
+        assertThat(pnl.totalPnl()).isEqualByComparingTo("53.4000");
         assertThat(pnl.estimateFetchFailed()).isTrue();
         assertThat(summary.dailyPnlTotal()).isNull();
+        assertThat(summary.holdingAmountTotal()).isEqualByComparingTo("1853.4000");
+        assertThat(summary.dailyCoveredFundCount()).isZero();
         assertThat(summary.estimateFetchFailedCount()).isEqualTo(1);
     }
 
@@ -232,7 +234,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void 单基金_估值预热失败_不复用上一期净值计算当前市值() {
+    void 单基金_估值预热失败_按最近确认净值展示仓位() {
         FundEntity fund = persistHoldingFundWithCode("008585", "华夏人工智能ETF联接A");
         navHistory(fund, Instant.parse("2026-07-02T00:00:00Z"), "1.84");
         navHistory(fund, Instant.parse("2026-07-03T00:00:00Z"), "1.8534");
@@ -245,8 +247,8 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
         assertThat(pnl.dailyChangePct()).isNull();
-        assertThat(pnl.holdingAmount()).isNull();
-        assertThat(pnl.totalPnl()).isNull();
+        assertThat(pnl.holdingAmount()).isEqualByComparingTo("1853.4000");
+        assertThat(pnl.totalPnl()).isEqualByComparingTo("53.4000");
         assertThat(pnl.estimateFetchFailed()).isTrue();
     }
 

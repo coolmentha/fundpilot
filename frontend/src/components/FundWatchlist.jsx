@@ -1,8 +1,8 @@
-import {Table, Tag} from 'antd';
+import {Table} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
-import {Link, useNavigate} from 'react-router-dom';
+import {Link} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
-import {signedMoney, signedPercent, compactMoney, pnlColor, text} from '../constants.js';
+import {money, signedMoney, signedPercent, pnlColor, text} from '../constants.js';
 import {buildFundWatchlistRows, estimateStatusText} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
@@ -16,7 +16,6 @@ import QueryErrorState from './QueryErrorState.jsx';
  * <p>支持按涨跌幅排序(默认降序,涨幅大的在前)。
  */
 export default function FundWatchlist() {
-    const navigate = useNavigate();
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
     const {
@@ -31,27 +30,24 @@ export default function FundWatchlist() {
 
     const columns = [
         {
-            title: '代码',
-            dataIndex: 'fundCode',
-            width: 112,
-            render: (v) => <span className="num-cell">{v}</span>,
-        },
-        {
-            title: '名称',
+            title: '基金',
             dataIndex: 'fundName',
             ellipsis: true,
             render: (v, r) => (
                 <span className="watchlist-name-cell">
-                    <Link className="watchlist-name-text" title={v} to={`/funds/${r.id}`}>{v}</Link>
+                    <Link className="watchlist-name-text" title={v} to={`/funds/${r.id}`}>
+                        <strong>{v}</strong><small>{r.fundCode} · {text(r.fundSubType)}</small>
+                    </Link>
                 </span>
             ),
         },
         {
-            title: '类型',
-            dataIndex: 'fundSubType',
-            width: 104,
-            responsive: ['md'],
-            render: (v) => v ? <Tag>{text(v)}</Tag> : <span className="muted">-</span>,
+            title: '持仓市值', dataIndex: 'holdingAmount', width: 140, align: 'right',
+            render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{money(v)}</span>,
+        },
+        {
+            title: '仓位', dataIndex: 'allocationPct', width: 90, align: 'right',
+            render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{v.toFixed(1)}%</span>,
         },
         {
             title: '涨跌幅',
@@ -77,16 +73,6 @@ export default function FundWatchlist() {
             },
         },
         {
-            title: '持仓份额',
-            dataIndex: 'holdingShares',
-            width: 128,
-            align: 'right',
-            responsive: ['sm'],
-            render: (v) => v !== null && v !== undefined
-                ? <span className="num-cell">{compactMoney(v)}</span>
-                : <span className="muted">-</span>,
-        },
-        {
             title: '当日收益',
             dataIndex: 'dailyPnl',
             width: 132,
@@ -99,11 +85,10 @@ export default function FundWatchlist() {
                     : <span className="muted">-</span>,
         },
         {
-            title: '操作',
-            width: 88,
-            render: (_, r) => (
-                <a onClick={() => navigate(`/funds/${r.id}`)}>详情</a>
-            ),
+            title: '数据状态', width: 130,
+            render: (_, r) => <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>
+                {estimateStatusText(r.estimateStatus) || (r.isEstimated ? '盘中估值' : '净值已确认')}
+            </span>,
         },
     ];
 
@@ -115,13 +100,22 @@ export default function FundWatchlist() {
         );
     }
 
+    const holdingRows = rows.filter((r) => r.status === 'HOLDING' && Number(r.holdingAmount) > 0);
+    const totalHoldingAmount = holdingRows.reduce((sum, r) => sum + Number(r.holdingAmount), 0);
+    const displayRows = rows.map((r) => ({
+        ...r,
+        allocationPct: r.status === 'HOLDING' && totalHoldingAmount > 0
+            ? Number(r.holdingAmount || 0) / totalHoldingAmount * 100 : null,
+    }));
+
     return (
         <div className="fund-watchlist">
             {estimatesError && (
                 <QueryErrorState onRetry={refetchEstimates} description="实时估值加载失败，已隐藏旧估值"/>
             )}
+            <div className="watchlist-layout">
             <Table
-                dataSource={rows}
+                dataSource={displayRows}
                 columns={columns}
                 loading={fundsLoading}
                 size="small"
@@ -134,6 +128,16 @@ export default function FundWatchlist() {
                     </span>
                 )}}
             />
+            <aside className="allocation-panel" aria-label="仓位构成">
+                <div className="allocation-title"><strong>仓位构成</strong><span>100%</span></div>
+                {displayRows.filter((r) => r.allocationPct != null).map((r) => (
+                    <div className="allocation-item" key={r.id}>
+                        <div><span title={r.fundName}>{r.fundName}</span><strong>{r.allocationPct.toFixed(1)}%</strong></div>
+                        <div className="allocation-bar"><i style={{width: `${r.allocationPct}%`}}/></div>
+                    </div>
+                ))}
+            </aside>
+            </div>
         </div>
     );
 }

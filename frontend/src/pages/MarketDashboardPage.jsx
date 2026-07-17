@@ -3,6 +3,8 @@ import PortfolioOverview from '../components/PortfolioOverview.jsx';
 import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import MoneyFlow from '../components/MoneyFlow.jsx';
+import {Link} from 'react-router-dom';
+import {usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
 
 /**
  * 行情工作台(首页)。
@@ -18,6 +20,11 @@ import MoneyFlow from '../components/MoneyFlow.jsx';
  * 非交易时段数据不变,前端继续展示上一交易日收盘数据。
  */
 export default function MarketDashboardPage() {
+    const {data: summary} = usePortfolioSummary();
+    const {data: pending} = usePendingSignals();
+    const unknownCount = Math.max(
+        (summary?.holdingFundCount ?? 0) - (summary?.risingFundCount ?? 0) - (summary?.fallingFundCount ?? 0), 0);
+
     return (
         <div className="market-dashboard">
             <section className="dashboard-section overview-section" aria-label="组合总览">
@@ -33,10 +40,24 @@ export default function MarketDashboardPage() {
 
             <section className="dashboard-section watchlist-section" aria-label="自选基金行情">
                 <div className="section-header">
-                    <h3 className="section-title">自选基金</h3>
-                    <span className="section-hint muted">点击表头排序,点击「详情」查看 K 线</span>
+                    <h3 className="section-title">自选基金与我的持仓</h3>
                 </div>
                 <FundWatchlist/>
+            </section>
+
+            <section className="dashboard-status-grid" aria-label="持仓状态与待处理">
+                <div className="dashboard-status-item">
+                    <span className="muted">持仓涨跌分布</span>
+                    <div className="distribution-values">
+                        <strong className="pnl-up">{summary?.risingFundCount ?? 0} 上涨</strong>
+                        <strong className="pnl-down">{summary?.fallingFundCount ?? 0} 下跌</strong>
+                        <strong className="muted">{unknownCount} 未知</strong>
+                    </div>
+                </div>
+                <div className="dashboard-status-item">
+                    <span className="muted">待处理</span>
+                    <div><strong>{pending?.length ?? 0} 个操作待确认</strong> <Link to="/confirm">查看 →</Link></div>
+                </div>
             </section>
 
             <section className="dashboard-section bottom-section" aria-label="板块与资金流向">
