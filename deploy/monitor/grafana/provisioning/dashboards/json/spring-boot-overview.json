@@ -4,7 +4,7 @@
   "tags": ["spring-boot", "fundpilot"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": {"from": "now-1h", "to": "now"},
   "panels": [
@@ -12,7 +12,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "JVM 堆内存已用",
-      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {
         "defaults": {"unit": "bytes"},
@@ -27,7 +27,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "HTTP 请求速率 (req/s)",
-      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {
         "defaults": {"unit": "reqps"},
@@ -42,7 +42,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "定时任务执行次数 (5min)",
-      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {
         "defaults": {"unit": "short"},
@@ -57,7 +57,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "定时任务耗时 P99 (s)",
-      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {
         "defaults": {"unit": "s"},
@@ -72,7 +72,7 @@
       "id": 5,
       "type": "stat",
       "title": "HTTP 500 错误 (5min)",
-      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 6},
+      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 6},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "fieldConfig": {
         "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}},
@@ -87,7 +87,7 @@
       "id": 6,
       "type": "logs",
       "title": "Backend 应用日志",
-      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
       "datasource": {"type": "loki", "uid": "loki"},
       "options": {
         "showTime": true,
@@ -97,6 +97,7 @@
         "prettifyLogMessage": false,
         "syntaxHighlighting": false,
         "enableLogDetails": true,
+        "showControls": true,
         "dedupStrategy": "none",
         "sortOrder": "Descending"
       },
