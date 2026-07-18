@@ -588,6 +588,9 @@ jobs:
             timeout --foreground --kill-after=5s 300s docker pull "$FRONTEND_IMAGE"
             maintenance_window_is_safe
 
+            # 监控配置由 release 管理；清理挂载文件产生的工作区漂移，避免阻塞 tag 切换。
+            git restore --worktree -- deploy/monitor
+
             # 升级前必须使用上一已部署版本的 Compose 和环境完成停写与备份。
             if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
               git checkout --detach "$PREVIOUS_RELEASE_TAG"
