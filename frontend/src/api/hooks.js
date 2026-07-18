@@ -266,6 +266,22 @@ export function useConfirmTransaction() {
         },
     });
 }
+export function useUpdateTransaction() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({id, body}) => updatePendingTransaction(id, body),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['transactions-pending']});
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['portfolio-summary']});
+            invalidateDcaBudgetSummary(qc);
+        },
+    });
+}
+export function updatePendingTransaction(id, body) {
+    return put(`/api/transactions/${id}`, body);
+}
 export function useCreateManualTransaction(fundId) {
     const qc = useQueryClient();
     return useMutation({

@@ -263,8 +263,8 @@ export default function FundsPage() {
                     {!editing && (
                         <Form.Item label="持有份额（可选）" name="initialHoldingShares"
                                    help="现有持仓的实际份额。不填则创建空仓基金"
-                                   rules={[{type: 'number', min: 0.0001, message: '持有份额必须大于 0'}]}>
-                            <InputNumber min={0.0001} precision={4} className="full-width" placeholder="已有持仓份额,不填则空仓"
+                                   rules={[{type: 'number', min: 0.01, message: '持有份额必须至少为 0.01'}]}>
+                            <InputNumber min={0.01} precision={2} className="full-width" placeholder="已有持仓份额,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                          parser={(v) => v.replace(/,/g, '')}/>
                         </Form.Item>

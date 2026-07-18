@@ -4,6 +4,7 @@ import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.controller.ManualTransactionRequest;
+import com.fundpilot.backend.fund.controller.PendingTransactionUpdateRequest;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
@@ -47,6 +48,65 @@ public class FundTransactionService {
                 .toList();
     }
 
+    /** 修改一笔 PENDING 流水的业务输入；来源、基金和来源关联保持不变。 */
+    @Transactional
+    public FundTransactionView updatePending(Long transactionId, PendingTransactionUpdateRequest request) {
+        FundTransactionEntity tx = fundTransactionRepository.findByIdForUpdate(transactionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND,
+                        "FundTransaction #" + transactionId + " 不存在"));
+        if (tx.getStatus() == FundTransactionStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED,
+                    "已确认交易不可修改 #" + transactionId);
+        }
+        if (tx.getStatus() == FundTransactionStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CANCELLED,
+                    "已撤销交易不可修改 #" + transactionId);
+        }
+
+        FundTransactionEntity related = tx.getRelatedFundTransactionEntity();
+        ConversionTransactionPair conversion = ConversionTransactionPair.resolve(tx, related);
+        if (conversion != null && conversion.inLeg().getId().equals(tx.getId())) {
+            throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
+                    "基金转换转入腿由转出腿派生,不可单独修改 #" + transactionId);
+        }
+
+        Instant tradeDate = request.tradeDate() != null ? request.tradeDate() : tx.getTradeDate();
+        if (tradeDate == null) {
+            tradeDate = tx.getCreatedDate();
+        }
+        if (tradeDate == null || tradeDate.isAfter(Instant.now())) {
+            throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
+                    "交易发生时间不能为空或晚于当前时间");
+        }
+
+        switch (tx.getSource()) {
+            case INCREASE, TRANSFER_IN, INVEST -> {
+                if (request.amount() == null || request.amount().signum() <= 0) {
+                    throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
+                            tx.getSource() + " 需填正数金额(amount)");
+                }
+                tx.setAmount(request.amount());
+            }
+            case DECREASE, TRANSFER_OUT -> {
+                BigDecimal shares = ShareScale.normalize(request.shares());
+                if (shares == null || shares.signum() <= 0) {
+                    throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
+                            tx.getSource() + " 需填正数份额(shares)");
+                }
+                tx.setShares(shares);
+            }
+            case ADJUST_IN, ADJUST_OUT -> throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION,
+                    "调整交易创建即确认,不可修改 #" + transactionId);
+        }
+        tx.setTradeDate(tradeDate);
+        fundTransactionRepository.save(tx);
+        if (conversion != null) {
+            conversion.inLeg().setTradeDate(tradeDate);
+            fundTransactionRepository.save(conversion.inLeg());
+        }
+        return FundTransactionView.from(tx);
+    }
+
     /**
      * 手动录入一笔交易(issue #18 手动交易)。绕过信号(signalLog=null),status=PENDING,
      * 交易日净值落库后回填另一侧并转 CONFIRMED。手动卖出不卡 7 天硬约束。
@@ -74,22 +134,23 @@ public class FundTransactionService {
         // 调整交易(task 07-09):录入即 CONFIRMED,不算净值/手续费,只改持仓份额。
         // amount/fee/feeRate/nav 均空,金额实时算(份额×当前净值)。
         if (isAdjust) {
-            if (request.shares() == null || request.shares().signum() <= 0) {
+            BigDecimal adjustedShares = ShareScale.normalize(request.shares());
+            if (adjustedShares == null || adjustedShares.signum() <= 0) {
                 throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
                         request.source() + " 需填正数份额(shares)");
             }
             if (request.source() == FundTransactionSource.ADJUST_OUT) {
                 BigDecimal holdingShares = fundPositionService.getHoldingShares(fundId);
-                if (holdingShares == null || request.shares().compareTo(holdingShares) > 0) {
+                if (holdingShares == null || adjustedShares.compareTo(holdingShares) > 0) {
                     throw new BusinessException(ErrorCode.INSUFFICIENT_HOLDING_SHARES,
-                            "调减份额 " + request.shares() + " 超过当前持仓 "
+                            "调减份额 " + adjustedShares + " 超过当前持仓 "
                                     + (holdingShares == null ? BigDecimal.ZERO : holdingShares));
                 }
             }
             FundTransactionEntity tx = new FundTransactionEntity();
             tx.setFundEntity(fund);
             tx.setSource(request.source());
-            tx.setShares(request.shares());
+            tx.setShares(adjustedShares);
             tx.setAmount(null);
             tx.setNav(null);
             tx.setFee(null);
@@ -116,12 +177,12 @@ public class FundTransactionService {
                 shares = null;
             }
             case DECREASE, TRANSFER_OUT -> {
-                if (request.shares() == null || request.shares().signum() <= 0) {
+                shares = ShareScale.normalize(request.shares());
+                if (shares == null || shares.signum() <= 0) {
                     throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
                             request.source() + " 需填正数份额(shares)");
                 }
                 amount = null;
-                shares = request.shares();
             }
             default -> throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED,
                     "不支持的手动交易来源: " + request.source());

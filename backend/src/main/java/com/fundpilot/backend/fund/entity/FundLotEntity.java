@@ -33,11 +33,11 @@ public class FundLotEntity extends AbstractEntity {
     private Instant acquireDate;
 
     /** 买入份额(扣申购费后)。 */
-    @Column(name = "acquire_shares", nullable = false)
+    @Column(name = "acquire_shares", nullable = false, precision = 19, scale = 2)
     private BigDecimal acquireShares;
 
     /** 剩余未卖出份额(FIFO 消耗时递减)。 */
-    @Column(name = "remaining_shares", nullable = false)
+    @Column(name = "remaining_shares", nullable = false, precision = 19, scale = 2)
     private BigDecimal remainingShares;
 
     /** 买入成本单价(用户完整投入 amount / 到账 shares，含申购费)。 */

@@ -4,6 +4,7 @@ import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.controller.ManualTransactionRequest;
+import com.fundpilot.backend.fund.controller.PendingTransactionUpdateRequest;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
@@ -400,6 +401,99 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
                 new ManualTransactionRequest(FundTransactionSource.ADJUST_IN, null, BigDecimal.ZERO, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
+    }
+
+    @Test
+    @Transactional
+    void updatePending_卖出份额按两位四舍五入且来源关联不变() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity tx = persistTx(fund, FundTransactionSource.DECREASE, "0");
+        tx.setDcaPlanId(77L);
+        fundTransactionRepository.flush();
+        Instant tradeDate = Instant.parse("2026-07-17T00:00:00Z");
+
+        FundTransactionView view = fundTransactionService.updatePending(tx.getId(),
+                new PendingTransactionUpdateRequest(null, new BigDecimal("605.36974183"), tradeDate));
+
+        assertThat(view.shares()).isEqualByComparingTo("605.37");
+        assertThat(view.tradeDate()).isEqualTo(tradeDate);
+        assertThat(view.source()).isEqualTo(FundTransactionSource.DECREASE);
+        assertThat(fundTransactionRepository.findById(tx.getId()).orElseThrow().getDcaPlanId()).isEqualTo(77L);
+    }
+
+    @Test
+    @Transactional
+    void updatePending_卖出份额舍入为零后拒绝() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity tx = persistTx(fund, FundTransactionSource.DECREASE, "0");
+
+        assertThatThrownBy(() -> fundTransactionService.updatePending(tx.getId(),
+                new PendingTransactionUpdateRequest(null, new BigDecimal("0.001"), Instant.now().minusSeconds(60))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
+    }
+
+    @Test
+    @Transactional
+    void updatePending_买入更新金额且非正金额被拒绝() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity tx = persistTx(fund, FundTransactionSource.INVEST, "1000");
+
+        FundTransactionView view = fundTransactionService.updatePending(tx.getId(),
+                new PendingTransactionUpdateRequest(new BigDecimal("800"), null, Instant.now().minusSeconds(60)));
+        assertThat(view.amount()).isEqualByComparingTo("800");
+
+        assertThatThrownBy(() -> fundTransactionService.updatePending(tx.getId(),
+                new PendingTransactionUpdateRequest(BigDecimal.ZERO, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED.name());
+    }
+
+    @Test
+    @Transactional
+    void updatePending_已确认或撤销流水拒绝修改() {
+        FundEntity fund = persistFund();
+        FundTransactionEntity confirmed = persistTx(fund, FundTransactionSource.INCREASE, "1000");
+        confirmed.setStatus(FundTransactionStatus.CONFIRMED);
+        FundTransactionEntity cancelled = persistTx(fund, FundTransactionSource.INCREASE, "1000");
+        cancelled.setStatus(FundTransactionStatus.CANCELLED);
+        fundTransactionRepository.flush();
+        PendingTransactionUpdateRequest request = new PendingTransactionUpdateRequest(
+                new BigDecimal("900"), null, Instant.now().minusSeconds(60));
+
+        assertThatThrownBy(() -> fundTransactionService.updatePending(confirmed.getId(), request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.TRANSACTION_ALREADY_CONFIRMED.name());
+        assertThatThrownBy(() -> fundTransactionService.updatePending(cancelled.getId(), request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.TRANSACTION_ALREADY_CANCELLED.name());
+    }
+
+    @Test
+    @Transactional
+    void updatePending_转换只允许改转出腿并同步交易日期() {
+        FundEntity fundA = persistFund();
+        FundEntity fundB = new FundEntity();
+        fundB.setFundCode("161725");
+        fundB.setFundName("招商白酒");
+        fundB.setStatus(FundStatus.HOLDING);
+        fundRepository.save(fundB);
+        FundTransactionView created = fundTransactionService.createManual(fundA.getId(),
+                new ManualTransactionRequest(FundTransactionSource.TRANSFER_OUT, null,
+                        new BigDecimal("100"), fundB.getId(), Instant.parse("2026-07-16T00:00:00Z")));
+        FundTransactionEntity outLeg = fundTransactionRepository.findById(created.id()).orElseThrow();
+        FundTransactionEntity inLeg = outLeg.getRelatedFundTransactionEntity();
+        Instant changedDate = Instant.parse("2026-07-17T00:00:00Z");
+
+        fundTransactionService.updatePending(outLeg.getId(),
+                new PendingTransactionUpdateRequest(null, new BigDecimal("605.36974183"), changedDate));
+
+        assertThat(outLeg.getShares()).isEqualByComparingTo("605.37");
+        assertThat(inLeg.getTradeDate()).isEqualTo(changedDate);
+        assertThatThrownBy(() -> fundTransactionService.updatePending(inLeg.getId(),
+                new PendingTransactionUpdateRequest(new BigDecimal("1000"), null, changedDate)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.ILLEGAL_STATE_TRANSITION.name());
     }
 
     private FundEntity persistFund() {

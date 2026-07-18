@@ -97,10 +97,12 @@ public class AccountingRebuildService {
         }
         BigDecimal rate = purchaseRate(tx, amount);
         BigDecimal fee = amount.multiply(rate, MATH);
-        BigDecimal shares = amount.subtract(fee).divide(unitNav, MATH);
-        BigDecimal ordinaryCost = amount.divide(shares, MATH);
         OldLotEvidence oldLot = oldLots.get(tx.id());
         BigDecimal onboardingCost = onboardingCosts.get(tx.id());
+        BigDecimal shares = onboardingCost != null
+                ? ShareScale.normalize(tx.shares())
+                : ShareScale.normalize(amount.subtract(fee).divide(unitNav, MATH));
+        BigDecimal ordinaryCost = amount.divide(shares, MATH);
         BigDecimal costPerShare = onboardingCost != null ? onboardingCost : ordinaryCost;
         Instant acquireTime = onboardingCost != null && oldLot != null ? oldLot.acquireTime() : tx.tradeTime();
 

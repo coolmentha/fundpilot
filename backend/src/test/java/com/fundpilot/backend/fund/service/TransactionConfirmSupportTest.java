@@ -77,9 +77,7 @@ class TransactionConfirmSupportTest {
 
         assertThat(tx.getFee()).isEqualByComparingTo(new BigDecimal("1.500"));
         assertThat(tx.getFeeRate()).isEqualByComparingTo(new BigDecimal("0.0015"));
-        // shares = 998.5 / 1.5 (DECIMAL64)
-        assertThat(tx.getShares()).isEqualByComparingTo(
-                new BigDecimal("998.5").divide(new BigDecimal("1.5"), MATH));
+        assertThat(tx.getShares()).isEqualByComparingTo("665.67");
         ArgumentCaptor<FundLotEntity> lotCaptor = ArgumentCaptor.forClass(FundLotEntity.class);
         verify(fundLotRepository).save(lotCaptor.capture());
         FundLotEntity lot = lotCaptor.getValue();
@@ -101,9 +99,7 @@ class TransactionConfirmSupportTest {
 
         assertThat(tx.getFee()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(tx.getFeeRate()).isNull();
-        // shares = 1000 / 1.5 (DECIMAL64,费率缺失降级不扣费)
-        assertThat(tx.getShares()).isEqualByComparingTo(
-                new BigDecimal("1000").divide(new BigDecimal("1.5"), MATH));
+        assertThat(tx.getShares()).isEqualByComparingTo("666.67");
     }
 
     @Test

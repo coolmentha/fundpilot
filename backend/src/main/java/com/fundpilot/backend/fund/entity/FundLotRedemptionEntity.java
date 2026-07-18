@@ -28,7 +28,7 @@ public class FundLotRedemptionEntity extends AbstractEntity {
     private Long sellTxId;
 
     /** 本次消耗的份额。 */
-    @Column(name = "shares_consumed", nullable = false)
+    @Column(name = "shares_consumed", nullable = false, precision = 19, scale = 2)
     private BigDecimal sharesConsumed;
 
     /** 持有天数(卖出交易发生日 − lot.acquireDate 的北京时间自然日)。 */

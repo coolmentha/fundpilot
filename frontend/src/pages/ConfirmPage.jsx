@@ -1,5 +1,6 @@
 import {App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
+import {useState} from 'react';
 import {Link} from 'react-router-dom';
 import {
     useCancelTransaction,
@@ -11,6 +12,8 @@ import {datetime, money} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
+import PendingTransactionEditModal from '../components/PendingTransactionEditModal.jsx';
+import {canEditPendingTransaction} from '../transactionEditing.js';
 
 const {Title, Text} = Typography;
 
@@ -20,6 +23,7 @@ export default function ConfirmPage() {
     const {data: funds} = useFunds();
     const confirmTx = useConfirmTransaction();
     const cancelTx = useCancelTransaction();
+    const [editing, setEditing] = useState(null);
     const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
 
     const confirm = async (id) => {
@@ -43,8 +47,11 @@ export default function ConfirmPage() {
             render: (value) => value == null ? '-' : <span className="num-cell">{Number(value).toFixed(2)}</span>},
         {title: '状态', dataIndex: 'status', width: 100, align: 'right',
             render: (value) => <StatusTag value={value}/>},
-        {title: '操作', width: 130, align: 'right', render: (_, row) => (
+        {title: '操作', width: 180, align: 'right', render: (_, row) => (
             <Space size={0}>
+                {canEditPendingTransaction(row) && (
+                    <Button type="link" size="small" onClick={() => setEditing(row)}>编辑</Button>
+                )}
                 <Popconfirm title="确认该笔交易？" description="按交易发生日净值回填并计入持仓"
                             onConfirm={() => confirm(row.id)}>
                     <Button type="link" size="small" loading={confirmTx.isPending}>确认</Button>
@@ -67,6 +74,11 @@ export default function ConfirmPage() {
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={transactions || []}
                        columns={columns} pagination={false} scroll={{x: 990}}
                        locale={{emptyText: <EmptyState description="暂无待处理交易"/>}}/>
+            )}
+            {editing && (
+                <PendingTransactionEditModal transaction={editing}
+                                             holdingShares={funds?.find((fund) => fund.id === editing.fundId)?.holdingShares}
+                                             onClose={() => setEditing(null)}/>
             )}
         </Card>
     );

@@ -7,13 +7,14 @@ vi.mock('./client.js', () => ({
     del: vi.fn(),
 }));
 
-import {del, post} from './client.js';
+import {del, post, put} from './client.js';
 import {
     deleteDcaPlan,
     invalidateDcaBudgetSummary,
     invalidateDcaPlanQueries,
     invalidateSignalQueries,
     requestAdminAction,
+    updatePendingTransaction,
 } from './hooks.js';
 
 describe('signal query invalidation', () => {
@@ -50,6 +51,16 @@ describe('admin actions', () => {
     it('rejects unsupported actions instead of falling back to refresh', () => {
         expect(() => requestAdminAction('unknown'))
             .toThrow('Unsupported admin action: unknown');
+    });
+});
+
+describe('pending transaction update', () => {
+    it('uses the transaction update endpoint', () => {
+        const body = {amount: null, shares: '605.36974183', tradeDate: '2026-07-18T00:00:00+08:00'};
+
+        updatePendingTransaction(7, body);
+
+        expect(put).toHaveBeenCalledWith('/api/transactions/7', body);
     });
 });
 

@@ -78,7 +78,8 @@ public class FundService {
                 && (request.fundName() == null || request.fundName().isBlank())) {
             throw new BusinessException(ErrorCode.MISSING_FUND_IDENTITY, "基金代码和名称至少填一个");
         }
-        if (request.initialHoldingShares() != null && request.initialHoldingShares().signum() <= 0) {
+        BigDecimal initialHoldingShares = ShareScale.normalize(request.initialHoldingShares());
+        if (initialHoldingShares != null && initialHoldingShares.signum() <= 0) {
             throw new BusinessException(ErrorCode.INITIAL_HOLDING_SHARES_INVALID, "初始持仓份额必须大于 0");
         }
         FundEntity fund = new FundEntity();
@@ -101,9 +102,9 @@ public class FundService {
         FundEntity saved = fundRepository.save(fund);
 
         // initialHoldingShares 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后生成交易核算金额。
-        if (request.initialHoldingShares() != null) {
+        if (initialHoldingShares != null) {
             marketDataFetchService.fetchOneFund(saved.getId());
-            openWithExistingPosition(saved, request.initialHoldingShares(), request.costPerShare(), request.openedAt());
+            openWithExistingPosition(saved, initialHoldingShares, request.costPerShare(), request.openedAt());
         } else {
             eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));
         }
