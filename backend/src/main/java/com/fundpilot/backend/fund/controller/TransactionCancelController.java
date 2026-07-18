@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -28,6 +30,13 @@ public class TransactionCancelController {
     @GetMapping("/api/transactions/pending")
     public ApiResponse<List<FundTransactionView>> pending() {
         return ApiResponse.ok(fundTransactionService.listPending());
+    }
+
+    /** 修改 PENDING 流水的金额或份额及交易日期。 */
+    @PutMapping("/api/transactions/{id}")
+    public ApiResponse<FundTransactionView> update(
+            @PathVariable Long id, @RequestBody PendingTransactionUpdateRequest request) {
+        return ApiResponse.ok(fundTransactionService.updatePending(id, request));
     }
 
     @PostMapping("/api/transactions/{id}/cancel")

@@ -39,6 +39,7 @@ public class FundTransactionEntity extends AbstractEntity {
     @Column(length = 32)
     private FundTransactionSource source;
 
+    @Column(precision = 19, scale = 2)
     private BigDecimal shares;
 
     private BigDecimal nav;

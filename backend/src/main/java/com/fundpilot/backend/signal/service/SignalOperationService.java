@@ -8,6 +8,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
+import com.fundpilot.backend.fund.service.ShareScale;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -187,13 +188,14 @@ public class SignalOperationService {
     }
 
     private static BigDecimal requireShares(ConfirmOperationRequest request) {
-        if (request.actualShares() == null) {
+        BigDecimal shares = ShareScale.normalize(request.actualShares());
+        if (shares == null) {
             throw new BusinessException(ErrorCode.MISSING_ACTUAL_SHARES, "SELL 需提供 actualShares");
         }
-        if (request.actualShares().signum() <= 0) {
+        if (shares.signum() <= 0) {
             throw new BusinessException(ErrorCode.SIGNAL_OPERATION_VALUE_INVALID, "实际份额必须大于 0");
         }
-        return request.actualShares();
+        return shares;
     }
 
     private static FundTransactionEntity newTransaction(FundEntity fund, SignalLogEntity signalLog,

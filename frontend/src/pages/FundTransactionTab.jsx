@@ -6,6 +6,8 @@ import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, u
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import PendingTransactionEditModal from '../components/PendingTransactionEditModal.jsx';
+import {canEditPendingTransaction} from '../transactionEditing.js';
 
 const {Title} = Typography;
 
@@ -25,11 +27,13 @@ export default function FundTransactionTab({fundId}) {
     const confirmTx = useConfirmTransaction();
     const createManual = useCreateManualTransaction(fundId);
     const [open, setOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const source = Form.useWatch('source', form);
     const isSell = source && SELL_SOURCES.has(source);
     const isAdjust = source && ADJUST_SOURCES.has(source);
     const isTransferOut = source === 'TRANSFER_OUT';
+    const currentFund = funds?.find((fund) => fund.id === fundId);
 
     const columns = [
         {title: '交易日期', dataIndex: 'tradeDate', width: 170, render: datetime},
@@ -44,8 +48,11 @@ export default function FundTransactionTab({fundId}) {
             render: (v) => v == null ? '-' : <span className="num-cell">{money(v)}</span>},
         {title: '状态', dataIndex: 'status', width: 110, render: (v) => <StatusTag value={v}/>},
         {
-            title: '', width: 130, render: (_, r) => r.status === 'PENDING' && (
+            title: '', width: 180, render: (_, r) => r.status === 'PENDING' && (
                 <Space size={0}>
+                    {canEditPendingTransaction(r) && (
+                        <Button type="link" size="small" onClick={() => setEditing(r)}>编辑</Button>
+                    )}
                     <Popconfirm title="确认该笔交易?" description="用交易发生日净值回填另一侧并转 CONFIRMED"
                                 onConfirm={() => confirmTx.mutate(r.id)}>
                         <Button type="link" size="small" loading={confirmTx.isPending}>确认</Button>
@@ -100,8 +107,19 @@ export default function FundTransactionTab({fundId}) {
                                     disabledDate={(date) => date && date.isAfter(dayjs().endOf('day'))}/>
                     </Form.Item>
                     {isSell ? (
-                        <Form.Item label="份额" name="shares" rules={[{required: true, message: '卖出类需填份额'}]}>
-                            <InputNumber className="full-width" min={0.01} step={0.01} precision={2}/>
+                        <Form.Item label="份额" required
+                                   extra={currentFund?.holdingShares == null ? null : `当前可用 ${Number(currentFund.holdingShares).toFixed(2)} 份`}>
+                            <Space.Compact block>
+                                <Form.Item name="shares" noStyle rules={[{required: true, message: '卖出类需填份额'}]}>
+                                    <InputNumber className="full-width" min={0.01} step={0.01} precision={2}/>
+                                </Form.Item>
+                                <Button disabled={currentFund?.holdingShares == null}
+                                        onClick={() => {
+                                            form.setFieldValue('shares', Number(currentFund.holdingShares).toFixed(2));
+                                        }}>
+                                    全部
+                                </Button>
+                            </Space.Compact>
                         </Form.Item>
                     ) : (
                         <Form.Item label="金额(元)" name="amount" rules={[{required: true, message: '买入类需填金额'}]}>
@@ -127,6 +145,11 @@ export default function FundTransactionTab({fundId}) {
                     )}
                 </Form>
             </Modal>
+            {editing && (
+                <PendingTransactionEditModal transaction={editing}
+                                             holdingShares={currentFund?.holdingShares}
+                                             onClose={() => setEditing(null)}/>
+            )}
         </Card>
     );
 }

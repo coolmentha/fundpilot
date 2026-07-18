@@ -58,7 +58,7 @@ public class TransactionConfirmSupport {
 
         BigDecimal feeAmount = tx.getAmount().multiply(discountRate, MATH);
         BigDecimal netAmount = tx.getAmount().subtract(feeAmount);
-        BigDecimal shares = netAmount.divide(navValue, MATH);
+        BigDecimal shares = ShareScale.normalize(netAmount.divide(navValue, MATH));
 
         tx.setShares(shares);
         tx.setFee(feeAmount);

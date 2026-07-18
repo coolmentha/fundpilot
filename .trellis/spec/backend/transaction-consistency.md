@@ -25,6 +25,7 @@ Optional<Instant> TradingCalendarRepository.findMaxCalendarDate();
 int TradingCalendarSyncService.sync();
 int TradingCalendarSyncService.syncFull();
 FundTransactionView FundTransactionService.createManual(Long fundId, ManualTransactionRequest request);
+FundTransactionView FundTransactionService.updatePending(Long transactionId, PendingTransactionUpdateRequest request);
 boolean FundTransactionRepository.existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
 DcaBudgetSummaryView DcaBudgetSummaryService.currentMonth();
 void DcaPlanService.delete(Long planId);
@@ -40,6 +41,9 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 
 前端 `POST /api/funds/{fundId}/transactions`：买入类传正数 `amount`，卖出/调整类传正数 `shares`，转换可额外传 `targetFundId`；
 可选 `tradeDate: Instant` 表示真实交易发生时间，省略时后端使用当前时间。
+
+`PUT /api/transactions/{id}` 只修改 PENDING 流水：买入类传正数 `amount`，卖出类传正数 `shares`，并可传
+`tradeDate: Instant`。来源、基金、信号关联、定投关联和转换目标不在更新契约内。
 
 `PUT /api/user-config` 同时覆盖 `watchedIndices: string[]` 与可空 `monthlyDcaBudget: decimal`；
 `GET /api/dca/budget-summary` 返回 `monthlyBudget/investedAmount/futureAmount/projectedAmount/remainingAmount/overBudgetAmount`。
@@ -57,6 +61,14 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `MarketDataFetchService` 写 snapshot、`SignalQueryService.today` 查当日信号也必须使用同一日期标签，手动入口不能按 JVM UTC 截日。
 - `NavConfirmJob` 次日 03:00 用 `ChinaTradingDate.previousUtcDate(clock.instant())` 传前一业务自然日标签。
 - `tradeDate` 是业务交易发生时间，`createdDate` 只是审计创建时间；所有新建交易路径必须显式写 `tradeDate`。
+- 份额的业务最小单位是 `0.01`。交易、lot、赎回明细及初始持仓的所有写入边界必须调用
+  `ShareScale.normalize`，以 `HALF_UP` 保留两位；禁止在 UI 展示两位、后端却保留隐藏尾差。
+- PENDING 编辑必须悲观锁定交易后再次检查状态；CONFIRMED/CANCELLED 不可修改。信号或定投来源只修改本次
+  执行记录，不反向修改来源计划。
+- 转换转入腿是派生记录，不可单独编辑；修改转出腿的 `tradeDate` 必须在同一事务同步转入腿。
+- “全部卖出/转出”在点击时冻结当前两位事实持仓；确认时仍锁基金并严格比较届时 CONFIRMED 事实持仓。
+- V23 将 `fund_transaction.shares`、lot 份额和赎回消耗份额统一为 `NUMERIC(19,2)`，并把
+  `UNIT_NAV_V1` 重建状态重置为 PENDING。部署前必须备份；迁移或重放失败必须阻止启动。
 - `NavConfirmService` 优先按每笔 PENDING 交易的 `tradeDate` 选择净值日；仅存量 `tradeDate` 为空时回退 `createdDate`，Job 参数是最后降级值。
 - 手动确认与自动确认都必须按交易 `tradeDate` 对应的北京时间自然日取单位净值；累计净值仅用于复权分析，禁止用于真实交易份额、金额和市值。
 - 单日净值查询必须使用半开区间 `[startInclusive, endExclusive)`；禁止 `Between` 或包含结束点的查询，避免当日缺净值时用次日净值确认历史交易。
@@ -109,6 +121,9 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 |---|---|---|
 | 买入 amount 为空、为零或负数 | 拒绝创建 | `MANUAL_TRANSACTION_FIELD_REQUIRED` |
 | 卖出/调整 shares 为空、为零或负数 | 拒绝创建 | `MANUAL_TRANSACTION_FIELD_REQUIRED` |
+| 卖出 shares 经两位 `HALF_UP` 后为 `0.00` | 拒绝创建或修改 | `MANUAL_TRANSACTION_FIELD_REQUIRED` / `SIGNAL_OPERATION_VALUE_INVALID` |
+| 修改 CONFIRMED/CANCELLED 流水 | 原记录不变 | `TRANSACTION_ALREADY_CONFIRMED` / `TRANSACTION_ALREADY_CANCELLED` |
+| 单独修改转换转入腿 | 原转换双腿不变 | `ILLEGAL_STATE_TRANSITION` |
 | 手动交易 `tradeDate` 晚于当前时间 | 拒绝创建 | `MANUAL_TRANSACTION_FIELD_REQUIRED` |
 | 定投金额非正、频率为空、周计划日不在 1..5、月计划日不在 1..28 | 拒绝创建/更新/激活 | `DCA_PLAN_INVALID` |
 | EFFECTIVE 或 DRAFT 计划参数合法 | 原计划原状态更新，只影响未来未生成交易 | 无 |
@@ -138,6 +153,9 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 ## 5. Good / Base / Bad Cases
 
 - Good：A、B 当日净值齐备，一次事务确认两腿并生成 B lot。
+- Good：输入 `605.36974183` 归一化为 `605.37`；“全部卖出”冻结 `605.37` 并可严格清仓。
+- Base：编辑信号或定投生成的 PENDING 流水，只更新本次金额/份额和日期，关联 ID 保持不变。
+- Bad：用隐藏 8 位份额提交、给超卖校验增加全局容差，或绕过转出腿直接修改转换转入腿。
 - Good：周一创建的补录交易将 `tradeDate` 设为上周五，确认时使用周五净值而非周一创建时间。
 - Good：月计划日落在月末连续休市区间，下月首个交易日补执行一次。
 - Good：当日定投已 CONFIRMED 或 CANCELLED，Job 重跑仍不新增交易。
@@ -182,7 +200,8 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `DailyNavConfirmJobTest` / `DailyNavConfirmServiceEventTest` / `DailyNavConfirmServiceTest`：覆盖上海时区、上一交易日定位、跨夜指定日期补拉、目标日期幂等和发布 `FundNavUpdatedEvent`。
 - `NavConfirmServiceStateTest`：覆盖交易自身日期、周末旧交易、缺净值保持 PENDING 和转换两腿原子确认。
 - `NavConfirmAndCancelServiceTest` / `SellConfirmationHoldingValidationTest`：覆盖结束点排除、手动/自动/转换卖出的锁后事实持仓校验和并发超卖保护。
-- `FundTransactionServiceTest`：覆盖历史 `tradeDate`、未来日期拒绝和转换两腿日期一致。
+- `FundTransactionServiceTest`：覆盖历史 `tradeDate`、未来日期拒绝、PENDING 编辑、两位 `HALF_UP`、
+  舍入后为零、终态拒绝和转换两腿日期一致。
 - `SignalOperationServiceUnitTest` / `SignalOperationServiceTest`：覆盖归属、重复回应、SELL 关联、PENDING 状态和非正实际值。
 - `SignalQueryServiceTest`：已回应信号不再出现在 pending 列表。
 - `SignalGenerationServiceTest` / `FundTransactionRepositoryTest`：无买入记录仍落信号，较新卖出不覆盖最近买入时间，已回应信号重跑不覆盖。
@@ -192,7 +211,8 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `FundPositionService` 调用路径测试：确认/撤销后按 CONFIRMED 事实持仓重算状态。
 - `TransactionConfirmServiceStateTest`：CONFIRMED/PENDING 不重复调用 `onSellConfirmed`。
 - `TransactionCancelServiceStateTest`：关联腿已确认时拒绝撤销。
-- `TransactionConfirmSupportTest` / `FundPositionServiceUnitTest`：部分 lot 缺口、全空 lot 的合法 ADJUST_IN/损坏账本分支、账本 FIFO 重放、ADJUST_OUT、初始持仓 lot 且不重复扣费。
+- `TransactionConfirmSupportTest` / `FundPositionServiceUnitTest`：买入份额两位舍入、部分 lot 缺口、全空 lot 的合法 ADJUST_IN/损坏账本分支、账本 FIFO 重放、ADJUST_OUT、初始持仓 lot 且不重复扣费。
+- `AccountingRebuildServiceTest`：断言 transaction、lot、redemption 重放结果均为两位，并覆盖非整除净值的 `HALF_UP`。
 - `DcaBudgetSummaryServiceTest` / `DcaScheduleServiceTest`：覆盖 PENDING/CONFIRMED 计入、CANCELLED 排除、手动 INVEST、14:55 边界、已生成日期去重、跨月顺延、预算为空/剩余/超额。
 - `FundServiceAutoFetchTest` / `TransactionConfirmSupportTest` / 转换确认测试：覆盖初始持仓和所有买入确认不受预算/仓位提醒影响。
 - `TradingCalendarSchemaIntegrationTest`：原子重复写返回 1/0，最大日期查询正确。
@@ -219,6 +239,8 @@ positionLimitService.validatePurchase(tx, nav); // 展示型提醒错误进入�
 funds.stream().map(fund -> get("/api/funds/" + fund.id() + "/dca-plans")); // 管理页 N+1 且自行重算剩余金额
 dailyNavConfirmService.confirmTodayNav(); // 次日上午仍按今天校验，无法补拉昨天净值
 fundDcaPlanRepository.delete(plan); // 未校验 DRAFT，运行中计划可被直接删除
+tx.setShares(request.shares()); // 页面只显示两位，账本却继续保存隐藏尾差
+transactionRepository.findById(id); // 编辑未加锁，可覆盖并发确认结果
 ```
 
 ### Correct
@@ -243,6 +265,8 @@ tradingCalendarService.latestTradingDayBefore(today)
         .ifPresent(dailyNavConfirmService::confirmNavForDate); // 跨夜补拉显式目标交易日
 if (plan.getStatus() != DRAFT) throw DCA_PLAN_DELETE_REQUIRES_DRAFT;
 fundDcaPlanRepository.delete(plan); // @SQLDelete 软删，历史交易不动
+BigDecimal shares = ShareScale.normalize(request.shares());
+transactionRepository.findByIdForUpdate(id); // 锁内再次检查 PENDING 后修改
 ```
 
 ## Scenario: Fund NAV Date Normalization

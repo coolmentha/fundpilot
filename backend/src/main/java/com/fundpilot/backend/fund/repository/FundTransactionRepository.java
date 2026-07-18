@@ -4,7 +4,9 @@ import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.signal.enums.SignalType;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +17,11 @@ import java.util.Optional;
 import java.util.Set;
 
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
+
+    /** 锁定流水，串行化编辑与其他编辑操作。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from FundTransactionEntity t where t.id = :id")
+    Optional<FundTransactionEntity> findByIdForUpdate(@Param("id") Long id);
 
     interface HoldingSharesProjection {
         Long getFundId();

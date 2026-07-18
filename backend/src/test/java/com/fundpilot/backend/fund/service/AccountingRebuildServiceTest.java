@@ -57,14 +57,18 @@ class AccountingRebuildServiceTest extends AbstractIntegrationTest {
 
         assertThat(decimal("select nav from fund_transaction where id=?", buyId)).isEqualByComparingTo("1.00");
         assertThat(decimal("select shares from fund_transaction where id=?", buyId))
-                .isEqualByComparingTo(new BigDecimal("998.5"));
+                .isEqualByComparingTo("998.50");
         assertThat(decimal("select acquire_cost_per_share from fund_lot where acquire_tx_id=?", buyId))
                 .isEqualByComparingTo("1.00150225");
         assertThat(decimal("select remaining_shares from fund_lot where acquire_tx_id=?", buyId))
-                .isEqualByComparingTo("798.5");
+                .isEqualByComparingTo("798.50");
+        assertThat(decimal("select acquire_shares from fund_lot where acquire_tx_id=?", buyId))
+                .isEqualByComparingTo("998.50");
+        assertThat(decimal("select shares_consumed from fund_lot_redemption where sell_tx_id=?", sellId))
+                .isEqualByComparingTo("100.00");
         assertThat(decimal("select amount from fund_transaction where id=?", sellId)).isEqualByComparingTo("118.8");
         assertThat(decimal("select amount from fund_transaction where id=?", transferInId)).isEqualByComparingTo("118.8");
-        assertThat(decimal("select shares from fund_transaction where id=?", transferInId)).isEqualByComparingTo("59.4");
+        assertThat(decimal("select shares from fund_transaction where id=?", transferInId)).isEqualByComparingTo("59.40");
         assertThat(jdbcTemplate.queryForObject("select take_profit_phase from fund_strategy where fund_id=?",
                 String.class, fundId)).isEqualTo("ACCUMULATING");
         assertThat(jdbcTemplate.queryForObject("select cycle_peak_nav is null from fund_strategy where fund_id=?",
@@ -98,6 +102,10 @@ class AccountingRebuildServiceTest extends AbstractIntegrationTest {
                 Timestamp.class, txId).toInstant()).isEqualTo(openedAt);
         assertThat(decimal("select acquire_cost_per_share from fund_lot where acquire_tx_id=?", txId))
                 .isEqualByComparingTo("3.80");
+        assertThat(decimal("select shares from fund_transaction where id=?", txId))
+                .isEqualByComparingTo("1102.84");
+        assertThat(decimal("select acquire_shares from fund_lot where acquire_tx_id=?", txId))
+                .isEqualByComparingTo("1102.84");
     }
 
     private void insertNav(long fundId, String date, String nav, String accumulatedNav) {
