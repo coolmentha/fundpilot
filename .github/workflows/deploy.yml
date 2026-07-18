@@ -624,6 +624,7 @@ jobs:
             BACKUP_READY=1
 
             git checkout --detach "$RELEASE_TAG"
+            chmod -R a+rX deploy/monitor
             write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" true
             {
               printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG"
