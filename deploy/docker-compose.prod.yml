@@ -35,6 +35,7 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       FLYWAY_REPAIR_LEGACY_V7: ${FLYWAY_REPAIR_LEGACY_V7:-false}
       DEPLOYMENT_VALIDATION_MODE: ${DEPLOYMENT_VALIDATION_MODE:-false}
+      SPRING_OUTPUT_ANSI_ENABLED: NEVER
       TZ: Asia/Shanghai
       JAVA_OPTS: -Duser.timezone=Asia/Shanghai
     depends_on:
