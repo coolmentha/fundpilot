@@ -3,7 +3,7 @@ package com.fundpilot.backend.fund.enums;
 import com.fundpilot.backend.common.EnumValue;
 
 public enum StrategyParamStatus implements EnumValue {
-    PENDING_CALIBRATION("待校准"),
+    PENDING_CALIBRATION("草稿"),
     CALIBRATED("已通过"),
     CALIBRATION_FAILED("未通过"),
     EFFECTIVE("已生效");

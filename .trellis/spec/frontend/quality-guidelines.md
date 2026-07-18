@@ -12,6 +12,7 @@ Applies to JavaScript and JSX under `frontend/src`.
 - Null or invalid display values render as `-` rather than fake zeroes or invalid dates.
 - API error codes are added to the shared `errorTitles` mapping when the backend introduces a user-facing `ErrorCode`.
 - JSX imports, callbacks, and derived state must pass ESLint without disabled core or Hooks rules.
+- Top-level route pages are loaded with `React.lazy` under one `React.Suspense` boundary. Keep the shared shell eager so navigation and authentication layout stay stable.
 
 ## Forbidden Patterns
 
@@ -41,6 +42,17 @@ npm run build
 - Pure utilities require Vitest coverage for normal, boundary, null, and invalid inputs.
 - User-visible date/time changes require an assertion with a fixed UTC timestamp and expected Shanghai output.
 - Build warnings must be reported; do not silence them without addressing or documenting the reason.
+- Route changes require a Vitest navigation check that renders the lazy page, follows at least one parameterized route when applicable, and verifies the unknown-route redirect.
+
+```javascript
+const FundsPage = React.lazy(() => import('./pages/FundsPage.jsx'));
+
+<React.Suspense fallback={<div role="status">加载中...</div>}>
+    <Routes>{/* route pages */}</Routes>
+</React.Suspense>
+```
+
+Do not raise `chunkSizeWarningLimit` only to hide a bundle warning. Report the remaining shared chunk and split its ownership module when the initial-load cost justifies that larger refactor.
 
 ## Review Checklist
 
