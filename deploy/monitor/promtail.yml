@@ -29,9 +29,14 @@ scrape_configs:
     pipeline_stages:
       # Docker JSON 日志行的 log 字段是实际日志内容,先提取出来
       - docker:
+      # Spring 异常堆栈没有时间戳；把后续 at/Caused by 等行并入上一条结构化日志。
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+(Z|[+-]\d{2}:\d{2})\s+'
+          max_wait_time: 3s
+          max_lines: 256
       # 解析 Spring Boot 日志,提取 level(INFO/WARN/ERROR)做标签,方便 Grafana 按级别过滤
       # 格式: 2026-06-29T22:55:00.006+08:00  INFO 7 --- [fundpilot-backend] [scheduling-1] c.f.b... : 消息
       - regex:
-          expression: '^(?P<timestamp>\S+)\s+(?P<level>\w+)\s+\d+\s+---\s+\[(?P<thread>[^\]]+)\]\s+(?P<logger>\S+)\s+:\s+(?P<message>.*)$'
+          expression: '^(?P<timestamp>\S+)\s+(?P<level>\w+)\s+\d+\s+---\s+\[(?P<thread>[^\]]+)\]\s+(?P<logger>\S+)\s+:'
       - labels:
           level:
