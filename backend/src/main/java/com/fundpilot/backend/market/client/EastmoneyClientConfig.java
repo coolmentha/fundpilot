@@ -17,7 +17,7 @@ import java.time.Duration;
 
 /**
  * EastmoneyClient 的 Feign 配置:速率限流 + Referer/UA 请求头拦截器。
- * <p>ADR-0002:东方财富对 IP 有限速(约每秒 2-3 次),用 {@link RateLimiter}(Bucket4j 令牌桶)
+ * <p>东方财富请求用 {@link RateLimiter}(Bucket4j 令牌桶)
  * 做速率限流(issue #35 替换未接入的 Semaphore);加 {@code Referer: https://fund.eastmoney.com/} 避免被反爬。
  * <p>限流为全客户端共享单例(净值/字典/K线/估值共用一个桶),保证总请求速率不超限。
  * 静态工厂方法保留供单元测试直接使用;{@link #eastmoneyClient(String)} 等注册为 Spring Bean,
@@ -26,8 +26,8 @@ import java.time.Duration;
 @Configuration(proxyBeanMethods = false)
 public class EastmoneyClientConfig {
 
-    /** 东方财富 IP 限速约每秒 2-3 次,统一取 2 次/秒(全客户端共享一个桶)。 */
-    private static final long PERMITS_PER_SECOND = 2;
+    /** 全客户端共享限流桶；本机短压测 20 次/秒无失败。 */
+    private static final long PERMITS_PER_SECOND = 20;
     private static final Duration RATE_LIMIT_MAX_WAIT = Duration.ofSeconds(1);
     /** 共享速率限流器,全客户端单例。 */
     private static final RateLimiter SHARED_LIMITER = RateLimiter.perSecond(PERMITS_PER_SECOND);
@@ -117,7 +117,7 @@ public class EastmoneyClientConfig {
 
     /**
      * 注册 {@link EastmoneyFundFeeClient} 为 Spring Bean(fundf10.eastmoney.com 域名,基金费率页)。
-     * 费率页在第五个域名 fundf10,故独立 target;共享同一限流桶(2 req/s)。返回 HTML 由 FundFeeHtmlParser 解析。
+     * 费率页在第五个域名 fundf10,故独立 target;共享同一限流桶。返回 HTML 由 FundFeeHtmlParser 解析。
      */
     @Bean
     public EastmoneyFundFeeClient eastmoneyFundFeeClient(

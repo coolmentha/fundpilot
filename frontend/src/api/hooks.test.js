@@ -40,7 +40,11 @@ describe('admin actions', () => {
     ])('routes %s through the authenticated API client', (action, path) => {
         requestAdminAction(action);
 
-        expect(post).toHaveBeenLastCalledWith(path);
+        expect(post).toHaveBeenLastCalledWith(
+            path,
+            undefined,
+            action === 'refresh' ? {timeoutMs: 120_000} : {},
+        );
     });
 
     it('rejects unsupported actions instead of falling back to refresh', () => {

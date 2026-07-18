@@ -318,7 +318,7 @@ const ADMIN_ACTION_PATHS = {
 export function requestAdminAction(action) {
     const path = ADMIN_ACTION_PATHS[action];
     if (!path) throw new Error(`Unsupported admin action: ${action}`);
-    return post(path);
+    return post(path, undefined, action === 'refresh' ? {timeoutMs: 120_000} : {});
 }
 
 export function useAdminAction() {

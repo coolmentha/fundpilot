@@ -1,7 +1,7 @@
 # Realtime Market Cache Layer
 
 > 行情工作台实时数据缓存层契约。本任务(task 07-04-market-dashboard-pivot)引入,
-> 解决「前端 5-10s 高频轮询 vs 东方财富 2 req/s 限流」矛盾。
+> 解决「前端 5-10s 高频轮询 vs 东方财富共享限流」矛盾。
 
 ---
 
@@ -77,6 +77,7 @@ N 个前端客户端共享同一份缓存。
 
 ### 外部调用预算与降级链
 
+- 东方财富客户端共享 20 req/s 令牌桶；该值经本机短压测验证，线上异常时应根据指标下调。
 - 手工 Feign client 统一 `connectTimeout=1s/readTimeout=3s`，`Retryer.NEVER_RETRY`。
 - 东方财富共享限流器单次最多等待 1 秒；超时进入下一个数据源。
 - 净值/字典：东方财富 -> 同花顺；指数 K 线：中证指数公司 -> 东方财富 -> 同花顺。
@@ -217,7 +218,7 @@ N 个前端客户端共享同一份缓存。
 ### Wrong:前端直接轮询东方财富
 
 ```javascript
-// 错误:N 个前端 × 5s 轮询 × 直接调东方财富 = 瞬间超 2 req/s 被封 IP
+// 错误:N 个前端 × 5s 轮询 × 直接调东方财富 = 请求量随用户数失控
 useQuery({
     queryFn: () => fetch('https://push2.eastmoney.com/...'),
     refetchInterval: 5_000,

@@ -6,7 +6,7 @@ import feign.RequestLine;
 /**
  * 东方财富指数 K 线 Feign 客户端(独立接口,K 线接口在 push2his.eastmoney.com 域名,
  * 与基金净值/字典的 fund.eastmoney.com 不同,故单独配置 target)。
- * <p>请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与 Semaphore。
+ * <p>请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与令牌桶。
  */
 public interface EastmoneyKlineClient {
 

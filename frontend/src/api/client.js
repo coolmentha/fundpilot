@@ -15,14 +15,14 @@ export function setSiteUnauthorizedHandler(handler) {
 /**
  * 调后端接口，返回 ApiResponse.data（已解包）。
  * @param {string} path 形如 /api/funds
- * @param {{method?: string, body?: any, headers?: Record<string, string>}} options
+ * @param {{method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number}} options
  * @returns {Promise<any>} data 字段
  */
 export async function apiFetch(path, options = {}) {
     const requestAuthGeneration = siteAuthGeneration;
     const method = (options.method || 'GET').toUpperCase();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const init = {
         method,
         headers: {...(options.headers || {})},

@@ -130,4 +130,20 @@ describe('apiFetch headers', () => {
         await rejection;
         vi.useRealTimers();
     });
+
+    it('accepts a longer timeout for slow admin actions', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', vi.fn((path, init) => new Promise((resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        })));
+
+        const pending = apiFetch('/api/admin/market-data/refresh', {timeoutMs: 120_000});
+        const rejection = expect(pending).rejects.toMatchObject({code: 'REQUEST_TIMEOUT'});
+        await vi.advanceTimersByTimeAsync(119_999);
+        expect(fetch).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(1);
+
+        await rejection;
+        vi.useRealTimers();
+    });
 });

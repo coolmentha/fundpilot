@@ -120,7 +120,7 @@ public class FundFeeService {
 
     /**
      * 刷新所有持仓(HOLDING)基金的费率。由 {@code FundFeeRefreshJob} 定时调用。
-     * 逐个爬取(受 RateLimiter 2 req/s 限流),单只失败不影响其他。
+     * 逐个爬取(受共享 RateLimiter 限流),单只失败不影响其他。
      */
     public void refreshHoldingFunds() {
         List<FundEntity> funds = fundRepository.findByStatus(FundStatus.HOLDING);

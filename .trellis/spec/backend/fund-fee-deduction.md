@@ -267,7 +267,7 @@ if (tx.isBuy()) {
 
 ### 启动线程不刷新逐基金费率
 
-**背景**:`refreshHoldingFunds()` 逐基金访问外部 HTML,受 2 req/s 限流。放在 `ApplicationReadyEvent` 会让启动时间随持仓数线性增长。
+**背景**:`refreshHoldingFunds()` 逐基金访问外部 HTML,受共享限流。放在 `ApplicationReadyEvent` 会让启动时间随持仓数线性增长。
 
 **决策**:启动时不执行费率爬取；每天北京时间 02:30 定时刷新，必须早于 03:00 `NavConfirmJob`。
 若外部源失败或缓存仍缺失,交易确认沿用零费率降级，详情查询可按需抓取。

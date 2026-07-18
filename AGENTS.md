@@ -19,6 +19,11 @@ Issues 与 PRD 通过 `gh` CLI 写入 GitHub 仓库 `coolmentha/fundpilot` 的 I
 ### Coding standards
 
 backend Java 代码硬性规范（Controller 不写逻辑、@RequiredArgsConstructor、ErrorCode 枚举、Actuator、数据源降级链、全局 Instant、View DTO、魔法值枚举化）。详见 `docs/agents/coding-standards.md`。
+
+## Git Tag 规范
+
+- 只有 `main` 分支允许创建和推送 Git tag。
+- 功能分支、修复分支及 `test` 分支禁止创建或推送 Git tag。
 <!-- TRELLIS:START -->
 # Trellis Instructions
 

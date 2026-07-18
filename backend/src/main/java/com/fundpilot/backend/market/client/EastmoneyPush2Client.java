@@ -13,7 +13,7 @@ import feign.RequestLine;
  *   <li>{@link #fetchSectorListRaw(String)} 行业板块涨跌 + 资金流向(clist/get,fs=m:90 t:2)</li>
  *   <li>{@link #fetchNorthboundRaw()} 北向资金实时净流入(kamt.rtmin/get)</li>
  * </ul>
- * 请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与 Semaphore。
+ * 请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与令牌桶。
  * fields 中的逗号用 {@code %2C} 编码(同 {@link EastmoneyKlineClient},Feign URI template 会截断字面逗号)。
  */
 public interface EastmoneyPush2Client {

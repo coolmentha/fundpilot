@@ -14,7 +14,7 @@ import java.util.List;
  * 指数 K 线在 push2his.eastmoney.com 不同域名,见 {@link EastmoneyKlineClient};
  * 三者由 {@link EastmoneyMarketDataSource} 聚合实现 {@link MarketDataSource}。
  * <p>所有请求经 {@link EastmoneyClientConfig#requestInterceptor()} 加 Referer/UA 头,
- * 经 {@link EastmoneyClientConfig#semaphore()} 限流(共享 Semaphore,约每秒 2-3 次)。
+ * 经 {@link EastmoneyClientConfig#rateLimiter()} 使用共享令牌桶限流。
  * Feign {@code url} 通过 Spring 属性 {@code eastmoney.base-url} 配置(默认指向东方财富服务),
  * 测试时通过 {@code feign.Feign.builder()} 编程指向 MockWebServer 地址。
  *

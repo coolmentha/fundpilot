@@ -26,7 +26,7 @@
 - 工作量显著增加（约翻倍）：从"预留空接口"变为"实现两个 Provider + 限流 + 自动基金识别 + 表级缓存"。
 - 时序约束：14:50 信号生成前需完成所有数据抓取和计算；抓取失败有降级兜底（指标不全 → 当天
   `signalType=NONE, reason=INSUFFICIENT_MARKET_DATA`）。
-- 限流约束：东方财富对 IP 有限速（约每秒 2-3 次），需用 `Semaphore` 或 `Bucket4j` 做节流；加
+- 限流约束：东方财富请求使用共享 `Bucket4j` 令牌桶；本机短压测 20 次/秒无失败，当前上限取 20 次/秒；加
   `Referer: https://fund.eastmoney.com/` 请求头避免被反爬。
 
 ## 原"半自动灌入"定位
