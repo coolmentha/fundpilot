@@ -650,5 +650,15 @@ jobs:
             find "$BACKUP_DIR" -maxdepth 1 -type f -name 'pre-v*.dump' -mtime +30 -delete || true
             stop_maintenance_watchdog
             trap - ERR HUP INT TERM
+
+            if [ -n "$PREVIOUS_RELEASE_TAG" ] &&
+              ! git diff --quiet "$PREVIOUS_RELEASE_TAG" "$RELEASE_TAG" -- deploy/monitor; then
+              for container in fundpilot-promtail fundpilot-grafana; do
+                if docker inspect "$container" >/dev/null 2>&1; then
+                  echo "restarting $container for updated monitor configuration"
+                  run_before_total_deadline 120 docker restart "$container" >/dev/null
+                fi
+              done
+            fi
             echo "deployed $RELEASE_TAG ($IMAGE_TAG)"
 
