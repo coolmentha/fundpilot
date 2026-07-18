@@ -14,7 +14,7 @@ import java.time.Instant;
  *
  * @param id                        策略 ID
  * @param fundId                    基金 ID
- * @param status                    策略状态(PENDING_CALIBRATION/CALIBRATED/EFFECTIVE)
+ * @param status                    策略状态(PENDING_CALIBRATION 表示草稿；旧校准状态仅兼容存量数据)
  * @param stopLossPullbackPercent   止盈周期高点回撤比例
  * @param createdDate               创建时间
  */

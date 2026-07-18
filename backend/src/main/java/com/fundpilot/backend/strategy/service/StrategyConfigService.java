@@ -27,7 +27,7 @@ import java.util.Optional;
  *
  * <p>金字塔加仓退场 + 回测/寻优移除后,状态机简化为:
  * <pre>
- * PENDING_CALIBRATION --activate--> EFFECTIVE
+ * 草稿(PENDING_CALIBRATION) --activate--> EFFECTIVE
  *        |
  *        +--updateDraft(改参数,任意非 EFFECTIVE 态可改)
  * </pre>
@@ -46,7 +46,7 @@ public class StrategyConfigService {
     private final TakeProfitPresetService takeProfitPresetService;
 
     /**
-     * 新建策略草稿,状态 PENDING_CALIBRATION。
+     * 新建策略草稿。底层继续使用 PENDING_CALIBRATION 枚举值兼容存量数据。
      */
     @Transactional
     public Long createDraft(Long fundId, StrategyConfigRequest request) {
@@ -109,7 +109,7 @@ public class StrategyConfigService {
     }
 
     /**
-     * 激活:PENDING_CALIBRATION → EFFECTIVE。
+     * 激活:草稿(PENDING_CALIBRATION) → EFFECTIVE。
      * <p>金字塔退场后不再要求回测校验——移动止盈阈值无需回测验证。
      * 同基金旧 EFFECTIVE 自动回退 PENDING_CALIBRATION;写一行激活表并回填上一任 deactivatedAt。
      */
@@ -146,14 +146,14 @@ public class StrategyConfigService {
     }
 
     /**
-     * 主动停用:EFFECTIVE → PENDING_CALIBRATION,回填激活表 deactivatedAt。
+     * 主动停用:EFFECTIVE → 草稿(PENDING_CALIBRATION),回填激活表 deactivatedAt。
      * 非 EFFECTIVE 状态抛 {@link IllegalStateTransitionException}。
      */
     @Transactional
     public void retire(Long strategyId) {
         FundStrategyEntity strategy = requireStrategy(strategyId);
         if (strategy.getStatus() != StrategyParamStatus.EFFECTIVE) {
-            throw new IllegalStateTransitionException(strategy.getStatus().name(), "PENDING_CALIBRATION(停用)");
+            throw new IllegalStateTransitionException(strategy.getStatus().name(), "已生效策略");
         }
         strategy.setStatus(StrategyParamStatus.PENDING_CALIBRATION);
         clearRuntimeState(strategy);
