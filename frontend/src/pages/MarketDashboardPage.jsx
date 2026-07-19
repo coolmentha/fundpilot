@@ -1,5 +1,6 @@
 import IndexTicker from '../components/IndexTicker.jsx';
 import PortfolioOverview from '../components/PortfolioOverview.jsx';
+import PortfolioReturns from '../components/PortfolioReturns.jsx';
 import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import MoneyFlow from '../components/MoneyFlow.jsx';
@@ -31,7 +32,8 @@ export default function MarketDashboardPage() {
                 <div className="section-header">
                     <h3 className="section-title">总览</h3>
                 </div>
-                <PortfolioOverview/>
+            <PortfolioOverview/>
+            <PortfolioReturns/>
             </section>
 
             <section className="dashboard-section index-section" aria-label="大盘指数">

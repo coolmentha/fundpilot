@@ -2,6 +2,7 @@ package com.fundpilot.backend.portfolio.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.fund.service.FundPnlService;
+import com.fundpilot.backend.portfolio.service.PortfolioReturnService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,10 +18,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class PortfolioController {
 
     private final FundPnlService fundPnlService;
+    private final PortfolioReturnService portfolioReturnService;
 
     /** 组合盈亏汇总(概览页 KPI 用)。 */
     @GetMapping("/summary")
     public ApiResponse<PortfolioSummaryView> summary() {
         return ApiResponse.ok(PortfolioSummaryView.from(fundPnlService.computePortfolioSummary()));
+    }
+
+    @GetMapping("/returns")
+    public ApiResponse<PortfolioReturnView> returns() {
+        return ApiResponse.ok(portfolioReturnService.getReturns());
     }
 }

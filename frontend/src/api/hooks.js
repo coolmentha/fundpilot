@@ -199,6 +199,9 @@ export function usePendingSignals() {
 export function usePortfolioSummary() {
     return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary'), ...realtimeQueryOptions});
 }
+export function usePortfolioReturns() {
+    return useQuery({queryKey: ['portfolio-returns'], queryFn: () => get('/api/portfolio/returns'), ...realtimeQueryOptions});
+}
 export function invalidateSignalQueries(queryClient) {
     queryClient.invalidateQueries({queryKey: ['signals-pending']});
     queryClient.invalidateQueries({queryKey: ['signals-today']});
