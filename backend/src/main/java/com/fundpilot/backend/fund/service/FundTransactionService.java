@@ -10,6 +10,7 @@ import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 /**
  * 交易流水服务(issue #18 交易合并到基金详情):查某基金交易流水列表 + 手动录入交易。
@@ -31,6 +33,8 @@ public class FundTransactionService {
 
     private final FundTransactionRepository fundTransactionRepository;
     private final FundRepository fundRepository;
+    private final FundNavHistoryRepository fundNavHistoryRepository;
+    private final FundFeeService fundFeeService;
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
 
@@ -44,8 +48,53 @@ public class FundTransactionService {
     /** 查全部待处理交易，供跨基金操作确认工作台使用。 */
     public List<FundTransactionView> listPending() {
         return fundTransactionRepository.findByStatusOrderByTradeDateDesc(FundTransactionStatus.PENDING).stream()
-                .map(FundTransactionView::from)
+                .map(this::pendingView)
                 .toList();
+    }
+
+    private FundTransactionView pendingView(FundTransactionEntity tx) {
+        FundTransactionView base = FundTransactionView.from(tx);
+        Instant tradeDate = tx.getTradeDate() != null ? tx.getTradeDate() : tx.getCreatedDate();
+        Instant day = tradeDate == null ? null : TransactionTradeDate.resolve(tx, tradeDate);
+        BigDecimal nav = day == null ? null : fundNavHistoryRepository
+                .findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(tx.getFundEntity().getId(), day,
+                        day.plus(1, ChronoUnit.DAYS)).stream().findFirst().map(n -> n.getNav()).orElse(null);
+        String reason;
+        if (tx.getRelatedFundTransactionEntity() != null
+                && tx.getRelatedFundTransactionEntity().getStatus() == FundTransactionStatus.PENDING
+                && tx.getSource() == FundTransactionSource.TRANSFER_IN) {
+            reason = "RELATED_PENDING";
+        } else if ((isBuy(tx.getSource()) && (tx.getAmount() == null || tx.getAmount().signum() <= 0))
+                || (isSell(tx.getSource()) && (tx.getShares() == null || tx.getShares().signum() <= 0))) {
+            reason = "INPUT_MISSING";
+        } else if (nav == null || nav.signum() <= 0) {
+            reason = "NAV_PENDING";
+        } else {
+            reason = "READY";
+        }
+        BigDecimal expectedShares = null;
+        if ("READY".equals(reason) && isBuy(tx.getSource())) {
+            BigDecimal rate = fundFeeService.getFeeByFundId(tx.getFundEntity().getId()).discountRate();
+            rate = rate == null ? BigDecimal.ZERO : rate;
+            expectedShares = ShareScale.normalize(tx.getAmount().multiply(BigDecimal.ONE.subtract(rate))
+                    .divide(nav, java.math.MathContext.DECIMAL64));
+        }
+        return FundTransactionView.withPendingDetails(base, nav, expectedShares, reason,
+                switch (reason) {
+                    case "READY" -> "交易日净值已入库,可确认";
+                    case "INPUT_MISSING" -> "缺少交易金额或份额";
+                    case "RELATED_PENDING" -> "等待关联转换交易先确认";
+                    default -> "等待交易日净值入库";
+                }, tx.getFundEntity().getInvestmentTarget() == com.fundpilot.backend.fund.enums.InvestmentTarget.QDII);
+    }
+
+    private boolean isBuy(FundTransactionSource source) {
+        return source == FundTransactionSource.INCREASE || source == FundTransactionSource.TRANSFER_IN
+                || source == FundTransactionSource.INVEST;
+    }
+
+    private boolean isSell(FundTransactionSource source) {
+        return source == FundTransactionSource.DECREASE || source == FundTransactionSource.TRANSFER_OUT;
     }
 
     /** 修改一笔 PENDING 流水的业务输入；来源、基金和来源关联保持不变。 */
