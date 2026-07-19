@@ -81,6 +81,9 @@ class FundPnlServiceDateTest {
         assertThat(pnl.isEstimated()).isTrue();
         assertThat(pnl.dailyChangePct()).isEqualByComparingTo("0.0123");
         assertThat(pnl.dailyPnl()).isEqualByComparingTo("1.47600");
+        assertThat(pnl.valuationSource()).isEqualTo("INTRADAY_ESTIMATE");
+        assertThat(pnl.estimateTime()).isEqualTo("2026-07-10 15:00");
+        assertThat(pnl.baseNavDate()).isEqualTo("2026-07-09");
     }
 
     @Test
@@ -127,6 +130,8 @@ class FundPnlServiceDateTest {
         assertThat(pnl.holdingAmount()).isEqualByComparingTo("120.00");
         assertThat(pnl.dailyPnl()).isZero();
         assertThat(pnl.totalPnl()).isEqualByComparingTo("10.00");
+        assertThat(pnl.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
+        assertThat(pnl.valuationDate()).isEqualTo(Instant.parse("2026-07-09T00:00:00Z"));
     }
 
     private static FundEntity fund() {

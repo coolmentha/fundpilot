@@ -155,9 +155,15 @@ public class FundPnlService {
         BigDecimal positionNav = pnlNav != null ? pnlNav : latestUnitNav;
         BigDecimal holdingAmount = computeHoldingAmount(holdingShares, positionNav);
         BigDecimal totalPnl = FundPnlCalculator.totalPnl(holdingShares, positionNav, costPerShare);
+        String valuationSource = todayNavConfirmed ? "CONFIRMED_NAV"
+                : isEstimated ? "INTRADAY_ESTIMATE"
+                : latestUnitNav != null ? "LATEST_CONFIRMED_NAV" : null;
+        String estimateTime = estimate.map(FundEstimateSnapshot::estimateTime).orElse(null);
+        String baseNavDate = estimate.map(FundEstimateSnapshot::baseNavDate).orElse(null);
 
         return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed, estimateStatus,
-                holdingShares, holdingAmount, dailyPnl, totalPnl);
+                holdingShares, holdingAmount, dailyPnl, totalPnl, positionNav, valuationSource,
+                latestTwo.isEmpty() ? null : latestTwo.get(0).getNavDate(), estimateTime, baseNavDate);
     }
 
     /** 从实时缓存读取 fundgz 当日估值;缓存未命中降级返 empty。 */
@@ -254,7 +260,8 @@ public class FundPnlService {
     }
 
     private Pnl emptyPnl() {
-        return new Pnl(null, false, false, EstimateStatus.NOT_ATTEMPTED, null, null, null, null);
+        return new Pnl(null, false, false, EstimateStatus.NOT_ATTEMPTED, null, null, null, null,
+                null, null, null, null, null);
     }
 
     /**
@@ -277,6 +284,11 @@ public class FundPnlService {
             BigDecimal holdingShares,
             BigDecimal holdingAmount,
             BigDecimal dailyPnl,
-            BigDecimal totalPnl) {
+            BigDecimal totalPnl,
+            BigDecimal valuationNav,
+            String valuationSource,
+            Instant valuationDate,
+            String estimateTime,
+            String baseNavDate) {
     }
 }

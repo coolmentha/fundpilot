@@ -63,6 +63,11 @@ public record FundView(
         BigDecimal holdingAmount,
         BigDecimal dailyPnl,
         BigDecimal totalPnl,
+        BigDecimal valuationNav,
+        String valuationSource,
+        Instant valuationDate,
+        String estimateTime,
+        String baseNavDate,
         Instant createdDate) {
 
     /** 从 Entity 映射到视图 DTO(盈亏字段为 null,isEstimated=false,供新建/更新等不需盈亏的场景用)。 */
@@ -83,7 +88,7 @@ public record FundView(
                 fund.isPositionWarningEnabled(),
                 fund.getPositionWarningRatio(),
                 null, false, false, EstimateStatus.NOT_ATTEMPTED,
-                null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 fund.getCreatedDate());
     }
 
@@ -112,6 +117,11 @@ public record FundView(
                 pnl.holdingAmount(),
                 pnl.dailyPnl(),
                 pnl.totalPnl(),
+                pnl.valuationNav(),
+                pnl.valuationSource(),
+                pnl.valuationDate(),
+                pnl.estimateTime(),
+                pnl.baseNavDate(),
                 fund.getCreatedDate());
     }
 }

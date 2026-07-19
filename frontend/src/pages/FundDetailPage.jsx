@@ -84,6 +84,15 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="总盈亏">
                     <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
                 </Descriptions.Item>
+                <Descriptions.Item label="收益计算依据" span={2}>
+                    {fund.valuationSource === 'INTRADAY_ESTIMATE'
+                        ? `盘中估值${fund.estimateTime ? `（${fund.estimateTime}）` : ''}，基准净值日 ${fund.baseNavDate || '-'}，计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
+                        : fund.valuationSource === 'CONFIRMED_NAV'
+                            ? `当日已确认净值（${fund.valuationDate ? fund.valuationDate.slice(0, 10) : '-'}），计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
+                            : fund.valuationSource === 'LATEST_CONFIRMED_NAV'
+                                ? `估值不可用，使用最近确认净值（${fund.valuationDate ? fund.valuationDate.slice(0, 10) : '-'}），计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
+                                : <span className="muted">暂无可用净值</span>}
+                </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
                 <Descriptions.Item label="参考费率">
                     {feeRates && feeRates.discountRate != null
