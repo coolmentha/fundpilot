@@ -128,6 +128,8 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
             "where t.signalLogEntity.id in :signalIds")
     Set<Long> findRespondedSignalIds(@Param("signalIds") Collection<Long> signalIds);
 
+    List<FundTransactionEntity> findBySignalLogEntity_IdIn(Collection<Long> signalIds);
+
     /** 定投并发最终兜底：数据库唯一索引冲突时返回 0，不污染当前事务。 */
     @Modifying
     @Query(value = "insert into fund_transaction(fund_id,amount,status,source,trade_date,dca_plan_id," +

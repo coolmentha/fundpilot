@@ -1,7 +1,7 @@
 import {App, Button, Card, Popconfirm, Space, Table, Tag, Typography} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
 import {useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Link, useSearchParams} from 'react-router-dom';
 import {
     useCancelTransaction,
     useConfirmTransaction,
@@ -24,6 +24,9 @@ export default function ConfirmPage() {
     const confirmTx = useConfirmTransaction();
     const cancelTx = useCancelTransaction();
     const [editing, setEditing] = useState(null);
+    const [params] = useSearchParams();
+    const targetSignalId = Number(params.get('signalId'));
+    const targetTransactionId = Number(params.get('transactionId'));
     const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
 
     const confirm = async (id) => {
@@ -55,6 +58,10 @@ export default function ConfirmPage() {
                 {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
                 {row.qdii && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
+                {row.signalLogId && <Link to={`/signals?fundId=${row.fundId}`}>来源信号 #{row.signalLogId}</Link>}
+                {row.signalReason && <Text type="secondary">
+                    {row.signalReason === 'LOGIC_BROKEN' ? '逻辑破坏止损：建议清仓' : '移动止盈：收割部分浮盈'}
+                </Text>}
             </Space>
         )},
         {title: '状态', dataIndex: 'status', width: 100, align: 'right',
@@ -86,6 +93,8 @@ export default function ConfirmPage() {
             {isError ? <QueryErrorState onRetry={refetch} description="待处理交易加载失败"/> : (
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={transactions || []}
                        columns={columns} pagination={false} scroll={{x: 1240}}
+                       rowClassName={(row) => row.id === targetTransactionId || row.signalLogId === targetSignalId
+                           ? 'row-target' : ''}
                        locale={{emptyText: <EmptyState description="暂无待处理交易"/>}}/>
             )}
             {editing && (
