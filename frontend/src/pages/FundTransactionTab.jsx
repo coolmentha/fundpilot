@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space, DatePicker} from 'antd';
 import {PlusOutlined} from '@ant-design/icons';
 import dayjs from 'dayjs';
-import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds} from '../api/hooks.js';
+import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds, useFundFeeRates} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -34,6 +34,13 @@ export default function FundTransactionTab({fundId}) {
     const isAdjust = source && ADJUST_SOURCES.has(source);
     const isTransferOut = source === 'TRANSFER_OUT';
     const currentFund = funds?.find((fund) => fund.id === fundId);
+    const {data: feeRates} = useFundFeeRates(fundId);
+    const redemptionHint = feeRates?.redemptionLadder?.length
+        ? feeRates.redemptionLadder.map((tier, index) => {
+            const boundary = tier.maxDays == null ? `${index ? feeRates.redemptionLadder[index - 1].maxDays : 0}天以上` : `${tier.maxDays}天以内`;
+            return `${boundary} ${(Number(tier.rate) * 100).toFixed(2)}%`;
+        }).join('；')
+        : null;
 
     const columns = [
         {title: '交易日期', dataIndex: 'tradeDate', width: 170, render: datetime},
@@ -137,7 +144,10 @@ export default function FundTransactionTab({fundId}) {
                     )}
                     {isSell && !isAdjust && (
                         <Alert type="info" showIcon
-                               message="手动卖出不卡 7 天硬约束,可自行减仓;份额对应的金额在交易发生日净值可用后回填。"/>
+                               message={redemptionHint
+                                   ? `赎回费参考：${redemptionHint}`
+                                   : '赎回费率未获取，确认时按可用费率降级计算。'}
+                               description="最终按 FIFO 持有天数和交易发生日净值确认，当前录入份额不含手续费预扣。"/>
                     )}
                     {isAdjust && (
                         <Alert type="info" showIcon
