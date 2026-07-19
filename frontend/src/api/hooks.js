@@ -202,6 +202,15 @@ export function usePortfolioSummary() {
 export function usePortfolioReturns() {
     return useQuery({queryKey: ['portfolio-returns'], queryFn: () => get('/api/portfolio/returns'), ...realtimeQueryOptions});
 }
+export function usePortfolioReturnTrends(period, from, to) {
+    const params = new URLSearchParams({period});
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    return useQuery({
+        queryKey: ['portfolio-return-trends', period, from, to],
+        queryFn: () => get(`/api/portfolio/return-trends?${params}`),
+    });
+}
 export function invalidateSignalQueries(queryClient) {
     queryClient.invalidateQueries({queryKey: ['signals-pending']});
     queryClient.invalidateQueries({queryKey: ['signals-today']});

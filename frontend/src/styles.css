@@ -1278,3 +1278,12 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .ant-table-tbody > tr.row-target > td {
     background: #fff7e6 !important;
 }
+/* v0.10 portfolio return trend */
+.portfolio-trend-header { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 18px; flex-wrap: wrap; }
+.portfolio-trend-stats { margin-top: 16px; }
+.portfolio-trend-chart { margin-top: 12px; border: 1px solid var(--border-color, #f0f0f0); padding: 12px 12px 4px; }
+.portfolio-trend-chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.trend-axis { stroke: #d9d9d9; stroke-width: .6; stroke-dasharray: 2 2; }
+.trend-line { fill: none; stroke: #1677ff; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.portfolio-trend-dates { display: flex; justify-content: space-between; color: #8c8c8c; font-size: 12px; }
+.portfolio-trend-empty { color: #8c8c8c; padding: 24px 0 8px; text-align: center; }
