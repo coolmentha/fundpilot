@@ -3,7 +3,7 @@ import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
 import {useFunds, useFundEstimates} from '../api/hooks.js';
 import {money, signedMoney, signedPercent, pnlColor, text} from '../constants.js';
-import {buildFundWatchlistRows, estimateStatusText} from '../querySafety.js';
+import {buildFundWatchlistRows, estimateStatusText, selectHoldingRows} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -102,11 +102,11 @@ export default function FundWatchlist() {
         );
     }
 
-    const holdingRows = rows.filter((r) => r.status === 'HOLDING' && Number(r.holdingAmount) > 0);
+    const holdingRows = selectHoldingRows(rows);
     const totalHoldingAmount = holdingRows.reduce((sum, r) => sum + Number(r.holdingAmount), 0);
-    const displayRows = rows.map((r) => ({
+    const displayRows = holdingRows.map((r) => ({
         ...r,
-        allocationPct: r.status === 'HOLDING' && totalHoldingAmount > 0
+        allocationPct: totalHoldingAmount > 0
             ? Number(r.holdingAmount || 0) / totalHoldingAmount * 100 : null,
     }));
 

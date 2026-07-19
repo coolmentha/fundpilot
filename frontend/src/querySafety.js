@@ -43,3 +43,7 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
         };
     });
 }
+
+export function selectHoldingRows(rows) {
+    return (rows || []).filter((row) => row.status === 'HOLDING' && Number(row.holdingAmount) > 0);
+}

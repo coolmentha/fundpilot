@@ -1,4 +1,4 @@
-import {App, Button, Card, Popconfirm, Space, Table, Typography} from 'antd';
+import {App, Button, Card, Popconfirm, Space, Table, Tag, Typography} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
 import {useState} from 'react';
 import {Link} from 'react-router-dom';
@@ -44,7 +44,19 @@ export default function ConfirmPage() {
         {title: '金额', dataIndex: 'amount', width: 140, align: 'right',
             render: (value) => value == null ? '-' : <span className="num-cell">{money(value)}</span>},
         {title: '份额', dataIndex: 'shares', width: 120, align: 'right',
-            render: (value) => value == null ? '-' : <span className="num-cell">{Number(value).toFixed(2)}</span>},
+            render: (value, row) => value != null
+                ? <span className="num-cell">{Number(value).toFixed(2)}</span>
+                : row.expectedShares != null
+                    ? <span className="num-cell">预计 {Number(row.expectedShares).toFixed(2)}</span>
+                    : '-'},
+        {title: '确认条件', width: 250, render: (_, row) => (
+            <Space direction="vertical" size={0}>
+                <span>{row.confirmationReason || '等待交易日净值入库'}</span>
+                {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
+                {row.qdii && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
+                {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
+            </Space>
+        )},
         {title: '状态', dataIndex: 'status', width: 100, align: 'right',
             render: (value) => <StatusTag value={value}/>},
         {title: '操作', width: 180, align: 'right', render: (_, row) => (
@@ -54,7 +66,8 @@ export default function ConfirmPage() {
                 )}
                 <Popconfirm title="确认该笔交易？" description="按交易发生日净值回填并计入持仓"
                             onConfirm={() => confirm(row.id)}>
-                    <Button type="link" size="small" loading={confirmTx.isPending}>确认</Button>
+                    <Button type="link" size="small" loading={confirmTx.isPending}
+                            disabled={row.confirmationState !== 'READY'}>确认</Button>
                 </Popconfirm>
                 <Popconfirm title="撤销该笔交易？" onConfirm={() => cancel(row.id)}>
                     <Button type="link" size="small" danger loading={cancelTx.isPending}>撤单</Button>
@@ -72,7 +85,7 @@ export default function ConfirmPage() {
             </Text>
             {isError ? <QueryErrorState onRetry={refetch} description="待处理交易加载失败"/> : (
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={transactions || []}
-                       columns={columns} pagination={false} scroll={{x: 990}}
+                       columns={columns} pagination={false} scroll={{x: 1240}}
                        locale={{emptyText: <EmptyState description="暂无待处理交易"/>}}/>
             )}
             {editing && (

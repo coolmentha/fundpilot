@@ -1,7 +1,14 @@
 import {describe, expect, it} from 'vitest';
-import {buildFundWatchlistRows, estimateStatusText, isQueryDataReady} from './querySafety.js';
+import {buildFundWatchlistRows, estimateStatusText, isQueryDataReady, selectHoldingRows} from './querySafety.js';
 
 describe('query safety guards', () => {
+    it('我的持仓只保留有正持仓的 HOLDING 基金', () => {
+        expect(selectHoldingRows([
+            {id: 1, status: 'HOLDING', holdingAmount: 100},
+            {id: 2, status: 'CLEARED', holdingAmount: 100},
+            {id: 3, status: 'HOLDING', holdingAmount: 0},
+        ]).map((row) => row.id)).toEqual([1]);
+    });
     it('requires successfully loaded query data before enabling destructive actions', () => {
         expect(isQueryDataReady({data: {watchedIndices: []}, isLoading: false, isError: false})).toBe(true);
         expect(isQueryDataReady({data: undefined, isLoading: true, isError: false})).toBe(false);

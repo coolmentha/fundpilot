@@ -23,6 +23,11 @@ import java.time.Instant;
  * @param relatedTransactionId    关联交易 ID(转换交易互指)
  * @param tradeDate               交易发生时间
  * @param createdDate             创建时间
+ * @param expectedNav             待确认交易的交易日净值；未入库时为空
+ * @param expectedShares          待确认买入按交易日净值和申购费率计算的预计份额
+ * @param confirmationState       当前确认状态(READY/NAV_PENDING/INPUT_MISSING/RELATED_PENDING)
+ * @param confirmationReason      当前确认状态说明，不保存历史失败记录
+ * @param qdii                    是否 QDII，用于提示净值公布可能延迟
  */
 public record FundTransactionView(
         Long id,
@@ -39,7 +44,12 @@ public record FundTransactionView(
         Long signalLogId,
         Long relatedTransactionId,
         Instant tradeDate,
-        Instant createdDate) {
+        Instant createdDate,
+        BigDecimal expectedNav,
+        BigDecimal expectedShares,
+        String confirmationState,
+        String confirmationReason,
+        boolean qdii) {
 
     public static FundTransactionView from(FundTransactionEntity tx) {
         return new FundTransactionView(
@@ -57,6 +67,18 @@ public record FundTransactionView(
                 tx.getSignalLogEntity() != null ? tx.getSignalLogEntity().getId() : null,
                 tx.getRelatedFundTransactionEntity() != null ? tx.getRelatedFundTransactionEntity().getId() : null,
                 tx.getTradeDate() != null ? tx.getTradeDate() : tx.getCreatedDate(),
-                tx.getCreatedDate());
+                tx.getCreatedDate(), null, null, null, null, false);
+    }
+
+    public static FundTransactionView withPendingDetails(FundTransactionView base,
+                                                          BigDecimal expectedNav,
+                                                          BigDecimal expectedShares,
+                                                          String confirmationState,
+                                                          String confirmationReason,
+                                                          boolean qdii) {
+        return new FundTransactionView(base.id(), base.fundId(), base.amount(), base.shares(), base.nav(),
+                base.fee(), base.feeRate(), base.status(), base.source(), base.confirmTime(), base.cancelTime(),
+                base.signalLogId(), base.relatedTransactionId(), base.tradeDate(), base.createdDate(),
+                expectedNav, expectedShares, confirmationState, confirmationReason, qdii);
     }
 }
