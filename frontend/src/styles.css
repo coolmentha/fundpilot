@@ -1275,3 +1275,6 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
         grid-template-columns: minmax(0, 1fr);
     }
 }
+.ant-table-tbody > tr.row-target > td {
+    background: #fff7e6 !important;
+}

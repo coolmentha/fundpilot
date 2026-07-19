@@ -5,6 +5,7 @@ import com.fundpilot.backend.signal.enums.SignalReason;
 import com.fundpilot.backend.signal.enums.SignalActionStatus;
 import com.fundpilot.backend.signal.enums.SignalType;
 import com.fundpilot.backend.signal.valueobject.Measure;
+import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,7 +40,9 @@ public record SignalLogView(
         String warnings,
         String hardConstraintBreaches,
         SignalActionStatus actionStatus,
-        Instant ignoredDate) {
+        Instant ignoredDate,
+        Long relatedTransactionId,
+        FundTransactionStatus relatedTransactionStatus) {
 
     public static SignalLogView from(SignalLogEntity log, SignalActionStatus actionStatus) {
         return new SignalLogView(
@@ -56,6 +59,12 @@ public record SignalLogView(
                 log.getWarnings(),
                 log.getHardConstraintBreaches(),
                 actionStatus,
-                log.getIgnoredDate());
+                log.getIgnoredDate(), null, null);
+    }
+
+    public SignalLogView withTransaction(Long transactionId, FundTransactionStatus transactionStatus) {
+        return new SignalLogView(id, fundId, fundStrategyId, signalDate, triggerNav, triggerTier, coefficient,
+                signalType, suggestedMeasure, reason, warnings, hardConstraintBreaches, actionStatus, ignoredDate,
+                transactionId, transactionStatus);
     }
 }

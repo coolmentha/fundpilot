@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {App, Button, Card, DatePicker, Form, InputNumber, Modal, Popconfirm, Select, Space, Table, Typography} from 'antd';
-import {useSearchParams} from 'react-router-dom';
+import {Link, useNavigate, useSearchParams} from 'react-router-dom';
 import {ReloadOutlined} from '@ant-design/icons';
 import {
     useConfirmOperation,
@@ -36,6 +36,7 @@ const signalColumns = (extraCol) => [
 
 export default function SignalsPage() {
     const {message} = App.useApp();
+    const navigate = useNavigate();
     const [params, setParams] = useSearchParams();
     const fundIdParam = params.get('fundId');
     const fundId = fundIdParam ? Number(fundIdParam) : null;
@@ -82,13 +83,14 @@ export default function SignalsPage() {
     const submit = async () => {
         if (modal.signal?.signalType === 'SELL' && !fundsReady) return;
         const values = await form.validateFields();
-        await confirmOp.mutateAsync({
+        const transaction = await confirmOp.mutateAsync({
             signalLogId: modal.signal.id,
             actualAmount: values.actualAmount ?? null,
             actualShares: values.actualShares ?? null,
         });
         message.success('信号已采纳，待确认交易已生成');
         setModal({open: false, signal: null});
+        navigate(`/confirm?signalId=${modal.signal.id}&transactionId=${transaction.id}`);
     };
     const pendingActionColumn = {
         title: '操作', width: 150, render: (_, signal) => (
@@ -107,6 +109,14 @@ export default function SignalsPage() {
     };
     const isSell = modal.signal?.signalType === 'SELL';
     const currentHoldingShares = holdingShares(modal.signal?.fundId);
+    const transactionColumn = {
+        title: '交易', width: 120, render: (_, signal) => signal.relatedTransactionId ? (
+            <Space direction="vertical" size={0}>
+                <Link to={`/funds/${signal.fundId}?transactionId=${signal.relatedTransactionId}`}>查看交易</Link>
+                <Text type="secondary">{text(signal.relatedTransactionStatus)}</Text>
+            </Space>
+        ) : '-',
+    };
 
     return (
         <Space direction="vertical" size={16} className="full-width">
@@ -136,7 +146,7 @@ export default function SignalsPage() {
                 ) : fundId ? (
                     <Table rowKey="id" size="small" loading={todayLoading}
                            dataSource={todaySignal ? [todaySignal] : []}
-                           columns={signalColumns()} pagination={false}
+                           columns={signalColumns(transactionColumn)} pagination={false}
                            locale={{emptyText: <EmptyState description="今日无信号"/>}}/>
                 ) : (
                     <EmptyState description="选择基金查看今日信号"/>
@@ -151,7 +161,7 @@ export default function SignalsPage() {
                         <QueryErrorState onRetry={refetchRange} description="历史信号加载失败"/>
                     ) : (
                         <Table rowKey="id" size="small" loading={rangeLoading} dataSource={rangeSignals}
-                               columns={signalColumns()} pagination={false}
+                               columns={signalColumns(transactionColumn)} pagination={false}
                                locale={{emptyText: <EmptyState description="所选区间无信号"/>}}/>
                     )}
                 </Card>

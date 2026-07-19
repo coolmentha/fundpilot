@@ -3,6 +3,7 @@ package com.fundpilot.backend.fund.controller;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.signal.enums.SignalReason;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -49,7 +50,8 @@ public record FundTransactionView(
         BigDecimal expectedShares,
         String confirmationState,
         String confirmationReason,
-        boolean qdii) {
+        boolean qdii,
+        SignalReason signalReason) {
 
     public static FundTransactionView from(FundTransactionEntity tx) {
         return new FundTransactionView(
@@ -67,7 +69,8 @@ public record FundTransactionView(
                 tx.getSignalLogEntity() != null ? tx.getSignalLogEntity().getId() : null,
                 tx.getRelatedFundTransactionEntity() != null ? tx.getRelatedFundTransactionEntity().getId() : null,
                 tx.getTradeDate() != null ? tx.getTradeDate() : tx.getCreatedDate(),
-                tx.getCreatedDate(), null, null, null, null, false);
+                tx.getCreatedDate(), null, null, null, null, false,
+                tx.getSignalLogEntity() != null ? tx.getSignalLogEntity().getReason() : null);
     }
 
     public static FundTransactionView withPendingDetails(FundTransactionView base,
@@ -79,6 +82,6 @@ public record FundTransactionView(
         return new FundTransactionView(base.id(), base.fundId(), base.amount(), base.shares(), base.nav(),
                 base.fee(), base.feeRate(), base.status(), base.source(), base.confirmTime(), base.cancelTime(),
                 base.signalLogId(), base.relatedTransactionId(), base.tradeDate(), base.createdDate(),
-                expectedNav, expectedShares, confirmationState, confirmationReason, qdii);
+                expectedNav, expectedShares, confirmationState, confirmationReason, qdii, base.signalReason());
     }
 }

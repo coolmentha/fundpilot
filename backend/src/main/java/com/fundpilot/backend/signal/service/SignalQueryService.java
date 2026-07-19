@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Set;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 
 /**
  * 信号查询服务(issue #16):只读 SignalLog 表的查询逻辑下沉。
@@ -83,10 +87,14 @@ public class SignalQueryService {
             return List.of();
         }
         List<Long> ids = logs.stream().map(SignalLogEntity::getId).toList();
-        Set<Long> respondedIds = fundTransactionRepository.findRespondedSignalIds(ids);
+        Map<Long, FundTransactionEntity> transactions = fundTransactionRepository.findBySignalLogEntity_IdIn(ids)
+                .stream().collect(Collectors.toMap(tx -> tx.getSignalLogEntity().getId(), Function.identity()));
+        Set<Long> respondedIds = transactions.keySet();
         List<SignalLogView> views = new ArrayList<>(logs.size());
         for (SignalLogEntity log : logs) {
-            views.add(SignalLogView.from(log, signalActionabilityService.status(log, respondedIds)));
+            FundTransactionEntity tx = transactions.get(log.getId());
+            SignalLogView view = SignalLogView.from(log, signalActionabilityService.status(log, respondedIds));
+            views.add(tx == null ? view : view.withTransaction(tx.getId(), tx.getStatus()));
         }
         return views;
     }

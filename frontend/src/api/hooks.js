@@ -250,6 +250,7 @@ export function useCancelTransaction() {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
             qc.invalidateQueries({queryKey: ['transactions-pending']});
             qc.invalidateQueries({queryKey: ['funds']});
+            invalidateSignalQueries(qc);
             invalidateDcaBudgetSummary(qc);
         },
     });
@@ -262,6 +263,7 @@ export function useConfirmTransaction() {
             qc.invalidateQueries({queryKey: ['fund-transactions']});
             qc.invalidateQueries({queryKey: ['transactions-pending']});
             qc.invalidateQueries({queryKey: ['funds']});
+            invalidateSignalQueries(qc);
             invalidateDcaBudgetSummary(qc);
         },
     });
