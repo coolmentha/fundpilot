@@ -3,6 +3,7 @@ package com.fundpilot.backend.portfolio.controller;
 import com.fundpilot.backend.fund.enums.FundStatus;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 public record FundReturnView(
         Long fundId,
@@ -17,5 +18,6 @@ public record FundReturnView(
         BigDecimal unrealizedPnl,
         BigDecimal totalReturn,
         BigDecimal returnRate,
-        boolean realizedComplete) {
+        boolean realizedComplete,
+        Instant valuationDate) {
 }

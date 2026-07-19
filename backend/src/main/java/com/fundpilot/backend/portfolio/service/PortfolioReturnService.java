@@ -97,7 +97,7 @@ public class PortfolioReturnService {
             rows.add(new FundReturnView(fund.getId(), fund.getFundCode(), fund.getFundName(), fund.getStatus(),
                     totals.invested, totals.redeemed, totals.fees, holding,
                     totals.complete ? totals.realized : null, fundUnrealized, totalReturn,
-                    ratio(totalReturn, totals.invested), totals.complete));
+                    ratio(totalReturn, totals.invested), totals.complete, pnl != null ? pnl.valuationDate() : null));
         }
         BigDecimal holdingTotal = rows.stream().map(FundReturnView::holdingAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

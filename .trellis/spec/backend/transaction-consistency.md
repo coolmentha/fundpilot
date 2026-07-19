@@ -428,3 +428,54 @@ shares = min(profitHarvestShares, singleSellCapShares, matureShares, retentionCa
 takeProfitLifecycleService.onTransactionConfirmed(tx);
 resetTriggeredCycle(strategy); // ARMED + clear signal/start/peak; next prepare records a new peak
 ```
+
+## Scenario: Portfolio return snapshots
+
+### 1. Scope / Trigger
+
+Applies when changing portfolio return history, confirmed-NAV catch-up, or the dashboard return-trend API.
+
+### 2. Signatures
+
+- DB: `portfolio_return_snapshot.business_date DATE` is unique for active rows.
+- Service: `void PortfolioReturnTrendService.capture(Instant businessDate)`.
+- API: `GET /api/portfolio/return-trends?period=30D&from=<Instant>&to=<Instant>`.
+
+### 3. Contracts
+
+- `businessDate` is a `ChinaTradingDate` UTC-midnight label, not the snapshot write time.
+- The 03:30 capture and 04:00-10:30 catch-up runs upsert the same business date.
+- Missing fund NAV does not suppress the snapshot; `valuationComplete=false` and `missingFundCodes` explain partial coverage.
+- History starts with the first v0.10 snapshot; no pre-release backfill is inferred.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| No prior snapshot for the requested start | Return points with `dataSufficient=false` |
+| No points in the range | Return an empty point list, not a synthetic zero point |
+| QDII NAV arrives after 03:30 | Replace the same business-date snapshot |
+| One fund NAV is missing | Return available totals and the missing fund code |
+
+### 5. Good/Base/Bad Cases
+
+- Good: QDII catch-up updates one row and clears its missing code.
+- Base: ordinary funds produce one complete row after NAV confirmation.
+- Bad: using `capturedAt` as the curve date shifts the prior trading day into the next calendar day.
+
+### 6. Tests Required
+
+- Unit: interval return and cash-flow deltas use the preceding snapshot baseline; maximum drawdown uses the peak-to-later-low difference.
+- Integration: the V24 unique index rejects duplicate active business dates and Flyway validates on a clean schema.
+- UI: empty, insufficient-history, and incomplete-valuation states remain visible.
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: creates a new curve point whenever a delayed NAV arrives.
+repository.save(new PortfolioReturnSnapshotEntity());
+
+// Correct: business date owns identity; delayed NAV overwrites that row.
+row = repository.findByBusinessDate(businessDate).orElseGet(PortfolioReturnSnapshotEntity::new);
+repository.save(row);
+```
