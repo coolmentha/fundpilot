@@ -46,6 +46,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 前端 CI 固定执行 `npm ci -> npm run lint -> npm test -> npm run build`；tag 发布工作流必须重新执行后端 verify 和前端完整验证。
 - Git `v*` tag 只用于检出 Compose；实际部署和回滚必须使用构建步骤返回的 backend/frontend GHCR digest。
 - 发布工作流使用 concurrency 串行化，且必须确认 release tag 仍指向本次构建 commit。
+- 监控栈独立手动维护；应用 `deploy.yml` 不得 checkout、改权限或重启 Promtail/Grafana。
 - 候选镜像必须在停写前拉取。进入维护前检查未来 60 分钟安全区间不得与北京时间 `02:00-04:15`、工作日 `14:00-15:15` 相交；正常发布使用 30 分钟绝对截止，总维护/回滚使用 55 分钟截止并预留 5 分钟紧急停服。
 - 维护和回滚中的 `docker`、Compose、`pg_dump`、`pg_restore`、探活等外部命令必须用绝对截止时间与 `timeout --foreground --kill-after=5s` 双重约束。提交前命令按 30 分钟前向截止裁剪，rollback/提交后命令按 55 分钟总截止裁剪，禁止只依赖 Bash 收到 TERM 后执行 trap。
 - 部署在同一 SSH 脚本中用上一 release 的 Compose 停止 frontend/backend、等待固定 `fundpilot-db` 容器、生成并校验 `pg_dump -Fc`。
