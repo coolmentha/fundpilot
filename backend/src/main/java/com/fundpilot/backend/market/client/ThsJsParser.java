@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +22,38 @@ import java.util.Map;
 public final class ThsJsParser {
 
     private ThsJsParser() {
+    }
+
+    /** 解析同花顺盘中估值分钟线，取最后一个有效点计算相对基准净值涨跌幅。 */
+    public static FundEstimateSnapshot parseFundEstimate(String raw) {
+        String payload = ScriptPayloadExtractor.assignedValueByPrefix(raw, "vm_fd_");
+        if (payload == null) {
+            return null;
+        }
+        try {
+            String[] sides = payload.split("\\|", 2);
+            String baseNavDate = sides[0].split(";", 2)[0];
+            String[] estimate = sides[1].split("~", 3);
+            BigDecimal baseNav = new BigDecimal(estimate[1]);
+            String[] points = estimate[2].split(";");
+            String[] latest = null;
+            for (int i = points.length - 1; i >= 0; i--) {
+                String[] candidate = points[i].split(",");
+                if (candidate.length >= 2 && candidate[0].length() == 4 && !candidate[1].isBlank()) {
+                    latest = candidate;
+                    break;
+                }
+            }
+            if (latest == null) {
+                return null;
+            }
+            BigDecimal latestNav = new BigDecimal(latest[1]);
+            BigDecimal changePct = latestNav.subtract(baseNav).divide(baseNav, MathContext.DECIMAL64);
+            String time = latest[0].substring(0, 2) + ":" + latest[0].substring(2, 4);
+            return new FundEstimateSnapshot(changePct, estimate[0] + " " + time, baseNavDate);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("同花顺盘中估值解析失败", e);
+        }
     }
 
     /**

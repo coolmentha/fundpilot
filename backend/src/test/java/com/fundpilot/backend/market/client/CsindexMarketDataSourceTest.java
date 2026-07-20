@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * {@link CsindexMarketDataSource} 单测:验证 secid 前缀剥离、klt 周期聚合、
@@ -13,6 +15,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>{@link CsindexClient} 是单方法接口,用 lambda 桩注入 canned JSON,不发真实网络请求。
  */
 class CsindexMarketDataSourceTest {
+
+    @Test
+    void 深交所指数直接跳过中证源() {
+        CsindexClient client = mock(CsindexClient.class);
+
+        assertThatThrownBy(() -> new CsindexMarketDataSource(client).fetchIndexKline("0.399006", "6"))
+                .isInstanceOf(UnsupportedOperationException.class);
+        verifyNoInteractions(client);
+    }
 
     private static final String TWO_WEEK_BARS = """
             {"code":"200","data":[

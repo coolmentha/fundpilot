@@ -35,4 +35,18 @@ class ThsMarketDataSourceIntegrationTest {
         assertThat(server.takeRequest().getPath()).isEqualTo("/510300/json/jsondwjz.json");
         assertThat(server.takeRequest().getPath()).isEqualTo("/510300/json/jsonljjz.json");
     }
+
+    @Test
+    void fetchEstimate_请求同花顺分钟估值接口() throws Exception {
+        server.enqueue(new MockResponse().setResponseCode(200)
+                .setBody("vm_fd_016664='2026-07-17;0930-1500|2026-07-20~2.9763~1500,3.1010,2.9763,0';"));
+        ThsFundEstimateClient client = Feign.builder()
+                .requestInterceptor(ThsClientConfig.requestInterceptor())
+                .options(ThsClientConfig.options())
+                .target(ThsFundEstimateClient.class, server.url("/").toString());
+
+        assertThat(ThsJsParser.parseFundEstimate(client.fetchEstimateRaw("016664"))).isNotNull();
+        assertThat(server.takeRequest().getPath()).isEqualTo(
+                "/?module=api&controller=index&action=chart&info=vm_fd_016664&start=0930");
+    }
 }

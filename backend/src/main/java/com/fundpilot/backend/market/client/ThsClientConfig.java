@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * 同花顺 Feign 客户端配置，提供基金净值、基金字典和指数 K 线真实降级源。
+ * 同花顺 Feign 客户端配置，提供基金净值、基金字典、指数 K 线和盘中估值降级源。
  * <p>加同花顺 Referer/UA 请求头;不重试(让 {@link MarketDataSourceChain} 控制降级)。
  * <p>Feign {@code url} 通过 {@code ths.base-url} 配置,默认指向同花顺服务。
  */
@@ -67,6 +67,16 @@ public class ThsClientConfig {
                 .retryer(retryer())
                 .options(options())
                 .target(ThsIndexClient.class, baseUrl);
+    }
+
+    @Bean
+    public ThsFundEstimateClient thsFundEstimateClient(
+            @Value("${ths.estimate-base-url:https://gz-fund.10jqka.com.cn}") String baseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(ThsFundEstimateClient.class, baseUrl);
     }
 
     private ThsClientConfig() {
