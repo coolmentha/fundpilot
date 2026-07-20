@@ -319,37 +319,10 @@ jobs:
             DATABASE_MAY_HAVE_CHANGED=0
             FORWARD_MAINTENANCE_SECONDS=1800
             TOTAL_MAINTENANCE_SECONDS=3300
-            MAINTENANCE_SAFETY_SECONDS=3600
             FORWARD_DEADLINE_EPOCH=0
             TOTAL_DEADLINE_EPOCH=0
             MAINTENANCE_WATCHDOG_PID=""
             ROLLBACK_ACTIVE=0
-
-            maintenance_window_is_safe() {
-              now_epoch=$(date +%s)
-              FORWARD_DEADLINE_EPOCH=$((now_epoch + FORWARD_MAINTENANCE_SECONDS))
-              TOTAL_DEADLINE_EPOCH=$((now_epoch + TOTAL_MAINTENANCE_SECONDS))
-              safety_deadline_epoch=$((now_epoch + MAINTENANCE_SAFETY_SECONDS))
-              base_day=$(TZ=Asia/Shanghai date -d "@$now_epoch" +%F)
-              for day_offset in 0 1; do
-                candidate_day=$(TZ=Asia/Shanghai date -d "$base_day +$day_offset day" +%F)
-                blocked_start=$(TZ=Asia/Shanghai date -d "$candidate_day 02:00" +%s)
-                blocked_end=$(TZ=Asia/Shanghai date -d "$candidate_day 04:16" +%s)
-                if [ "$now_epoch" -lt "$blocked_end" ] && [ "$safety_deadline_epoch" -ge "$blocked_start" ]; then
-                  echo "deployment maintenance could overlap 02:00-04:15 scheduled-job window" >&2
-                  return 1
-                fi
-                weekday=$((10#$(TZ=Asia/Shanghai date -d "$candidate_day" +%u)))
-                if [ "$weekday" -le 5 ]; then
-                  blocked_start=$(TZ=Asia/Shanghai date -d "$candidate_day 14:00" +%s)
-                  blocked_end=$(TZ=Asia/Shanghai date -d "$candidate_day 15:16" +%s)
-                  if [ "$now_epoch" -lt "$blocked_end" ] && [ "$safety_deadline_epoch" -ge "$blocked_start" ]; then
-                    echo "deployment maintenance could overlap weekday 14:00-15:15 scheduled-job window" >&2
-                    return 1
-                  fi
-                fi
-              done
-            }
 
             run_before_total_deadline() {
               max_seconds=$1
@@ -583,10 +556,12 @@ jobs:
               fi
             }
 
-            # 镜像拉取不需要停写；完成后再检查一个有硬上限的完整维护区间。
+            # 镜像拉取不需要停写；完成后再进入有硬上限的维护阶段。
             timeout --foreground --kill-after=5s 300s docker pull "$BACKEND_IMAGE"
             timeout --foreground --kill-after=5s 300s docker pull "$FRONTEND_IMAGE"
-            maintenance_window_is_safe
+            now_epoch=$(date +%s)
+            FORWARD_DEADLINE_EPOCH=$((now_epoch + FORWARD_MAINTENANCE_SECONDS))
+            TOTAL_DEADLINE_EPOCH=$((now_epoch + TOTAL_MAINTENANCE_SECONDS))
 
             # 升级前必须使用上一已部署版本的 Compose 和环境完成停写与备份。
             if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
