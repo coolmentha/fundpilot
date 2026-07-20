@@ -1,5 +1,9 @@
 # Test profile:使用独立 fundpilot_test schema，禁止连接或清理业务 public schema。
 spring:
+  data:
+    redis:
+      repositories:
+        enabled: false
   datasource:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=fundpilot_test}
     username: ${TEST_DB_USERNAME:fundpilot}

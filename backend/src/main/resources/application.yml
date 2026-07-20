@@ -10,6 +10,12 @@ spring:
     username: ${DB_USERNAME:fundpilot}
     password: ${DB_PASSWORD:fundpilot}
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 1s
+      timeout: 1s
   flyway:
     enabled: true
     locations: classpath:db/migration
