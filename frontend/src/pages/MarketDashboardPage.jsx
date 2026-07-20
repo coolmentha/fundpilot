@@ -4,6 +4,7 @@ import PortfolioReturns from '../components/PortfolioReturns.jsx';
 import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import MoneyFlow from '../components/MoneyFlow.jsx';
+import {Collapse} from 'antd';
 import {Link} from 'react-router-dom';
 import {usePendingTransactions, usePortfolioSummary} from '../api/hooks.js';
 
@@ -33,7 +34,6 @@ export default function MarketDashboardPage() {
                     <h3 className="section-title">总览</h3>
                 </div>
             <PortfolioOverview/>
-            <PortfolioReturns/>
             </section>
 
             <section className="dashboard-section index-section" aria-label="大盘指数">
@@ -45,6 +45,11 @@ export default function MarketDashboardPage() {
                     <h3 className="section-title">我的持仓</h3>
                 </div>
                 <FundWatchlist/>
+                <Collapse style={{marginTop: 12}} items={[{
+                    key: 'returns',
+                    label: '累计收益',
+                    children: <PortfolioReturns/>,
+                }]}/>
             </section>
 
             <section className="dashboard-status-grid" aria-label="持仓状态与待处理">
