@@ -48,11 +48,13 @@ public class FundService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundTransactionRepository fundTransactionRepository;
     private final TransactionConfirmSupport transactionConfirmSupport;
+    private final FundGroupService fundGroupService;
     private final ApplicationEventPublisher eventPublisher;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
+    @Transactional(readOnly = true)
     public List<FundView> list() {
         List<FundEntity> funds = fundRepository.findAll();
         var pnlByFund = fundPnlService.computeForFunds(funds);
@@ -97,6 +99,10 @@ public class FundService {
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
         fund.setPositionWarningEnabled(request.positionWarningEnabled() == null || request.positionWarningEnabled());
         fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
+        var groups = fundGroupService.resolveNames(request.groupNames());
+        if (groups != null) {
+            fund.setGroups(groups);
+        }
 
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
@@ -176,6 +182,7 @@ public class FundService {
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */
+    @Transactional(readOnly = true)
     public FundView get(Long id) {
         FundEntity fund = requireFund(id);
         return FundView.from(fund, fundPnlService.computeForFund(fund.getId()));
@@ -202,6 +209,10 @@ public class FundService {
         }
         if (request.positionWarningRatio() != null) {
             fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
+        }
+        var groups = fundGroupService.resolveNames(request.groupNames());
+        if (groups != null) {
+            fund.setGroups(groups);
         }
         return FundView.from(fundRepository.save(fund));
     }

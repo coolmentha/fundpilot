@@ -24,6 +24,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Transaction Consistency](./transaction-consistency.md) | 夜间确认、转换状态、ADJUST/lot 与日历并发幂等契约 | Filled |
 | [Existing Position Onboarding](./existing-position-onboarding.md) | 已有持仓按事实份额录入、交易核算金额与校验契约 | Filled |
 | [Operations Security And Release Safety](./operations-security.md) | 管理 API Key、Flyway 严格修复、CI 门禁与生产备份回滚契约 | Filled |
+| [Fund Groups](./fund-groups.md) | 多分组数据模型、批量管理 API、名称校验与删除语义 | Filled |
 
 ---
 

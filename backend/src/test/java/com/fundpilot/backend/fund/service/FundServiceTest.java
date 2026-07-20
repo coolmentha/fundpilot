@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,6 +42,17 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
         assertThat(view.positionWarningEnabled()).isTrue();
         assertThat(view.positionWarningRatio()).isEqualByComparingTo("0.30");
+    }
+
+    @Test
+    void create_可同时加入多个分组() {
+        FundCreateRequest request = new FundCreateRequest(
+                "510300", "沪深300ETF", FundCategory.BROAD_BASE, FundSubType.ETF, null,
+                null, null, null, null, null, List.of("核心", "宽基"));
+
+        FundView view = fundService.create(request);
+
+        assertThat(view.groups()).extracting("name").containsExactly("核心", "宽基");
     }
 
     @Test

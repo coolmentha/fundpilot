@@ -12,6 +12,21 @@ export function useFunds() {
     return useQuery({queryKey: ['funds'], queryFn: () => get('/api/funds'), ...realtimeQueryOptions});
 }
 
+export function useFundGroups() {
+    return useQuery({queryKey: ['fund-groups'], queryFn: () => get('/api/fund-groups')});
+}
+
+export function useSaveFundGroups() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (body) => put('/api/fund-groups', body),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['fund-groups']});
+            qc.invalidateQueries({queryKey: ['funds']});
+        },
+    });
+}
+
 export function useFund(id) {
     return useQuery({
         queryKey: ['funds', id],
@@ -34,7 +49,10 @@ export function useSaveFund() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({id, body}) => id ? put(`/api/funds/${id}`, body) : post('/api/funds', body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-groups']});
+        },
     });
 }
 
@@ -49,14 +67,20 @@ export function useCreateFund() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => post('/api/funds', body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-groups']});
+        },
     });
 }
 export function useUpdateFund() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({id, body}) => put(`/api/funds/${id}`, body),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-groups']});
+        },
     });
 }
 

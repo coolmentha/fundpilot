@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.enums.FundSubType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 基金新建/更新请求 DTO(issue #16 + ADR-0005 + ADR-0013)。
@@ -37,26 +38,27 @@ public record FundCreateRequest(
         BigDecimal positionWarningRatio,
         BigDecimal initialHoldingShares,
         BigDecimal costPerShare,
-        Instant openedAt) {
+        Instant openedAt,
+        List<String> groupNames) {
 
     /** 5 参数次构造:不录现有份额(走原 PENDING_HOLDING 流程)。维持现有调用方兼容。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, null, null, null);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, null, null, null, null);
     }
 
     /** 6 参数次构造:录入持有份额但不填建仓时间和成本单价(沿用现有调用方兼容)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialHoldingShares) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, null);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, null, null);
     }
 
     /** 7 参数次构造:录入持有份额+建仓时间但不填成本单价(兼容老调用方)。 */
     public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialHoldingShares, Instant openedAt) {
-        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, openedAt);
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, null, null, initialHoldingShares, null, openedAt, null);
     }
 
     /** 8 参数次构造:兼容新增仓位提醒前的完整建仓调用方。 */
@@ -64,7 +66,7 @@ public record FundCreateRequest(
                              FundSubType fundSubType, String benchmarkIndexCode,
                              BigDecimal initialHoldingShares, BigDecimal costPerShare, Instant openedAt) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
-                null, null, initialHoldingShares, costPerShare, openedAt);
+                null, null, initialHoldingShares, costPerShare, openedAt, null);
     }
 
     /** 兼容仓位提醒字段改名前的完整创建调用方。 */
@@ -73,6 +75,15 @@ public record FundCreateRequest(
                              BigDecimal positionWarningRatio, BigDecimal initialHoldingShares,
                              BigDecimal costPerShare, Instant openedAt) {
         this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode,
-                null, positionWarningRatio, initialHoldingShares, costPerShare, openedAt);
+                null, positionWarningRatio, initialHoldingShares, costPerShare, openedAt, null);
+    }
+
+    /** 兼容新增分组前的完整请求构造器。 */
+    public FundCreateRequest(String fundCode, String fundName, FundCategory fundCategory,
+                             FundSubType fundSubType, String benchmarkIndexCode,
+                             Boolean positionWarningEnabled, BigDecimal positionWarningRatio,
+                             BigDecimal initialHoldingShares, BigDecimal costPerShare, Instant openedAt) {
+        this(fundCode, fundName, fundCategory, fundSubType, benchmarkIndexCode, positionWarningEnabled,
+                positionWarningRatio, initialHoldingShares, costPerShare, openedAt, null);
     }
 }
