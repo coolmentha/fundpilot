@@ -28,7 +28,7 @@ GET /api/funds/{fundId}/kline?period=daily|weekly|monthly → KlineView
 ### 缓存服务(`MarketRealtimeCache`)
 
 ```java
-public List<IndexRealtimeSnapshot> getIndices();        // 读 volatile 字段
+public List<IndexRealtimeSnapshot> getIndices();        // 读进程内副本，刷新后写穿 Redis
 public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌家数
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
@@ -70,6 +70,7 @@ public void refreshFundEstimates(); // A 股完整行情运行时跳过,其余�
 | 基金估值 | **30s** | 10s | 覆盖 A 股与 QDII 主要估值窗口,后台逐只刷新;失败立即失效该基金旧估值 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
+刷新成功后写穿 Redis AOF，应用重启先恢复快照；Redis 故障时保留进程内副本并记录 warn。
 N 个前端客户端共享同一份缓存。
 
 调度线程池固定 `spring.task.scheduling.pool.size=2`。`MarketRealtimeRefreshJob` 用 `AtomicBoolean`
@@ -228,15 +229,15 @@ useQuery({
 ### Correct:前端轮询后端缓存,后端定时刷新
 
 ```javascript
-// 正确:前端读后端内存缓存,后端 30s 刷一次东方财富
+// 正确:前端读后端内存副本,后端 30s 刷一次东方财富并写穿 Redis
 useQuery({
     queryFn: () => get('/api/market/indices/realtime'),
     refetchInterval: 5_000,
 });
 ```
 
-后端 `MarketRealtimeCache` 用 volatile 字段 + `@Scheduled` 30s 刷新,
-前端 N 客户端共享同一份缓存,东方财富侧请求量恒定(与客户端数无关)。
+后端 `MarketRealtimeCache` 用内存副本 + Redis AOF + `@Scheduled` 30s 刷新,
+前端 N 客户端共享同一份缓存,东方财富侧请求量恒定(与客户端数无关),应用发布重启后从 Redis 恢复。
 
 ### Wrong:盘后重启后等待下一交易时段
 

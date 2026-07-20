@@ -13,6 +13,7 @@ import com.fundpilot.backend.market.client.SectorSnapshot;
 import com.fundpilot.backend.user.event.WatchedIndicesChangedEvent;
 import com.fundpilot.backend.user.service.UserConfigService;
 import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,10 +35,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 行情实时数据内存缓存(行情工作台核心)。
+ * 行情实时数据缓存(行情工作台核心)。
  *
  * <p>解决「前端 5-10s 高频轮询 vs 东方财富共享限流」的矛盾:本服务以 30s 周期
- * 从东方财富拉数据填入 volatile 字段,前端轮询只读内存不触外部请求。
+ * 从东方财富拉数据填入内存并写穿 Redis,前端轮询只读内存不触外部请求。
  *
  * <p>五类缓存:
  * <ul>
@@ -69,6 +70,7 @@ public class MarketRealtimeCache {
     private final FundRepository fundRepository;
     private final MarketDataMetrics marketDataMetrics;
     private final Clock clock;
+    private final MarketRealtimeRedisStore redisStore;
 
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
     private volatile List<IndexRealtimeSnapshot> indexCache = List.of();
@@ -77,6 +79,30 @@ public class MarketRealtimeCache {
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
     private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    void restoreFromRedis() {
+        redisStore.load().ifPresent(snapshot -> {
+            indexCache = snapshot.indices() == null ? List.of() : List.copyOf(snapshot.indices());
+            breadthCache = snapshot.breadth();
+            sectorCache = snapshot.sectors() == null ? List.of() : List.copyOf(snapshot.sectors());
+            moneyFlowCache = snapshot.moneyFlow();
+            if (snapshot.estimateStatuses() != null) {
+                estimateStatuses.putAll(snapshot.estimateStatuses());
+            }
+            if (snapshot.estimates() != null) {
+                snapshot.estimates().forEach((code, estimate) -> {
+                    EstimateStatus status = classifyFreshness(FundEstimateResult.available(estimate));
+                    if (status == EstimateStatus.AVAILABLE) {
+                        estimateCache.put(code, estimate);
+                    } else {
+                        estimateStatuses.put(code, status);
+                    }
+                });
+            }
+            log.info("已从 Redis 恢复行情缓存");
+        });
+    }
 
     /** 读指数缓存(已按用户关注列表过滤,顺序按请求 secid 顺序)。 */
     public List<IndexRealtimeSnapshot> getIndices() {
@@ -218,6 +244,7 @@ public class MarketRealtimeCache {
             if (snapshotsBySecid.isEmpty() && breadth == null) {
                 result = "empty";
             }
+            persist();
         } catch (RuntimeException e) {
             result = metricResult(e);
             log.warn("指数实时行情与市场宽度刷新失败,保留旧缓存: {}", e.getMessage());
@@ -235,6 +262,7 @@ public class MarketRealtimeCache {
             if (sectorCache.isEmpty()) {
                 result = "empty";
             }
+            persist();
         } catch (RuntimeException e) {
             result = metricResult(e);
             log.warn("行业板块刷新失败,保留旧缓存: {}", e.getMessage());
@@ -251,6 +279,7 @@ public class MarketRealtimeCache {
             MoneyFlowSnapshot snapshot = EastmoneyJsParser.parseNorthbound(raw);
             if (snapshot != null) {
                 moneyFlowCache = snapshot;
+                persist();
             } else {
                 result = "empty";
             }
@@ -302,6 +331,7 @@ public class MarketRealtimeCache {
                     log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
                 }
             }
+            persist();
         } catch (RuntimeException e) {
             log.warn("基金估值刷新失败: {}", e.getMessage());
         }
@@ -331,6 +361,12 @@ public class MarketRealtimeCache {
         }
         estimateCache.remove(fundCode);
         estimateStatuses.put(fundCode, status);
+    }
+
+    private void persist() {
+        redisStore.save(new MarketRealtimeRedisStore.Snapshot(
+                indexCache, breadthCache, sectorCache, moneyFlowCache,
+                Map.copyOf(estimateCache), Map.copyOf(estimateStatuses)));
     }
 
 }

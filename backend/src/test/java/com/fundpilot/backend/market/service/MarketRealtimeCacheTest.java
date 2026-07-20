@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.user.service.UserConfigService;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -27,6 +30,26 @@ import static org.mockito.Mockito.when;
 class MarketRealtimeCacheTest {
 
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-10T05:30:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void restoreFromRedis_启动时恢复持久化行情快照() {
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        IndexRealtimeSnapshot index = new IndexRealtimeSnapshot("1.000001", "上证指数",
+                new BigDecimal("3500"), BigDecimal.TEN, new BigDecimal("0.003"), new BigDecimal("1000"));
+        FundEstimateSnapshot estimate = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        when(redisStore.load()).thenReturn(Optional.of(new MarketRealtimeRedisStore.Snapshot(
+                List.of(index), new MarketBreadthSnapshot(3000, 2000), List.of(), null,
+                Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE))));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(UserConfigService.class),
+                mock(FundRepository.class), mock(MarketDataMetrics.class), CLOCK, redisStore);
+
+        cache.restoreFromRedis();
+
+        assertThat(cache.getIndices()).containsExactly(index);
+        assertThat(cache.getEstimates(List.of("510300"))).containsEntry("510300", estimate);
+    }
 
     @Test
     void refreshRealtimeWithoutEstimates_一次请求同时刷新自选指数和市场宽度() {
@@ -44,7 +67,8 @@ class MarketRealtimeCacheTest {
                 ]}}
                 """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshRealtimeWithoutEstimates();
 
@@ -79,7 +103,8 @@ class MarketRealtimeCacheTest {
                         ]}}
                         """);
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -101,7 +126,8 @@ class MarketRealtimeCacheTest {
         when(estimateService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.unavailable());
         when(estimateService.fetchEstimateResult("159825")).thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshAll();
 
@@ -120,7 +146,8 @@ class MarketRealtimeCacheTest {
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult("270042")).thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshFundEstimates();
 
@@ -138,7 +165,8 @@ class MarketRealtimeCacheTest {
         FundRepository fundRepository = mock(FundRepository.class);
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         assertThat(MarketRealtimeCache.class.getDeclaredMethod("onApplicationReady")
                 .isAnnotationPresent(Async.class)).isTrue();
@@ -160,7 +188,8 @@ class MarketRealtimeCacheTest {
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.available(snapshot));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         var method = MarketRealtimeCache.class.getMethod("warmFundEstimatesAfterReady");
 
@@ -185,7 +214,8 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(snapshot))
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshAll();
         cache.refreshAll();
@@ -210,7 +240,8 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(snapshot))
                 .thenThrow(new IllegalStateException("timeout"));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshAll();
         cache.refreshAll();
@@ -236,7 +267,8 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(stale))
                 .thenReturn(FundEstimateResult.available(current));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshAll();
 
@@ -262,7 +294,8 @@ class MarketRealtimeCacheTest {
         when(userConfigService.getWatchedIndices()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK);
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
 
         cache.refreshAll();
 
