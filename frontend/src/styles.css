@@ -253,8 +253,139 @@ body {
 .help-step small,
 .help-destination small { margin-top: 5px; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
 
-.help-detail .ant-collapse { margin-top: 12px; }
-.help-detail .ant-typography:last-child { margin-bottom: 0; }
+.help-workflow-list {
+    display: grid;
+    gap: 0;
+    margin-top: 14px;
+}
+
+.help-workflow {
+    --workflow-color: var(--color-primary);
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 16px;
+}
+
+.help-workflow-blue { --workflow-color: var(--color-info); }
+.help-workflow-violet { --workflow-color: var(--color-accent); }
+.help-workflow-green { --workflow-color: var(--color-success); }
+
+.help-workflow-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.help-workflow-rail span {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    color: var(--color-bg);
+    background: var(--workflow-color);
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.help-workflow-rail i {
+    width: 1px;
+    min-height: 28px;
+    flex: 1;
+    background: var(--color-border);
+}
+
+.help-workflow:last-child .help-workflow-rail i { display: none; }
+
+.help-workflow-body {
+    min-width: 0;
+    margin-bottom: 16px;
+    padding: 20px 22px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-top: 2px solid var(--workflow-color);
+    border-radius: 6px;
+}
+
+.help-workflow-body header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.help-workflow-body header .ant-typography { margin: 0; }
+.help-workflow-body header p.ant-typography { margin-top: 4px; color: var(--color-muted); line-height: 1.65; }
+
+.help-workflow-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    color: var(--workflow-color);
+    background: color-mix(in srgb, var(--workflow-color) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--workflow-color) 38%, transparent);
+    border-radius: 4px;
+    font-size: 18px;
+}
+
+.help-workflow-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.help-workflow-steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    min-width: 0;
+    padding: 11px 12px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.help-workflow-steps li > span {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    color: var(--workflow-color);
+    border: 1px solid var(--workflow-color);
+    border-radius: 50%;
+    font-family: 'Fira Code', monospace;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.help-workflow-steps p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+
+.help-workflow-body footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border);
+}
+
+.help-workflow-done {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    color: var(--color-success);
+}
+
+.help-workflow-done > span { color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.help-workflow-done strong { margin-right: 8px; color: var(--color-text); }
+.help-workflow-body footer > a { flex: 0 0 auto; font-size: 13px; font-weight: 600; }
 
 .help-definition-grid > div {
     min-width: 0;
@@ -273,6 +404,7 @@ body {
 @media (max-width: 900px) {
     .help-step-grid,
     .help-definition-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .help-workflow-steps { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 640px) {
@@ -282,6 +414,10 @@ body {
     .help-step-grid,
     .help-destination-grid,
     .help-definition-grid { grid-template-columns: minmax(0, 1fr); }
+    .help-workflow { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; }
+    .help-workflow-rail span { width: 34px; height: 34px; }
+    .help-workflow-body { padding: 16px; }
+    .help-workflow-body footer { align-items: flex-start; flex-direction: column; }
     .help-footer-actions { justify-content: stretch; }
     .help-footer-actions .ant-btn { flex: 1; }
 }
