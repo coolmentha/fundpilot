@@ -7,7 +7,7 @@ import {money, signedMoney, signedPercent, pnlColor, text} from '../constants.js
 import {buildFundWatchlistRows, estimateStatusText, selectHoldingRows} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 import FundGroupTabs from './FundGroupTabs.jsx';
-import {ALL_GROUPS_KEY, filterFundsByGroup} from '../fundGroups.js';
+import {ALL_GROUPS_KEY, filterFundsByGroup, getStoredFundGroup, storeFundGroup} from '../fundGroups.js';
 
 /**
  * 自选基金行情列表:展示所有持仓/观察基金的实时涨跌(来自 fundgz 盘中估值)。
@@ -21,7 +21,7 @@ import {ALL_GROUPS_KEY, filterFundsByGroup} from '../fundGroups.js';
 export default function FundWatchlist() {
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const {data: fundGroups} = useFundGroups();
-    const [activeGroup, setActiveGroup] = useState(ALL_GROUPS_KEY);
+    const [activeGroup, setActiveGroup] = useState(getStoredFundGroup);
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
     const {
         data: estimates,
@@ -123,7 +123,10 @@ export default function FundWatchlist() {
             {estimatesError && (
                 <QueryErrorState onRetry={refetchEstimates} description="实时估值加载失败，已隐藏旧估值"/>
             )}
-            <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={setActiveGroup}/>
+            <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={(groupKey) => {
+                setActiveGroup(groupKey);
+                storeFundGroup(groupKey);
+            }}/>
             <div className="watchlist-layout">
             <Table
                 dataSource={displayRows}

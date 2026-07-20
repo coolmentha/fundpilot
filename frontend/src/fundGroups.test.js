@@ -1,5 +1,5 @@
-import {describe, expect, it} from 'vitest';
-import {filterFundsByGroup} from './fundGroups.js';
+import {beforeEach, describe, expect, it} from 'vitest';
+import {filterFundsByGroup, getStoredFundGroup, storeFundGroup} from './fundGroups.js';
 
 describe('filterFundsByGroup', () => {
     const funds = [
@@ -14,5 +14,15 @@ describe('filterFundsByGroup', () => {
 
     it('按单个分组筛选并支持一只基金属于多个分组', () => {
         expect(filterFundsByGroup(funds, '20').map((fund) => fund.id)).toEqual([1, 2]);
+    });
+});
+
+describe('分组选择记忆', () => {
+    beforeEach(() => localStorage.clear());
+
+    it('默认选择全部并记住用户最后选择', () => {
+        expect(getStoredFundGroup()).toBe('all');
+        storeFundGroup('20');
+        expect(getStoredFundGroup()).toBe('20');
     });
 });

@@ -12,7 +12,7 @@ import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import {buildFundPositionWarnings} from '../positionWarnings.js';
 import FundGroupTabs from '../components/FundGroupTabs.jsx';
 import FundGroupManagerModal from '../components/FundGroupManagerModal.jsx';
-import {ALL_GROUPS_KEY, filterFundsByGroup} from '../fundGroups.js';
+import {ALL_GROUPS_KEY, filterFundsByGroup, getStoredFundGroup, storeFundGroup} from '../fundGroups.js';
 
 const {Title} = Typography;
 
@@ -37,7 +37,7 @@ export default function FundsPage() {
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeGroup, setActiveGroup] = useState(ALL_GROUPS_KEY);
+    const [activeGroup, setActiveGroup] = useState(getStoredFundGroup);
     const [groupManagerOpen, setGroupManagerOpen] = useState(false);
     const initialHoldingShares = Form.useWatch('initialHoldingShares', form);
     const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
@@ -209,7 +209,10 @@ export default function FundsPage() {
             }>
                 <DcaBudgetOverview summary={dcaBudgetSummary} isLoading={isDcaBudgetLoading}
                                    isError={isDcaBudgetError} onRetry={refetchDcaBudget}/>
-                <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={setActiveGroup}/>
+                <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={(groupKey) => {
+                    setActiveGroup(groupKey);
+                    storeFundGroup(groupKey);
+                }}/>
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={displayRows} columns={columns}
                        pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
