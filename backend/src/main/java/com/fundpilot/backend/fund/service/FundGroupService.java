@@ -62,6 +62,7 @@ public class FundGroupService {
             funds.forEach(fund -> fund.getGroups().removeIf(group -> deletedIds.contains(group.getId())));
             fundRepository.saveAll(funds);
             fundRepository.flush();
+            fundGroupRepository.deleteMemberships(deletedIds);
             fundGroupRepository.deleteAll(existing.stream().filter(group -> deletedIds.contains(group.getId())).toList());
             fundGroupRepository.flush();
         }
