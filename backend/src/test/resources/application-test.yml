@@ -1,5 +1,9 @@
 # Test profile:使用独立 fundpilot_test schema，禁止连接或清理业务 public schema。
 spring:
+  data:
+    redis:
+      repositories:
+        enabled: false
   datasource:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=fundpilot_test}
     username: ${TEST_DB_USERNAME:fundpilot}
@@ -12,6 +16,11 @@ spring:
     properties:
       hibernate:
         default_schema: fundpilot_test
+
+management:
+  health:
+    redis:
+      enabled: false
 
 # 关闭交易日历启动预热:避免集成测试启动时灌入 8000+ 条新浪交易日,
 # 与测试夹具日期(如 2026-06-22)撞唯一索引 uq_trading_calendar_date。
