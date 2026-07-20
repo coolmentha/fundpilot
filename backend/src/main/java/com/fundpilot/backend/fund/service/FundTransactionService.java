@@ -46,6 +46,7 @@ public class FundTransactionService {
     }
 
     /** 查全部待处理交易，供跨基金操作确认工作台使用。 */
+    @Transactional(readOnly = true)
     public List<FundTransactionView> listPending() {
         return fundTransactionRepository.findByStatusOrderByTradeDateDesc(FundTransactionStatus.PENDING).stream()
                 .map(this::pendingView)

@@ -104,6 +104,30 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void listPending_仓储会话关闭后仍可读取基金类型() {
+        FundEntity fund = new FundEntity();
+        fund.setFundCode("968001");
+        fund.setFundName("QDII 测试基金");
+        fund.setStatus(FundStatus.HOLDING);
+        fund.setInvestmentTarget(com.fundpilot.backend.fund.enums.InvestmentTarget.QDII);
+        fund = fundRepository.save(fund);
+
+        FundTransactionEntity tx = new FundTransactionEntity();
+        tx.setFundEntity(fund);
+        tx.setSource(FundTransactionSource.DECREASE);
+        tx.setStatus(FundTransactionStatus.PENDING);
+        tx.setShares(new BigDecimal("100"));
+        tx = fundTransactionRepository.save(tx);
+
+        Long transactionId = tx.getId();
+        assertThat(fundTransactionService.listPending())
+                .filteredOn(view -> view.id().equals(transactionId))
+                .singleElement()
+                .extracting(FundTransactionView::qdii)
+                .isEqualTo(true);
+    }
+
+    @Test
     @Transactional
     void createManual_买入类写amount_份额null_状态PENDING_无关联信号() {
         FundEntity fund = persistFund();
