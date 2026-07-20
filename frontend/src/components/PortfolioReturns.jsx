@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Alert, Card, Col, DatePicker, Row, Segmented, Skeleton, Statistic, Table, Typography} from 'antd';
+import {Alert, Col, DatePicker, Row, Segmented, Skeleton, Statistic, Table, Typography} from 'antd';
 import {Link} from 'react-router-dom';
 import {usePortfolioReturns, usePortfolioReturnTrends} from '../api/hooks.js';
 import {date, money, percent, pnlColor, signedMoney} from '../constants.js';
@@ -12,8 +12,8 @@ export default function PortfolioReturns() {
     const [customRange, setCustomRange] = useState([null, null]);
     const {data, isLoading, isError, refetch} = usePortfolioReturns();
     const {data: trend} = usePortfolioReturnTrends(period, customRange[0], customRange[1]);
-    if (isLoading && !data) return <Card><Skeleton active paragraph={{rows: 3}}/></Card>;
-    if (isError) return <Card><QueryErrorState onRetry={refetch} description="累计收益加载失败"/></Card>;
+    if (isLoading && !data) return <Skeleton active paragraph={{rows: 3}}/>;
+    if (isError) return <QueryErrorState onRetry={refetch} description="累计收益加载失败"/>;
 
     const columns = [
         {title: '基金', dataIndex: 'fundName', ellipsis: true,
@@ -21,9 +21,9 @@ export default function PortfolioReturns() {
         {title: '投入', dataIndex: 'investedAmount', align: 'right', render: money},
         {title: '赎回净额', dataIndex: 'redeemedAmount', align: 'right', render: money},
         {title: '手续费', dataIndex: 'feeAmount', align: 'right', render: money},
-        {title: '已实现', dataIndex: 'realizedPnl', align: 'right',
+        {title: '已实现盈亏', dataIndex: 'realizedPnl', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
-        {title: '未实现', dataIndex: 'unrealizedPnl', align: 'right',
+        {title: '浮动盈亏', dataIndex: 'unrealizedPnl', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
         {title: '累计收益', dataIndex: 'totalReturn', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
@@ -31,15 +31,15 @@ export default function PortfolioReturns() {
     ];
 
     return (
-        <Card title="累计收益">
+        <div>
             {!data?.realizedComplete && <Alert type="warning" showIcon style={{marginBottom: 16}}
-                message="部分历史卖出缺少完整 FIFO 成本，已实现收益暂不可用"/>}
+                message="部分历史卖出缺少完整 FIFO 成本，已实现盈亏暂不可用"/>}
             <Row gutter={[16, 16]} style={{marginBottom: 16}}>
                 <Col xs={12} md={6}><Statistic title="累计总收益" value={data?.totalReturn}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.totalReturn)}}/></Col>
-                <Col xs={12} md={6}><Statistic title="已实现收益" value={data?.realizedPnl}
+                <Col xs={12} md={6}><Statistic title="已实现盈亏" value={data?.realizedPnl}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.realizedPnl)}}/></Col>
-                <Col xs={12} md={6}><Statistic title="未实现收益" value={data?.unrealizedPnl}
+                <Col xs={12} md={6}><Statistic title="浮动盈亏" value={data?.unrealizedPnl}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.unrealizedPnl)}}/></Col>
                 <Col xs={12} md={6}><Statistic title="累计收益率" value={data?.returnRate}
                     formatter={(value) => percent(value)} valueStyle={{color: pnlColor(data?.returnRate)}}/></Col>
@@ -74,7 +74,7 @@ export default function PortfolioReturns() {
             </> : <div className="portfolio-trend-empty">趋势数据将在首个净值确认快照后显示</div>}
             <Table rowKey="fundId" size="small" style={{marginTop: 16}} dataSource={data?.funds || []}
                    columns={columns} pagination={false} scroll={{x: 980}}/>
-        </Card>
+        </div>
     );
 }
 
