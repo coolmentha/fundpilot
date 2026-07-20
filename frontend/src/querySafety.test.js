@@ -24,6 +24,7 @@ describe('query safety guards', () => {
             isEstimated: true,
             dailyChangePct: 1.25,
             dailyPnl: 10,
+            groups: [{id: 3, name: '核心'}],
         }];
         const estimates = {'000001': {estimatedChangePct: 2.5, estimateTime: '2026-07-12T02:00:00Z'}};
 
@@ -36,6 +37,7 @@ describe('query safety guards', () => {
         expect(row.isEstimated).toBe(false);
         expect(row.estimateFetchFailed).toBe(true);
         expect(row.estimateTime).toBeUndefined();
+        expect(row.groups).toEqual([{id: 3, name: '核心'}]);
     });
 
     it('keeps unsupported estimates neutral instead of reporting a fetch failure', () => {

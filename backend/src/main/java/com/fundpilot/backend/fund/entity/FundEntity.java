@@ -7,12 +7,17 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "fund")
@@ -68,5 +73,11 @@ public class FundEntity extends AbstractEntity {
     /** 单基金当前持仓占比提醒线；仅提示，范围为 (0, 1]。 */
     @Column(name = "position_warning_ratio", nullable = false)
     private BigDecimal positionWarningRatio = DEFAULT_POSITION_WARNING_RATIO;
+
+    @ManyToMany
+    @JoinTable(name = "fund_group_member",
+            joinColumns = @JoinColumn(name = "fund_id"),
+            inverseJoinColumns = @JoinColumn(name = "group_id"))
+    private Set<FundGroupEntity> groups = new LinkedHashSet<>();
 
 }

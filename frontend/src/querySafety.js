@@ -40,6 +40,7 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             dailyPnl: fund.dailyPnl,
             totalPnl: fund.totalPnl,
             status: fund.status,
+            groups: fund.groups || [],
         };
     });
 }

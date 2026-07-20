@@ -1,6 +1,7 @@
 package com.fundpilot.backend.fund.controller;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.entity.FundGroupEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundSubType;
@@ -12,6 +13,8 @@ import com.fundpilot.backend.market.service.EstimateStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 基金视图 DTO(issue #16):返回给前端的基金信息,只含业务字段,不含 version/deletedDate 等内部字段。
@@ -68,7 +71,11 @@ public record FundView(
         Instant valuationDate,
         String estimateTime,
         String baseNavDate,
-        Instant createdDate) {
+        Instant createdDate,
+        List<Group> groups) {
+
+    public record Group(Long id, String name) {
+    }
 
     /** 从 Entity 映射到视图 DTO(盈亏字段为 null,isEstimated=false,供新建/更新等不需盈亏的场景用)。 */
     public static FundView from(FundEntity fund) {
@@ -89,7 +96,7 @@ public record FundView(
                 fund.getPositionWarningRatio(),
                 null, false, false, EstimateStatus.NOT_ATTEMPTED,
                 null, null, null, null, null, null, null, null, null,
-                fund.getCreatedDate());
+                fund.getCreatedDate(), groupsOf(fund));
     }
 
     /** 从 Entity + 盈亏结果映射到视图 DTO(列表/详情等需展示盈亏的场景用)。 */
@@ -122,6 +129,14 @@ public record FundView(
                 pnl.valuationDate(),
                 pnl.estimateTime(),
                 pnl.baseNavDate(),
-                fund.getCreatedDate());
+                fund.getCreatedDate(), groupsOf(fund));
+    }
+
+    private static List<Group> groupsOf(FundEntity fund) {
+        return fund.getGroups().stream()
+                .sorted(Comparator.comparingInt(FundGroupEntity::getSortOrder)
+                        .thenComparing(FundGroupEntity::getId))
+                .map(group -> new Group(group.getId(), group.getName()))
+                .toList();
     }
 }

@@ -1,26 +1,30 @@
 import {useState} from 'react';
 import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography} from 'antd';
-import {DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
+import {AppstoreOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import dayjs from 'dayjs';
 import {Link} from 'react-router-dom';
-import {useArchiveFund, useDcaBudgetSummary, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
+import {useArchiveFund, useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
 import {fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import {estimateStatusText} from '../querySafety.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import {buildFundPositionWarnings} from '../positionWarnings.js';
+import FundGroupTabs from '../components/FundGroupTabs.jsx';
+import FundGroupManagerModal from '../components/FundGroupManagerModal.jsx';
+import {ALL_GROUPS_KEY, filterFundsByGroup} from '../fundGroups.js';
 
 const {Title} = Typography;
 
 // 新建表单初始值:基金身份由搜索框选中后带入。已有持仓字段默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
     benchmarkIndexCode: '', positionWarningEnabled: true, positionWarningRatioPct: 30,
-    initialHoldingShares: null, costPerShare: null, openedAt: null};
+    initialHoldingShares: null, costPerShare: null, openedAt: null, groupNames: []};
 
 export default function FundsPage() {
     const {message} = App.useApp();
     const {data: funds, isLoading, refetch} = useFunds();
+    const {data: fundGroups} = useFundGroups();
     const {
         data: dcaBudgetSummary,
         isLoading: isDcaBudgetLoading,
@@ -33,9 +37,14 @@ export default function FundsPage() {
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeGroup, setActiveGroup] = useState(ALL_GROUPS_KEY);
+    const [groupManagerOpen, setGroupManagerOpen] = useState(false);
     const initialHoldingShares = Form.useWatch('initialHoldingShares', form);
     const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
     const rows = buildFundPositionWarnings(funds);
+    const effectiveActiveGroup = activeGroup === ALL_GROUPS_KEY
+        || (fundGroups || []).some((group) => String(group.id) === activeGroup) ? activeGroup : ALL_GROUPS_KEY;
+    const displayRows = filterFundsByGroup(rows, effectiveActiveGroup);
 
     // 字典搜索(仅新建时用;编辑时基金身份已固定)
     const {data: searchResults, isFetching: searching} = useFundSearch(searchQuery);
@@ -73,6 +82,7 @@ export default function FundsPage() {
             benchmarkIndexCode: fund.benchmarkIndexCode,
             positionWarningEnabled: fund.positionWarningEnabled !== false,
             positionWarningRatioPct: Number(fund.positionWarningRatio ?? 0.3) * 100,
+            groupNames: (fund.groups || []).map((group) => group.name),
         });
         setOpen(true);
     };
@@ -124,6 +134,10 @@ export default function FundsPage() {
         {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
+        {title: '分组', dataIndex: 'groups', width: 160, responsive: ['md'],
+            render: (groups) => groups?.length ? <Space size={[4, 4]} wrap>
+                {groups.map((group) => <Tag key={group.id}>{group.name}</Tag>)}
+            </Space> : '-'},
         {
             title: '仓位提醒', width: 132, align: 'right',
             render: (_, record) => {
@@ -188,13 +202,15 @@ export default function FundsPage() {
         <Space direction="vertical" size={16} className="full-width funds-page">
             <Card title={<Title level={4}>基金管理</Title>} extra={
                 <Space>
+                    <Button icon={<AppstoreOutlined/>} onClick={() => setGroupManagerOpen(true)}>管理分组</Button>
                     <Button icon={<ReloadOutlined/>} onClick={() => { refetch(); refetchDcaBudget(); }}>刷新</Button>
                     <Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建基金</Button>
                 </Space>
             }>
                 <DcaBudgetOverview summary={dcaBudgetSummary} isLoading={isDcaBudgetLoading}
                                    isError={isDcaBudgetError} onRetry={refetchDcaBudget}/>
-                <Table rowKey="id" size="small" loading={isLoading} dataSource={rows} columns={columns}
+                <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={setActiveGroup}/>
+                <Table rowKey="id" size="small" loading={isLoading} dataSource={displayRows} columns={columns}
                        pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
@@ -249,6 +265,10 @@ export default function FundsPage() {
                                help="自动识别,可手动调整">
                         <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
                     </Form.Item>
+                    <Form.Item label="分组" name="groupNames" help="可选择多个分组，输入新名称后回车即可创建">
+                        <Select mode="tags" maxLength={20} tokenSeparators={[',']} placeholder="可选"
+                                options={(fundGroups || []).map((group) => ({value: group.name, label: group.name}))}/>
+                    </Form.Item>
                     <Form.Item label="仓位提醒" name="positionWarningEnabled" valuePropName="checked">
                         <Switch checkedChildren="开" unCheckedChildren="关"/>
                     </Form.Item>
@@ -296,6 +316,8 @@ export default function FundsPage() {
                     )}
                 </Form>
             </Modal>
+            <FundGroupManagerModal open={groupManagerOpen} groups={fundGroups}
+                                   onCancel={() => setGroupManagerOpen(false)}/>
         </Space>
     );
 }

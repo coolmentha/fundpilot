@@ -1,10 +1,13 @@
+import {useState} from 'react';
 import {Table} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
-import {useFunds, useFundEstimates} from '../api/hooks.js';
+import {useFundGroups, useFunds, useFundEstimates} from '../api/hooks.js';
 import {money, signedMoney, signedPercent, pnlColor, text} from '../constants.js';
 import {buildFundWatchlistRows, estimateStatusText, selectHoldingRows} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
+import FundGroupTabs from './FundGroupTabs.jsx';
+import {ALL_GROUPS_KEY, filterFundsByGroup} from '../fundGroups.js';
 
 /**
  * 自选基金行情列表:展示所有持仓/观察基金的实时涨跌(来自 fundgz 盘中估值)。
@@ -17,6 +20,8 @@ import QueryErrorState from './QueryErrorState.jsx';
  */
 export default function FundWatchlist() {
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
+    const {data: fundGroups} = useFundGroups();
+    const [activeGroup, setActiveGroup] = useState(ALL_GROUPS_KEY);
     const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
     const {
         data: estimates,
@@ -27,6 +32,9 @@ export default function FundWatchlist() {
 
     // 合并基金档案 + 实时估值。失败态优先,防止两个轮询接口刷新时序不同导致旧估值回退。
     const rows = buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError});
+
+    const effectiveActiveGroup = activeGroup === ALL_GROUPS_KEY
+        || (fundGroups || []).some((group) => String(group.id) === activeGroup) ? activeGroup : ALL_GROUPS_KEY;
 
     const columns = [
         {
@@ -102,7 +110,7 @@ export default function FundWatchlist() {
         );
     }
 
-    const holdingRows = selectHoldingRows(rows);
+    const holdingRows = filterFundsByGroup(selectHoldingRows(rows), effectiveActiveGroup);
     const totalHoldingAmount = holdingRows.reduce((sum, r) => sum + Number(r.holdingAmount), 0);
     const displayRows = holdingRows.map((r) => ({
         ...r,
@@ -115,6 +123,7 @@ export default function FundWatchlist() {
             {estimatesError && (
                 <QueryErrorState onRetry={refetchEstimates} description="实时估值加载失败，已隐藏旧估值"/>
             )}
+            <FundGroupTabs groups={fundGroups} activeKey={effectiveActiveGroup} onChange={setActiveGroup}/>
             <div className="watchlist-layout">
             <Table
                 dataSource={displayRows}
