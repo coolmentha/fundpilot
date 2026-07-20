@@ -1,5 +1,5 @@
-import {App, Button, Card, Popconfirm, Space, Table, Tag, Typography} from 'antd';
-import {ReloadOutlined} from '@ant-design/icons';
+import {App, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography} from 'antd';
+import {InfoCircleOutlined, ReloadOutlined} from '@ant-design/icons';
 import {useState} from 'react';
 import {Link, useSearchParams} from 'react-router-dom';
 import {
@@ -46,7 +46,7 @@ export default function ConfirmPage() {
         {title: '来源', dataIndex: 'source', width: 110, render: (value) => <StatusTag value={value}/>},
         {title: '金额', dataIndex: 'amount', width: 140, align: 'right',
             render: (value) => value == null ? '-' : <span className="num-cell">{money(value)}</span>},
-        {title: '份额', dataIndex: 'shares', width: 120, align: 'right',
+        {title: <Tooltip title="买入类交易在净值确认前显示预计份额"><span>份额 <InfoCircleOutlined /></span></Tooltip>, dataIndex: 'shares', width: 120, align: 'right',
             render: (value, row) => value != null
                 ? <span className="num-cell">{Number(value).toFixed(2)}</span>
                 : row.expectedShares != null

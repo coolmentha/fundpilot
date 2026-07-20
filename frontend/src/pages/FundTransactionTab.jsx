@@ -1,6 +1,6 @@
 import {useState} from 'react';
-import {Card, Table, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space, DatePicker} from 'antd';
-import {PlusOutlined} from '@ant-design/icons';
+import {Card, Table, Tooltip, Typography, Button, Popconfirm, Modal, Form, InputNumber, Select, Alert, Space, DatePicker} from 'antd';
+import {InfoCircleOutlined, PlusOutlined} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds, useFundFeeRates} from '../api/hooks.js';
 import {datetime, money, fundSourceOptions} from '../constants.js';
@@ -53,7 +53,7 @@ export default function FundTransactionTab({fundId}) {
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
         {title: '手续费', dataIndex: 'fee', width: 110, align: 'right',
             render: (v) => v == null ? '-' : <span className="num-cell">{money(v)}</span>},
-        {title: '状态', dataIndex: 'status', width: 110, render: (v) => <StatusTag value={v}/>},
+        {title: <Tooltip title="PENDING 表示等待净值确认；CONFIRMED 表示已进入账本"><span>状态 <InfoCircleOutlined /></span></Tooltip>, dataIndex: 'status', width: 110, render: (v) => <StatusTag value={v}/>},
         {
             title: '', width: 180, render: (_, r) => r.status === 'PENDING' && (
                 <Space size={0}>
