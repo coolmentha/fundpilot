@@ -1,4 +1,4 @@
-import {Alert, Button, Collapse, Space, Tag, Typography} from 'antd';
+import {Alert, Button, Space, Tag, Typography} from 'antd';
 import {
     BarChartOutlined,
     CalendarOutlined,
@@ -22,31 +22,30 @@ const destinations = [
     {icon: <SettingOutlined/>, title: '用户配置', description: '管理关注指数和每月定投预算提醒。', path: '/settings'},
 ];
 
-const detailSections = [
+const workflows = [
     {
-        key: 'funds', title: '添加基金与维护持仓', children: <>
-            <Paragraph>进入「我的基金」，用代码或名称搜索并选择基金。系统会自动回填名称、分类、子类和跟踪指数。</Paragraph>
-            <Paragraph>有实际持仓时填写份额和成本单价；没有持仓也可以先添加为观察基金。分组标签会记住上次选择，下次打开行情或基金管理会继续使用。</Paragraph>
-            <Paragraph>仓位提醒只负责提示，不会阻止买入或卖出。成本、持仓市值和总盈亏都以单位净值口径计算。</Paragraph>
-        </>,
+        key: 'funds', number: '01', icon: <FundOutlined/>, title: '添加基金与维护持仓',
+        goal: '建立准确的基金档案和初始持仓，作为后续行情、定投与盈亏计算的基础。',
+        steps: ['在「我的基金」用代码或名称搜索并选择基金。', '有实际持仓时填写份额和成本单价；仅观察时可以留空。', '按用途设置分组，并检查仓位提醒线是否合适。'],
+        done: '基金出现在列表中，持仓市值、成本和分组信息正确。', path: '/funds', action: '前往我的基金', tone: 'amber',
     },
     {
-        key: 'dca', title: '设置自动定投', children: <>
-            <Paragraph>在「定投管理」创建计划，选择基金、金额、频率和执行日。启用后，系统按交易日生成待确认流水。</Paragraph>
-            <Paragraph>系统不会向基金平台自动下单。交易日净值入库后，到「操作确认」核对金额、净值、费用和预计份额，再确认或撤销。</Paragraph>
-        </>,
+        key: 'dca', number: '02', icon: <CalendarOutlined/>, title: '设置自动定投',
+        goal: '让系统按交易日生成纪律化的定投记录，同时保留最终确认权。',
+        steps: ['创建计划并选择基金、金额、频率和执行日。', '启用计划；休市日会按规则顺延到下一个交易日。', '生成交易后，到「操作确认」核对净值和预计份额。'],
+        done: '计划状态为生效，下一执行日和本月剩余预计金额可见。', path: '/dca', action: '前往定投管理', tone: 'blue',
     },
     {
-        key: 'signals', title: '阅读和回应交易信号', children: <>
-            <Paragraph>「交易信号」只提供纪律建议，包括定投止盈和逻辑破坏止损。点开信号可查看触发原因、建议动作和关联基金。</Paragraph>
-            <Paragraph>回应信号会生成待确认交易；忽略信号不会自动卖出。真实申赎始终由你在基金平台完成。</Paragraph>
-        </>,
+        key: 'signals', number: '03', icon: <BarChartOutlined/>, title: '阅读和回应交易信号',
+        goal: '理解止盈或逻辑破坏止损的触发原因，再决定是否执行建议。',
+        steps: ['打开待回应信号，查看触发原因、建议份额和风险提示。', '在基金平台完成真实申赎后，再在系统内回应。', '不采纳时选择忽略，避免留下长期待办。'],
+        done: '信号显示已回应或已忽略；回应信号已生成关联交易。', path: '/signals', action: '前往交易信号', tone: 'violet',
     },
     {
-        key: 'confirm', title: '处理待确认交易', children: <>
-            <Paragraph><Tag color="gold">PENDING</Tag> 表示交易尚未进入最终账本。买入类等待交易日单位净值，卖出类等待净值回填金额和手续费。</Paragraph>
-            <Paragraph>确认前核对交易日期、金额或份额。确认后交易会计入持仓；录入错误时优先撤单，账实差异使用调整交易修正。</Paragraph>
-        </>,
+        key: 'confirm', number: '04', icon: <ThunderboltOutlined/>, title: '处理待确认交易',
+        goal: '在净值与交易信息完整后，将流水正式计入持仓账本。',
+        steps: ['确认交易日期、金额或份额与基金平台记录一致。', '等待状态变为可确认，并核对单位净值、费用和预计份额。', '信息正确则确认；录入错误则撤单或编辑后再确认。'],
+        done: <><Tag color="green">CONFIRMED</Tag> 交易已进入账本，持仓份额和成本同步更新。</>, path: '/confirm', action: '前往操作确认', tone: 'green',
     },
 ];
 
@@ -92,7 +91,29 @@ export default function HelpPage() {
 
             <section className="help-detail" aria-labelledby="help-detail-title">
                 <div className="help-section-heading"><div><Text className="help-eyebrow">WORKFLOWS</Text><Title id="help-detail-title" level={4}>常用操作说明</Title></div></div>
-                <Collapse items={detailSections}/>
+                <div className="help-workflow-list">
+                    {workflows.map((workflow) => (
+                        <article className={`help-workflow help-workflow-${workflow.tone}`} key={workflow.key}>
+                            <div className="help-workflow-rail" aria-hidden="true">
+                                <span>{workflow.number}</span>
+                                <i/>
+                            </div>
+                            <div className="help-workflow-body">
+                                <header>
+                                    <span className="help-workflow-icon">{workflow.icon}</span>
+                                    <div><Title level={5}>{workflow.title}</Title><Paragraph>{workflow.goal}</Paragraph></div>
+                                </header>
+                                <ol className="help-workflow-steps">
+                                    {workflow.steps.map((step, index) => <li key={step}><span>{index + 1}</span><p>{step}</p></li>)}
+                                </ol>
+                                <footer>
+                                    <div className="help-workflow-done"><CheckCircleOutlined/><span><strong>完成标志</strong>{workflow.done}</span></div>
+                                    <Link to={workflow.path}>{workflow.action} →</Link>
+                                </footer>
+                            </div>
+                        </article>
+                    ))}
+                </div>
             </section>
 
             <section className="help-definitions" aria-labelledby="help-definitions-title">
