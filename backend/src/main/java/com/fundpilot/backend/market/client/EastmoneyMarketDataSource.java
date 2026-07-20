@@ -17,8 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EastmoneyMarketDataSource implements MarketDataSource {
 
-    /** K 线返回条数(约一年多交易日,够算量能状态)。 */
-    private static final String KLINE_LIMIT = "400";
+    private static final String LEGACY_KLINE_LIMIT = "400";
 
     private final EastmoneyClient eastmoneyClient;
     private final EastmoneyKlineClient eastmoneyKlineClient;
@@ -35,8 +34,8 @@ public class EastmoneyMarketDataSource implements MarketDataSource {
 
     @Override
     public IndexKline fetchIndexKline(String indexCode, String range) {
-        // indexCode 是 secid 格式(如 "1.000300");range 不再用,固定 lmt
-        String raw = eastmoneyKlineClient.fetchKlineRaw(indexCode, KLINE_LIMIT);
+        String limit = "6".equals(range) ? LEGACY_KLINE_LIMIT : range;
+        String raw = eastmoneyKlineClient.fetchKlineRaw(indexCode, limit);
         return EastmoneyJsParser.parseIndexKline(raw);
     }
 

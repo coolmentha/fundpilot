@@ -42,8 +42,8 @@ push2his 被封则缓存永远空,陷入「封了→拉不到→缓存空→图�
 
 - **正面**:930713.CSI 等 CSI 主题指数 K 线恢复,缓存可填充(`MarketDataFetchService` refresh → csindex → `upsertIndexKline` → `index_kline`),
   打破死循环;沪深300/上证50/中证1000 等主流基准也改走 csindex,降低对 push2his 的依赖。
-- **负面/边界**:csindex 仅日 K(周/月靠源内聚合,非原生);仅中证编制指数(399xxx 深交所回退 eastmoney,仍可能被封→降级净值,
-  但当前无基金跟踪 399xxx);`tradingVol` 单位为股(push2his 为手),图表成交量只需序列内一致,跨源不混用故无碍。
+- **负面/边界**:csindex 仅日 K(周/月靠源内聚合,非原生);仅中证编制指数，`0.*` 深交所指数直接跳过本源并回退 eastmoney；
+  `tradingVol` 单位为股(push2his 为手),图表成交量只需序列内一致,跨源不混用故无碍。
 - **时序**:`MarketDataFetchService.fetchOne` → `marketDataSource.fetchIndexKline`(链首 csindex)→ `upsertIndexKline` 落库 →
   `KlineService.getKline` 读缓存聚合日/周/月。缓存空时 `KlineService` 实时拉(链首 csindex)兜底。
 

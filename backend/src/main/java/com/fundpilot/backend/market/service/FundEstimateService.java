@@ -3,6 +3,8 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.market.client.EastmoneyFundGzClient;
 import com.fundpilot.backend.market.client.EastmoneyJsParser;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.ThsFundEstimateClient;
+import com.fundpilot.backend.market.client.ThsJsParser;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 /**
- * 基金盘中估值拉取服务(issue #36):调 fundgz 接口取盘中估算涨跌幅,
+ * 基金盘中估值拉取服务(issue #36):东方财富 fundgz 失败时降级同花顺估值接口,
  * 供三态今日涨跌「估值阶段」使用(详见 ADR-0008 / issue #38)。
  *
  * <p>估值是短时态数据(盘中每分钟变化,当日实际净值落库后失效),后台刷新不落库。
@@ -24,6 +26,7 @@ public class FundEstimateService {
     private static final Logger log = LoggerFactory.getLogger(FundEstimateService.class);
 
     private final EastmoneyFundGzClient eastmoneyFundGzClient;
+    private final ThsFundEstimateClient thsFundEstimateClient;
     private final MarketDataMetrics metrics;
 
     /**
@@ -40,24 +43,49 @@ public class FundEstimateService {
             metrics.record("EastmoneyFundGzClient", "fetchEstimate", "empty", startedAt);
             return FundEstimateResult.unavailable();
         }
+        EstimateStatus eastmoneyFailure = EstimateStatus.UNAVAILABLE;
         try {
             String raw = eastmoneyFundGzClient.fetchGzRaw(fundCode);
             FundEstimateSnapshot snapshot = EastmoneyJsParser.parseFundGz(raw);
             metrics.record("EastmoneyFundGzClient", "fetchEstimate",
                     snapshot == null ? "empty" : "success", startedAt);
-            return snapshot == null ? FundEstimateResult.unavailable() : FundEstimateResult.available(snapshot);
+            if (snapshot != null) {
+                return FundEstimateResult.available(snapshot);
+            }
         } catch (IllegalStateException ex) {
             metrics.record("EastmoneyFundGzClient", "fetchEstimate", "parse_error", startedAt);
-            log.warn("解析基金 {} 盘中估值失败: {}", fundCode, ex.getMessage());
-            return FundEstimateResult.failed(EstimateStatus.PARSE_ERROR);
+            eastmoneyFailure = EstimateStatus.PARSE_ERROR;
+            log.debug("解析基金 {} 东方财富盘中估值失败,尝试同花顺: {}", fundCode, ex.getMessage());
         } catch (feign.RetryableException ex) {
             metrics.record("EastmoneyFundGzClient", "fetchEstimate", "timeout", startedAt);
-            log.warn("拉取基金 {} 盘中估值超时: {}", fundCode, ex.getMessage());
-            return FundEstimateResult.failed(EstimateStatus.TIMEOUT);
+            eastmoneyFailure = EstimateStatus.TIMEOUT;
+            log.debug("拉取基金 {} 东方财富盘中估值超时,尝试同花顺: {}", fundCode, ex.getMessage());
         } catch (RuntimeException ex) {
             metrics.record("EastmoneyFundGzClient", "fetchEstimate", "failure", startedAt);
-            log.warn("拉取基金 {} 盘中估值不可用: {}", fundCode, ex.getMessage());
-            return FundEstimateResult.unavailable();
+            log.debug("拉取基金 {} 东方财富盘中估值不可用,尝试同花顺: {}", fundCode, ex.getMessage());
+        }
+
+        long thsStartedAt = System.nanoTime();
+        try {
+            FundEstimateSnapshot snapshot = ThsJsParser.parseFundEstimate(
+                    thsFundEstimateClient.fetchEstimateRaw(fundCode));
+            metrics.record("ThsFundEstimateClient", "fetchEstimate",
+                    snapshot == null ? "empty" : "success", thsStartedAt);
+            return snapshot == null ? FundEstimateResult.unavailable() : FundEstimateResult.available(snapshot);
+        } catch (IllegalStateException ex) {
+            metrics.record("ThsFundEstimateClient", "fetchEstimate", "parse_error", thsStartedAt);
+            log.warn("解析基金 {} 同花顺盘中估值失败: {}", fundCode, ex.getMessage());
+            return FundEstimateResult.failed(EstimateStatus.PARSE_ERROR);
+        } catch (feign.RetryableException ex) {
+            metrics.record("ThsFundEstimateClient", "fetchEstimate", "timeout", thsStartedAt);
+            log.warn("拉取基金 {} 同花顺盘中估值超时: {}", fundCode, ex.getMessage());
+            return FundEstimateResult.failed(eastmoneyFailure == EstimateStatus.PARSE_ERROR
+                    ? EstimateStatus.PARSE_ERROR : EstimateStatus.TIMEOUT);
+        } catch (RuntimeException ex) {
+            metrics.record("ThsFundEstimateClient", "fetchEstimate", "failure", thsStartedAt);
+            log.warn("拉取基金 {} 同花顺盘中估值不可用: {}", fundCode, ex.getMessage());
+            return eastmoneyFailure.isFailure()
+                    ? FundEstimateResult.failed(eastmoneyFailure) : FundEstimateResult.unavailable();
         }
     }
 }

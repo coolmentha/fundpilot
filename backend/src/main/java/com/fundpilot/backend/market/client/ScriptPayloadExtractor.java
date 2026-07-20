@@ -49,6 +49,20 @@ final class ScriptPayloadExtractor {
             return null;
         }
         char opening = raw.charAt(start);
+        if (opening == '\'' || opening == '"') {
+            boolean escaped = false;
+            for (int i = start + 1; i < raw.length(); i++) {
+                char current = raw.charAt(i);
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else if (current == opening) {
+                    return raw.substring(start + 1, i);
+                }
+            }
+            return null;
+        }
         char closing = switch (opening) {
             case '[' -> ']';
             case '{' -> '}';

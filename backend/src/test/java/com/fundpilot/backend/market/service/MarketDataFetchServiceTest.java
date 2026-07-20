@@ -32,6 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * issue #7 循环 F:{@code MarketDataFetchService.fetchBatch} 编排逻辑。
@@ -89,6 +91,7 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f1.getId(), today)).isPresent();
         assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f2.getId(), today)).isPresent();
         assertThat(snapshotRepository.findByFundEntity_IdAndSnapshotDate(f3.getId(), today)).isPresent();
+        verify(marketDataSource, times(1)).fetchIndexKline("1.000300", "400");
     }
 
     @Test
@@ -125,6 +128,8 @@ class MarketDataFetchServiceTest extends AbstractIntegrationTest {
         long secondRun = snapshotRepository.count();
 
         assertThat(secondRun).isEqualTo(firstRun);
+        verify(marketDataSource).fetchIndexKline("1.000300", "400");
+        verify(marketDataSource).fetchIndexKline("1.000300", "10");
     }
 
     @Test

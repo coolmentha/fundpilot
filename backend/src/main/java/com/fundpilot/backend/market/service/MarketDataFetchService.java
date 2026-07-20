@@ -27,8 +27,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -48,7 +50,8 @@ public class MarketDataFetchService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketDataFetchService.class);
     private static final int TOTAL_BATCHES = 3;
-    private static final String INDEX_KLINE_RANGE = "6"; // 6 = 近一年日 K
+    private static final String INDEX_KLINE_FULL_LIMIT = "400";
+    private static final String INDEX_KLINE_INCREMENTAL_LIMIT = "10";
 
     private final FundRepository fundRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
@@ -63,6 +66,10 @@ public class MarketDataFetchService {
      * 拉取指定批次的基金行情指标。{@code batchNumber} 取 0/1/2,对应 14:30/14:40/14:50。
      */
     public void fetchBatch(int batchNumber) {
+        fetchBatch(batchNumber, new HashMap<>(), new HashSet<>());
+    }
+
+    private void fetchBatch(int batchNumber, Map<String, IndexKline> indexKlines, Set<String> persistedIndexKlines) {
         // issue #23:范围从"有 EFFECTIVE 策略的基金"扩大到"所有未软删基金",
         // 让未建仓(观察池)基金也落净值历史支撑今日涨跌(story 21)。软删由 @SQLRestriction 自动过滤。
         List<Long> fundIds = fundRepository.findAll().stream()
@@ -75,7 +82,7 @@ public class MarketDataFetchService {
                 continue;
             }
             try {
-                fetchOne(fundId);
+                fetchOne(fundId, indexKlines, persistedIndexKlines);
                 success++;
             } catch (RuntimeException ex) {
                 failure++;
@@ -89,8 +96,10 @@ public class MarketDataFetchService {
      * 当日全量刷新——跑全部三批,供 {@code POST /api/admin/market-data/refresh} 手动触发。
      */
     public void refreshAll() {
+        Map<String, IndexKline> indexKlines = new HashMap<>();
+        Set<String> persistedIndexKlines = new HashSet<>();
         for (int batch = 0; batch < TOTAL_BATCHES; batch++) {
-            fetchBatch(batch);
+            fetchBatch(batch, indexKlines, persistedIndexKlines);
         }
     }
 
@@ -102,10 +111,10 @@ public class MarketDataFetchService {
      * @param fundId 基金 id
      */
     public void fetchOneFund(Long fundId) {
-        fetchOne(fundId);
+        fetchOne(fundId, new HashMap<>(), new HashSet<>());
     }
 
-    private void fetchOne(Long fundId) {
+    private void fetchOne(Long fundId, Map<String, IndexKline> indexKlines, Set<String> persistedIndexKlines) {
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         if (!FundMarketDataCapability.supportsStandardNav(fund)) {
@@ -151,7 +160,10 @@ public class MarketDataFetchService {
             try {
                 // benchmarkIndexCode 是 "000300.SH" 人类可读格式,转 secid "1.000300" 调东方财富接口
                 String secid = SecidFormat.fromIndexCode(indexCode).orElse(indexCode);
-                indexKline = marketDataSource.fetchIndexKline(secid, INDEX_KLINE_RANGE);
+                String limit = indexKlineRepository.existsByIndexCode(indexCode)
+                        ? INDEX_KLINE_INCREMENTAL_LIMIT : INDEX_KLINE_FULL_LIMIT;
+                indexKline = indexKlines.computeIfAbsent(indexCode,
+                        ignored -> marketDataSource.fetchIndexKline(secid, limit));
                 VolumeStateCalculator.calculate(indexKline).ifPresent(template::setVolumeState);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());
@@ -163,8 +175,9 @@ public class MarketDataFetchService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
             template.setFundEntity(managedFund);
             upsertNavHistory(managedFund, navHistory);
-            if (fetchedIndexKline != null) {
+            if (fetchedIndexKline != null && !persistedIndexKlines.contains(indexCode)) {
                 upsertIndexKline(indexCode, fetchedIndexKline);
+                persistedIndexKlines.add(indexCode);
             }
             snapshotService.upsert(template);
             return null;
@@ -208,13 +221,16 @@ public class MarketDataFetchService {
      */
     private void upsertIndexKline(String indexCode, IndexKline kline) {
         if (indexCode == null || indexCode.isBlank()) return;
-        Set<Instant> existing = new HashSet<>(indexKlineRepository.findTradeDatesByIndexCode(indexCode));
-        List<IndexKlineEntity> toInsert = kline.bars().stream()
-                .filter(b -> !existing.contains(b.date()))
+        Map<Instant, IndexKlineEntity> existing = indexKlineRepository
+                .findByIndexCodeOrderByTradeDateAsc(indexCode).stream()
+                .collect(java.util.stream.Collectors.toMap(IndexKlineEntity::getTradeDate, e -> e));
+        List<IndexKlineEntity> toSave = kline.bars().stream()
                 .map(b -> {
-                    IndexKlineEntity entity = new IndexKlineEntity();
-                    entity.setIndexCode(indexCode);
-                    entity.setTradeDate(b.date());
+                    IndexKlineEntity entity = existing.getOrDefault(b.date(), new IndexKlineEntity());
+                    if (entity.getId() == null) {
+                        entity.setIndexCode(indexCode);
+                        entity.setTradeDate(b.date());
+                    }
                     entity.setOpen(b.open());
                     entity.setHigh(b.high());
                     entity.setLow(b.low());
@@ -223,9 +239,9 @@ public class MarketDataFetchService {
                     return entity;
                 })
                 .toList();
-        if (!toInsert.isEmpty()) {
-            indexKlineRepository.saveAll(toInsert);
-            log.debug("指数 K 线缓存写入 indexCode={} 新增 {} 条(已有 {} 条)", indexCode, toInsert.size(), existing.size());
+        if (!toSave.isEmpty()) {
+            indexKlineRepository.saveAll(toSave);
+            log.debug("指数 K 线缓存写入 indexCode={} 更新 {} 条", indexCode, toSave.size());
         }
     }
 }

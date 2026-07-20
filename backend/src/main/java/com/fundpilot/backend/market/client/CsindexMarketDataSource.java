@@ -41,9 +41,12 @@ public class CsindexMarketDataSource implements MarketDataSource {
 
     @Override
     public IndexKline fetchIndexKline(String secid, String range) {
+        if (secid != null && secid.startsWith("0.")) {
+            throw new UnsupportedOperationException("中证源不支持深交所指数");
+        }
         String code = bareCode(secid);
         LocalDate end = LocalDate.now(ZoneOffset.UTC);
-        LocalDate start = end.minusYears(HISTORY_YEARS);
+        LocalDate start = "10".equals(range) ? end.minusDays(30) : end.minusYears(HISTORY_YEARS);
         String raw = csindexClient.fetchIndexPerf(code, start.format(YYYYMMDD), end.format(YYYYMMDD));
         return CsindexJsParser.parseIndexKline(raw, code);
     }
