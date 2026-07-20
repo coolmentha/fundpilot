@@ -156,6 +156,136 @@ body {
 
 .full-width { width: 100%; }
 
+/* ===== 使用帮助 ===== */
+.help-page {
+    display: grid;
+    gap: 28px;
+    width: min(100%, 1120px);
+    margin: 0 auto;
+}
+
+.help-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    min-height: 210px;
+    padding: 34px 38px;
+    overflow: hidden;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-top: 3px solid var(--color-primary);
+    border-radius: 6px;
+}
+
+.help-hero > div { max-width: 720px; }
+.help-hero .ant-typography { margin-bottom: 8px; }
+.help-hero p.ant-typography { margin: 0; color: var(--color-muted); font-size: 15px; line-height: 1.8; }
+
+.help-hero-icon {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-size: 76px;
+    opacity: 0.72;
+}
+
+.help-eyebrow {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--color-primary);
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.help-section-heading .ant-typography { margin: 0; }
+
+.help-step-grid,
+.help-destination-grid,
+.help-definition-grid {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.help-step-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.help-destination-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.help-definition-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.help-step,
+.help-destination {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    min-width: 0;
+    padding: 18px;
+    color: var(--color-text);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.help-step:hover,
+.help-step:focus-visible,
+.help-destination:hover,
+.help-destination:focus-visible {
+    color: var(--color-text);
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+.help-step-number,
+.help-destination-icon {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-family: 'Fira Code', monospace;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.help-destination-icon { font-size: 20px; }
+.help-step strong,
+.help-step small,
+.help-destination strong,
+.help-destination small { display: block; }
+.help-step small,
+.help-destination small { margin-top: 5px; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+
+.help-detail .ant-collapse { margin-top: 12px; }
+.help-detail .ant-typography:last-child { margin-bottom: 0; }
+
+.help-definition-grid > div {
+    min-width: 0;
+    padding: 15px 16px;
+    border-left: 3px solid var(--color-info);
+    background: var(--color-surface-2);
+}
+
+.help-definition-grid strong,
+.help-definition-grid span { display: block; }
+.help-definition-grid strong { margin-bottom: 6px; }
+.help-definition-grid span { color: var(--color-muted); font-size: 12px; line-height: 1.65; }
+.help-boundary { border-radius: 6px; }
+.help-footer-actions { justify-content: flex-end; }
+
+@media (max-width: 900px) {
+    .help-step-grid,
+    .help-definition-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+    .help-page { gap: 22px; }
+    .help-hero { min-height: 0; padding: 24px 20px; }
+    .help-hero-icon { display: none; }
+    .help-step-grid,
+    .help-destination-grid,
+    .help-definition-grid { grid-template-columns: minmax(0, 1fr); }
+    .help-footer-actions { justify-content: stretch; }
+    .help-footer-actions .ant-btn { flex: 1; }
+}
+
 /* ===== KPI 概览卡片 ===== */
 .kpi-grid {
     display: grid;
