@@ -4,6 +4,7 @@ import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
+import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
@@ -51,8 +52,9 @@ public class FundPnlService {
     private final Clock clock;
 
     /**
-     * 聚合单基金的涨跌与盈亏(三态,issue #38)。
-     * <p>今日涨跌经 {@link DailyChangeResolver} 三态判定(估值前0/当日估值/净值实际),
+     * 聚合单基金的涨跌与盈亏(issue #38)。
+     * <p>普通基金经 {@link DailyChangeResolver} 三态判定(估值前0/当日估值/净值实际)，
+     * QDII 两期净值齐备时优先使用最新确认净值收益。
      * 今日盈亏 = 最近确认市值 × 今日涨跌幅,总盈亏按最近确认净值 / 当日估值 / 实际净值切换(详见 ADR-0008)。
      *
      * @param fundId 基金 ID
@@ -117,18 +119,20 @@ public class FundPnlService {
         BigDecimal latestUnitNav = latestTwo.size() >= 1 ? latestTwo.get(0).getNav() : null;
         BigDecimal previousUnitNav = latestTwo.size() >= 2 ? latestTwo.get(1).getNav() : null;
         boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
+        boolean confirmedNavSelected = todayNavConfirmed
+                || (fund.getInvestmentTarget() == InvestmentTarget.QDII && latestTwo.size() >= 2);
         boolean standardNavSupported = FundMarketDataCapability.supportsStandardNav(fund);
 
-        // 三态判定只读实时缓存,不在 GET 请求里打外部接口。
-        EstimateStatus estimateStatus = todayNavConfirmed ? EstimateStatus.AVAILABLE
+        // QDII 净值可能滞后公布；两期确认净值齐备时优先展示最新确认收益。
+        EstimateStatus estimateStatus = confirmedNavSelected ? EstimateStatus.AVAILABLE
                 : !standardNavSupported ? EstimateStatus.UNAVAILABLE
                 : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
-        Optional<FundEstimateSnapshot> estimate = todayNavConfirmed || !standardNavSupported
+        Optional<FundEstimateSnapshot> estimate = confirmedNavSelected || !standardNavSupported
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode(), batchEstimates);
-        DailyChangeResult changeResult = standardNavSupported || todayNavConfirmed
+        DailyChangeResult changeResult = standardNavSupported || confirmedNavSelected
                 ? DailyChangeResolver.resolve(
-                        todayNavConfirmed, latestAccumulatedNav, previousAccumulatedNav, estimate, estimateStatus)
+                        confirmedNavSelected, latestAccumulatedNav, previousAccumulatedNav, estimate, estimateStatus)
                 : new DailyChangeResult(null, false);
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
@@ -144,12 +148,12 @@ public class FundPnlService {
         // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
         // 非估计态:dailyChangePct = (latest-previous)/previous,基准是 previousNav
         // 估计态:dailyChangePct = fundgz.gszzl,基准是 latestNav(最新已公布净值)
-        boolean usesLatestConfirmedNav = !todayNavConfirmed && !isEstimated && dailyChangePct != null;
+        boolean usesLatestConfirmedNav = !confirmedNavSelected && !isEstimated && dailyChangePct != null;
         BigDecimal dailyPnlBaseNav = isEstimated || usesLatestConfirmedNav ? latestUnitNav : previousUnitNav;
         BigDecimal dailyPnl = FundPnlCalculator.dailyPnlByChangePct(holdingShares, dailyPnlBaseNav, dailyChangePct);
         // 当日净值已确认时使用实际值;未确认时必须有今日涨跌才能推算当前净值。
         // 估值失败/缺失时不能拿上一期已公布净值冒充当前市值和总盈亏。
-        BigDecimal pnlNav = todayNavConfirmed || usesLatestConfirmedNav ? latestUnitNav
+        BigDecimal pnlNav = confirmedNavSelected || usesLatestConfirmedNav ? latestUnitNav
                 : isEstimated ? estimatedUnitNav(latestUnitNav, dailyChangePct) : null;
         // 当日估值不可用时,总仓位仍按最近确认净值展示;仅今日收益保持未知。
         BigDecimal positionNav = pnlNav != null ? pnlNav : latestUnitNav;

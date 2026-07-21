@@ -5,7 +5,7 @@ import {App} from 'antd';
 import dayjs from 'dayjs';
 import {Link} from 'react-router-dom';
 import {useArchiveFund, useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
-import {fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
+import {date, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import {estimateStatusText} from '../querySafety.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
@@ -166,6 +166,8 @@ export default function FundsPage() {
                         {r.isEstimated && <span className="estimate-tag">估</span>}
                     </div>
                     <div style={{color: pnlColor(r.dailyPnl)}}>{signedMoney(r.dailyPnl)}</div>
+                    {r.investmentTarget === 'QDII' && r.valuationSource === 'LATEST_CONFIRMED_NAV'
+                        && <div className="muted">净值 {date(r.valuationDate)}</div>}
                 </div>
             ),
         },

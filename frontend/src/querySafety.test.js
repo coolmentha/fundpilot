@@ -54,4 +54,34 @@ describe('query safety guards', () => {
         expect(row.estimateStatus).toBe('UNAVAILABLE');
         expect(estimateStatusText(row.estimateStatus)).toBe('暂无估值');
     });
+
+    it('keeps QDII latest confirmed NAV ahead of intraday estimates', () => {
+        const [row] = buildFundWatchlistRows([{
+            id: 1,
+            fundCode: '000001',
+            investmentTarget: 'QDII',
+            valuationSource: 'LATEST_CONFIRMED_NAV',
+            valuationDate: '2026-07-17T00:00:00Z',
+            dailyChangePct: 0.1,
+            estimateStatus: 'AVAILABLE',
+        }], {
+            '000001': {estimatedChangePct: 0.02, estimateTime: '2026-07-20 16:00'},
+        }, {estimatesFetched: true, estimatesError: false});
+
+        expect(row.changePct).toBe(0.1);
+        expect(row.isEstimated).toBe(false);
+        expect(row.valuationDate).toBe('2026-07-17T00:00:00Z');
+
+        const [errorRow] = buildFundWatchlistRows([{
+            id: 1,
+            fundCode: '000001',
+            investmentTarget: 'QDII',
+            valuationSource: 'LATEST_CONFIRMED_NAV',
+            valuationDate: '2026-07-17T00:00:00Z',
+            dailyChangePct: 0.1,
+            estimateStatus: 'AVAILABLE',
+        }], {}, {estimatesFetched: true, estimatesError: true});
+        expect(errorRow.changePct).toBe(0.1);
+        expect(errorRow.estimateFetchFailed).toBe(false);
+    });
 });

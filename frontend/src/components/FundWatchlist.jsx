@@ -3,7 +3,7 @@ import {Table} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
 import {useFundGroups, useFunds, useFundEstimates} from '../api/hooks.js';
-import {money, signedMoney, signedPercent, pnlColor, text} from '../constants.js';
+import {date, money, signedMoney, signedPercent, pnlColor, text} from '../constants.js';
 import {buildFundWatchlistRows, estimateStatusText, selectHoldingRows} from '../querySafety.js';
 import QueryErrorState from './QueryErrorState.jsx';
 import FundGroupTabs from './FundGroupTabs.jsx';
@@ -97,7 +97,11 @@ export default function FundWatchlist() {
         {
             title: '数据状态', width: 110, align: 'right',
             render: (_, r) => <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>
-                {estimateStatusText(r.estimateStatus) || (r.isEstimated ? '盘中估值' : '净值已确认')}
+                {estimateStatusText(r.estimateStatus) || (r.isEstimated
+                    ? '盘中估值'
+                    : r.investmentTarget === 'QDII' && r.valuationSource === 'LATEST_CONFIRMED_NAV'
+                        ? `确认净值 ${date(r.valuationDate)}`
+                        : '净值已确认')}
             </span>,
         },
     ];
