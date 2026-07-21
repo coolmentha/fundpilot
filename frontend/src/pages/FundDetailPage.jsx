@@ -2,7 +2,7 @@ import {Card, Descriptions, Skeleton, Space, Tabs, Typography, Button} from 'ant
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined} from '@ant-design/icons';
 import {useFund, useFundFeeRates} from '../api/hooks.js';
-import {date, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
+import {date, datetime, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
@@ -90,7 +90,7 @@ export default function FundDetailPage() {
                         : fund.valuationSource === 'CONFIRMED_NAV'
                             ? `当日已确认净值（${date(fund.valuationDate)}），计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
                             : fund.valuationSource === 'LATEST_CONFIRMED_NAV'
-                                ? `${fund.investmentTarget === 'QDII' ? '最新确认净值' : '估值不可用，使用最近确认净值'}（${date(fund.valuationDate)}），计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
+                                ? `${fund.investmentTarget === 'QDII' ? '最新确认净值' : '估值不可用，使用最近确认净值'}（${date(fund.valuationDate)}）${fund.investmentTarget === 'QDII' && fund.valuationFirstSeenAt ? `，平台发现于 ${datetime(fund.valuationFirstSeenAt)}` : ''}，计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
                                 : <span className="muted">暂无可用净值</span>}
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>

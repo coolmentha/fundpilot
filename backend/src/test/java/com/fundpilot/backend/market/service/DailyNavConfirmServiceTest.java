@@ -67,6 +67,8 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         List<FundNavHistoryEntity> navs = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
         assertThat(navs).extracting(FundNavHistoryEntity::getAccumulatedNav)
                 .anyMatch(value -> value.compareTo(new BigDecimal("1.0100")) == 0);
+        assertThat(navs).filteredOn(nav -> nav.getNavDate().equals(today))
+                .extracting(FundNavHistoryEntity::getFirstSeenAt).doesNotContainNull();
     }
 
     @Test

@@ -29,4 +29,7 @@ public class FundNavHistoryEntity extends AbstractEntity {
 
     private BigDecimal accumulatedNav;
 
+    /** 平台首次发现该基金该净值日的时间，不等同于基金公司的披露时间。 */
+    private Instant firstSeenAt;
+
 }

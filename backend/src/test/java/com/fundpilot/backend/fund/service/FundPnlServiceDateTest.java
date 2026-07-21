@@ -56,6 +56,7 @@ class FundPnlServiceDateTest {
         assertThat(pnl.isEstimated()).isFalse();
         assertThat(pnl.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
         assertThat(pnl.valuationDate()).isEqualTo(Instant.parse("2026-07-17T00:00:00Z"));
+        assertThat(pnl.valuationFirstSeenAt()).isEqualTo(Instant.parse("2026-07-20T11:00:00Z"));
         verifyNoInteractions(marketRealtimeCache);
     }
 
@@ -172,6 +173,7 @@ class FundPnlServiceDateTest {
         entity.setNavDate(Instant.parse(date));
         entity.setNav(new BigDecimal(accumulatedNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
+        entity.setFirstSeenAt(Instant.parse("2026-07-20T11:00:00Z"));
         return entity;
     }
 }

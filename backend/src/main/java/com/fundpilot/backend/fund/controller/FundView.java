@@ -41,6 +41,7 @@ import java.util.List;
  * @param holdingAmount        持仓市值(可空——无持仓或无净值时为 null;估算态用昨日净值推算)
  * @param dailyPnl             今日盈亏(昨日市值×今日涨跌幅,可空——无持仓或无净值时为 null)
  * @param totalPnl             总盈亏(盘后用落库净值算/盘中估算,可空——无持仓或无净值时为 null)
+ * @param valuationFirstSeenAt 当前收益所用确认净值首次由平台发现的时间(非基金公司披露时间)
  * @param createdDate          创建时间
  */
 public record FundView(
@@ -69,6 +70,7 @@ public record FundView(
         BigDecimal valuationNav,
         String valuationSource,
         Instant valuationDate,
+        Instant valuationFirstSeenAt,
         String estimateTime,
         String baseNavDate,
         Instant createdDate,
@@ -95,7 +97,7 @@ public record FundView(
                 fund.isPositionWarningEnabled(),
                 fund.getPositionWarningRatio(),
                 null, false, false, EstimateStatus.NOT_ATTEMPTED,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
                 fund.getCreatedDate(), groupsOf(fund));
     }
 
@@ -127,6 +129,7 @@ public record FundView(
                 pnl.valuationNav(),
                 pnl.valuationSource(),
                 pnl.valuationDate(),
+                pnl.valuationFirstSeenAt(),
                 pnl.estimateTime(),
                 pnl.baseNavDate(),
                 fund.getCreatedDate(), groupsOf(fund));

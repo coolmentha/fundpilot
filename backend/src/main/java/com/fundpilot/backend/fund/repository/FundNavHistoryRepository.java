@@ -16,6 +16,7 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
         Instant getNavDate();
         java.math.BigDecimal getNav();
         java.math.BigDecimal getAccumulatedNav();
+        Instant getFirstSeenAt();
     }
 
     /**
@@ -55,8 +56,8 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      */
     List<FundNavHistoryEntity> findTop2ByFundEntity_IdOrderByNavDateDesc(Long fundId);
 
-    @Query(value = "select fund_id as fundId, nav_date as navDate, nav, accumulated_nav as accumulatedNav " +
-            "from (select fund_id, nav_date, nav, accumulated_nav, " +
+    @Query(value = "select fund_id as fundId, nav_date as navDate, nav, accumulated_nav as accumulatedNav, " +
+            "first_seen_at as firstSeenAt from (select fund_id, nav_date, nav, accumulated_nav, first_seen_at, " +
             "row_number() over (partition by fund_id order by nav_date desc) as row_num " +
             "from fund_nav_history where deleted_date is null and fund_id in (:fundIds)) ranked " +
             "where row_num <= 2 order by fund_id, nav_date desc", nativeQuery = true)

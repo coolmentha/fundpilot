@@ -91,6 +91,7 @@ public class FundPnlService {
             nav.setNavDate(row.getNavDate());
             nav.setNav(row.getNav());
             nav.setAccumulatedNav(row.getAccumulatedNav());
+            nav.setFirstSeenAt(row.getFirstSeenAt());
             navsByFund.computeIfAbsent(row.getFundId(), ignored -> new ArrayList<>()).add(nav);
         });
         List<String> fundCodes = funds.stream().map(FundEntity::getFundCode)
@@ -167,7 +168,8 @@ public class FundPnlService {
 
         return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed, estimateStatus,
                 holdingShares, holdingAmount, dailyPnl, totalPnl, positionNav, valuationSource,
-                latestTwo.isEmpty() ? null : latestTwo.get(0).getNavDate(), estimateTime, baseNavDate);
+                latestTwo.isEmpty() ? null : latestTwo.get(0).getNavDate(),
+                latestTwo.isEmpty() ? null : latestTwo.get(0).getFirstSeenAt(), estimateTime, baseNavDate);
     }
 
     /** 从实时缓存读取 fundgz 当日估值;缓存未命中降级返 empty。 */
@@ -265,7 +267,7 @@ public class FundPnlService {
 
     private Pnl emptyPnl() {
         return new Pnl(null, false, false, EstimateStatus.NOT_ATTEMPTED, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     /**
@@ -292,6 +294,7 @@ public class FundPnlService {
             BigDecimal valuationNav,
             String valuationSource,
             Instant valuationDate,
+            Instant valuationFirstSeenAt,
             String estimateTime,
             String baseNavDate) {
     }
