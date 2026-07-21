@@ -19,6 +19,7 @@
 - 登录接口使用 `MD5(MD5(path) + token + timestamp + secret)`，path 不含 query。
 - Token 只存后端 30 分钟内存会话，完成、取消、超时清除。
 - Spring Boot 4 客户端注入 `tools.jackson.databind.ObjectMapper`；不得使用 Flyway 间接依赖的 Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper`，后者没有 Boot 自动配置 Bean。
+- `YangjibaoClient` 使用 `RestClient.builder()` 构建专用客户端，不依赖生产上下文未提供的 `RestClient.Builder` Bean。
 - 提交只接收预览 item ID 与 `KEEP_LOCAL/SYNC_TARGET`，份额和成本以服务端快照为准。
 - 同 code 多账户最多选择一份。新 code 复用初始持仓；已有 code 显式选择保留或按锁后差额生成 ADJUST。
 
@@ -40,7 +41,7 @@
 ## 6. Tests Required
 
 - 两种签名与 query 剥离；二维码 Header 与响应解析。
-- 轻量 Spring 上下文必须能同时装配 Boot Jackson 3、RestClient 与 `YangjibaoClient`。
+- 轻量 Spring 上下文只加载 Boot Jackson 3 时必须能装配 `YangjibaoClient`，不得在测试中额外加载生产环境没有的 RestClient 自动配置。
 - 扫码、预览、新基金导入、同 code 多选拒绝。
 - 目标份额正差、负差、零差和并发锁后重算。
 - 前端未选处理方式不可提交、同 code 选择互斥。

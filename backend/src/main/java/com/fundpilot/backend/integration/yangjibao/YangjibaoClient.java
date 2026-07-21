@@ -24,14 +24,14 @@ public class YangjibaoClient {
     private final String secret;
     private final Clock clock = Clock.systemUTC();
 
-    public YangjibaoClient(RestClient.Builder builder, ObjectMapper mapper, YangjibaoSigner signer,
+    public YangjibaoClient(ObjectMapper mapper, YangjibaoSigner signer,
                            @Value("${fundpilot.yangjibao.base-url}") String baseUrl,
                            @Value("${fundpilot.yangjibao.secret}") String secret,
                            @Value("${fundpilot.yangjibao.timeout:PT15S}") Duration timeout) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(timeout);
         requestFactory.setReadTimeout(timeout);
-        this.client = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
+        this.client = RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
         this.mapper = mapper;
         this.signer = signer;
         this.secret = secret;
