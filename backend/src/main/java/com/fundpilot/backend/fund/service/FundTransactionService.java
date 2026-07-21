@@ -276,4 +276,28 @@ public class FundTransactionService {
         }
         return FundTransactionView.from(fundTransactionRepository.save(tx));
     }
+
+    /** 锁后把事实持仓校准到目标份额；零差额不写流水。 */
+    @Transactional
+    public TargetHoldingAdjustment adjustToHoldingShares(Long fundId, BigDecimal targetShares) {
+        fundRepository.findByIdForUpdate(fundId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
+        BigDecimal target = ShareScale.normalize(targetShares);
+        if (target == null || target.signum() < 0) {
+            throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "目标持仓份额不能为负数");
+        }
+        BigDecimal current = ShareScale.normalize(fundPositionService.getHoldingShares(fundId));
+        BigDecimal difference = target.subtract(current);
+        if (difference.signum() == 0) {
+            return new TargetHoldingAdjustment(current, target, null);
+        }
+        FundTransactionSource source = difference.signum() > 0
+                ? FundTransactionSource.ADJUST_IN : FundTransactionSource.ADJUST_OUT;
+        FundTransactionView transaction = createManual(fundId,
+                new ManualTransactionRequest(source, null, difference.abs(), null, Instant.now()));
+        return new TargetHoldingAdjustment(current, target, transaction);
+    }
+
+    public record TargetHoldingAdjustment(BigDecimal previousShares, BigDecimal targetShares,
+                                          FundTransactionView transaction) {}
 }

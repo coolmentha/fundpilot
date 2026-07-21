@@ -351,6 +351,25 @@ export function useUpdateUserConfig() {
     });
 }
 
+// ===== 养基宝持仓导入 =====
+export const createYangjibaoSession = () => post('/api/imports/yangjibao/sessions');
+export const getYangjibaoSession = (id) => get(`/api/imports/yangjibao/sessions/${id}`);
+export const getYangjibaoPreview = (id) => get(`/api/imports/yangjibao/sessions/${id}/preview`);
+export const cancelYangjibaoSession = (id) => del(`/api/imports/yangjibao/sessions/${id}`);
+
+export function useRunYangjibaoImport() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({sessionId, items}) => post(`/api/imports/yangjibao/sessions/${sessionId}/import`, {items}),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['portfolio-summary']});
+            qc.invalidateQueries({queryKey: ['portfolio-returns']});
+        },
+    });
+}
+
 // ===== 行情 =====
 export function useMarketIndicatorsToday(fundId) {
     return useQuery({
