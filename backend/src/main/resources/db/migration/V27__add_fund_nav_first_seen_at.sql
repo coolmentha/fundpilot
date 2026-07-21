@@ -1,5 +1,5 @@
 ALTER TABLE fund_nav_history
-    ADD COLUMN first_seen_at TIMESTAMPTZ;
+    ADD COLUMN first_seen_at TIMESTAMPTZ DEFAULT now();
 
 -- 历史数据无法还原外部实际披露时刻，使用本平台原始入库时间作为首次发现时间。
 UPDATE fund_nav_history
