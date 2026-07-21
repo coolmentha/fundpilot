@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,5 +32,12 @@ public class FundNavHistoryEntity extends AbstractEntity {
 
     /** 平台首次发现该基金该净值日的时间，不等同于基金公司的披露时间。 */
     private Instant firstSeenAt;
+
+    @PrePersist
+    void assignFirstSeenAt() {
+        if (firstSeenAt == null) {
+            firstSeenAt = Instant.now();
+        }
+    }
 
 }

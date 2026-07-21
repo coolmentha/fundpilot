@@ -205,6 +205,7 @@ public class MarketDataFetchService {
                     entity.setNavDate(s.navDate());
                     entity.setNav(s.nav());
                     entity.setAccumulatedNav(s.accumulatedNav());
+                    entity.setFirstSeenAt(clock.instant());
                     return entity;
                 })
                 .toList();
