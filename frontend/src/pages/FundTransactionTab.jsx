@@ -7,13 +7,18 @@ import {datetime, money, fundSourceOptions} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import PendingTransactionEditModal from '../components/PendingTransactionEditModal.jsx';
-import {canEditPendingTransaction} from '../transactionEditing.js';
+import {adjustmentFromTarget, canEditPendingTransaction} from '../transactionEditing.js';
 
 const {Title} = Typography;
 
-// 买入类写金额,卖出类+调整类写份额(与后端 createManual 方向一致)
-const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT', 'ADJUST_IN', 'ADJUST_OUT']);
+// 买入类写金额,卖出类写份额(与后端 createManual 方向一致)
+const SELL_SOURCES = new Set(['DECREASE', 'TRANSFER_OUT']);
 const ADJUST_SOURCES = new Set(['ADJUST_IN', 'ADJUST_OUT']);
+const ADJUST_TARGET_SOURCE = 'ADJUST_TARGET';
+const transactionSourceOptions = [
+    ...fundSourceOptions.filter((option) => !ADJUST_SOURCES.has(option.value)),
+    {value: ADJUST_TARGET_SOURCE, label: '调整持仓'},
+];
 
 /**
  * 基金详情 · 交易流水 tab(issue #18 交易合并到基金详情 + 手动录入)。
@@ -28,12 +33,14 @@ export default function FundTransactionTab({fundId}) {
     const createManual = useCreateManualTransaction(fundId);
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [adjustmentConfirmation, setAdjustmentConfirmation] = useState(null);
     const [form] = Form.useForm();
     const source = Form.useWatch('source', form);
     const isSell = source && SELL_SOURCES.has(source);
-    const isAdjust = source && ADJUST_SOURCES.has(source);
+    const isAdjustTarget = source === ADJUST_TARGET_SOURCE;
     const isTransferOut = source === 'TRANSFER_OUT';
     const currentFund = funds?.find((fund) => fund.id === fundId);
+    const currentHoldingShares = Number(currentFund?.holdingShares ?? 0);
     const {data: feeRates} = useFundFeeRates(fundId);
     const redemptionHint = feeRates?.redemptionLadder?.length
         ? feeRates.redemptionLadder.map((tier, index) => {
@@ -72,14 +79,33 @@ export default function FundTransactionTab({fundId}) {
         },
     ];
 
+    const createTransaction = async (body) => {
+        await createManual.mutateAsync(body);
+        setAdjustmentConfirmation(null);
+        setOpen(false);
+        form.resetFields();
+    };
+
     const submit = async () => {
         const values = await form.validateFields();
-        const body = {
-            source: values.source,
-            tradeDate: values.tradeDate
-                ? `${values.tradeDate.format('YYYY-MM-DD')}T00:00:00+08:00`
-                : null,
-        };
+        const tradeDate = values.tradeDate
+            ? `${values.tradeDate.format('YYYY-MM-DD')}T00:00:00+08:00`
+            : null;
+        if (isAdjustTarget) {
+            const adjustment = adjustmentFromTarget(currentHoldingShares, values.targetShares);
+            if (!adjustment) {
+                form.setFields([{name: 'targetShares', errors: ['目标持仓与当前持仓相同，无需调整']}]);
+                return;
+            }
+            setAdjustmentConfirmation({
+                ...adjustment,
+                currentShares: currentHoldingShares,
+                targetShares: Number(values.targetShares),
+                tradeDate,
+            });
+            return;
+        }
+        const body = {source: values.source, tradeDate};
         if (SELL_SOURCES.has(values.source)) {
             body.shares = values.shares;
         } else {
@@ -89,9 +115,7 @@ export default function FundTransactionTab({fundId}) {
         if (values.source === 'TRANSFER_OUT' && values.targetFundId) {
             body.targetFundId = values.targetFundId;
         }
-        await createManual.mutateAsync(body);
-        setOpen(false);
-        form.resetFields();
+        await createTransaction(body);
     };
 
     return (
@@ -106,14 +130,20 @@ export default function FundTransactionTab({fundId}) {
                    destroyOnClose onClose={() => form.resetFields()}>
                 <Form form={form} layout="vertical" initialValues={{source: 'INCREASE', tradeDate: dayjs()}}>
                     <Form.Item label="来源" name="source" rules={[{required: true}]}>
-                        <Select options={fundSourceOptions}/>
+                        <Select options={transactionSourceOptions}/>
                     </Form.Item>
                     <Form.Item label="交易发生日" name="tradeDate"
                                rules={[{required: true, message: '请选择交易发生日'}]}>
                         <DatePicker className="full-width"
                                     disabledDate={(date) => date && date.isAfter(dayjs().endOf('day'))}/>
                     </Form.Item>
-                    {isSell ? (
+                    {isAdjustTarget ? (
+                        <Form.Item label="调整后持仓份额" name="targetShares"
+                                   extra={`当前持仓 ${currentHoldingShares.toFixed(2)} 份；系统将自动判断调增或调减`}
+                                   rules={[{required: true, message: '请输入调整后持仓份额'}]}>
+                            <InputNumber className="full-width" min={0} step={0.01} precision={2}/>
+                        </Form.Item>
+                    ) : isSell ? (
                         <Form.Item label="份额" required
                                    extra={currentFund?.holdingShares == null ? null : `当前可用 ${Number(currentFund.holdingShares).toFixed(2)} 份`}>
                             <Space.Compact block>
@@ -142,18 +172,31 @@ export default function FundTransactionTab({fundId}) {
                                         .map(f => ({value: f.id, label: `${f.fundName}(${f.fundCode})`}))}/>
                         </Form.Item>
                     )}
-                    {isSell && !isAdjust && (
+                    {isSell && (
                         <Alert type="info" showIcon
                                message={redemptionHint
                                    ? `赎回费参考：${redemptionHint}`
                                    : '赎回费率未获取，确认时按可用费率降级计算。'}
                                description="最终按 FIFO 持有天数和交易发生日净值确认，当前录入份额不含手续费预扣。"/>
                     )}
-                    {isAdjust && (
-                        <Alert type="info" showIcon
-                               message="调整交易录入即生效,直接增减持仓份额;不算净值/手续费/不建 lot,用于账面与真实对不上的修正。"/>
-                    )}
                 </Form>
+            </Modal>
+            <Modal title="确认调整持仓" open={!!adjustmentConfirmation}
+                   onCancel={() => setAdjustmentConfirmation(null)}
+                   onOk={() => createTransaction({
+                       source: adjustmentConfirmation.source,
+                       shares: adjustmentConfirmation.shares,
+                       tradeDate: adjustmentConfirmation.tradeDate,
+                   })}
+                   okText="确认调整" okButtonProps={{loading: createManual.isPending}}>
+                {adjustmentConfirmation && (
+                    <Space direction="vertical" size={4}>
+                        <span>当前持仓：{adjustmentConfirmation.currentShares.toFixed(2)} 份</span>
+                        <span>调整后持仓：{adjustmentConfirmation.targetShares.toFixed(2)} 份</span>
+                        <span>{adjustmentConfirmation.source === 'ADJUST_IN' ? '调增' : '调减'}：{adjustmentConfirmation.shares.toFixed(2)} 份</span>
+                        <Alert type="warning" showIcon message="确认后立即修正持仓份额，不计算净值、手续费或交易批次。"/>
+                    </Space>
+                )}
             </Modal>
             {editing && (
                 <PendingTransactionEditModal transaction={editing}

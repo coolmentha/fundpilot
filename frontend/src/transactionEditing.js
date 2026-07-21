@@ -13,4 +13,17 @@ export function pendingTransactionBody(source, values) {
     };
 }
 
+export function adjustmentFromTarget(currentShares, targetShares) {
+    const current = Number(currentShares ?? 0);
+    const target = Number(targetShares);
+    if (!Number.isFinite(current) || !Number.isFinite(target)) return null;
+
+    const difference = Number((target - current).toFixed(2));
+    if (difference === 0) return null;
+    return {
+        source: difference > 0 ? 'ADJUST_IN' : 'ADJUST_OUT',
+        shares: Math.abs(difference),
+    };
+}
+
 export {BUY_SOURCES};
