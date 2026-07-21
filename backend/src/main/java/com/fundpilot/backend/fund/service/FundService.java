@@ -11,6 +11,7 @@ import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
+import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.event.FundCreatedEvent;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
@@ -87,6 +88,7 @@ public class FundService {
         FundEntity fund = new FundEntity();
         fund.setFundCode(request.fundCode());
         fund.setFundName(request.fundName());
+        fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
 
         // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填)
         FundTypeClassification fallback = request.fundSubType() == null && request.fundCategory() == null
@@ -194,6 +196,9 @@ public class FundService {
         FundEntity fund = requireFund(id);
         if (request.fundName() != null) {
             fund.setFundName(request.fundName());
+            if (fund.getInvestmentTarget() == null) {
+                fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
+            }
         }
         if (request.fundCategory() != null) {
             fund.setFundCategory(request.fundCategory());
@@ -231,6 +236,11 @@ public class FundService {
         if (fundCategory == null) {
             throw new BusinessException(ErrorCode.FUND_CATEGORY_REQUIRED, "基金类型不能为空(阻塞默认档位查询)");
         }
+    }
+
+    private InvestmentTarget inferInvestmentTarget(String fundName) {
+        return fundName != null && fundName.toUpperCase(java.util.Locale.ROOT).contains("QDII")
+                ? InvestmentTarget.QDII : null;
     }
 
     private BigDecimal normalizePositionWarningRatio(BigDecimal ratio) {

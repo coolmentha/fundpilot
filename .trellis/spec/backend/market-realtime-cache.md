@@ -56,6 +56,9 @@ public void refreshFundEstimates(); // A 股完整行情运行时跳过,其余�
 `FundView` 新增 `estimateStatus: NOT_ATTEMPTED|AVAILABLE|UNAVAILABLE|STALE|TIMEOUT|PARSE_ERROR`；
 兼容字段 `estimateFetchFailed` 仅在 `TIMEOUT/PARSE_ERROR` 时为 true。
 
+`fund.investment_target` 是 QDII 收益分支的持久化判定字段。`V26__backfill_qdii_investment_target.sql`
+仅把名称含 `QDII` 且该字段为空的存量基金回填为 `QDII`；`FundService.create/update` 对后续空分类执行相同识别。
+
 ---
 
 ## Contracts
@@ -134,6 +137,7 @@ N 个前端客户端共享同一份缓存。
 - 实时行情监听器调用 `refreshRealtimeWithoutEstimates()`；独立监听器调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 普通基金今日净值未落库时禁止用 T-1 对 T-2 冒充今日涨跌。
 - QDII 已有两期确认净值时，收益服务优先使用最新两期净值并返回真实 `valuationDate`，不要求最新日期等于今天；前端合并估值缓存时不得覆盖该确认收益。
+- 收益测试不能只手工构造 `InvestmentTarget.QDII`；必须另有创建链路测试证明真实基金会持久化该分类。
 
 ### 14:50 串行契约
 
@@ -171,6 +175,8 @@ N 个前端客户端共享同一份缓存。
 | 晚间净值远端日期晚于本地最新日期 | 不要求等于今天，在短事务内增量落库 |
 | FOF/QDII 新净值仍滞后今天 | 按真实 navDate 落库，不受 fundgz 状态阻断 |
 | QDII 两期确认净值齐备且同时存在盘中估值 | 使用最新两期确认净值计算收益，`isEstimated=false`，展示最新 `valuationDate` |
+| 存量基金名称含 QDII 且 `investment_target IS NULL` | V26 回填为 `QDII` |
+| 存量基金已有非空 `investment_target` | V26 保持原值，不覆盖人工或既有分类 |
 
 ---
 
@@ -182,6 +188,7 @@ N 个前端客户端共享同一份缓存。
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
 - **Good**:QDII 在北京时间 22:29 首次返回当日 `gztime`,估值专用调度将状态从 STALE 更新为 AVAILABLE
 - **Good**:QDII 最新净值日仍为 7 月 17 日时，收益按 7 月 17 日与上一期确认净值计算并显示净值日；盘中估值不覆盖确认收益
+- **Good**:通过基金搜索创建名称含 QDII 的基金，`investmentTarget` 自动保存为 `QDII`
 - **Good**:中国节假日晚间境外市场正常交易,估值专用刷新不受 A 股交易日历阻断
 - **Good**:东方财富启动预热超时,应用 readiness 仍可及时完成,缓存等待后台任务或下次定时刷新
 - **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
@@ -195,6 +202,7 @@ N 个前端客户端共享同一份缓存。
 - **Bad**:估值已进入当日阶段后发生空响应/失败,收益服务仍用上一期已公布净值冒充当前持仓市值/总盈亏
 - **Bad**:普通基金今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
 - **Bad**:观察列表把独立估值接口结果覆盖到已由后端选定的 QDII 确认收益
+- **Bad**:测试手工设置 QDII 枚举但真实创建链路从不写该字段，导致测试通过而生产分支永远不命中
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
 - **Bad**:行情抓取和信号生成使用两个同秒 cron,信号可能先读到缺失快照
 - **Bad**:从用户自选指数的 `f104/f105` 相加市场宽度,会因沪深300等成分范围重叠而重复计数
@@ -220,6 +228,7 @@ N 个前端客户端共享同一份缓存。
 - `FundPnlServiceTest`:断言估值阶段开始前使用最近确认单位净值；估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
 - `FundPnlServiceDateTest`:断言 QDII 最新净值日期早于今天且估值同时存在时，仍使用最新两期确认净值、上一期单位净值作为收益基准，并返回真实 `valuationDate`。
 - `querySafety.test.js`:断言观察列表合并独立估值接口时保留 QDII 的确认收益、`isEstimated=false` 和 `valuationDate`。
+- `FundServiceTest`:通过真实创建入口断言名称含 QDII 时 `FundView.investmentTarget=QDII`；CI 在 PostgreSQL 上执行 V26 与 Hibernate validate。
 - `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
 
 ---
@@ -272,6 +281,23 @@ public void warmFundEstimatesAfterReady() {
 
 // STALE/NOT_ATTEMPTED:今日涨跌 0,市值使用最近确认净值。
 // UNAVAILABLE/TIMEOUT/PARSE_ERROR:返回未知,不冒充交易中的当前值。
+```
+
+### Wrong:只在收益测试里手工设置 QDII
+
+```java
+fund.setInvestmentTarget(InvestmentTarget.QDII); // 真实创建链路没有写入，生产仍为空
+```
+
+### Correct:创建时持久化并迁移存量空分类
+
+```java
+fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
+```
+
+```sql
+UPDATE fund SET investment_target = 'QDII'
+WHERE investment_target IS NULL AND fund_name ILIKE '%QDII%';
 ```
 
 ### Wrong:基金估值失败沿用通用旧缓存降级

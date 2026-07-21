@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundSubType;
+import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,17 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
         assertThat(view.positionWarningEnabled()).isTrue();
         assertThat(view.positionWarningRatio()).isEqualByComparingTo("0.30");
+    }
+
+    @Test
+    void create_QDII名称自动填充投资目标() {
+        FundCreateRequest request = new FundCreateRequest(
+                "019736", "宝盈纳斯达克100指数发起(QDII)A人民币",
+                FundCategory.BROAD_BASE, FundSubType.INDEX, null);
+
+        FundView view = fundService.create(request);
+
+        assertThat(view.investmentTarget()).isEqualTo(InvestmentTarget.QDII);
     }
 
     @Test
