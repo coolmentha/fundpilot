@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
+import YangjibaoImportModal from '../components/YangjibaoImportModal.jsx';
 import {isQueryDataReady} from '../querySafety.js';
 
 const {Title, Text} = Typography;
@@ -30,6 +31,7 @@ export default function SettingsPage() {
     const updateConfig = useUpdateUserConfig();
     const [selectedOverride, setSelectedOverride] = useState(null);
     const [monthlyBudgetOverride, setMonthlyBudgetOverride] = useState(undefined);
+    const [importOpen, setImportOpen] = useState(false);
     const selected = selectedOverride ?? config?.watchedIndices ?? [];
     const monthlyDcaBudget = monthlyBudgetOverride === undefined
         ? (config?.monthlyDcaBudget ?? null)
@@ -43,7 +45,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <Card title={<Title level={4}>用户配置</Title>} style={{maxWidth: 600}}>
+        <><Card title={<Title level={4}>用户配置</Title>} style={{maxWidth: 600}}>
             <Space direction="vertical" className="full-width" size="large">
                 <div>
                     <Text type="secondary" style={{display: 'block', marginBottom: 8}}>每月定投预算</Text>
@@ -79,7 +81,8 @@ export default function SettingsPage() {
                 {isError && <QueryErrorState onRetry={refetch} description="用户配置加载失败"/>}
                 <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
                         onClick={save}>保存配置</Button>
+                <Button onClick={() => setImportOpen(true)}>从养基宝导入持仓</Button>
             </Space>
-        </Card>
+        </Card><YangjibaoImportModal open={importOpen} onClose={() => setImportOpen(false)}/></>
     );
 }

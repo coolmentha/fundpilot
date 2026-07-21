@@ -27,6 +27,8 @@ public interface FundRepository extends JpaRepository<FundEntity, Long> {
      */
     List<FundEntity> findByStatus(FundStatus status);
 
+    Optional<FundEntity> findByFundCode(String fundCode);
+
     /** 锁定基金行，串行化依赖事实持仓校验的手工调整。 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select f from FundEntity f where f.id = :id")
