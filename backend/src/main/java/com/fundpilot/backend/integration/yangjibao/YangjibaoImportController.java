@@ -12,13 +12,47 @@ import java.util.List;
 public class YangjibaoImportController {
     private final YangjibaoImportService service;
 
-    @PostMapping("/sessions") public ApiResponse<YangjibaoImportService.SessionView> create() { return ApiResponse.ok(service.create()); }
-    @GetMapping("/sessions/{id}") public ApiResponse<YangjibaoImportService.SessionView> state(@PathVariable String id) { return ApiResponse.ok(service.state(id)); }
-    @GetMapping("/sessions/{id}/preview") public ApiResponse<List<YangjibaoImportService.PreviewItem>> preview(@PathVariable String id) { return ApiResponse.ok(service.preview(id)); }
-    @PostMapping("/sessions/{id}/import") public ApiResponse<List<YangjibaoImportService.ImportResult>> run(@PathVariable String id, @RequestBody ImportRequest request) { return ApiResponse.ok(service.run(id, request.items())); }
-    @DeleteMapping("/sessions/{id}") public ApiResponse<Void> cancel(@PathVariable String id) { service.cancel(id); return ApiResponse.ok(null); }
+    @PostMapping("/sessions")
+    public ApiResponse<YangjibaoImportService.SessionView> create() {
+        return ApiResponse.ok(service.create());
+    }
 
-    public record ImportRequest(List<Selection> items) {}
-    public record Selection(String itemId, ExistingMode existingMode) {}
-    public enum ExistingMode { KEEP_LOCAL, SYNC_TARGET }
+    @GetMapping("/sessions/{id}")
+    public ApiResponse<YangjibaoImportService.SessionView> state(@PathVariable String id) {
+        return ApiResponse.ok(service.state(id));
+    }
+
+    @GetMapping("/sessions/{id}/preview")
+    public ApiResponse<List<YangjibaoImportService.PreviewItem>> preview(@PathVariable String id) {
+        return ApiResponse.ok(service.preview(id));
+    }
+
+    @PostMapping("/sessions/{id}/import")
+    public ApiResponse<YangjibaoImportService.ImportJobView> run(@PathVariable String id, @RequestBody ImportRequest request) {
+        return ApiResponse.ok(service.startImport(id, request.items()));
+    }
+
+    @GetMapping("/sessions/{id}/import")
+    public ApiResponse<YangjibaoImportService.ImportJobView> importStatus(@PathVariable String id) {
+        return ApiResponse.ok(service.importStatus(id));
+    }
+
+    @PostMapping("/sessions/{id}/import/retry")
+    public ApiResponse<YangjibaoImportService.ImportJobView> retryFailed(@PathVariable String id) {
+        return ApiResponse.ok(service.retryFailed(id));
+    }
+
+    @DeleteMapping("/sessions/{id}")
+    public ApiResponse<Void> cancel(@PathVariable String id) {
+        service.cancel(id);
+        return ApiResponse.ok(null);
+    }
+
+    public record ImportRequest(List<Selection> items) {
+    }
+
+    public record Selection(String itemId, ExistingMode existingMode) {
+    }
+
+    public enum ExistingMode {KEEP_LOCAL, SYNC_TARGET}
 }

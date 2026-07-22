@@ -10,18 +10,23 @@
 - `GET /api/imports/yangjibao/sessions/{id}`
 - `GET /api/imports/yangjibao/sessions/{id}/preview`
 - `POST /api/imports/yangjibao/sessions/{id}/import`
+- `GET /api/imports/yangjibao/sessions/{id}/import`
+- `POST /api/imports/yangjibao/sessions/{id}/import/retry`
 - `DELETE /api/imports/yangjibao/sessions/{id}`
 - `FundTransactionService.adjustToHoldingShares(Long, BigDecimal)`
 
 ## 3. Contracts
 
 - `/qr_code` 与 `/qr_code_state/{id}` 使用空 Token 计算 `MD5(path + timestamp + secret)`；JDK 客户端省略空 `Authorization` Header。
-- 登录接口使用 `MD5(MD5(path) + token + timestamp + secret)`，path 不含 query。
+- 登录接口使用 `MD5(path + token + timestamp + secret)`，path 不含 query。
 - Token 只存后端 30 分钟内存会话，完成、取消、超时清除。
 - Spring Boot 4 客户端注入 `tools.jackson.databind.ObjectMapper`；不得使用 Flyway 间接依赖的 Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper`，后者没有 Boot 自动配置 Bean。
 - `YangjibaoClient` 使用 `RestClient.builder()` 构建专用客户端，不依赖生产上下文未提供的 `RestClient.Builder` Bean。
 - 提交只接收预览 item ID 与 `KEEP_LOCAL/SYNC_TARGET`，份额和成本以服务端快照为准。
 - 同 code 多账户最多选择一份。新 code 复用初始持仓；已有 code 显式选择保留或按锁后差额生成 ADJUST。
+- 批量导入异步执行，提交立即返回任务状态；前端轮询进度，失败项可单独重试。
+- 导入任务响应固定包含 `status/total/processed/succeeded/failed/currentFund/results`；`status` 仅为 `PROCESSING/COMPLETED`。
+- 任务状态仍存于 30 分钟内存会话；应用重启或会话过期后不提供恢复，用户需重新扫码。
 
 ## 4. Validation & Error Matrix
 
@@ -30,6 +35,8 @@
 | 会话不存在/过期 | `YANGJIBAO_SESSION_NOT_FOUND/INVALID` |
 | 同 code 选择多份或未知 item | `YANGJIBAO_SESSION_INVALID` |
 | 已有基金未选处理方式 | 该项 `YANGJIBAO_IMPORT_INVALID` |
+| 导入未开始却查询进度 | `YANGJIBAO_SESSION_INVALID` |
+| 导入未完成或无失败项却重试 | `YANGJIBAO_SESSION_INVALID` |
 | 外部超时、业务码失败、解析失败 | `YANGJIBAO_API_FAILED`，不回显 Token/签名 |
 
 ## 5. Good / Base / Bad Cases
@@ -37,6 +44,7 @@
 - Good：两个账户同 code，选择其中一份并明确同步目标份额。
 - Base：已有基金选择 `KEEP_LOCAL`，返回跳过且不写库。
 - Bad：前端回传自造份额，后端忽略并只使用会话预览快照。
+- Good：批量任务返回后持续轮询，完成时 `processed == total`；仅失败项进入重试任务。
 
 ## 6. Tests Required
 
@@ -45,9 +53,10 @@
 - 扫码、预览、新基金导入、同 code 多选拒绝。
 - 目标份额正差、负差、零差和并发锁后重算。
 - 前端未选处理方式不可提交、同 code 选择互斥。
+- 异步任务立即返回、进度单调递增、失败项重试不重复执行成功项。
 
 ## 7. Wrong vs Correct
 
-错误：把 Token 返回前端或持久化；在导入编排层直接写交易/lot；使用预览时旧份额计算差额；客户端注入 Jackson 2 mapper。
+错误：让批量 HTTP 请求同步等待全部基金完成；把 Token 返回前端或持久化；在导入编排层直接写交易/lot；使用预览时旧份额计算差额；客户端注入 Jackson 2 mapper。
 
-正确：Token 留在短期会话；调用现有 Fund/Transaction Service；提交时在交易事务锁内重算差额；客户端注入 Boot 管理的 Jackson 3 mapper。
+正确：提交立即返回内存任务并轮询进度；Token 留在短期会话；调用现有 Fund/Transaction Service；提交时在交易事务锁内重算差额；客户端注入 Boot 管理的 Jackson 3 mapper。

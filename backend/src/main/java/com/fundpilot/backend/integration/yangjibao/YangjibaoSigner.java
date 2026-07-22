@@ -13,7 +13,7 @@ public class YangjibaoSigner {
     }
 
     public String authenticated(String path, String token, long timestamp, String secret) {
-        return md5(md5(pathOnly(path)) + token + timestamp + secret);
+        return md5(pathOnly(path) + token + timestamp + secret);
     }
 
     private String pathOnly(String path) {

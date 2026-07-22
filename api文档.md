@@ -12,7 +12,7 @@
 ## 签名算法
 
 ```
-Request-Sign = MD5( MD5(path) + token + TsSec + "YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc" )
+Request-Sign = MD5( path + token + TsSec + "YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc" )
 ```
 
 | 参数 | 说明 |
@@ -30,9 +30,9 @@ Request-Time: {TsSec}
 Request-Sign: {sign}
 ```
 
-### 二维码公开接口签名例外
+### 二维码公开接口
 
-`/qr_code` 与 `/qr_code_state/{id}` 不需要登录态，但仍需发送匿名签名请求头：
+`/qr_code` 与 `/qr_code_state/{id}` 不需要登录态，使用与通用接口相同的签名公式，但 `token` 取空字符串 (`""`)：
 
 ```text
 Authorization: <空字符串>
@@ -40,10 +40,10 @@ Request-Time: {TsSec}
 Request-Sign: MD5(path + "" + TsSec + secret)
 ```
 
-这两个公开接口的签名直接拼接不含 query string 的 `path`，不使用通用登录接口的内层 `MD5(path)`。例如：
+例如：
 
 ```text
-MD5("/qr_code" + TsSec + "YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc")
+MD5("/qr_code" + "" + TsSec + "YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc")
 ```
 
 ### 通用响应格式
@@ -444,7 +444,7 @@ const SECRET = "YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc";
 function md5(s) { /* 标准 MD5 */ }
 function sign(path, token) {
   const ep = path.includes("?") ? path.split("?")[0] : path;
-  return md5("" + md5(ep) + token + Math.floor(Date.now() / 1000) + SECRET);
+  return md5("" + ep + token + Math.floor(Date.now() / 1000) + SECRET);
 }
 
 async function api(path, method = "GET", body = null) {

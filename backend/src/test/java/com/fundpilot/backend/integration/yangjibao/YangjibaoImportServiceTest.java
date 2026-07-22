@@ -33,7 +33,7 @@ class YangjibaoImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new YangjibaoImportService(client, fundRepository, positionService, fundService, transactionService);
+        service = new YangjibaoImportService(client, fundRepository, positionService, fundService, transactionService, Runnable::run);
         ReflectionTestUtils.setField(service, "ttl", Duration.ofMinutes(30));
     }
 
@@ -49,7 +49,8 @@ class YangjibaoImportServiceTest {
         String id = service.create().sessionId();
         service.state(id);
         var preview = service.preview(id);
-        var results = service.run(id, List.of(new YangjibaoImportController.Selection(preview.getFirst().itemId(), null)));
+        service.startImport(id, List.of(new YangjibaoImportController.Selection(preview.getFirst().itemId(), null)));
+        var results = service.importStatus(id).results();
 
         assertThat(results.getFirst().status()).isEqualTo("CREATED");
         verify(fundService).create(any());
@@ -69,9 +70,29 @@ class YangjibaoImportServiceTest {
         service.state(id);
         var preview = service.preview(id);
 
-        assertThatThrownBy(() -> service.run(id, preview.stream()
+        assertThatThrownBy(() -> service.startImport(id, preview.stream()
                 .map(item -> new YangjibaoImportController.Selection(item.itemId(), null)).toList()))
                 .isInstanceOf(BusinessException.class);
         verifyNoInteractions(fundService);
+    }
+
+    @Test
+    void retriesOnlyFailedImports() {
+        when(client.createQrCode()).thenReturn(new YangjibaoClient.QrCode("qr", "https://qr"));
+        when(client.qrState("qr")).thenReturn(new YangjibaoClient.QrState("2", "token"));
+        when(client.accounts("token")).thenReturn(List.of(new YangjibaoClient.Account("a", "支付宝")));
+        when(client.holdings("token", "a")).thenReturn(List.of(new YangjibaoClient.Holding(
+                "h", "017093", "示例基金", BigDecimal.TEN, BigDecimal.ONE)));
+        when(fundRepository.findByFundCode("017093")).thenReturn(Optional.empty());
+        when(fundService.create(any())).thenThrow(new RuntimeException("temporary failure")).thenReturn(null);
+
+        String id = service.create().sessionId();
+        service.state(id);
+        var item = service.preview(id).getFirst();
+        service.startImport(id, List.of(new YangjibaoImportController.Selection(item.itemId(), null)));
+
+        assertThat(service.importStatus(id).failed()).isEqualTo(1);
+        assertThat(service.retryFailed(id).failed()).isZero();
+        verify(fundService, times(2)).create(any());
     }
 }

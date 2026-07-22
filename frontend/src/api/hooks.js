@@ -355,6 +355,8 @@ export function useUpdateUserConfig() {
 export const createYangjibaoSession = () => post('/api/imports/yangjibao/sessions');
 export const getYangjibaoSession = (id) => get(`/api/imports/yangjibao/sessions/${id}`);
 export const getYangjibaoPreview = (id) => get(`/api/imports/yangjibao/sessions/${id}/preview`);
+export const getYangjibaoImportStatus = (id) => get(`/api/imports/yangjibao/sessions/${id}/import`);
+export const retryYangjibaoImport = (id) => post(`/api/imports/yangjibao/sessions/${id}/import/retry`);
 export const cancelYangjibaoSession = (id) => del(`/api/imports/yangjibao/sessions/${id}`);
 
 export function useRunYangjibaoImport() {

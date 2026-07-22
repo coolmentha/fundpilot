@@ -1,8 +1,9 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Alert, Button, Checkbox, Modal, QRCode, Radio, Space, Spin, Table, Tag, Typography} from 'antd';
+import {Alert, Button, Checkbox, Input, Modal, Progress, QRCode, Radio, Segmented, Space, Spin, Table, Tag, Typography} from 'antd';
+import {ReloadOutlined, SearchOutlined} from '@ant-design/icons';
 import {
-    cancelYangjibaoSession, createYangjibaoSession, getYangjibaoPreview,
-    getYangjibaoSession, useRunYangjibaoImport,
+    cancelYangjibaoSession, createYangjibaoSession, getYangjibaoImportStatus,
+    getYangjibaoPreview, getYangjibaoSession, retryYangjibaoImport, useRunYangjibaoImport,
 } from '../api/hooks.js';
 
 const {Text} = Typography;
@@ -12,8 +13,10 @@ export default function YangjibaoImportModal({open, onClose}) {
     const [preview, setPreview] = useState(null);
     const [selected, setSelected] = useState({});
     const [modes, setModes] = useState({});
+    const [filter, setFilter] = useState('ALL');
+    const [search, setSearch] = useState('');
     const [error, setError] = useState(null);
-    const [results, setResults] = useState(null);
+    const [job, setJob] = useState(null);
     const runImport = useRunYangjibaoImport();
 
     useEffect(() => {
@@ -24,7 +27,7 @@ export default function YangjibaoImportModal({open, onClose}) {
     }, [open]);
 
     useEffect(() => {
-        if (!open || !session || preview || results) return;
+        if (!open || !session || preview || job) return;
         const timer = setInterval(async () => {
             try {
                 const state = await getYangjibaoSession(session.sessionId);
@@ -32,48 +35,151 @@ export default function YangjibaoImportModal({open, onClose}) {
                 if (state.status === 'CONNECTED') {
                     const items = await getYangjibaoPreview(session.sessionId);
                     setPreview(items);
+                    const initial = {};
+                    const seen = new Set();
+                    items.forEach(item => {
+                        if (!item.localFundId && !seen.has(item.fundCode)) {
+                            initial[item.itemId] = true;
+                            seen.add(item.fundCode);
+                        }
+                    });
+                    setSelected(initial);
                 }
             } catch (e) { setError(e.message); }
         }, 2000);
         return () => clearInterval(timer);
-    }, [open, session, preview, results]);
+    }, [open, session, preview, job]);
 
+    useEffect(() => {
+        if (!job || job.status !== 'PROCESSING' || !session) return;
+        const timer = setInterval(() => getYangjibaoImportStatus(session.sessionId)
+            .then(setJob).catch(e => setError(e.message)), 1000);
+        return () => clearInterval(timer);
+    }, [job, session]);
+
+    const codeCounts = useMemo(() => (preview || []).reduce((map, item) =>
+        map.set(item.fundCode, (map.get(item.fundCode) || 0) + 1), new Map()), [preview]);
     const selectedCodes = useMemo(() => new Set((preview || []).filter(x => selected[x.itemId]).map(x => x.fundCode)), [preview, selected]);
+    const filtered = useMemo(() => (preview || []).filter(item => {
+        const keyword = search.trim().toLowerCase();
+        if (keyword && !`${item.fundName} ${item.fundCode} ${item.accountName}`.toLowerCase().includes(keyword)) return false;
+        if (filter === 'NEW') return !item.localFundId;
+        if (filter === 'EXISTING') return !!item.localFundId;
+        if (filter === 'CONFLICT') return codeCounts.get(item.fundCode) > 1;
+        return true;
+    }), [preview, search, filter, codeCounts]);
+
+    const chooseRows = rows => {
+        const next = {...selected};
+        const used = new Set(selectedCodes);
+        rows.forEach(item => {
+            if (!used.has(item.fundCode)) {
+                next[item.itemId] = true;
+                used.add(item.fundCode);
+            }
+        });
+        setSelected(next);
+    };
+    const setBulkMode = mode => {
+        const next = {...modes};
+        (preview || []).filter(item => selected[item.itemId] && item.localFundId).forEach(item => { next[item.itemId] = mode; });
+        setModes(next);
+    };
     const close = async () => {
-        if (session && !results) await cancelYangjibaoSession(session.sessionId).catch(() => {});
-        setSession(null); setPreview(null); setSelected({}); setModes({}); setResults(null); setError(null); onClose();
+        if (session && !job) await cancelYangjibaoSession(session.sessionId).catch(() => {});
+        setSession(null); setPreview(null); setSelected({}); setModes({}); setJob(null); setError(null); setSearch(''); setFilter('ALL'); onClose();
     };
     const submit = async () => {
         const items = (preview || []).filter(x => selected[x.itemId]).map(x => ({itemId: x.itemId, existingMode: modes[x.itemId] || null}));
-        try { setResults(await runImport.mutateAsync({sessionId: session.sessionId, items})); }
+        try { setError(null); setJob(await runImport.mutateAsync({sessionId: session.sessionId, items})); }
+        catch (e) { setError(e.message); }
+    };
+    const retry = async () => {
+        try { setError(null); setJob(await retryYangjibaoImport(session.sessionId)); }
         catch (e) { setError(e.message); }
     };
 
+    const selectedItems = (preview || []).filter(item => selected[item.itemId]);
+    const invalidSelection = selectedItems.some(item => item.localFundId && !modes[item.itemId]);
     const columns = [
-        {title: '', width: 44, render: (_, row) => <Checkbox checked={!!selected[row.itemId]}
+        {title: '', width: 44, fixed: 'left', render: (_, row) => <Checkbox checked={!!selected[row.itemId]}
             disabled={!selected[row.itemId] && selectedCodes.has(row.fundCode)}
             onChange={e => setSelected(old => ({...old, [row.itemId]: e.target.checked}))}/>},
-        {title: '来源', dataIndex: 'accountName'},
-        {title: '基金', render: (_, row) => <><div>{row.fundName}</div><Text type="secondary">{row.fundCode}</Text></>},
-        {title: '养基宝份额', dataIndex: 'yangjibaoShares'},
-        {title: '本系统份额', render: (_, row) => row.localFundId ? row.localShares : <Tag color="green">新增基金</Tag>},
-        {title: '处理方式', render: (_, row) => row.localFundId ? <Radio.Group size="small" value={modes[row.itemId]}
-            onChange={e => setModes(old => ({...old, [row.itemId]: e.target.value}))}
-            options={[{label: '以本系统为准', value: 'KEEP_LOCAL'}, {label: '同步养基宝份额', value: 'SYNC_TARGET'}]}/> : '新增并导入持仓'},
+        {title: '来源', dataIndex: 'accountName', width: 110},
+        {title: '基金', width: 210, render: (_, row) => <div className="yangjibao-fund"><strong>{row.fundName}</strong><Text type="secondary">{row.fundCode}</Text></div>},
+        {title: '养基宝份额', dataIndex: 'yangjibaoShares', width: 130, className: 'num-cell'},
+        {title: '本系统份额', width: 130, render: (_, row) => row.localFundId ? <span className="num-cell">{row.localShares}</span> : <Tag color="green">新增基金</Tag>},
+        {title: '处理方式', width: 270, render: (_, row) => row.localFundId ? <Radio.Group size="small" value={modes[row.itemId]}
+            disabled={!selected[row.itemId]} onChange={e => setModes(old => ({...old, [row.itemId]: e.target.value}))}
+            options={[{label: '保留本系统', value: 'KEEP_LOCAL'}, {label: '同步养基宝', value: 'SYNC_TARGET'}]}/> : <Text type="secondary">新增并导入持仓</Text>},
     ];
 
-    return <Modal title="从养基宝导入持仓" open={open} onCancel={close} width={900}
-        footer={preview && !results ? <Space><Button onClick={close}>取消</Button><Button type="primary" loading={runImport.isPending}
-            disabled={!Object.values(selected).some(Boolean) || (preview || []).some(x => selected[x.itemId] && x.localFundId && !modes[x.itemId])}
-            onClick={submit}>导入所选</Button></Space> : <Button onClick={close}>关闭</Button>}>
-        {error && <Alert type="error" showIcon message={error} style={{marginBottom: 16}}/>}
+    const results = job?.results || [];
+    const footer = preview && !job ? <Space wrap>
+        <Button onClick={close}>取消</Button>
+        <Button type="primary" loading={runImport.isPending} disabled={!selectedItems.length || invalidSelection} onClick={submit}>
+            导入 {selectedItems.length} 条
+        </Button>
+    </Space> : <Button onClick={close}>{job?.status === 'PROCESSING' ? '后台继续' : '关闭'}</Button>;
+
+    return <Modal className="yangjibao-import-modal" title="从养基宝导入持仓" open={open} onCancel={close}
+        width="min(1200px, 96vw)" footer={footer} destroyOnHidden>
+        <div className="yangjibao-steps" aria-label="导入进度">
+            {['扫码连接', '选择持仓', '导入结果'].map((label, index) => <span key={label} className={(preview ? 1 : 0) + (job ? 1 : 0) >= index ? 'active' : ''}>{index + 1}. {label}</span>)}
+        </div>
+        {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)}/>}
         {!session && !error && <Spin/>}
-        {session && !preview && !results && <Space direction="vertical" align="center" style={{width: '100%'}}>
+        {session && !preview && !job && <div className="yangjibao-scan">
             <QRCode value={session.qrUrl}/><Text>请使用微信扫描二维码</Text><Text type="secondary">等待扫码连接</Text>
-        </Space>}
-        {preview && !results && <Table rowKey="itemId" columns={columns} dataSource={preview} pagination={false} scroll={{x: 780}}/>}
-        {results && <Space direction="vertical" style={{width: '100%'}}>{results.map(item => <Alert key={item.itemId}
-            type={item.status === 'FAILED' ? 'error' : item.status === 'SKIPPED' ? 'info' : 'success'}
-            showIcon message={`${item.fundCode} · ${item.message}`}/>)}</Space>}
+        </div>}
+        {preview && !job && <>
+            <div className="yangjibao-summary">
+                <strong>{preview.length} 条持仓</strong>
+                <span>新增 {(preview || []).filter(x => !x.localFundId).length}</span>
+                <span>已存在 {(preview || []).filter(x => x.localFundId).length}</span>
+                <span>冲突 {(preview || []).filter(x => codeCounts.get(x.fundCode) > 1).length}</span>
+            </div>
+            <div className="yangjibao-toolbar">
+                <Input allowClear prefix={<SearchOutlined/>} placeholder="搜索基金、代码或账户" value={search} onChange={e => setSearch(e.target.value)}/>
+                <Segmented value={filter} onChange={setFilter} options={[
+                    {label: '全部', value: 'ALL'}, {label: '新增', value: 'NEW'}, {label: '已存在', value: 'EXISTING'}, {label: '冲突', value: 'CONFLICT'},
+                ]}/>
+            </div>
+            <div className="yangjibao-actions">
+                <Text>已选择 <strong>{selectedItems.length}</strong> 条</Text>
+                <Space wrap>
+                    <Button size="small" onClick={() => chooseRows(filtered)}>全选当前结果</Button>
+                    <Button size="small" onClick={() => {
+                        const next = {}; const seen = new Set();
+                        (preview || []).filter(x => !x.localFundId).forEach(item => {
+                            if (!seen.has(item.fundCode)) { next[item.itemId] = true; seen.add(item.fundCode); }
+                        });
+                        setSelected(next);
+                    }}>仅选择新增</Button>
+                    <Button size="small" onClick={() => setSelected({})}>清空</Button>
+                    <span className="yangjibao-bulk-label">已有基金批量处理</span>
+                    <Button size="small" onClick={() => setBulkMode('KEEP_LOCAL')}>保留本系统</Button>
+                    <Button size="small" onClick={() => setBulkMode('SYNC_TARGET')}>同步养基宝</Button>
+                </Space>
+            </div>
+            <Table rowKey="itemId" columns={columns} dataSource={filtered} pagination={{pageSize: 20, showSizeChanger: false}}
+                scroll={{x: 900, y: '48vh'}} size="small"/>
+            {invalidSelection && <Alert type="warning" showIcon message="请为已选择的已有基金设置处理方式"/>}
+        </>}
+        {job?.status === 'PROCESSING' && <div className="yangjibao-progress" aria-live="polite">
+            <Text type="secondary">正在导入</Text><strong>{job.processed} / {job.total}</strong>
+            <Progress percent={job.total ? Math.round(job.processed / job.total * 100) : 0}/>
+            <div><span>成功 {job.succeeded}</span><span>失败 {job.failed}</span><span>剩余 {job.total - job.processed}</span></div>
+            {job.currentFund && <Text type="secondary">当前基金：{job.currentFund}</Text>}
+        </div>}
+        {job?.status === 'COMPLETED' && <div className="yangjibao-results">
+            <div className="yangjibao-summary"><strong>导入完成</strong><span>成功 {job.succeeded}</span><span>失败 {job.failed}</span></div>
+            {job.failed > 0 && <Button icon={<ReloadOutlined/>} onClick={retry}>仅重试失败项</Button>}
+            <Table rowKey="itemId" size="small" pagination={{pageSize: 20, showSizeChanger: false}} dataSource={results} columns={[
+                {title: '基金代码', dataIndex: 'fundCode', width: 120, className: 'num-cell'},
+                {title: '结果', dataIndex: 'status', width: 110, render: value => <Tag color={value === 'FAILED' ? 'red' : value === 'SKIPPED' ? 'blue' : 'green'}>{value}</Tag>},
+                {title: '说明', dataIndex: 'message'},
+            ]}/>
+        </div>}
     </Modal>;
 }
