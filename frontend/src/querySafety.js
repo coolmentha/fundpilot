@@ -10,10 +10,11 @@ export function estimateStatusText(status) {
 
 export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError}) {
     return (funds || []).map((fund) => {
-        const confirmedQdii = fund.investmentTarget === 'QDII'
-            && fund.valuationSource === 'LATEST_CONFIRMED_NAV';
-        const effectiveEstimatesError = estimatesError && !confirmedQdii;
-        const estimate = effectiveEstimatesError || confirmedQdii ? undefined : estimates?.[fund.fundCode];
+        const confirmedNav = fund.valuationSource === 'CONFIRMED_NAV'
+            || (fund.investmentTarget === 'QDII'
+                && fund.valuationSource === 'LATEST_CONFIRMED_NAV');
+        const effectiveEstimatesError = estimatesError && !confirmedNav;
+        const estimate = effectiveEstimatesError || confirmedNav ? undefined : estimates?.[fund.fundCode];
         const estimateStatus = effectiveEstimatesError
             ? 'TIMEOUT'
             : estimate

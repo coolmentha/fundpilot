@@ -84,4 +84,23 @@ describe('query safety guards', () => {
         expect(errorRow.changePct).toBe(0.1);
         expect(errorRow.estimateFetchFailed).toBe(false);
     });
+
+    it('keeps confirmed A-share NAV ahead of an intraday estimate', () => {
+        const [row] = buildFundWatchlistRows([{
+            id: 1,
+            fundCode: '510300',
+            investmentTarget: 'A_SHARE',
+            valuationSource: 'CONFIRMED_NAV',
+            valuationDate: '2026-07-22T00:00:00Z',
+            dailyChangePct: 0.01,
+            isEstimated: false,
+            estimateStatus: 'AVAILABLE',
+        }], {
+            '510300': {estimatedChangePct: 0.02, estimateTime: '2026-07-22 15:00'},
+        }, {estimatesFetched: true, estimatesError: false});
+
+        expect(row.changePct).toBe(0.01);
+        expect(row.isEstimated).toBe(false);
+        expect(row.valuationSource).toBe('CONFIRMED_NAV');
+    });
 });
