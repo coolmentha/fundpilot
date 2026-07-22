@@ -4,7 +4,7 @@
 FROM eclipse-temurin:25-jre AS extract
 WORKDIR /workspace
 COPY target/*.jar app.jar
-RUN java -Djarmode=tools -jar app.jar extract --layers --destination extracted
+RUN java -Djarmode=tools -jar app.jar extract --launcher --layers --destination extracted
 
 # BusyBox wget 是静态二进制，避免每次构建访问 Ubuntu 安全仓库安装 curl。
 FROM busybox:1.37.0 AS busybox
@@ -31,4 +31,4 @@ ENV JAVA_OPTS="-Duser.timezone=Asia/Shanghai" \
 
 EXPOSE 8080
 USER fundpilot
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp . org.springframework.boot.loader.launch.JarLauncher"]
