@@ -40,8 +40,6 @@ jobs:
         with:
           context: backend
           push: true
-          cache-from: type=gha,scope=fundpilot-backend
-          cache-to: type=gha,mode=max,scope=fundpilot-backend
           tags: |
             ghcr.io/coolmentha/fundpilot-backend:${{ github.ref_name }}
             ghcr.io/coolmentha/fundpilot-backend:sha-${{ github.sha }}
