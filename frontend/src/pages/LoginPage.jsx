@@ -1,8 +1,9 @@
-import {useState} from 'react';
+import * as React from 'react';
 import {Alert, Button, Card, Input, Typography} from 'antd';
-import {KeyOutlined, LoginOutlined} from '@ant-design/icons';
+import {LoginOutlined, UserOutlined} from '@ant-design/icons';
 
 const {Title, Text} = Typography;
+const {useState} = React;
 
 export default function LoginPage({onLogin}) {
     const [username, setUsername] = useState('');
@@ -23,9 +24,9 @@ export default function LoginPage({onLogin}) {
                 setPassword('');
                 setError('用户名或密码错误');
             } else if (requestError?.code === 'ADMIN_AUTH_NOT_CONFIGURED') {
-                setError('服务端访问鉴权未配置');
+                setError('服务端登录鉴权未配置');
             } else {
-                setError(requestError?.message || '暂时无法验证访问 Key');
+                setError(requestError?.message || '暂时无法登录');
             }
         } finally {
             setLoading(false);
@@ -40,19 +41,19 @@ export default function LoginPage({onLogin}) {
                     Fund Pilot
                 </div>
                 <Title level={2} className="site-login-title">安全访问</Title>
-                <Text type="secondary">请输入访问 Key</Text>
+                <Text type="secondary">请输入用户名和密码</Text>
                 <form className="site-login-form" onSubmit={submit}>
-                    <Input.Password
+                    <Input
                         value={username}
                         onChange={(event) => {
                             setUsername(event.target.value);
                             if (error) setError('');
                         }}
-                        prefix={<KeyOutlined/>}
+                        prefix={<UserOutlined/>}
                         placeholder="用户名"
                         autoComplete="username"
                         autoFocus
-                        aria-label="访问 Key"
+                        aria-label="用户名"
                         size="large"
                     />
                     <Input.Password value={password} onChange={(event) => setPassword(event.target.value)}
