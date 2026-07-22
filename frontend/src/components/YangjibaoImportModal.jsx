@@ -139,7 +139,7 @@ export default function YangjibaoImportModal({open, onClose}) {
         {session && !preview && !job && <div className="yangjibao-scan">
             <span className="yangjibao-state-icon"><QrcodeOutlined/></span>
             <div><Typography.Title level={4}>连接养基宝账户</Typography.Title><Text type="secondary">使用微信扫描二维码，授权后将自动读取持仓</Text></div>
-            <div className="yangjibao-qr"><QRCode value={session.qrUrl}/></div>
+            <div className="yangjibao-qr"><QRCode value={session.qrUrl} color="#0F172A" bgColor="#FFFFFF"/></div>
             <Tag color="processing">等待扫码连接</Tag>
         </div>}
         {preview && !job && <>
