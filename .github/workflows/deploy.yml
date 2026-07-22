@@ -25,6 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # 复用 main CI 写入的 Maven 依赖缓存，避免在 Docker BuildKit 内下载完整依赖树。
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # tag 仅从已通过 main CI 的提交创建，无需在发布阶段重复执行测试。
+      - name: Package backend
+        working-directory: backend
+        run: ./mvnw -B package -Dmaven.test.skip=true
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
