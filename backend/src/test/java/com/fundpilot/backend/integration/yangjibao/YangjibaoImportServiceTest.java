@@ -61,7 +61,7 @@ class YangjibaoImportServiceTest {
         var results = service.importStatus(id).results();
 
         assertThat(results.getFirst().status()).isEqualTo("CREATED");
-        verify(fundService).create(any());
+        verify(fundService).create(argThat(request -> request.groupNames().equals(List.of("支付宝"))));
     }
 
     @Test

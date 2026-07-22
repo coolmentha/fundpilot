@@ -144,7 +144,7 @@ public class YangjibaoImportService {
         Optional<FundEntity> existing = findOwnedFund(item.fundCode());
         if (existing.isEmpty()) {
             fundService.create(new FundCreateRequest(item.fundCode(), item.fundName(), null, null, null,
-                    null, null, item.yangjibaoShares(), item.costPerShare(), null, null));
+                    null, null, item.yangjibaoShares(), item.costPerShare(), null, List.of(item.accountName())));
             return new ImportResult(item.itemId(), item.fundCode(), "CREATED", "已新增基金");
         }
         if (mode == null) {
