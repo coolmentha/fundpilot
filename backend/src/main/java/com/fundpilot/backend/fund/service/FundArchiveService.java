@@ -76,8 +76,13 @@ public class FundArchiveService {
                 fundStrategyActivationRepository.findByFundEntity_Id(fundId));
         fundTransactionRepository.deleteAll(transactions);
         signalLogRepository.deleteAll(signalLogRepository.findByFundEntity_Id(fundId));
-        fundNavHistoryRepository.deleteAll(fundNavHistoryRepository.findByFundEntity_Id(fundId));
-        marketIndicatorSnapshotRepository.deleteAll(marketIndicatorSnapshotRepository.findByFundEntity_Id(fundId));
+        // 共享行情脱离被归档用户基金，避免 JPA 在软删 fund 时级联移除共享实体。
+        var navs = fundNavHistoryRepository.findByFundEntity_Id(fundId);
+        navs.forEach(nav -> nav.setFundEntity(null));
+        fundNavHistoryRepository.saveAll(navs);
+        var snapshots = marketIndicatorSnapshotRepository.findByFundEntity_Id(fundId);
+        snapshots.forEach(snapshot -> snapshot.setFundEntity(null));
+        marketIndicatorSnapshotRepository.saveAll(snapshots);
         fundStrategyRepository.deleteAll(fundStrategyRepository.findByFundEntity_Id(fundId));
         fundRepository.delete(fund);
     }

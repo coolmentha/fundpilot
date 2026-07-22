@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
+import {ImportOutlined} from '@ant-design/icons';
 import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import YangjibaoImportModal from '../components/YangjibaoImportModal.jsx';
@@ -45,7 +46,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <><Card title={<Title level={4}>用户配置</Title>} style={{maxWidth: 600}}>
+        <><div className="settings-page"><Card title={<Title level={4}>用户配置</Title>}>
             <Space direction="vertical" className="full-width" size="large">
                 <div>
                     <Text type="secondary" style={{display: 'block', marginBottom: 8}}>每月定投预算</Text>
@@ -81,8 +82,13 @@ export default function SettingsPage() {
                 {isError && <QueryErrorState onRetry={refetch} description="用户配置加载失败"/>}
                 <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
                         onClick={save}>保存配置</Button>
-                <Button onClick={() => setImportOpen(true)}>从养基宝导入持仓</Button>
             </Space>
-        </Card><YangjibaoImportModal open={importOpen} onClose={() => setImportOpen(false)}/></>
+        </Card>
+        <Card title={<Title level={4}>数据导入</Title>}>
+            <div className="settings-import-action">
+                <div><Text strong>养基宝持仓</Text><Text type="secondary">扫码连接账户，选择需要同步的基金持仓</Text></div>
+                <Button icon={<ImportOutlined/>} onClick={() => setImportOpen(true)}>从养基宝导入</Button>
+            </div>
+        </Card></div><YangjibaoImportModal open={importOpen} onClose={() => setImportOpen(false)}/></>
     );
 }

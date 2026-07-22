@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
 import java.util.List;
+import com.fundpilot.backend.user.service.CurrentUserService;
 
 /**
  * 基金服务(issue #16 + ADR-0005):基金 CRUD 业务逻辑,Controller 只做 HTTP 路由,逻辑下沉到本层。
@@ -51,13 +52,16 @@ public class FundService {
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundGroupService fundGroupService;
     private final ApplicationEventPublisher eventPublisher;
+    private final CurrentUserService currentUserService;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     @Transactional(readOnly = true)
     public List<FundView> list() {
-        List<FundEntity> funds = fundRepository.findAll();
+        long userId = currentUserService.userId();
+        List<FundEntity> funds = userId == 0L ? fundRepository.findAll()
+                : fundRepository.findAllByOwnerId(userId);
         var pnlByFund = fundPnlService.computeForFunds(funds);
         return funds.stream()
                 .map(fund -> FundView.from(fund, pnlByFund.get(fund.getId())))
@@ -86,6 +90,8 @@ public class FundService {
             throw new BusinessException(ErrorCode.INITIAL_HOLDING_SHARES_INVALID, "初始持仓份额必须大于 0");
         }
         FundEntity fund = new FundEntity();
+        long userId = currentUserService.userId();
+        fund.setOwnerId(userId == 0L ? null : userId);
         fund.setFundCode(request.fundCode());
         fund.setFundName(request.fundName());
         fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
@@ -225,6 +231,7 @@ public class FundService {
     /** 归档基金(级联软删),委托 {@link FundArchiveService}。 */
     @Transactional
     public void archive(Long id) {
+        requireFund(id);
         fundArchiveService.archive(id);
     }
 
@@ -253,7 +260,8 @@ public class FundService {
     }
 
     private FundEntity requireFund(Long id) {
-        return fundRepository.findById(id)
+        long userId = currentUserService.userId();
+        return (userId == 0L ? fundRepository.findById(id) : fundRepository.findByIdAndOwnerId(id, userId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + id + " 不存在"));
     }
 }

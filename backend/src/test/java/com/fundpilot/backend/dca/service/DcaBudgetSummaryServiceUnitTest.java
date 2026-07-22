@@ -4,6 +4,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,9 @@ class DcaBudgetSummaryServiceUnitTest {
     @Mock
     DcaPlanForecastService dcaPlanForecastService;
 
+    @Mock
+    CurrentUserService currentUserService;
+
     private DcaBudgetSummaryService service;
 
     @BeforeEach
@@ -46,6 +50,7 @@ class DcaBudgetSummaryServiceUnitTest {
                 fundTransactionRepository,
                 dcaScheduleService,
                 dcaPlanForecastService,
+                currentUserService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(dcaScheduleService.startOfCurrentMonth(NOW)).thenReturn(MONTH_START);
         when(dcaScheduleService.startOfNextMonth(NOW)).thenReturn(MONTH_END);

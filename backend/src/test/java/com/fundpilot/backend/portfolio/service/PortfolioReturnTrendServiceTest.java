@@ -2,6 +2,7 @@ package com.fundpilot.backend.portfolio.service;
 
 import com.fundpilot.backend.portfolio.entity.PortfolioReturnSnapshotEntity;
 import com.fundpilot.backend.portfolio.repository.PortfolioReturnSnapshotRepository;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -30,7 +31,7 @@ class PortfolioReturnTrendServiceTest {
         when(repository.findByBusinessDateBetweenOrderByBusinessDateAsc(from, to)).thenReturn(List.of(first, peak, last));
 
         var service = new PortfolioReturnTrendService(repository, mock(PortfolioReturnService.class),
-                Clock.fixed(to, ZoneOffset.UTC));
+                Clock.fixed(to, ZoneOffset.UTC), mock(CurrentUserService.class));
         var result = service.getTrend("30D", from, to);
 
         assertThat(result.intervalReturn()).isEqualByComparingTo("40");

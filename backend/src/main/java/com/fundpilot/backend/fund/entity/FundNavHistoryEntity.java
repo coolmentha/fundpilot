@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.Column;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -24,6 +25,9 @@ public class FundNavHistoryEntity extends AbstractEntity {
     @JoinColumn(name = "fund_id")
     private FundEntity fundEntity;
 
+    @Column(name = "fund_code", nullable = false)
+    private String fundCode;
+
     private Instant navDate;
 
     private BigDecimal nav;
@@ -35,6 +39,9 @@ public class FundNavHistoryEntity extends AbstractEntity {
 
     @PrePersist
     void assignFirstSeenAt() {
+        if (fundCode == null && fundEntity != null) {
+            fundCode = fundEntity.getFundCode() != null ? fundEntity.getFundCode() : "LEGACY:" + fundEntity.getId();
+        }
         if (firstSeenAt == null) {
             firstSeenAt = Instant.now();
         }

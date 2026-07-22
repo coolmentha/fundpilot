@@ -33,10 +33,11 @@ public class UserConfigService {
 
     private final UserConfigRepository userConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final CurrentUserService currentUserService;
 
     /** 取配置视图;未初始化返默认(空 watchedIndices,由 getWatchedIndices 兜底默认指数)。 */
     public UserConfigView get() {
-        List<UserConfigEntity> all = userConfigRepository.findAll();
+        List<UserConfigEntity> all = configs();
         return all.isEmpty() ? UserConfigView.from(null) : UserConfigView.from(all.get(0));
     }
 
@@ -45,7 +46,7 @@ public class UserConfigService {
      * <p>未初始化或字段空时返默认列表(不抛错——行情展示不应被配置缺失阻塞)。单一事实源。
      */
     public List<String> getWatchedIndices() {
-        List<UserConfigEntity> all = userConfigRepository.findAll();
+        List<UserConfigEntity> all = configs();
         if (all.isEmpty()) {
             return parseSecids(DEFAULT_WATCHED_INDICES);
         }
@@ -65,8 +66,9 @@ public class UserConfigService {
     public UserConfigView update(List<String> watchedIndices, BigDecimal monthlyDcaBudget) {
         validateMonthlyDcaBudget(monthlyDcaBudget);
         userConfigRepository.lockSingleton();
-        List<UserConfigEntity> all = userConfigRepository.findAll();
+        List<UserConfigEntity> all = configs();
         UserConfigEntity config = all.isEmpty() ? new UserConfigEntity() : all.get(0);
+        if (config.getOwnerId() == null && currentUserService.userId() != 0L) config.setOwnerId(currentUserService.userId());
         if (watchedIndices != null) {
             config.setWatchedIndices(watchedIndices.isEmpty() ? null : String.join(",", watchedIndices));
         }
@@ -84,9 +86,14 @@ public class UserConfigService {
 
     @Transactional(readOnly = true)
     public BigDecimal getMonthlyDcaBudget() {
-        return userConfigRepository.findAll().stream().findFirst()
+        return configs().stream().findFirst()
                 .map(UserConfigEntity::getMonthlyDcaBudget)
                 .orElse(null);
+    }
+
+    private List<UserConfigEntity> configs() {
+        long userId = currentUserService.userId();
+        return userId == 0L ? userConfigRepository.findAll() : userConfigRepository.findAllByOwnerId(userId);
     }
 
     private void validateMonthlyDcaBudget(BigDecimal monthlyDcaBudget) {

@@ -23,65 +23,72 @@ public interface FundNavHistoryRepository extends JpaRepository<FundNavHistoryEn
      * 全历史累计净值峰值(issue #9 ADR-0001:不落字段,实时派生)。
      * 用 (fund_id, nav_date) 索引 max 查询。
      */
-    @Query("select max(n.accumulatedNav) from FundNavHistoryEntity n where n.fundEntity.id = :fundId")
+    @Query("select max(n.accumulatedNav) from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId)")
     Optional<java.math.BigDecimal> findPeakAccumulatedNav(@Param("fundId") Long fundId);
 
     /**
      * 持仓期内累计净值峰值:加 {@code navDate >= openedAt} 过滤(ADR-0001)。
      */
-    @Query("select max(n.accumulatedNav) from FundNavHistoryEntity n where n.fundEntity.id = :fundId and n.navDate >= :since")
+    @Query("select max(n.accumulatedNav) from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) and n.navDate >= :since")
     Optional<java.math.BigDecimal> findPeakAccumulatedNavSince(@Param("fundId") Long fundId, @Param("since") Instant since);
 
     /**
      * 按日期范围升序查净值序列(issue #11 回测引擎用)。
      */
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) and n.navDate between :start and :end order by n.navDate asc")
     List<FundNavHistoryEntity> findByFundEntity_IdAndNavDateBetweenOrderByNavDateAsc(
-            Long fundId, Instant start, Instant end);
+            @Param("fundId") Long fundId, @Param("start") Instant start, @Param("end") Instant end);
 
     /**
      * 查某基金最早净值日期(issue #11 窗口降级用)。
      */
-    @Query("select min(n.navDate) from FundNavHistoryEntity n where n.fundEntity.id = :fundId")
+    @Query("select min(n.navDate) from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId)")
     Optional<Instant> findEarliestNavDate(@Param("fundId") Long fundId);
 
     /**
      * 查某基金最近 N 条净值(按日期降序取前 N,issue #13 单周跌幅用)。
      * 供 {@code WeeklyDropCalculator} 算 [T-5, T-1] 两点跌幅。
      */
-    List<FundNavHistoryEntity> findTop5ByFundEntity_IdOrderByNavDateDesc(Long fundId);
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) order by n.navDate desc limit 5")
+    List<FundNavHistoryEntity> findTop5ByFundEntity_IdOrderByNavDateDesc(@Param("fundId") Long fundId);
 
     /**
      * 查某基金最近两期净值(按日期降序,issue #18 今日涨跌/今日盈亏用)。
      * 取前 2:第 0 期为最近一期,第 1 期为上一期。
      */
-    List<FundNavHistoryEntity> findTop2ByFundEntity_IdOrderByNavDateDesc(Long fundId);
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) order by n.navDate desc limit 2")
+    List<FundNavHistoryEntity> findTop2ByFundEntity_IdOrderByNavDateDesc(@Param("fundId") Long fundId);
 
-    @Query(value = "select fund_id as fundId, nav_date as navDate, nav, accumulated_nav as accumulatedNav, " +
-            "first_seen_at as firstSeenAt from (select fund_id, nav_date, nav, accumulated_nav, first_seen_at, " +
-            "row_number() over (partition by fund_id order by nav_date desc) as row_num " +
-            "from fund_nav_history where deleted_date is null and fund_id in (:fundIds)) ranked " +
+    @Query(value = "select fund_id as fundId, nav_date as navDate, nav, accumulated_nav as accumulatedNav, first_seen_at as firstSeenAt " +
+            "from (select f.id as fund_id, n.nav_date, n.nav, n.accumulated_nav, n.first_seen_at, " +
+            "row_number() over (partition by f.id order by n.nav_date desc) as row_num " +
+            "from fund f join fund_nav_history n on n.fund_code = f.fund_code and n.deleted_date is null " +
+            "where f.id in (:fundIds) and f.deleted_date is null) ranked " +
             "where row_num <= 2 order by fund_id, nav_date desc", nativeQuery = true)
     List<LatestNavProjection> findLatestTwoByFundIds(@Param("fundIds") List<Long> fundIds);
 
     /** 查最近一期净值，账目/止盈收益使用单位净值，分析指标继续使用累计净值。 */
-    Optional<FundNavHistoryEntity> findFirstByFundEntity_IdOrderByNavDateDesc(Long fundId);
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) order by n.navDate desc limit 1")
+    Optional<FundNavHistoryEntity> findFirstByFundEntity_IdOrderByNavDateDesc(@Param("fundId") Long fundId);
 
     /**
      * 查某基金某日的净值行，区间严格为 {@code [startInclusive, endExclusive)}。
      * 结束点必须排除，避免当日净值缺失时误用次日净值确认交易。
      */
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId) and n.navDate >= :startInclusive and n.navDate < :endExclusive")
     List<FundNavHistoryEntity> findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
-            Long fundId, Instant startInclusive, Instant endExclusive);
+            @Param("fundId") Long fundId, @Param("startInclusive") Instant startInclusive, @Param("endExclusive") Instant endExclusive);
 
     /**
-     * 查某基金全部净值历史(归档级联逐个软删用)。
+     * 按基金代码查共享净值历史；归档用户基金时仅用于解除旧 fund_id 关联。
      */
-    List<FundNavHistoryEntity> findByFundEntity_Id(Long fundId);
+    @Query("select n from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId)")
+    List<FundNavHistoryEntity> findByFundEntity_Id(@Param("fundId") Long fundId);
 
     /**
      * 查某基金已落库的 navDate 集合(issue #23 净值历史落库去重用,
      * 避免违反 uq_fund_nav_history_daily 部分唯一索引)。
      */
-    @Query("select n.navDate from FundNavHistoryEntity n where n.fundEntity.id = :fundId")
+    @Query("select n.navDate from FundNavHistoryEntity n where n.fundCode = (select f.fundCode from FundEntity f where f.id = :fundId)")
     List<Instant> findNavDatesByFundEntity_Id(@Param("fundId") Long fundId);
 }

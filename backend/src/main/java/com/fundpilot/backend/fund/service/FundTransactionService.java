@@ -30,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 @Service
 @RequiredArgsConstructor
 public class FundTransactionService {
+    private final FundAccessService fundAccessService;
 
     private final FundTransactionRepository fundTransactionRepository;
     private final FundRepository fundRepository;
@@ -40,6 +41,7 @@ public class FundTransactionService {
 
     /** 查某基金全部交易流水,按交易发生时间倒序(最新在前)。 */
     public List<FundTransactionView> listByFund(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundTransactionRepository.findByFundIdOrderByTradeDateDesc(fundId).stream()
                 .map(FundTransactionView::from)
                 .toList();
@@ -49,6 +51,7 @@ public class FundTransactionService {
     @Transactional(readOnly = true)
     public List<FundTransactionView> listPending() {
         return fundTransactionRepository.findByStatusOrderByTradeDateDesc(FundTransactionStatus.PENDING).stream()
+                .filter(tx -> fundAccessService.isOwned(tx.getFundEntity()))
                 .map(this::pendingView)
                 .toList();
     }
@@ -104,6 +107,7 @@ public class FundTransactionService {
         FundTransactionEntity tx = fundTransactionRepository.findByIdForUpdate(transactionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND,
                         "FundTransaction #" + transactionId + " 不存在"));
+        fundAccessService.requireOwned(tx.getFundEntity());
         if (tx.getStatus() == FundTransactionStatus.CONFIRMED) {
             throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED,
                     "已确认交易不可修改 #" + transactionId);
@@ -168,6 +172,7 @@ public class FundTransactionService {
      */
     @Transactional
     public FundTransactionView createManual(Long fundId, ManualTransactionRequest request) {
+        fundAccessService.requireOwned(fundId);
         if (request.source() == null) {
             throw new BusinessException(ErrorCode.MANUAL_TRANSACTION_FIELD_REQUIRED, "交易来源(source)必填");
         }

@@ -9,6 +9,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -42,12 +43,13 @@ class SignalOperationServiceUnitTest {
     @Mock FundPositionService fundPositionService;
     @Mock SignalActionabilityService signalActionabilityService;
     @Mock TakeProfitLifecycleService takeProfitLifecycleService;
+    @Mock FundAccessService fundAccessService;
 
     private SignalOperationService service;
 
     @BeforeEach
     void setUp() {
-        service = new SignalOperationService(signalLogRepository, fundTransactionRepository,
+        service = new SignalOperationService(fundAccessService, signalLogRepository, fundTransactionRepository,
                 fundRepository, fundPositionService,
                 signalActionabilityService, takeProfitLifecycleService,
                 Clock.fixed(Instant.parse("2026-07-10T08:00:00Z"), ZoneOffset.UTC));

@@ -29,6 +29,7 @@ public class TransactionCancelService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundPositionService fundPositionService;
     private final TakeProfitLifecycleService takeProfitLifecycleService;
+    private final FundAccessService fundAccessService;
 
     /**
      * 撤销交易。PENDING→CANCELLED;CONFIRMED 抛 {@code TRANSACTION_ALREADY_CONFIRMED};
@@ -40,6 +41,7 @@ public class TransactionCancelService {
     public List<FundTransactionEntity> cancel(Long transactionId) {
         FundTransactionEntity tx = fundTransactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND, "FundTransaction #" + transactionId + " 不存在"));
+        fundAccessService.requireOwned(tx.getFundEntity());
         if (tx.getStatus() == FundTransactionStatus.CONFIRMED) {
             throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED,
                     "已确认交易不可撤销 #" + transactionId);

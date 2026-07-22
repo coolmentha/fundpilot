@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.fundpilot.backend.user.service.CurrentUserService;
 
 @Service
 @RequiredArgsConstructor
@@ -34,14 +35,18 @@ public class PortfolioReturnService {
     private final FundLotRepository lotRepository;
     private final FundLotRedemptionRepository redemptionRepository;
     private final FundPnlService fundPnlService;
+    private final CurrentUserService currentUserService;
 
     public PortfolioReturnView getReturns() {
-        List<FundEntity> funds = fundRepository.findAll();
+        long userId = currentUserService.userId();
+        List<FundEntity> funds = userId == 0L ? fundRepository.findAll() : fundRepository.findAllByOwnerId(userId);
+        java.util.Set<Long> fundIds = funds.stream().map(FundEntity::getId).collect(java.util.stream.Collectors.toSet());
         Map<Long, FundPnlService.Pnl> pnlByFund = fundPnlService.computeForFunds(funds);
-        List<FundTransactionEntity> transactions = transactionRepository.findByStatus(FundTransactionStatus.CONFIRMED);
+        List<FundTransactionEntity> transactions = transactionRepository.findByStatus(FundTransactionStatus.CONFIRMED).stream()
+                .filter(tx -> fundIds.contains(tx.getFundEntity().getId())).toList();
         Map<Long, FundLotEntity> lots = new HashMap<>();
         Map<Long, BigDecimal> buyCosts = new HashMap<>();
-        for (FundLotEntity lot : lotRepository.findAll()) {
+        for (FundLotEntity lot : lotRepository.findAll().stream().filter(lot -> fundIds.contains(lot.getFundEntity().getId())).toList()) {
             lots.put(lot.getId(), lot);
             buyCosts.merge(lot.getAcquireTxId(),
                     lot.getAcquireShares().multiply(lot.getAcquireCostPerShare(), MATH), BigDecimal::add);

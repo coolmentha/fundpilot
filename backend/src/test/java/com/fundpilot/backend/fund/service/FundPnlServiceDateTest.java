@@ -9,6 +9,7 @@ import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.EstimateStatus;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -34,13 +35,14 @@ class FundPnlServiceDateTest {
     @Mock FundRepository fundRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
     @Mock MarketRealtimeCache marketRealtimeCache;
+    @Mock CurrentUserService currentUserService;
 
     @Test
     void QDII优先使用最新确认净值收益() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-20T08:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock);
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = fund();
         fund.setInvestmentTarget(InvestmentTarget.QDII);
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
@@ -65,7 +67,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock);
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("510300");
@@ -91,7 +93,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock);
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = fund();
         FundNavHistoryEntity yesterday = nav("2026-07-09T00:00:00Z", "1.20");
         FundNavHistoryEntity previous = nav("2026-07-08T00:00:00Z", "1.10");
@@ -118,7 +120,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock);
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = fund();
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(
@@ -139,7 +141,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T00:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock);
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = fund();
         fund.setCostPerShare(new BigDecimal("1.10"));
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))

@@ -26,6 +26,7 @@ class TransactionCancelServiceStateTest {
     @Mock private FundTransactionRepository fundTransactionRepository;
     @Mock private FundPositionService fundPositionService;
     @Mock private TakeProfitLifecycleService takeProfitLifecycleService;
+    @Mock private FundAccessService fundAccessService;
     @InjectMocks private TransactionCancelService service;
 
     @Test

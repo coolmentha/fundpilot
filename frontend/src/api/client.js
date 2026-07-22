@@ -62,11 +62,11 @@ export async function apiFetch(path, options = {}) {
     return payload.data;
 }
 
-export function loginSiteApiKey(apiKey) {
-    return apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: {'X-Admin-Key': apiKey},
-    });
+export function loginSiteApiKey(credentials) {
+    if (typeof credentials === 'string') {
+        return apiFetch('/api/auth/login', {method: 'POST', headers: {'X-Admin-Key': credentials}});
+    }
+    return apiFetch('/api/auth/login', {method: 'POST', body: credentials});
 }
 
 export function verifySiteSession() {

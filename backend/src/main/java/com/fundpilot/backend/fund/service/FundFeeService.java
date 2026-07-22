@@ -36,6 +36,7 @@ public class FundFeeService {
     private final EastmoneyFundFeeClient fundFeeClient;
     private final FundFeeRepository fundFeeRepository;
     private final FundRepository fundRepository;
+    private final FundAccessService fundAccessService;
 
     /**
      * 爬取指定基金的费率并落库(upsert)。
@@ -111,6 +112,7 @@ public class FundFeeService {
      * <p>缓存缺失时按基金代码即时爬取一次并落库,避免详情页长期显示"未爬取"。
      */
     public FundFeeView getFeeView(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundRepository.findById(fundId)
                 .map(FundEntity::getFundCode)
                 .map(this::getOrFetchFeeEntity)

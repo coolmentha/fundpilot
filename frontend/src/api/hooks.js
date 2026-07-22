@@ -404,6 +404,22 @@ export function useAdminAction() {
     });
 }
 
+export function useAdminUsers() {
+    return useQuery({queryKey: ['admin-users'], queryFn: () => get('/api/admin/users')});
+}
+
+export function saveAdminUser(path, body) {
+    return post(path, body);
+}
+
+export function useAdminUserMutation() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({path, body}) => saveAdminUser(path, body),
+        onSuccess: () => qc.invalidateQueries({queryKey: ['admin-users']}),
+    });
+}
+
 // ===== 行情实时(行情工作台) =====
 // 前端高频轮询后端内存缓存,不直接击穿到东方财富。
 // 交易时段内刷新;react-query refetchInterval 常驻轮询,非交易时段数据不变也无副作用。

@@ -33,6 +33,7 @@ class FundTransactionPendingViewTest {
     @Mock TransactionConfirmSupport confirmSupport;
     @Mock FundPositionService positionService;
     @Mock FundFeeService feeService;
+    @Mock FundAccessService fundAccessService;
 
     @Test
     void 待确认买入仅在交易日净值入库后返回预计份额() {
@@ -49,11 +50,12 @@ class FundTransactionPendingViewTest {
         nav.setNav(new BigDecimal("2"));
         when(transactionRepository.findByStatusOrderByTradeDateDesc(FundTransactionStatus.PENDING))
                 .thenReturn(List.of(tx));
+        when(fundAccessService.isOwned(fund)).thenReturn(true);
         when(navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
                 eq(1L), any(), any())).thenReturn(List.of(nav));
         when(feeService.getFeeByFundId(1L)).thenReturn(
                 new FundFeeSnapshot(new BigDecimal("0.0015"), List.of(), null));
-        FundTransactionService service = new FundTransactionService(transactionRepository, fundRepository,
+        FundTransactionService service = new FundTransactionService(fundAccessService, transactionRepository, fundRepository,
                 navRepository, feeService, confirmSupport, positionService);
 
         FundTransactionView view = service.listPending().getFirst();

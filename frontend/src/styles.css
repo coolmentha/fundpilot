@@ -156,6 +156,41 @@ body {
 
 .full-width { width: 100%; }
 
+.settings-page { display: grid; width: min(100%, 600px); gap: 16px; }
+.settings-import-action { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.settings-import-action > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.settings-import-action .ant-btn { flex: none; }
+
+@media (max-width: 575px) {
+    .settings-import-action { align-items: stretch; flex-direction: column; }
+}
+
+.admin-users { min-width: 0; }
+.admin-users-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.admin-users-header .ant-typography { margin: 0; }
+.admin-user-avatar {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #1677ff;
+    background: #e6f4ff;
+}
+.admin-users-table .ant-table-cell { vertical-align: middle; }
+
+@media (max-width: 575px) {
+    .admin-users-header { align-items: flex-start; }
+    .admin-users-header .ant-btn { flex: none; }
+}
+
 /* ===== 使用帮助 ===== */
 .help-page {
     display: grid;
@@ -1476,28 +1511,47 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 /* ===== 养基宝批量导入 ===== */
 .yangjibao-import-modal .ant-modal-body { display: grid; gap: 14px; min-width: 0; }
-.yangjibao-steps { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--color-border); }
-.yangjibao-steps span { padding: 8px 4px 10px; color: var(--color-muted); font-size: 12px; text-align: center; border-bottom: 2px solid transparent; }
-.yangjibao-steps span.active { color: var(--color-text); border-color: var(--color-primary); }
-.yangjibao-scan { display: flex; min-height: 340px; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
-.yangjibao-summary { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
-.yangjibao-summary strong { font-size: 15px; }
-.yangjibao-summary span { color: var(--color-muted); font-size: 12px; }
+.yangjibao-title { display: flex; align-items: center; gap: 10px; }
+.yangjibao-title > span:last-child { display: flex; flex-direction: column; }
+.yangjibao-title .ant-typography { font-size: 12px; font-weight: 400; }
+.yangjibao-title-icon,
+.yangjibao-state-icon { display: inline-flex; width: 36px; height: 36px; flex: none; align-items: center; justify-content: center; border-radius: 6px; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); font-size: 18px; }
+.yangjibao-steps { max-width: 680px; margin: 4px auto 8px; }
+.yangjibao-scan { display: flex; min-height: 400px; align-items: center; justify-content: center; flex-direction: column; gap: 16px; text-align: center; }
+.yangjibao-scan h4,
+.yangjibao-progress h4,
+.yangjibao-result-header h4 { margin: 0 0 4px; }
+.yangjibao-qr { padding: 12px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; }
+.yangjibao-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); }
+.yangjibao-summary > span { display: flex; min-width: 0; padding: 12px 16px; flex-direction: column; gap: 2px; border-right: 1px solid var(--color-border); }
+.yangjibao-summary > span:last-child { border-right: 0; }
+.yangjibao-summary strong { font-size: 20px; line-height: 1.2; }
+.yangjibao-summary .is-warning { color: var(--color-warning); }
 .yangjibao-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 12px; }
-.yangjibao-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 8px 10px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; }
+.yangjibao-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 8px 10px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; }
+.yangjibao-selection { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.yangjibao-selection strong { color: var(--color-primary); font-size: 20px; }
 .yangjibao-bulk-label { color: var(--color-muted); font-size: 12px; }
 .yangjibao-fund { display: flex; min-width: 0; flex-direction: column; }
 .yangjibao-fund strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.yangjibao-progress { display: grid; width: min(100%, 620px); min-height: 320px; align-content: center; gap: 14px; margin: 0 auto; text-align: center; }
+.yangjibao-progress { display: grid; width: min(100%, 620px); min-height: 400px; justify-items: center; align-content: center; gap: 14px; margin: 0 auto; text-align: center; }
 .yangjibao-progress > strong { font-family: 'Fira Code', monospace; font-size: 30px; }
 .yangjibao-progress > div { display: flex; justify-content: center; gap: 24px; color: var(--color-muted); }
+.yangjibao-progress > .ant-progress { width: 100%; }
 .yangjibao-results { display: grid; gap: 14px; }
+.yangjibao-result-header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 0; }
+.yangjibao-state-icon.is-success { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); }
 
 @media (max-width: 768px) {
     .yangjibao-import-modal { max-width: 100vw; margin: 0; top: 0; padding-bottom: 0; }
     .yangjibao-import-modal .ant-modal-content { min-height: 100vh; border-radius: 0; }
     .yangjibao-toolbar { grid-template-columns: minmax(0, 1fr); }
     .yangjibao-actions { align-items: flex-start; flex-direction: column; }
+    .yangjibao-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .yangjibao-summary > span:nth-child(2) { border-right: 0; }
+    .yangjibao-summary > span:nth-child(-n+2) { border-bottom: 1px solid var(--color-border); }
+    .yangjibao-result-header { grid-template-columns: auto 1fr; }
+    .yangjibao-result-header .ant-btn { grid-column: 1 / -1; }
 }
 
 /* 空状态内联 CTA 链接(与 muted 文案同行) */

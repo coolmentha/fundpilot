@@ -25,6 +25,7 @@ class FundTransactionServiceValidationTest {
     @Mock private FundTransactionRepository fundTransactionRepository;
     @Mock private FundRepository fundRepository;
     @Mock private TransactionConfirmSupport transactionConfirmSupport;
+    @Mock private FundAccessService fundAccessService;
     @InjectMocks private FundTransactionService service;
 
     @BeforeEach

@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class DcaBudgetSummaryService {
     private final FundTransactionRepository fundTransactionRepository;
     private final DcaScheduleService dcaScheduleService;
     private final DcaPlanForecastService dcaPlanForecastService;
+    private final CurrentUserService currentUserService;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -31,8 +33,12 @@ public class DcaBudgetSummaryService {
         Instant now = clock.instant();
         Instant monthStart = dcaScheduleService.startOfCurrentMonth(now);
         Instant monthEnd = dcaScheduleService.startOfNextMonth(now);
-        BigDecimal investedAmount = nonNull(fundTransactionRepository.sumAmountBySourceAndStatusNotAndTradeDateBetween(
-                FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, monthStart, monthEnd));
+        long userId = currentUserService.userId();
+        BigDecimal investedAmount = nonNull(userId == 0L
+                ? fundTransactionRepository.sumAmountBySourceAndStatusNotAndTradeDateBetween(
+                        FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, monthStart, monthEnd)
+                : fundTransactionRepository.sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+                        userId, FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, monthStart, monthEnd));
 
         BigDecimal futureAmount = dcaPlanForecastService.currentMonthRemainingAmount();
         BigDecimal projectedAmount = investedAmount.add(futureAmount);

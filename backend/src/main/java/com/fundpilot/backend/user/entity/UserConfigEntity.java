@@ -18,6 +18,8 @@ import java.math.BigDecimal;
 @Getter
 @Setter
 public class UserConfigEntity extends AbstractEntity {
+    @Column(name = "owner_id")
+    private Long ownerId;
 
     /** 每月定投预算；null 表示仅展示定投金额而不比较预算。 */
     @Column(name = "monthly_dca_budget")

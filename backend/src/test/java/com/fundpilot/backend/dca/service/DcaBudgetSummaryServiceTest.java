@@ -17,6 +17,8 @@ import com.fundpilot.backend.support.AbstractIntegrationTest;
 import com.fundpilot.backend.user.entity.UserConfigEntity;
 import com.fundpilot.backend.user.repository.UserConfigRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,12 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
 
     @Autowired
     UserConfigService userConfigService;
+
+    @Autowired
+    CurrentUserService currentUserService;
+
+    @Autowired
+    FundAccessService fundAccessService;
 
     @Autowired
     UserConfigRepository userConfigRepository;
@@ -125,12 +133,13 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
     private DcaBudgetSummaryService summaryAt(Instant now) {
         Clock clock = Clock.fixed(now, ZoneOffset.UTC);
         DcaPlanForecastService forecastService = new DcaPlanForecastService(
-                fundDcaPlanRepository, fundTransactionRepository, dcaScheduleService, clock);
+                fundDcaPlanRepository, fundTransactionRepository, fundAccessService, dcaScheduleService, clock);
         return new DcaBudgetSummaryService(
                 userConfigService,
                 fundTransactionRepository,
                 dcaScheduleService,
                 forecastService,
+                currentUserService,
                 clock);
     }
 

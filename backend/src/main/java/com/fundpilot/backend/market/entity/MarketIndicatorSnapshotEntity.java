@@ -12,6 +12,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,8 +35,11 @@ import java.time.Instant;
 public class MarketIndicatorSnapshotEntity extends AbstractEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fund_id", nullable = false)
+    @JoinColumn(name = "fund_id")
     private FundEntity fundEntity;
+
+    @Column(name = "fund_code", nullable = false)
+    private String fundCode;
 
     @Column(nullable = false)
     @Convert(converter = com.fundpilot.backend.common.InstantDateConverter.class)
@@ -60,4 +64,11 @@ public class MarketIndicatorSnapshotEntity extends AbstractEntity {
     // AC 指定列名 is_sixty_day_high(带 is_ 前缀);Java 字段按惯例用 sixtyDayHigh,Lombok 生成 isSixtyDayHigh()。
     @Column(name = "is_sixty_day_high")
     private boolean sixtyDayHigh;
+
+    @PrePersist
+    void assignFundCode() {
+        if (fundCode == null && fundEntity != null) {
+            fundCode = fundEntity.getFundCode() != null ? fundEntity.getFundCode() : "LEGACY:" + fundEntity.getId();
+        }
+    }
 }

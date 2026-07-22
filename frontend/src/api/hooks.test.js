@@ -14,6 +14,7 @@ import {
     invalidateDcaPlanQueries,
     invalidateSignalQueries,
     requestAdminAction,
+    saveAdminUser,
     updatePendingTransaction,
 } from './hooks.js';
 
@@ -51,6 +52,16 @@ describe('admin actions', () => {
     it('rejects unsupported actions instead of falling back to refresh', () => {
         expect(() => requestAdminAction('unknown'))
             .toThrow('Unsupported admin action: unknown');
+    });
+});
+
+describe('admin users', () => {
+    it('posts the entered credentials as JSON body', () => {
+        const body = {username: 'alice', password: 'secret', role: 'USER'};
+
+        saveAdminUser('/api/admin/users', body);
+
+        expect(post).toHaveBeenCalledWith('/api/admin/users', body);
     });
 });
 

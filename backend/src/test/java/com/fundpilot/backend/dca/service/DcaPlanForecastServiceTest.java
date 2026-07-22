@@ -5,6 +5,7 @@ import com.fundpilot.backend.dca.enums.DcaFrequency;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
 import com.fundpilot.backend.dca.repository.FundDcaPlanRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,9 @@ class DcaPlanForecastServiceTest {
     @Mock
     DcaScheduleService dcaScheduleService;
 
+    @Mock
+    FundAccessService fundAccessService;
+
     private DcaPlanForecastService service;
 
     @BeforeEach
@@ -47,6 +51,7 @@ class DcaPlanForecastServiceTest {
         service = new DcaPlanForecastService(
                 fundDcaPlanRepository,
                 fundTransactionRepository,
+                fundAccessService,
                 dcaScheduleService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -59,6 +64,7 @@ class DcaPlanForecastServiceTest {
         when(occurrence.getDcaPlanId()).thenReturn(7L);
         when(occurrence.getTradeDate()).thenReturn(Instant.parse("2026-07-13T06:55:00Z"));
         when(fundDcaPlanRepository.findAllWithFund()).thenReturn(List.of(plan));
+        when(fundAccessService.isOwned(plan.getFundEntity())).thenReturn(true);
         when(dcaScheduleService.startOfBusinessDay(NOW)).thenReturn(DAY_START);
         when(dcaScheduleService.startOfNextMonth(NOW)).thenReturn(Instant.parse("2026-07-13T16:00:00Z"));
         when(fundTransactionRepository.findDcaTransactionDates(

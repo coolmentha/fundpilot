@@ -22,6 +22,7 @@ public class MarketIndicatorSnapshotService {
     @Transactional
     public MarketIndicatorSnapshotEntity upsert(MarketIndicatorSnapshotEntity template) {
         Long fundId = template.getFundEntity().getId();
+        template.setFundCode(template.getFundEntity().getFundCode());
         Optional<MarketIndicatorSnapshotEntity> existing =
                 snapshotRepository.findByFundEntity_IdAndSnapshotDate(fundId, template.getSnapshotDate());
         if (existing.isPresent()) {

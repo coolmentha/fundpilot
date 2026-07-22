@@ -14,6 +14,8 @@ import org.hibernate.annotations.SQLDelete;
 @Getter
 @Setter
 public class FundGroupEntity extends AbstractEntity {
+    @Column(name = "owner_id")
+    private Long ownerId;
     @Column(nullable = false, length = 20)
     private String name;
 

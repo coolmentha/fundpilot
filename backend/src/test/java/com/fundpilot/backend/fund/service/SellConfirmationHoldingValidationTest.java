@@ -126,7 +126,7 @@ class SellConfirmationHoldingValidationTest extends AbstractIntegrationTest {
                 invalidFund, FundTransactionSource.DECREASE, "10.01");
 
         FundEntity validFund = persistFund();
-        persistNav(validFund);
+        // 同代码基金复用 invalidFund 已落库的共享净值。
         persistConfirmedShares(validFund, FundTransactionSource.ADJUST_IN, "10");
         FundTransactionEntity validSell = persistPendingSell(
                 validFund, FundTransactionSource.DECREASE, "2");

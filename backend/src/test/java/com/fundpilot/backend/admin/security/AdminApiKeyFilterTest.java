@@ -93,6 +93,52 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
+    void validUserSessionDoesNotRequireLegacyApiKey() throws Exception {
+        AdminApiKeyProperties properties = new AdminApiKeyProperties("", "session-secret");
+        AdminSessionTokenService sessions = new AdminSessionTokenService(properties,
+                Clock.fixed(Instant.parse("2026-07-12T00:00:00Z"), ZoneOffset.UTC));
+        var users = mock(com.fundpilot.backend.user.repository.SiteUserRepository.class);
+        var user = new com.fundpilot.backend.user.entity.SiteUserEntity();
+        user.setId(7L);
+        user.setRole(com.fundpilot.backend.user.entity.UserRole.USER);
+        user.setEnabled(true);
+        org.mockito.Mockito.when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        filter = new AdminApiKeyFilter(JsonMapper.builder().build(), properties, sessions, users);
+        MockHttpServletRequest request = apiRequest();
+        request.setCookies(new Cookie(AdminSessionTokenService.COOKIE_NAME,
+                sessions.issue(7L, com.fundpilot.backend.user.entity.UserRole.USER)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void regularUserCannotAccessAdminApi() throws Exception {
+        AdminSessionTokenService sessions = createSessionService("test-admin-key");
+        var users = mock(com.fundpilot.backend.user.repository.SiteUserRepository.class);
+        var user = new com.fundpilot.backend.user.entity.SiteUserEntity();
+        user.setId(7L);
+        user.setRole(com.fundpilot.backend.user.entity.UserRole.USER);
+        user.setEnabled(true);
+        org.mockito.Mockito.when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        filter = new AdminApiKeyFilter(JsonMapper.builder().build(),
+                new AdminApiKeyProperties("test-admin-key", ""), sessions, users);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        request.setServletPath("/api/admin/users");
+        request.setCookies(new Cookie(AdminSessionTokenService.COOKIE_NAME,
+                sessions.issue(7L, com.fundpilot.backend.user.entity.UserRole.USER)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("\"code\":\"ADMIN_FORBIDDEN\"");
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
     void invalidSessionCookieIsRejected() throws Exception {
         MockHttpServletRequest request = apiRequest();
         request.setCookies(new Cookie(AdminSessionTokenService.COOKIE_NAME, "invalid"));
@@ -111,14 +157,15 @@ class AdminApiKeyFilterTest {
     private AdminApiKeyFilter createFilter(String configuredKey, AdminSessionTokenService sessions) {
         return new AdminApiKeyFilter(
                 JsonMapper.builder().build(),
-                new AdminApiKeyProperties(configuredKey),
-                sessions
+                new AdminApiKeyProperties(configuredKey, ""),
+                sessions,
+                mock(com.fundpilot.backend.user.repository.SiteUserRepository.class)
         );
     }
 
     private AdminSessionTokenService createSessionService(String configuredKey) {
         return new AdminSessionTokenService(
-                new AdminApiKeyProperties(configuredKey),
+                new AdminApiKeyProperties(configuredKey, ""),
                 Clock.fixed(Instant.parse("2026-07-12T00:00:00Z"), ZoneOffset.UTC));
     }
 

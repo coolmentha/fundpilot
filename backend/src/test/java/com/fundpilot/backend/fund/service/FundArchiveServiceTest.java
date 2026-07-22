@@ -71,8 +71,8 @@ class FundArchiveServiceTest extends AbstractIntegrationTest {
         assertThat(deletedCount("fund_strategy_activation", "fund_id", fundId)).isEqualTo(1);
         assertThat(deletedCount("fund_transaction", "fund_id", fundId)).isEqualTo(1);
         assertThat(deletedCount("signal_log", "fund_id", fundId)).isEqualTo(1);
-        assertThat(deletedCount("fund_nav_history", "fund_id", fundId)).isEqualTo(1);
-        assertThat(deletedCount("market_indicator_snapshot", "fund_id", fundId)).isEqualTo(1);
+        assertThat(deletedCount("fund_nav_history", "fund_id", fundId)).isZero();
+        assertThat(deletedCount("market_indicator_snapshot", "fund_id", fundId)).isZero();
     }
 
     @Test

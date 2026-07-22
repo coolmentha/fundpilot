@@ -10,6 +10,7 @@ import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class DcaPlanService {
+    private final FundAccessService fundAccessService;
 
     private final FundDcaPlanRepository fundDcaPlanRepository;
     private final FundRepository fundRepository;
@@ -37,6 +39,7 @@ public class DcaPlanService {
 
     @Transactional
     public Long create(Long fundId, DcaPlanRequest request) {
+        fundAccessService.requireOwned(fundId);
         FundEntity fund = fundRepository.findByIdForUpdate(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         // 新建即激活:同基金已有 EFFECTIVE 计划则回退为 DRAFT(同基金同时最多一份 EFFECTIVE)
@@ -60,6 +63,7 @@ public class DcaPlanService {
 
     @Transactional(readOnly = true)
     public List<FundDcaPlanEntity> listByFund(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundDcaPlanRepository.findByFundEntity_Id(fundId);
     }
 
@@ -71,6 +75,7 @@ public class DcaPlanService {
     @Transactional(readOnly = true)
     public List<DcaPlanManagementView> listManagementView() {
         List<FundDcaPlanEntity> plans = fundDcaPlanRepository.findAllWithFund().stream()
+                .filter(plan -> fundAccessService.isOwned(plan.getFundEntity()))
                 .sorted(Comparator
                         .comparing((FundDcaPlanEntity plan) -> plan.getStatus() != DcaPlanStatus.EFFECTIVE)
                         .thenComparing(plan -> !Boolean.TRUE.equals(plan.getEnabled()))
@@ -86,6 +91,7 @@ public class DcaPlanService {
 
     @Transactional(readOnly = true)
     public Optional<FundDcaPlanEntity> findActive(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundDcaPlanRepository.findByFundEntity_IdAndStatus(fundId, DcaPlanStatus.EFFECTIVE);
     }
 
@@ -141,8 +147,10 @@ public class DcaPlanService {
     }
 
     private FundDcaPlanEntity requirePlan(Long planId) {
-        return fundDcaPlanRepository.findById(planId)
+        FundDcaPlanEntity plan = fundDcaPlanRepository.findById(planId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.DCA_PLAN_NOT_FOUND, "DcaPlan #" + planId + " 不存在"));
+        fundAccessService.requireOwned(plan.getFundEntity());
+        return plan;
     }
 
     /** 同基金已有 EFFECTIVE 计划则回退为 DRAFT(保证同时最多一份 EFFECTIVE)。

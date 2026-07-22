@@ -8,6 +8,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.fund.service.FundTransactionService;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
@@ -27,6 +28,7 @@ public class YangjibaoImportService {
     private final FundPositionService positionService;
     private final FundService fundService;
     private final FundTransactionService transactionService;
+    private final CurrentUserService currentUserService;
     private final TaskExecutor applicationTaskExecutor;
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     @Value("${fundpilot.yangjibao.session-ttl:PT30M}") private Duration ttl;
@@ -34,7 +36,7 @@ public class YangjibaoImportService {
     public SessionView create() {
         var qr = client.createQrCode();
         String id = UUID.randomUUID().toString();
-        sessions.put(id, new Session(qr.id(), qr.url(), Instant.now().plus(ttl)));
+        sessions.put(id, new Session(currentUserService.userId(), qr.id(), qr.url(), Instant.now().plus(ttl)));
         return new SessionView(id, "WAITING", qr.url(), null);
     }
 
@@ -78,7 +80,8 @@ public class YangjibaoImportService {
                 if (item == null || !codes.add(item.fundCode())) throw invalid("选择项无效或同一基金代码选择了多份");
             }
             session.job = new ImportJob(selected);
-            applicationTaskExecutor.execute(() -> process(id, session, byId, selected));
+            applicationTaskExecutor.execute(() -> currentUserService.runAs(session.ownerId,
+                    () -> process(id, session, byId, selected)));
             return session.job.view();
         }
     }
@@ -103,7 +106,8 @@ public class YangjibaoImportService {
             Map<String, PreviewItem> byId = new HashMap<>();
             session.preview.forEach(item -> byId.put(item.itemId(), item));
             session.job = new ImportJob(retry);
-            applicationTaskExecutor.execute(() -> process(id, session, byId, retry));
+            applicationTaskExecutor.execute(() -> currentUserService.runAs(session.ownerId,
+                    () -> process(id, session, byId, retry)));
             return session.job.view();
         }
     }
@@ -130,10 +134,14 @@ public class YangjibaoImportService {
         }
     }
 
-    public void cancel(String id) { Session session = sessions.remove(id); if (session != null) session.token = null; }
+    public void cancel(String id) {
+        Session session = require(id);
+        sessions.remove(id, session);
+        session.token = null;
+    }
 
     private ImportResult importOne(PreviewItem item, YangjibaoImportController.ExistingMode mode) {
-        Optional<FundEntity> existing = fundRepository.findByFundCode(item.fundCode());
+        Optional<FundEntity> existing = findOwnedFund(item.fundCode());
         if (existing.isEmpty()) {
             fundService.create(new FundCreateRequest(item.fundCode(), item.fundName(), null, null, null,
                     null, null, item.yangjibaoShares(), item.costPerShare(), null, null));
@@ -153,7 +161,7 @@ public class YangjibaoImportService {
     private List<PreviewItem> loadPreview(String token) {
         List<PreviewItem> items = new ArrayList<>();
         for (var account : client.accounts(token)) for (var holding : client.holdings(token, account.id())) {
-            FundEntity local = fundRepository.findByFundCode(holding.code()).orElse(null);
+            FundEntity local = findOwnedFund(holding.code()).orElse(null);
             BigDecimal localShares = local == null ? BigDecimal.ZERO : positionService.getHoldingShares(local.getId());
             items.add(new PreviewItem(account.id() + ":" + holding.id(), account.id(), account.title(), holding.code(),
                     holding.short_name(), holding.hold_share(), holding.hold_cost(), local == null ? null : local.getId(), localShares));
@@ -163,9 +171,16 @@ public class YangjibaoImportService {
 
     private Session require(String id) {
         Session session = sessions.get(id);
-        if (session == null) throw new BusinessException(ErrorCode.YANGJIBAO_SESSION_NOT_FOUND, "导入会话不存在");
+        if (session == null || session.ownerId != currentUserService.userId()) {
+            throw new BusinessException(ErrorCode.YANGJIBAO_SESSION_NOT_FOUND, "导入会话不存在");
+        }
         if (Instant.now().isAfter(session.expiresAt)) { expire(id, session); throw invalid("导入会话已过期"); }
         return session;
+    }
+    private Optional<FundEntity> findOwnedFund(String fundCode) {
+        long userId = currentUserService.userId();
+        return userId == 0L ? fundRepository.findByFundCode(fundCode)
+                : fundRepository.findByFundCodeAndOwnerId(fundCode, userId);
     }
     private void expire(String id, Session session) { session.token = null; session.status = "EXPIRED"; sessions.remove(id); }
     private BusinessException invalid(String message) { return new BusinessException(ErrorCode.YANGJIBAO_SESSION_INVALID, message); }
@@ -195,8 +210,10 @@ public class YangjibaoImportService {
     }
 
     private static class Session {
-        final String qrId, qrUrl; final Instant expiresAt; String token; String status = "WAITING";
+        final long ownerId; final String qrId, qrUrl; final Instant expiresAt; String token; String status = "WAITING";
         List<PreviewItem> preview; ImportJob job;
-        Session(String qrId, String qrUrl, Instant expiresAt) { this.qrId = qrId; this.qrUrl = qrUrl; this.expiresAt = expiresAt; }
+        Session(long ownerId, String qrId, String qrUrl, Instant expiresAt) {
+            this.ownerId = ownerId; this.qrId = qrId; this.qrUrl = qrUrl; this.expiresAt = expiresAt;
+        }
     }
 }

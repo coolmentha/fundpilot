@@ -29,6 +29,7 @@ public enum ErrorCode {
     DCA_PLAN_INVALID,
     DCA_PLAN_DELETE_REQUIRES_DRAFT,
     SIGNAL_OPERATION_VALUE_INVALID,
+    USER_ACCOUNT_INVALID,
 
     // 交易/信号状态非法(400)
     TRANSACTION_ALREADY_CONFIRMED,
@@ -58,6 +59,7 @@ public enum ErrorCode {
 
     // 全站 API 鉴权(401/503,由请求过滤器直接映射 HTTP 状态)
     ADMIN_UNAUTHORIZED,
+    ADMIN_FORBIDDEN,
     ADMIN_AUTH_NOT_CONFIGURED,
 
     // 兜底(500)

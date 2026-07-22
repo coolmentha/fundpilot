@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import com.fundpilot.backend.user.service.CurrentUserService;
 
 @Service
 @RequiredArgsConstructor
@@ -25,16 +26,20 @@ public class PortfolioReturnTrendService {
     private final PortfolioReturnSnapshotRepository repository;
     private final PortfolioReturnService returnService;
     private final Clock clock;
+    private final CurrentUserService currentUserService;
 
     @Transactional
     public void capture(Instant businessDate) {
+        long userId = currentUserService.userId();
         var returns = returnService.getReturns();
         List<String> missing = returns.funds().stream()
                 .filter(fund -> fund.investedAmount().signum() > 0 && fund.unrealizedPnl() == null)
                 .map(fund -> fund.fundCode()).sorted().toList();
-        PortfolioReturnSnapshotEntity row = repository.findByBusinessDate(businessDate)
+        PortfolioReturnSnapshotEntity row = (userId == 0L ? repository.findByBusinessDate(businessDate)
+                : repository.findByOwnerIdAndBusinessDate(userId, businessDate))
                 .orElseGet(PortfolioReturnSnapshotEntity::new);
         row.setBusinessDate(businessDate);
+        row.setOwnerId(userId == 0L ? null : userId);
         row.setInvestedAmount(returns.investedAmount());
         row.setRedeemedAmount(returns.redeemedAmount());
         row.setFeeAmount(returns.feeAmount());
@@ -58,8 +63,13 @@ public class PortfolioReturnTrendService {
             case "YTD" -> Instant.parse(today.atZone(java.time.ZoneOffset.UTC).getYear() + "-01-01T00:00:00Z");
             default -> today.minus(29, ChronoUnit.DAYS);
         };
-        List<PortfolioReturnSnapshotEntity> rows = repository.findByBusinessDateBetweenOrderByBusinessDateAsc(from, to);
-        PortfolioReturnSnapshotEntity baseline = repository.findTopByBusinessDateBeforeOrderByBusinessDateDesc(from)
+        long userId = currentUserService.userId();
+        List<PortfolioReturnSnapshotEntity> rows = userId == 0L
+                ? repository.findByBusinessDateBetweenOrderByBusinessDateAsc(from, to)
+                : repository.findByOwnerIdAndBusinessDateBetweenOrderByBusinessDateAsc(userId, from, to);
+        PortfolioReturnSnapshotEntity baseline = (userId == 0L
+                ? repository.findTopByBusinessDateBeforeOrderByBusinessDateDesc(from)
+                : repository.findTopByOwnerIdAndBusinessDateBeforeOrderByBusinessDateDesc(userId, from))
                 .orElse(null);
         if (rows.isEmpty()) return empty();
         PortfolioReturnSnapshotEntity first = rows.getFirst();

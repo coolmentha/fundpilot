@@ -221,6 +221,7 @@ export const errorTitles = {
     DCA_PLAN_INVALID: '定投计划参数不合法',
     DCA_PLAN_DELETE_REQUIRES_DRAFT: '请先停用定投计划',
     SIGNAL_OPERATION_VALUE_INVALID: '实际操作数值不合法',
+    USER_ACCOUNT_INVALID: '用户信息不合法',
     OPENED_AT_IN_FUTURE: '建仓时间晚于当前时间',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',

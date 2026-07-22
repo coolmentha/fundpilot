@@ -19,6 +19,8 @@ import java.time.Instant;
 @Getter
 @Setter
 public class PortfolioReturnSnapshotEntity extends AbstractEntity {
+    @Column(name = "owner_id")
+    private Long ownerId;
 
     @Column(nullable = false)
     @Convert(converter = InstantDateConverter.class)
