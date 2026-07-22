@@ -9,9 +9,10 @@ import App from './App.jsx';
 import SiteAuthGate from './auth/SiteAuthGate.jsx';
 import {ApiError} from './api/client.js';
 import {errorTitle} from './constants.js';
+import {readTheme, THEME_STORAGE_KEY, ThemeModeContext} from './themeMode.js';
 
-// 深色金紫方案（ui-ux-pro-max 推荐 + 可访问性修正）。
-// muted 文字 #94A3B8 保证 4.5:1（AA）；正文 #F8FAFC 对比 ~16:1。
+// 深色金紫 + 浅色中性蓝方案（ui-ux-pro-max 推荐 + 可访问性修正）。
+// 两套主题的正文与 muted 文字均按 WCAG AA 对比度选色。
 
 // 设计原则(ui-ux-pro-max):错误须可被读屏 announced、信息清晰可看清、区分可恢复业务错误与系统异常。
 
@@ -85,37 +86,52 @@ function AppInit() {
     );
 }
 
-createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
+function Root() {
+    const [themeMode, setThemeMode] = React.useState(readTheme);
+    const isDark = themeMode === 'dark';
+
+    React.useLayoutEffect(() => {
+        document.documentElement.dataset.theme = themeMode;
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+        } catch {
+            // Storage may be disabled; theme switching still works for this session.
+        }
+    }, [themeMode]);
+
+    const toggleTheme = () => setThemeMode((current) => current === 'dark' ? 'light' : 'dark');
+
+    return (
+        <ThemeModeContext.Provider value={{themeMode, toggleTheme}}>
         <ConfigProvider theme={{
-            algorithm: theme.darkAlgorithm,
+            algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
             token: {
-                colorPrimary: '#F59E0B',
+                colorPrimary: isDark ? '#F59E0B' : '#2563EB',
                 colorInfo: '#3B82F6',
-                colorSuccess: '#22C55E',
-                colorWarning: '#F59E0B',
-                colorError: '#EF4444',
-                colorTextBase: '#F8FAFC',
-                colorBgBase: '#0F172A',
-                colorBgLayout: '#0F172A',
-                colorBgContainer: '#1E293B',
-                colorBgElevated: '#1E293B',
-                colorBorder: '#334155',
-                colorBorderSecondary: '#27364C',
-                colorText: '#F8FAFC',
-                colorTextSecondary: '#94A3B8',
-                colorTextTertiary: '#64748B',
-                colorTextQuaternary: '#475569',
+                colorSuccess: isDark ? '#22C55E' : '#15803D',
+                colorWarning: isDark ? '#F59E0B' : '#B45309',
+                colorError: isDark ? '#EF4444' : '#DC2626',
+                colorTextBase: isDark ? '#F8FAFC' : '#111827',
+                colorBgBase: isDark ? '#0F172A' : '#F6F8FB',
+                colorBgLayout: isDark ? '#0F172A' : '#F6F8FB',
+                colorBgContainer: isDark ? '#1E293B' : '#FFFFFF',
+                colorBgElevated: isDark ? '#1E293B' : '#FFFFFF',
+                colorBorder: isDark ? '#334155' : '#D7DEE8',
+                colorBorderSecondary: isDark ? '#27364C' : '#E5EAF1',
+                colorText: isDark ? '#F8FAFC' : '#111827',
+                colorTextSecondary: isDark ? '#94A3B8' : '#4B5563',
+                colorTextTertiary: isDark ? '#64748B' : '#6B7280',
+                colorTextQuaternary: isDark ? '#475569' : '#9CA3AF',
                 borderRadius: 8,
                 fontFamily: "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
                 fontFamilyCode: "'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
             },
             components: {
                 Layout: {
-                    siderBg: '#0B1220',
-                    headerBg: 'rgba(15, 23, 42, 0.85)',
+                    siderBg: isDark ? '#0B1220' : '#FFFFFF',
+                    headerBg: isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.9)',
                     headerHeight: 64,
-                    bodyBg: '#0F172A',
+                    bodyBg: isDark ? '#0F172A' : '#F6F8FB',
                 },
                 Menu: {
                     darkItemBg: '#0B1220',
@@ -125,27 +141,40 @@ createRoot(document.getElementById('root')).render(
                     darkItemHoverColor: '#F8FAFC',
                     darkItemHoverBg: 'rgba(148, 163, 184, 0.08)',
                     darkItemSelectedColor: '#F59E0B',
+                    itemBg: '#FFFFFF',
+                    itemColor: '#4B5563',
+                    itemHoverColor: '#111827',
+                    itemHoverBg: '#F3F6FA',
+                    itemSelectedColor: '#1D4ED8',
+                    itemSelectedBg: '#EFF6FF',
                 },
                 Card: {
-                    colorBgContainer: '#1E293B',
-                    colorBorderSecondary: '#27364C',
+                    colorBgContainer: isDark ? '#1E293B' : '#FFFFFF',
+                    colorBorderSecondary: isDark ? '#27364C' : '#E5EAF1',
                 },
                 Table: {
-                    headerBg: '#16223A',
-                    headerColor: '#CBD5E1',
-                    rowHoverBg: 'rgba(245, 158, 11, 0.06)',
-                    borderColor: '#27364C',
+                    headerBg: isDark ? '#16223A' : '#F3F6FA',
+                    headerColor: isDark ? '#CBD5E1' : '#374151',
+                    rowHoverBg: isDark ? 'rgba(245, 158, 11, 0.06)' : '#F8FAFC',
+                    borderColor: isDark ? '#27364C' : '#E5EAF1',
                 },
-                Modal: {contentBg: '#1E293B', headerBg: '#1E293B'},
-                Input: {colorBgContainer: '#0F172A'},
-                InputNumber: {colorBgContainer: '#0F172A'},
-                Select: {colorBgContainer: '#0F172A', optionSelectedBg: 'rgba(245, 158, 11, 0.15)'},
-                DatePicker: {colorBgContainer: '#0F172A'},
+                Modal: {contentBg: isDark ? '#1E293B' : '#FFFFFF', headerBg: isDark ? '#1E293B' : '#FFFFFF'},
+                Input: {colorBgContainer: isDark ? '#0F172A' : '#FFFFFF'},
+                InputNumber: {colorBgContainer: isDark ? '#0F172A' : '#FFFFFF'},
+                Select: {colorBgContainer: isDark ? '#0F172A' : '#FFFFFF', optionSelectedBg: isDark ? 'rgba(245, 158, 11, 0.15)' : '#EFF6FF'},
+                DatePicker: {colorBgContainer: isDark ? '#0F172A' : '#FFFFFF'},
             },
         }}>
             <AntdApp>
                 <AppInit/>
             </AntdApp>
         </ConfigProvider>
+        </ThemeModeContext.Provider>
+    );
+}
+
+createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+        <Root/>
     </React.StrictMode>,
 );
