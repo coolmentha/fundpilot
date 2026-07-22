@@ -43,7 +43,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Flyway 默认严格校验，禁止 `ignoreMigrationPatterns: '*:missing'` 或 `versioned:missing`。
 - repair 开关开启时，只有唯一 `MISSING_SUCCESS`、version `7`、description `dca take profit replaces timing`、script `V7__dca_take_profit_replaces_timing.sql` 可以进入 repair。
 - repair 前拒绝其他 missing/future/failed 与 checksum、description、type 不匹配；repair 后必须只有 V7 为 `DELETED`，不得 removed 或 aligned 其他迁移。合法 pending migration 必须先正常 migrate，再执行最终严格 validate，禁止用前置 validate 阻断版本升级。
-- 前端 CI 固定执行 `npm ci -> npm run lint -> npm test -> npm run build`；tag 发布工作流必须重新执行后端 verify 和前端完整验证。
+- 前端 CI 固定执行 `npm ci -> npm run lint -> npm test -> npm run build`；发布只允许在已通过 CI 的 `main` 提交上创建 tag，tag 发布工作流不重复执行后端 verify 或前端完整验证。
 - backend/frontend 镜像构建使用独立 scope 的 GitHub Actions Buildx 缓存；VPS 并行拉取两个候选镜像但必须等待且确认两者都成功。仅无状态 frontend 使用 2 秒停止宽限期，backend 保留默认安全停止时间。
 - Git `v*` tag 只用于检出 Compose；实际部署和回滚必须使用构建步骤返回的 backend/frontend GHCR digest。
 - 发布工作流使用 concurrency 串行化，且必须确认 release tag 仍指向本次构建 commit。
