@@ -1474,6 +1474,32 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     font-size: 13px;
 }
 
+/* ===== 养基宝批量导入 ===== */
+.yangjibao-import-modal .ant-modal-body { display: grid; gap: 14px; min-width: 0; }
+.yangjibao-steps { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--color-border); }
+.yangjibao-steps span { padding: 8px 4px 10px; color: var(--color-muted); font-size: 12px; text-align: center; border-bottom: 2px solid transparent; }
+.yangjibao-steps span.active { color: var(--color-text); border-color: var(--color-primary); }
+.yangjibao-scan { display: flex; min-height: 340px; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+.yangjibao-summary { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.yangjibao-summary strong { font-size: 15px; }
+.yangjibao-summary span { color: var(--color-muted); font-size: 12px; }
+.yangjibao-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 12px; }
+.yangjibao-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 8px 10px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; }
+.yangjibao-bulk-label { color: var(--color-muted); font-size: 12px; }
+.yangjibao-fund { display: flex; min-width: 0; flex-direction: column; }
+.yangjibao-fund strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yangjibao-progress { display: grid; width: min(100%, 620px); min-height: 320px; align-content: center; gap: 14px; margin: 0 auto; text-align: center; }
+.yangjibao-progress > strong { font-family: 'Fira Code', monospace; font-size: 30px; }
+.yangjibao-progress > div { display: flex; justify-content: center; gap: 24px; color: var(--color-muted); }
+.yangjibao-results { display: grid; gap: 14px; }
+
+@media (max-width: 768px) {
+    .yangjibao-import-modal { max-width: 100vw; margin: 0; top: 0; padding-bottom: 0; }
+    .yangjibao-import-modal .ant-modal-content { min-height: 100vh; border-radius: 0; }
+    .yangjibao-toolbar { grid-template-columns: minmax(0, 1fr); }
+    .yangjibao-actions { align-items: flex-start; flex-direction: column; }
+}
+
 /* 空状态内联 CTA 链接(与 muted 文案同行) */
 .empty-cta {
     margin-left: 8px;

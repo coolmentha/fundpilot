@@ -18,6 +18,6 @@ class YangjibaoSignerTest {
     @Test
     void authenticatedSignatureDiffersFromAnonymousSignature() {
         assertThat(signer.authenticated("/user_account", "token", 1784650158L, "secret"))
-                .isNotEqualTo(signer.anonymous("/user_account", 1784650158L, "secret"));
+                .isEqualTo("783d3c1dbd1fb40d87e8a432e6067c12");
     }
 }

@@ -10,6 +10,7 @@ import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.fund.service.FundTransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ public class YangjibaoImportService {
     private final FundPositionService positionService;
     private final FundService fundService;
     private final FundTransactionService transactionService;
+    private final TaskExecutor applicationTaskExecutor;
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     @Value("${fundpilot.yangjibao.session-ttl:PT30M}") private Duration ttl;
 
@@ -62,28 +64,69 @@ public class YangjibaoImportService {
         }
     }
 
-    public List<ImportResult> run(String id, List<YangjibaoImportController.Selection> selections) {
+    public ImportJobView startImport(String id, List<YangjibaoImportController.Selection> selections) {
         Session session = require(id);
         synchronized (session) {
-            if (session.results != null) return session.results;
+            if (session.job != null) return session.job.view();
             List<PreviewItem> preview = preview(id);
             Map<String, PreviewItem> byId = new HashMap<>();
             preview.forEach(item -> byId.put(item.itemId(), item));
             Set<String> codes = new HashSet<>();
-            for (var selection : selections == null ? List.<YangjibaoImportController.Selection>of() : selections) {
+            List<YangjibaoImportController.Selection> selected = selections == null ? List.of() : List.copyOf(selections);
+            for (var selection : selected) {
                 PreviewItem item = byId.get(selection.itemId());
                 if (item == null || !codes.add(item.fundCode())) throw invalid("选择项无效或同一基金代码选择了多份");
             }
-            List<ImportResult> results = new ArrayList<>();
-            for (var selection : selections == null ? List.<YangjibaoImportController.Selection>of() : selections) {
-                PreviewItem item = byId.get(selection.itemId());
-                try { results.add(importOne(item, selection.existingMode())); }
-                catch (Exception e) { results.add(new ImportResult(item.itemId(), item.fundCode(), "FAILED", e.getMessage())); }
+            session.job = new ImportJob(selected);
+            applicationTaskExecutor.execute(() -> process(id, session, byId, selected));
+            return session.job.view();
+        }
+    }
+
+    public ImportJobView importStatus(String id) {
+        Session session = require(id);
+        synchronized (session) {
+            if (session.job == null) throw invalid("导入任务尚未开始");
+            return session.job.view();
+        }
+    }
+
+    public ImportJobView retryFailed(String id) {
+        Session session = require(id);
+        synchronized (session) {
+            if (session.job == null || session.job.status != ImportStatus.COMPLETED) throw invalid("导入任务尚未完成");
+            Set<String> failedIds = new HashSet<>();
+            session.job.results.stream().filter(result -> "FAILED".equals(result.status())).forEach(result -> failedIds.add(result.itemId()));
+            if (failedIds.isEmpty()) throw invalid("没有可重试的失败项");
+            List<YangjibaoImportController.Selection> retry = session.job.selections.stream()
+                    .filter(selection -> failedIds.contains(selection.itemId())).toList();
+            Map<String, PreviewItem> byId = new HashMap<>();
+            session.preview.forEach(item -> byId.put(item.itemId(), item));
+            session.job = new ImportJob(retry);
+            applicationTaskExecutor.execute(() -> process(id, session, byId, retry));
+            return session.job.view();
+        }
+    }
+
+    private void process(String id, Session session, Map<String, PreviewItem> byId,
+                         List<YangjibaoImportController.Selection> selections) {
+        for (var selection : selections) {
+            if (sessions.get(id) != session) return;
+            PreviewItem item = byId.get(selection.itemId());
+            ImportResult result;
+            try { result = importOne(item, selection.existingMode()); }
+            catch (Exception e) { result = new ImportResult(item.itemId(), item.fundCode(), "FAILED", e.getMessage()); }
+            synchronized (session) {
+                session.job.results.add(result);
+                session.job.processed++;
+                session.job.currentFund = item.fundCode();
             }
-            session.results = List.copyOf(results);
+        }
+        synchronized (session) {
+            session.job.status = ImportStatus.COMPLETED;
+            session.job.currentFund = null;
             session.token = null;
             session.status = "COMPLETED";
-            return session.results;
         }
     }
 
@@ -131,9 +174,29 @@ public class YangjibaoImportService {
     public record PreviewItem(String itemId, String accountId, String accountName, String fundCode, String fundName,
                               BigDecimal yangjibaoShares, BigDecimal costPerShare, Long localFundId, BigDecimal localShares) {}
     public record ImportResult(String itemId, String fundCode, String status, String message) {}
+    public record ImportJobView(ImportStatus status, int total, int processed, int succeeded, int failed,
+                                String currentFund, List<ImportResult> results) {}
+    public enum ImportStatus {PROCESSING, COMPLETED}
+
+    private static class ImportJob {
+        final List<YangjibaoImportController.Selection> selections;
+        final List<ImportResult> results = new ArrayList<>();
+        ImportStatus status = ImportStatus.PROCESSING;
+        int processed;
+        String currentFund;
+
+        ImportJob(List<YangjibaoImportController.Selection> selections) { this.selections = selections; }
+
+        ImportJobView view() {
+            int failed = (int) results.stream().filter(result -> "FAILED".equals(result.status())).count();
+            return new ImportJobView(status, selections.size(), processed, processed - failed, failed,
+                    currentFund, List.copyOf(results));
+        }
+    }
+
     private static class Session {
         final String qrId, qrUrl; final Instant expiresAt; String token; String status = "WAITING";
-        List<PreviewItem> preview; List<ImportResult> results;
+        List<PreviewItem> preview; ImportJob job;
         Session(String qrId, String qrUrl, Instant expiresAt) { this.qrId = qrId; this.qrUrl = qrUrl; this.expiresAt = expiresAt; }
     }
 }
