@@ -6,6 +6,7 @@ import com.fundpilot.backend.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpStatusCodeException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -70,6 +71,9 @@ public class YangjibaoClient {
             return root.path("data");
         } catch (BusinessException e) {
             throw e;
+        } catch (HttpStatusCodeException e) {
+            throw new BusinessException(ErrorCode.YANGJIBAO_API_FAILED,
+                    "养基宝接口调用失败: " + path + " HTTP " + e.getStatusCode().value());
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.YANGJIBAO_API_FAILED,
                     "养基宝接口调用失败: " + e.getClass().getSimpleName());
