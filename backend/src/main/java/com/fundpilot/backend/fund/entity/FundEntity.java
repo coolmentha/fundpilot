@@ -26,6 +26,8 @@ import java.util.Set;
 @Setter
 public class FundEntity extends AbstractEntity {
     public static final BigDecimal DEFAULT_POSITION_WARNING_RATIO = new BigDecimal("0.30");
+    @Column(name = "owner_id")
+    private Long ownerId;
     private String fundCode;
 
     private String fundName;

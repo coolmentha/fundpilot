@@ -111,6 +111,17 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
             @Param("start") java.time.Instant start,
             @Param("end") java.time.Instant end);
 
+    @Query("select coalesce(sum(t.amount), 0) from FundTransactionEntity t " +
+            "where t.fundEntity.ownerId = :ownerId and t.source = :source and t.status <> :cancelled " +
+            "and coalesce(t.tradeDate, t.createdDate) >= :start " +
+            "and coalesce(t.tradeDate, t.createdDate) < :end")
+    java.math.BigDecimal sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+            @Param("ownerId") Long ownerId,
+            @Param("source") FundTransactionSource source,
+            @Param("cancelled") FundTransactionStatus cancelled,
+            @Param("start") java.time.Instant start,
+            @Param("end") java.time.Instant end);
+
     /** 自动计划已生成的任意状态交易都占用对应的实际执行日，预测不得重复计入。 */
     @Query("select t.dcaPlanId as dcaPlanId, coalesce(t.tradeDate, t.createdDate) as tradeDate " +
             "from FundTransactionEntity t where t.dcaPlanId in :planIds " +

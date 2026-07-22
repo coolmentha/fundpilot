@@ -32,6 +32,7 @@ import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SignalQueryService {
+    private final com.fundpilot.backend.fund.service.FundAccessService fundAccessService;
 
     private final SignalLogRepository signalLogRepository;
     private final FundTransactionRepository fundTransactionRepository;
@@ -41,6 +42,7 @@ public class SignalQueryService {
 
     /** 今日信号:取北京时间自然日对应的 UTC 00:00 标签起 24 小时区间最后一条。 */
     public SignalLogView today(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         Instant dayStart = ChinaTradingDate.toUtcDate(clock.instant());
         Instant dayEnd = dayStart.plus(1, java.time.temporal.ChronoUnit.DAYS);
         List<SignalLogEntity> logs = signalLogRepository
@@ -54,6 +56,7 @@ public class SignalQueryService {
 
     /** 日期范围信号(from/to 为日期字符串,UTC 0 点起算,含 from 含 to)。 */
     public List<SignalLogView> range(Long fundId, String from, String to) {
+        fundAccessService.requireOwned(fundId);
         Instant start = Instant.parse(from + "T00:00:00Z");
         Instant end = Instant.parse(to + "T00:00:00Z").plus(1, java.time.temporal.ChronoUnit.DAYS);
         return toViews(signalLogRepository
@@ -74,6 +77,7 @@ public class SignalQueryService {
         signalLogRepository.findTriggeredPendingSignals(SignalType.NONE, TakeProfitPhase.TRIGGERED)
                 .forEach(signal -> merged.put(signal.getId(), signal));
         return merged.values().stream()
+                .filter(signal -> fundAccessService.isOwned(signal.getFundEntity()))
                 .filter(signalActionabilityService::isActionable)
                 .sorted(Comparator.comparing(SignalLogEntity::getSignalDate).reversed())
                 .limit(100)

@@ -1,12 +1,17 @@
-import {App, Button, Card, Popconfirm, Space, Typography} from 'antd';
-import {DashboardOutlined, DatabaseOutlined, ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons';
-import {useAdminAction} from '../api/hooks.js';
+import React from 'react';
+import {App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography} from 'antd';
+import {DashboardOutlined, DatabaseOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined, UserOutlined} from '@ant-design/icons';
+import {useAdminAction, useAdminUserMutation, useAdminUsers} from '../api/hooks.js';
 
 const {Title, Text} = Typography;
 
 export default function AdminPage() {
     const {message} = App.useApp();
     const adminAction = useAdminAction();
+    const users = useAdminUsers();
+    const userMutation = useAdminUserMutation();
+    const [createOpen, setCreateOpen] = React.useState(false);
+    const [form] = Form.useForm();
     const run = async (action, successMsg) => {
         try {
             const result = await adminAction.mutateAsync({action});
@@ -16,8 +21,17 @@ export default function AdminPage() {
         }
     };
 
-    return (
-        <Space direction="vertical" size={16} className="full-width">
+    const createUser = async () => {
+        const values = await form.validateFields();
+        await userMutation.mutateAsync({path: '/api/admin/users', body: {
+            ...values, username: values.username.trim(),
+        }});
+        message.success('用户创建成功');
+        form.resetFields();
+        setCreateOpen(false);
+    };
+
+    const operations = (
             <Card title={<Title level={4}>管理操作</Title>}>
                 <Text type="secondary" style={{display: 'block', marginBottom: 24}}>
                     手动触发定时任务（日常由后端 @Scheduled 自动执行，此处用于调试/补跑）。
@@ -76,6 +90,77 @@ export default function AdminPage() {
                     </Card>
                 </Space>
             </Card>
-        </Space>
+    );
+    const userRows = users.data || [];
+    const enabledCount = userRows.filter((user) => user.enabled).length;
+    const adminCount = userRows.filter((user) => user.role === 'ADMIN').length;
+    const userManagement = (
+            <section className="admin-users" aria-labelledby="admin-users-title">
+                <div className="admin-users-header">
+                    <div>
+                        <Title level={4} id="admin-users-title">用户与权限</Title>
+                        <Text type="secondary">
+                            共 {userRows.length} 位用户 · {enabledCount} 位启用 · {adminCount} 位管理员
+                        </Text>
+                    </div>
+                    <Button type="primary" icon={<PlusOutlined/>} onClick={() => setCreateOpen(true)}>
+                        新建用户
+                    </Button>
+                </div>
+                <Table rowKey="id" loading={users.isLoading} dataSource={userRows} pagination={false}
+                       className="admin-users-table" scroll={{x: 680}}
+                       columns={[
+                           {title: '用户', dataIndex: 'username', render: (username) => <Space>
+                               <span className="admin-user-avatar"><UserOutlined/></span>
+                               <Text strong>{username}</Text>
+                           </Space>},
+                           {title: '角色', dataIndex: 'role', width: 140, render: (role) =>
+                               <Tag color={role === 'ADMIN' ? 'blue' : 'default'}>
+                                   {role === 'ADMIN' ? '管理员' : '普通用户'}
+                               </Tag>},
+                           {title: '状态', dataIndex: 'enabled', width: 110, render: (enabled) =>
+                               <Tag color={enabled ? 'green' : 'default'}>{enabled ? '已启用' : '已停用'}</Tag>},
+                           {title: '权限调整', width: 180, render: (_, row) =>
+                               <Select value={row.role} style={{width: 128}} aria-label={`调整 ${row.username} 的角色`}
+                                       options={[{value: 'USER', label: '普通用户'}, {value: 'ADMIN', label: '管理员'}]}
+                                       onChange={(role) => userMutation.mutate({path: `/api/admin/users/${row.id}/role`, body: {role}})}/>
+                           },
+                           {title: '账号启用', width: 120, render: (_, row) =>
+                               <Popconfirm title={`${row.enabled ? '停用' : '启用'}用户 ${row.username}？`}
+                                           onConfirm={() => userMutation.mutate({
+                                               path: `/api/admin/users/${row.id}/status`, body: {enabled: !row.enabled},
+                                           })}>
+                                   <Switch checked={row.enabled} aria-label={`${row.enabled ? '停用' : '启用'} ${row.username}`}/>
+                               </Popconfirm>
+                           },
+                       ]}/>
+                <Modal title="新建用户" open={createOpen} okText="创建用户" cancelText="取消"
+                       confirmLoading={userMutation.isPending} onOk={createUser}
+                       onCancel={() => { form.resetFields(); setCreateOpen(false); }} destroyOnHidden>
+                    <Form form={form} layout="vertical" initialValues={{role: 'USER'}} requiredMark="optional">
+                        <Form.Item name="username" label="用户名"
+                                   rules={[{required: true, whitespace: true, message: '请输入用户名'}]}>
+                            <Input autoFocus autoComplete="off" placeholder="用于登录" maxLength={100}/>
+                        </Form.Item>
+                        <Form.Item name="password" label="初始密码"
+                                   rules={[{required: true, message: '请输入初始密码'}]}>
+                            <Input.Password autoComplete="new-password" placeholder="用户首次登录使用"/>
+                        </Form.Item>
+                        <Form.Item name="role" label="角色">
+                            <Select options={[
+                                {value: 'USER', label: '普通用户'},
+                                {value: 'ADMIN', label: '管理员'},
+                            ]}/>
+                        </Form.Item>
+                    </Form>
+                </Modal>
+            </section>
+    );
+
+    return (
+        <Tabs defaultActiveKey="operations" items={[
+            {key: 'operations', label: '管理操作', children: operations},
+            {key: 'users', label: '用户管理', children: userManagement},
+        ]}/>
     );
 }

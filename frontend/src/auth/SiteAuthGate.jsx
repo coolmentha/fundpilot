@@ -21,11 +21,13 @@ export default function SiteAuthGate({children}) {
     const [restoreAttempt, setRestoreAttempt] = useState(0);
     const [restoreError, setRestoreError] = useState(null);
     const [authenticated, setAuthenticated] = useState(false);
+    const [user, setUser] = useState(null);
 
     const clearAuthenticatedState = useCallback(() => {
         markSiteAuthChanged();
         queryClient.clear();
         setAuthenticated(false);
+        setUser(null);
     }, [queryClient]);
 
     const handleUnauthorized = useCallback(() => {
@@ -52,11 +54,12 @@ export default function SiteAuthGate({children}) {
         let active = true;
 
         verifySiteSession()
-            .then(() => {
+            .then((currentUser) => {
                 if (!active) return;
                 markSiteAuthChanged();
                 queryClient.clear();
                 setAuthenticated(true);
+                setUser(currentUser);
             })
             .catch((error) => {
                 if (!active) return;
@@ -96,11 +99,12 @@ export default function SiteAuthGate({children}) {
         setRestoreError(null);
     };
 
-    const login = async (apiKey) => {
-        await loginSiteApiKey(apiKey);
+    const login = async (credentials) => {
+        const currentUser = await loginSiteApiKey(credentials);
         markSiteAuthChanged();
         queryClient.clear();
         setAuthenticated(true);
+        setUser(currentUser);
     };
 
     if (restoring) {
@@ -128,5 +132,5 @@ export default function SiteAuthGate({children}) {
     }
     if (!authenticated) return React.createElement(LoginPage, {onLogin: login});
 
-    return React.createElement(SiteAuthContext.Provider, {value: {logout}}, children);
+    return React.createElement(SiteAuthContext.Provider, {value: {logout, user}}, children);
 }

@@ -4,6 +4,7 @@ import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.exception.IllegalStateTransitionException;
 import com.fundpilot.backend.fund.entity.FundEntity;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import com.fundpilot.backend.fund.entity.FundStrategyActivationEntity;
 import com.fundpilot.backend.fund.enums.StrategyParamStatus;
 import com.fundpilot.backend.fund.enums.TakeProfitPhase;
@@ -39,6 +40,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class StrategyConfigService {
+    private final FundAccessService fundAccessService;
 
     private final FundStrategyRepository fundStrategyRepository;
     private final FundRepository fundRepository;
@@ -50,6 +52,7 @@ public class StrategyConfigService {
      */
     @Transactional
     public Long createDraft(Long fundId, StrategyConfigRequest request) {
+        fundAccessService.requireOwned(fundId);
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         FundStrategyEntity strategy = new FundStrategyEntity();
@@ -78,6 +81,7 @@ public class StrategyConfigService {
      */
     @Transactional(readOnly = true)
     public List<FundStrategyEntity> listByFund(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundStrategyRepository.findByFundEntity_Id(fundId);
     }
 
@@ -92,6 +96,7 @@ public class StrategyConfigService {
      */
     @Transactional(readOnly = true)
     public Optional<FundStrategyEntity> findActive(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         return fundStrategyRepository.findByFundEntity_IdAndStatus(fundId, StrategyParamStatus.EFFECTIVE);
     }
 
@@ -103,6 +108,7 @@ public class StrategyConfigService {
 
     @Transactional(readOnly = true)
     public StrategyRecommendationView recommendation(Long fundId) {
+        fundAccessService.requireOwned(fundId);
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
         return StrategyRecommendationView.from(takeProfitPresetService.recommend(fund.getFundCategory()));
@@ -188,8 +194,10 @@ public class StrategyConfigService {
     }
 
     private FundStrategyEntity requireStrategy(Long strategyId) {
-        return fundStrategyRepository.findById(strategyId)
+        FundStrategyEntity strategy = fundStrategyRepository.findById(strategyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "FundStrategy #" + strategyId + " 不存在"));
+        fundAccessService.requireOwned(strategy.getFundEntity());
+        return strategy;
     }
 
     private StrategyConfigRequest resolveRequest(FundEntity fund, StrategyConfigRequest request) {

@@ -202,6 +202,7 @@ public class MarketDataFetchService {
                 .map(s -> {
                     FundNavHistoryEntity entity = new FundNavHistoryEntity();
                     entity.setFundEntity(fund);
+                    entity.setFundCode(fund.getFundCode());
                     entity.setNavDate(s.navDate());
                     entity.setNav(s.nav());
                     entity.setAccumulatedNav(s.accumulatedNav());

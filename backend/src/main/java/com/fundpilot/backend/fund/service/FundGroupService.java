@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.fundpilot.backend.user.service.CurrentUserService;
 
 @Service
 @RequiredArgsConstructor
@@ -30,10 +31,11 @@ public class FundGroupService {
 
     private final FundGroupRepository fundGroupRepository;
     private final FundRepository fundRepository;
+    private final CurrentUserService currentUserService;
 
     @Transactional(readOnly = true)
     public List<FundGroupView> list() {
-        return toViews(fundGroupRepository.findAllByOrderBySortOrderAscIdAsc(), fundRepository.findAll());
+        return toViews(groups(), funds());
     }
 
     @Transactional
@@ -45,7 +47,7 @@ public class FundGroupService {
         List<String> names = items.stream().map(FundGroupSaveRequest.Item::name).map(this::normalizeName).toList();
         requireUniqueNames(names);
 
-        List<FundGroupEntity> existing = fundGroupRepository.findAllByOrderBySortOrderAscIdAsc();
+        List<FundGroupEntity> existing = groups();
         Map<Long, FundGroupEntity> byId = existing.stream()
                 .collect(Collectors.toMap(FundGroupEntity::getId, Function.identity()));
         Set<Long> retainedIds = new HashSet<>();
@@ -58,7 +60,7 @@ public class FundGroupService {
         Set<Long> deletedIds = new HashSet<>(byId.keySet());
         deletedIds.removeAll(retainedIds);
         if (!deletedIds.isEmpty()) {
-            List<FundEntity> funds = fundRepository.findAll();
+            List<FundEntity> funds = funds();
             funds.forEach(fund -> fund.getGroups().removeIf(group -> deletedIds.contains(group.getId())));
             fundRepository.saveAll(funds);
             fundRepository.flush();
@@ -71,12 +73,13 @@ public class FundGroupService {
         for (int index = 0; index < items.size(); index++) {
             FundGroupSaveRequest.Item item = items.get(index);
             FundGroupEntity group = item.id() == null ? new FundGroupEntity() : byId.get(item.id());
+            if (group.getOwnerId() == null && currentUserService.userId() != 0L) group.setOwnerId(currentUserService.userId());
             group.setName(names.get(index));
             group.setSortOrder(index);
             saved.add(fundGroupRepository.save(group));
         }
         fundGroupRepository.flush();
-        return toViews(saved, fundRepository.findAll());
+        return toViews(saved, funds());
     }
 
     @Transactional
@@ -86,7 +89,7 @@ public class FundGroupService {
         }
         List<String> names = requestedNames.stream().map(this::normalizeName).toList();
         requireUniqueNames(names);
-        List<FundGroupEntity> existing = fundGroupRepository.findAllByOrderBySortOrderAscIdAsc();
+        List<FundGroupEntity> existing = groups();
         Map<String, FundGroupEntity> byName = existing.stream()
                 .collect(Collectors.toMap(group -> key(group.getName()), Function.identity()));
         int nextOrder = existing.size();
@@ -95,6 +98,7 @@ public class FundGroupService {
             FundGroupEntity group = byName.get(key(name));
             if (group == null) {
                 group = new FundGroupEntity();
+                if (currentUserService.userId() != 0L) group.setOwnerId(currentUserService.userId());
                 group.setName(name);
                 group.setSortOrder(nextOrder++);
                 group = fundGroupRepository.save(group);
@@ -103,6 +107,17 @@ public class FundGroupService {
             groups.add(group);
         }
         return groups;
+    }
+
+    private List<FundGroupEntity> groups() {
+        long userId = currentUserService.userId();
+        return userId == 0L ? fundGroupRepository.findAllByOrderBySortOrderAscIdAsc()
+                : fundGroupRepository.findAllByOwnerIdOrderBySortOrderAscIdAsc(userId);
+    }
+
+    private List<FundEntity> funds() {
+        long userId = currentUserService.userId();
+        return userId == 0L ? fundRepository.findAll() : fundRepository.findAllByOwnerId(userId);
     }
 
     private List<FundGroupView> toViews(List<FundGroupEntity> groups, List<FundEntity> funds) {

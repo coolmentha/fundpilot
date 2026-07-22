@@ -13,6 +13,12 @@ import java.util.Set;
 public interface FundGroupRepository extends JpaRepository<FundGroupEntity, Long> {
     List<FundGroupEntity> findAllByOrderBySortOrderAscIdAsc();
 
+    List<FundGroupEntity> findAllByOwnerIdOrderBySortOrderAscIdAsc(Long ownerId);
+
+    @Modifying
+    @Query("update FundGroupEntity g set g.ownerId = :ownerId where g.ownerId is null")
+    int claimUnowned(@Param("ownerId") Long ownerId);
+
     Optional<FundGroupEntity> findByNameIgnoreCase(String name);
 
     @Modifying

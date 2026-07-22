@@ -5,6 +5,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.fund.service.FundTransactionService;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,11 +30,18 @@ class YangjibaoImportServiceTest {
     @Mock FundPositionService positionService;
     @Mock FundService fundService;
     @Mock FundTransactionService transactionService;
+    @Mock CurrentUserService currentUserService;
     YangjibaoImportService service;
 
     @BeforeEach
     void setUp() {
-        service = new YangjibaoImportService(client, fundRepository, positionService, fundService, transactionService, Runnable::run);
+        when(currentUserService.userId()).thenReturn(1L);
+        lenient().doAnswer(invocation -> {
+            invocation.getArgument(1, Runnable.class).run();
+            return null;
+        }).when(currentUserService).runAs(anyLong(), any(Runnable.class));
+        service = new YangjibaoImportService(client, fundRepository, positionService, fundService, transactionService,
+                currentUserService, Runnable::run);
         ReflectionTestUtils.setField(service, "ttl", Duration.ofMinutes(30));
     }
 
@@ -44,7 +52,7 @@ class YangjibaoImportServiceTest {
         when(client.accounts("token")).thenReturn(List.of(new YangjibaoClient.Account("a", "支付宝")));
         when(client.holdings("token", "a")).thenReturn(List.of(new YangjibaoClient.Holding(
                 "h", "017093", "示例基金", new BigDecimal("100.00"), new BigDecimal("1.23"))));
-        when(fundRepository.findByFundCode("017093")).thenReturn(Optional.empty());
+        when(fundRepository.findByFundCodeAndOwnerId("017093", 1L)).thenReturn(Optional.empty());
 
         String id = service.create().sessionId();
         service.state(id);
@@ -64,7 +72,7 @@ class YangjibaoImportServiceTest {
                 new YangjibaoClient.Account("a", "A"), new YangjibaoClient.Account("b", "B")));
         when(client.holdings(eq("token"), anyString())).thenAnswer(invocation -> List.of(new YangjibaoClient.Holding(
                 "h", "017093", "示例基金", BigDecimal.TEN, BigDecimal.ONE)));
-        when(fundRepository.findByFundCode("017093")).thenReturn(Optional.empty());
+        when(fundRepository.findByFundCodeAndOwnerId("017093", 1L)).thenReturn(Optional.empty());
 
         String id = service.create().sessionId();
         service.state(id);
@@ -83,7 +91,7 @@ class YangjibaoImportServiceTest {
         when(client.accounts("token")).thenReturn(List.of(new YangjibaoClient.Account("a", "支付宝")));
         when(client.holdings("token", "a")).thenReturn(List.of(new YangjibaoClient.Holding(
                 "h", "017093", "示例基金", BigDecimal.TEN, BigDecimal.ONE)));
-        when(fundRepository.findByFundCode("017093")).thenReturn(Optional.empty());
+        when(fundRepository.findByFundCodeAndOwnerId("017093", 1L)).thenReturn(Optional.empty());
         when(fundService.create(any())).thenThrow(new RuntimeException("temporary failure")).thenReturn(null);
 
         String id = service.create().sessionId();
@@ -94,5 +102,18 @@ class YangjibaoImportServiceTest {
         assertThat(service.importStatus(id).failed()).isEqualTo(1);
         assertThat(service.retryFailed(id).failed()).isZero();
         verify(fundService, times(2)).create(any());
+    }
+
+    @Test
+    void rejectsSessionOwnedByAnotherUser() {
+        when(client.createQrCode()).thenReturn(new YangjibaoClient.QrCode("qr", "https://qr"));
+        String id = service.create().sessionId();
+        when(currentUserService.userId()).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.state(id))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getCode())
+                .isEqualTo(com.fundpilot.backend.exception.ErrorCode.YANGJIBAO_SESSION_NOT_FOUND.name());
+        verify(client, never()).qrState(anyString());
     }
 }

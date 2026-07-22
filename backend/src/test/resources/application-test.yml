@@ -21,3 +21,8 @@ spring:
 # 与测试夹具日期(如 2026-06-22)撞唯一索引 uq_trading_calendar_date。
 trading-calendar:
   sync-on-startup: false
+
+management:
+  health:
+    redis:
+      enabled: false

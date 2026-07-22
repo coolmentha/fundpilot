@@ -16,6 +16,7 @@ import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import com.fundpilot.backend.market.service.EstimateStatus;
 import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
+import com.fundpilot.backend.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -50,6 +51,7 @@ public class FundPnlService {
     private final FundTransactionRepository fundTransactionRepository;
     private final MarketRealtimeCache marketRealtimeCache;
     private final Clock clock;
+    private final CurrentUserService currentUserService;
 
     /**
      * 聚合单基金的涨跌与盈亏(issue #38)。
@@ -237,7 +239,9 @@ public class FundPnlService {
      * @return 五指标汇总(无持仓基金时全为 0)
      */
     public PortfolioSummary computePortfolioSummary() {
-        List<FundEntity> holdingFunds = fundRepository.findByStatus(FundStatus.HOLDING);
+        long userId = currentUserService.userId();
+        List<FundEntity> holdingFunds = userId == 0L ? fundRepository.findByStatus(FundStatus.HOLDING)
+                : fundRepository.findByStatusAndOwnerId(FundStatus.HOLDING, userId);
         Map<Long, Pnl> pnlByFund = computeForFunds(holdingFunds);
         List<BigDecimal> changePcts = new ArrayList<>();
         List<BigDecimal> holdingAmounts = new ArrayList<>();

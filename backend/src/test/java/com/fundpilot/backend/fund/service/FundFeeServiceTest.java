@@ -37,7 +37,8 @@ class FundFeeServiceTest {
         EastmoneyFundFeeClient client = mock(EastmoneyFundFeeClient.class);
         FundFeeRepository feeRepository = mock(FundFeeRepository.class);
         FundRepository fundRepository = mock(FundRepository.class);
-        FundFeeService service = spy(new FundFeeService(client, feeRepository, fundRepository));
+        FundAccessService fundAccessService = mock(FundAccessService.class);
+        FundFeeService service = spy(new FundFeeService(client, feeRepository, fundRepository, fundAccessService));
 
         FundEntity fund = new FundEntity();
         fund.setFundCode("020608");
@@ -61,5 +62,6 @@ class FundFeeServiceTest {
         assertThat(view.purchaseRate()).isEqualByComparingTo(new BigDecimal("0.012"));
         assertThat(view.discountRate()).isEqualByComparingTo(new BigDecimal("0.0012"));
         verify(service).fetchAndSave("020608");
+        verify(fundAccessService).requireOwned(5L);
     }
 }

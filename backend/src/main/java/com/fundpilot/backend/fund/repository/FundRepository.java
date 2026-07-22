@@ -17,6 +17,15 @@ public interface FundRepository extends JpaRepository<FundEntity, Long> {
     @EntityGraph(attributePaths = "groups")
     List<FundEntity> findAll();
 
+    @EntityGraph(attributePaths = "groups")
+    List<FundEntity> findAllByOwnerId(Long ownerId);
+
+    Optional<FundEntity> findByIdAndOwnerId(Long id, Long ownerId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update FundEntity f set f.ownerId = :ownerId where f.ownerId is null")
+    int claimUnowned(@Param("ownerId") Long ownerId);
+
     /**
      * 查所有 fundSubType 为 null 的行,供 {@code FundDictBackfillService.backfillAll} 批量回填。
      */
@@ -27,7 +36,11 @@ public interface FundRepository extends JpaRepository<FundEntity, Long> {
      */
     List<FundEntity> findByStatus(FundStatus status);
 
+    List<FundEntity> findByStatusAndOwnerId(FundStatus status, Long ownerId);
+
     Optional<FundEntity> findByFundCode(String fundCode);
+
+    Optional<FundEntity> findByFundCodeAndOwnerId(String fundCode, Long ownerId);
 
     /** 锁定基金行，串行化依赖事实持仓校验的手工调整。 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

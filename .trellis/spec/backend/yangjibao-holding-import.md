@@ -20,6 +20,7 @@
 - `/qr_code` 与 `/qr_code_state/{id}` 使用空 Token 计算 `MD5(path + timestamp + secret)`；JDK 客户端省略空 `Authorization` Header。
 - 登录接口使用 `MD5(path + token + timestamp + secret)`，path 不含 query。
 - Token 只存后端 30 分钟内存会话，完成、取消、超时清除。
+- 会话绑定创建它的当前用户；其他用户即使取得 session ID 也按会话不存在处理。异步导入必须恢复创建者身份，使基金查找、新建和份额调整始终落在该用户的数据边界内。
 - Spring Boot 4 客户端注入 `tools.jackson.databind.ObjectMapper`；不得使用 Flyway 间接依赖的 Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper`，后者没有 Boot 自动配置 Bean。
 - `YangjibaoClient` 使用 `RestClient.builder()` 构建专用客户端，不依赖生产上下文未提供的 `RestClient.Builder` Bean。
 - 提交只接收预览 item ID 与 `KEEP_LOCAL/SYNC_TARGET`，份额和成本以服务端快照为准。

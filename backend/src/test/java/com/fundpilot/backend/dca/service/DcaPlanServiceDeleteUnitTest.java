@@ -6,6 +6,7 @@ import com.fundpilot.backend.dca.repository.FundDcaPlanRepository;
 import com.fundpilot.backend.exception.BusinessException;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,12 +31,14 @@ class DcaPlanServiceDeleteUnitTest {
 
     @Mock
     DcaPlanForecastService forecastService;
+    @Mock
+    FundAccessService fundAccessService;
 
     private DcaPlanService service;
 
     @BeforeEach
     void setUp() {
-        service = new DcaPlanService(planRepository, fundRepository, forecastService);
+        service = new DcaPlanService(fundAccessService, planRepository, fundRepository, forecastService);
     }
 
     @Test

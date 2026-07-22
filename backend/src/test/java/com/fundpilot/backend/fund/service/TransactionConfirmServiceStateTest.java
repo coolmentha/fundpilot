@@ -34,6 +34,7 @@ class TransactionConfirmServiceStateTest {
     @Mock private TransactionConfirmSupport transactionConfirmSupport;
     @Mock private FundPositionService fundPositionService;
     @Mock private TakeProfitLifecycleService takeProfitLifecycleService;
+    @Mock private FundAccessService fundAccessService;
     @InjectMocks private TransactionConfirmService service;
 
     @Test

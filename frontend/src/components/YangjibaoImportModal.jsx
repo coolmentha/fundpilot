@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Alert, Button, Checkbox, Input, Modal, Progress, QRCode, Radio, Segmented, Space, Spin, Table, Tag, Typography} from 'antd';
-import {ReloadOutlined, SearchOutlined} from '@ant-design/icons';
+import {Alert, Button, Checkbox, Input, Modal, Progress, QRCode, Radio, Segmented, Space, Spin, Steps, Table, Tag, Typography} from 'antd';
+import {CheckCircleOutlined, QrcodeOutlined, ReloadOutlined, SearchOutlined, SwapOutlined} from '@ant-design/icons';
 import {
     cancelYangjibaoSession, createYangjibaoSession, getYangjibaoImportStatus,
     getYangjibaoPreview, getYangjibaoSession, retryYangjibaoImport, useRunYangjibaoImport,
@@ -115,6 +115,10 @@ export default function YangjibaoImportModal({open, onClose}) {
     ];
 
     const results = job?.results || [];
+    const currentStep = job ? 2 : preview ? 1 : 0;
+    const newCount = (preview || []).filter(x => !x.localFundId).length;
+    const existingCount = (preview || []).filter(x => x.localFundId).length;
+    const conflictCount = (preview || []).filter(x => codeCounts.get(x.fundCode) > 1).length;
     const footer = preview && !job ? <Space wrap>
         <Button onClick={close}>取消</Button>
         <Button type="primary" loading={runImport.isPending} disabled={!selectedItems.length || invalidSelection} onClick={submit}>
@@ -122,22 +126,28 @@ export default function YangjibaoImportModal({open, onClose}) {
         </Button>
     </Space> : <Button onClick={close}>{job?.status === 'PROCESSING' ? '后台继续' : '关闭'}</Button>;
 
-    return <Modal className="yangjibao-import-modal" title="从养基宝导入持仓" open={open} onCancel={close}
+    return <Modal className="yangjibao-import-modal" title={<div className="yangjibao-title">
+        <span className="yangjibao-title-icon"><SwapOutlined/></span>
+        <span>从养基宝导入<Text type="secondary">同步基金持仓到 FundPilot</Text></span>
+    </div>} open={open} onCancel={close}
         width="min(1200px, 96vw)" footer={footer} destroyOnHidden>
-        <div className="yangjibao-steps" aria-label="导入进度">
-            {['扫码连接', '选择持仓', '导入结果'].map((label, index) => <span key={label} className={(preview ? 1 : 0) + (job ? 1 : 0) >= index ? 'active' : ''}>{index + 1}. {label}</span>)}
-        </div>
+        <Steps className="yangjibao-steps" current={currentStep} size="small" responsive={false} items={[
+            {title: '连接养基宝'}, {title: '确认持仓'}, {title: '导入结果'},
+        ]}/>
         {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)}/>}
         {!session && !error && <Spin/>}
         {session && !preview && !job && <div className="yangjibao-scan">
-            <QRCode value={session.qrUrl}/><Text>请使用微信扫描二维码</Text><Text type="secondary">等待扫码连接</Text>
+            <span className="yangjibao-state-icon"><QrcodeOutlined/></span>
+            <div><Typography.Title level={4}>连接养基宝账户</Typography.Title><Text type="secondary">使用微信扫描二维码，授权后将自动读取持仓</Text></div>
+            <div className="yangjibao-qr"><QRCode value={session.qrUrl}/></div>
+            <Tag color="processing">等待扫码连接</Tag>
         </div>}
         {preview && !job && <>
             <div className="yangjibao-summary">
-                <strong>{preview.length} 条持仓</strong>
-                <span>新增 {(preview || []).filter(x => !x.localFundId).length}</span>
-                <span>已存在 {(preview || []).filter(x => x.localFundId).length}</span>
-                <span>冲突 {(preview || []).filter(x => codeCounts.get(x.fundCode) > 1).length}</span>
+                <span><Text type="secondary">全部持仓</Text><strong>{preview.length}</strong></span>
+                <span><Text type="secondary">新增基金</Text><strong>{newCount}</strong></span>
+                <span><Text type="secondary">已有基金</Text><strong>{existingCount}</strong></span>
+                <span><Text type="secondary">重复冲突</Text><strong className={conflictCount ? 'is-warning' : ''}>{conflictCount}</strong></span>
             </div>
             <div className="yangjibao-toolbar">
                 <Input allowClear prefix={<SearchOutlined/>} placeholder="搜索基金、代码或账户" value={search} onChange={e => setSearch(e.target.value)}/>
@@ -146,8 +156,8 @@ export default function YangjibaoImportModal({open, onClose}) {
                 ]}/>
             </div>
             <div className="yangjibao-actions">
-                <Text>已选择 <strong>{selectedItems.length}</strong> 条</Text>
-                <Space wrap>
+                <div className="yangjibao-selection"><Text type="secondary">已选择</Text><strong>{selectedItems.length}</strong><Text type="secondary">条</Text></div>
+                <Space wrap size={8}>
                     <Button size="small" onClick={() => chooseRows(filtered)}>全选当前结果</Button>
                     <Button size="small" onClick={() => {
                         const next = {}; const seen = new Set();
@@ -157,7 +167,7 @@ export default function YangjibaoImportModal({open, onClose}) {
                         setSelected(next);
                     }}>仅选择新增</Button>
                     <Button size="small" onClick={() => setSelected({})}>清空</Button>
-                    <span className="yangjibao-bulk-label">已有基金批量处理</span>
+                    <span className="yangjibao-bulk-label">批量处理已有基金</span>
                     <Button size="small" onClick={() => setBulkMode('KEEP_LOCAL')}>保留本系统</Button>
                     <Button size="small" onClick={() => setBulkMode('SYNC_TARGET')}>同步养基宝</Button>
                 </Space>
@@ -167,14 +177,19 @@ export default function YangjibaoImportModal({open, onClose}) {
             {invalidSelection && <Alert type="warning" showIcon message="请为已选择的已有基金设置处理方式"/>}
         </>}
         {job?.status === 'PROCESSING' && <div className="yangjibao-progress" aria-live="polite">
-            <Text type="secondary">正在导入</Text><strong>{job.processed} / {job.total}</strong>
+            <span className="yangjibao-state-icon"><SwapOutlined/></span>
+            <div><Typography.Title level={4}>正在同步持仓</Typography.Title><Text type="secondary">请保持页面开启，关闭后任务仍会在后台继续</Text></div>
+            <strong>{job.processed} / {job.total}</strong>
             <Progress percent={job.total ? Math.round(job.processed / job.total * 100) : 0}/>
             <div><span>成功 {job.succeeded}</span><span>失败 {job.failed}</span><span>剩余 {job.total - job.processed}</span></div>
             {job.currentFund && <Text type="secondary">当前基金：{job.currentFund}</Text>}
         </div>}
         {job?.status === 'COMPLETED' && <div className="yangjibao-results">
-            <div className="yangjibao-summary"><strong>导入完成</strong><span>成功 {job.succeeded}</span><span>失败 {job.failed}</span></div>
-            {job.failed > 0 && <Button icon={<ReloadOutlined/>} onClick={retry}>仅重试失败项</Button>}
+            <div className="yangjibao-result-header">
+                <span className="yangjibao-state-icon is-success"><CheckCircleOutlined/></span>
+                <div><Typography.Title level={4}>导入完成</Typography.Title><Text type="secondary">成功 {job.succeeded} 条，失败 {job.failed} 条</Text></div>
+                {job.failed > 0 && <Button icon={<ReloadOutlined/>} onClick={retry}>仅重试失败项</Button>}
+            </div>
             <Table rowKey="itemId" size="small" pagination={{pageSize: 20, showSizeChanger: false}} dataSource={results} columns={[
                 {title: '基金代码', dataIndex: 'fundCode', width: 120, className: 'num-cell'},
                 {title: '结果', dataIndex: 'status', width: 110, render: value => <Tag color={value === 'FAILED' ? 'red' : value === 'SKIPPED' ? 'blue' : 'green'}>{value}</Tag>},

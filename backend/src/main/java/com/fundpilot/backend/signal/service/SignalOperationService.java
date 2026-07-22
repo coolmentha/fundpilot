@@ -48,6 +48,7 @@ import java.time.Clock;
 @Service
 @RequiredArgsConstructor
 public class SignalOperationService {
+    private final com.fundpilot.backend.fund.service.FundAccessService fundAccessService;
 
     private final SignalLogRepository signalLogRepository;
     private final FundTransactionRepository fundTransactionRepository;
@@ -69,6 +70,7 @@ public class SignalOperationService {
      */
     @Transactional
     public FundTransactionEntity confirmOperation(Long fundId, Long signalLogId, ConfirmOperationRequest request) {
+        fundAccessService.requireOwned(fundId);
         SignalLogEntity signalLog = signalLogRepository.findByIdForUpdate(signalLogId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SIGNAL_LOG_NOT_FOUND, "SignalLog #" + signalLogId + " 不存在"));
         FundEntity fund = signalLog.getFundEntity();
@@ -104,6 +106,7 @@ public class SignalOperationService {
 
     @Transactional
     public SignalLogEntity ignoreSignal(Long fundId, Long signalLogId) {
+        fundAccessService.requireOwned(fundId);
         SignalLogEntity signalLog = signalLogRepository.findByIdForUpdate(signalLogId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.SIGNAL_LOG_NOT_FOUND, "SignalLog #" + signalLogId + " 不存在"));

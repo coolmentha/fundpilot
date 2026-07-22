@@ -78,7 +78,7 @@ const useSelectedKey = () => {
 };
 
 export default function Shell() {
-    const {logout} = useSiteAuth();
+    const {logout, user} = useSiteAuth();
     const navigate = useNavigate();
     const selected = useSelectedKey();
     const {data: pending} = usePendingTransactions();
@@ -96,7 +96,11 @@ export default function Shell() {
         label: it.label,
     }));
 
-    const siderItems = NAV_GROUPS.map((g) => ({
+    const visibleGroups = NAV_GROUPS.map((g) => ({
+        ...g,
+        children: g.children.filter((item) => item.key !== '/admin' || user?.role === 'ADMIN'),
+    })).filter((g) => g.children.length > 0);
+    const siderItems = visibleGroups.map((g) => ({
         type: 'group', key: g.key, label: g.label,
         children: buildItems(g.children),
     }));
@@ -158,7 +162,7 @@ export default function Shell() {
             <Drawer title="更多" open={moreOpen} onClose={() => setMoreOpen(false)}
                     placement="bottom" height="auto" styles={{body: {padding: 16}}}>
                 <Menu mode="vertical" selectedKeys={[selected]}
-                      items={BOTTOM_MORE.map((it) => ({
+                      items={BOTTOM_MORE.filter((it) => it.key !== '/admin' || user?.role === 'ADMIN').map((it) => ({
                           key: it.key, icon: it.icon, label: it.label,
                       }))}
                       onClick={({key}) => go(key)}/>

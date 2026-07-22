@@ -40,6 +40,7 @@ public class TransactionConfirmService {
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
     private final TakeProfitLifecycleService takeProfitLifecycleService;
+    private final FundAccessService fundAccessService;
 
     /**
      * 手动确认一笔交易。PENDING→CONFIRMED,用交易发生日净值回填另一侧;转换交易两条腿一起确认。
@@ -51,6 +52,7 @@ public class TransactionConfirmService {
         FundTransactionEntity tx = fundTransactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRANSACTION_NOT_FOUND,
                         "FundTransaction #" + transactionId + " 不存在"));
+        fundAccessService.requireOwned(tx.getFundEntity());
         if (tx.getStatus() == FundTransactionStatus.CONFIRMED) {
             throw new BusinessException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED,
                     "已确认交易不可再确认 #" + transactionId);

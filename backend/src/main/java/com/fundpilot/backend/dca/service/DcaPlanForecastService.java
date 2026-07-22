@@ -5,6 +5,7 @@ import com.fundpilot.backend.dca.entity.FundDcaPlanEntity;
 import com.fundpilot.backend.dca.enums.DcaPlanStatus;
 import com.fundpilot.backend.dca.repository.FundDcaPlanRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.fund.service.FundAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +28,15 @@ public class DcaPlanForecastService {
 
     private final FundDcaPlanRepository fundDcaPlanRepository;
     private final FundTransactionRepository fundTransactionRepository;
+    private final FundAccessService fundAccessService;
     private final DcaScheduleService dcaScheduleService;
     private final Clock clock;
 
     @Transactional(readOnly = true)
     public BigDecimal currentMonthRemainingAmount() {
-        List<FundDcaPlanEntity> plans = fundDcaPlanRepository.findAllWithFund();
+        List<FundDcaPlanEntity> plans = fundDcaPlanRepository.findAllWithFund().stream()
+                .filter(plan -> fundAccessService.isOwned(plan.getFundEntity()))
+                .toList();
         Map<Long, List<Instant>> datesByPlan = currentMonthExecutionDates(plans);
         return plans.stream()
                 .map(plan -> plan.getAmount().multiply(BigDecimal.valueOf(

@@ -1,6 +1,7 @@
 # CD:打 tag v* 时构建镜像推 GHCR,SSH 到 VPS 拉镜像重启。
 # 需配置仓库 Secrets:VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PATH /
-# DB_USERNAME / DB_PASSWORD / ADMIN_API_KEY / PUBLIC_URL
+# DB_USERNAME / DB_PASSWORD / PUBLIC_URL /
+# FUNDPILOT_SESSION_SECRET / FUNDPILOT_BOOTSTRAP_USERNAME / FUNDPILOT_BOOTSTRAP_PASSWORD
 # VPS 须先 docker login ghcr.io(拉私有镜像);clone 仓库与 .env 由本工作流自动完成
 name: Deploy
 
@@ -139,7 +140,9 @@ jobs:
       PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
       DB_USERNAME: ${{ secrets.DB_USERNAME }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      FUNDPILOT_SESSION_SECRET: ${{ secrets.FUNDPILOT_SESSION_SECRET }}
+      FUNDPILOT_BOOTSTRAP_USERNAME: ${{ secrets.FUNDPILOT_BOOTSTRAP_USERNAME }}
+      FUNDPILOT_BOOTSTRAP_PASSWORD: ${{ secrets.FUNDPILOT_BOOTSTRAP_PASSWORD }}
       DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: SSH deploy
@@ -149,7 +152,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 80m
-          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,ADMIN_API_KEY,DEPLOYMENT_TOKEN
+          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,DEPLOYMENT_TOKEN
           script: |
             set -Eeuo pipefail
             umask 077
@@ -208,17 +211,18 @@ jobs:
               echo "DB_PASSWORD must use at least 16 safe ASCII characters" >&2
               exit 1
             }
-            case "$ADMIN_API_KEY" in
-              ""|*[!A-Za-z0-9._-]*)
-                echo "ADMIN_API_KEY must use at least 32 safe ASCII characters" >&2
-                exit 1
-                ;;
-            esac
-            [ "${#ADMIN_API_KEY}" -ge 32 ] || {
-              echo "ADMIN_API_KEY must use at least 32 safe ASCII characters" >&2
+            [ "${#FUNDPILOT_SESSION_SECRET}" -ge 32 ] || {
+              echo "FUNDPILOT_SESSION_SECRET must use at least 32 characters" >&2
               exit 1
             }
-            HEALTHCHECK_API_KEY=$ADMIN_API_KEY
+            [ -n "$FUNDPILOT_BOOTSTRAP_USERNAME" ] || {
+              echo "FUNDPILOT_BOOTSTRAP_USERNAME is required" >&2
+              exit 1
+            }
+            [ -n "$FUNDPILOT_BOOTSTRAP_PASSWORD" ] || {
+              echo "FUNDPILOT_BOOTSTRAP_PASSWORD is required" >&2
+              exit 1
+            }
             case "$DEPLOYMENT_TOKEN" in
               [0-9]*-[0-9]*) ;;
               *) echo "invalid deployment token" >&2; exit 1 ;;
@@ -305,7 +309,9 @@ jobs:
               {
                 printf 'DB_USERNAME=%s\n' "$DB_USERNAME"
                 printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
-                printf 'ADMIN_API_KEY=%s\n' "$ADMIN_API_KEY"
+                printf 'FUNDPILOT_SESSION_SECRET=%s\n' "$FUNDPILOT_SESSION_SECRET"
+                printf 'FUNDPILOT_BOOTSTRAP_USERNAME=%s\n' "$FUNDPILOT_BOOTSTRAP_USERNAME"
+                printf 'FUNDPILOT_BOOTSTRAP_PASSWORD=%s\n' "$FUNDPILOT_BOOTSTRAP_PASSWORD"
                 printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
                 printf 'DEPLOYMENT_VALIDATION_MODE=%s\n' "$validation_mode"
                 printf 'TAG=%s\n' "$target_tag"
@@ -415,20 +421,7 @@ jobs:
                 "$FRONTEND_IMAGE" >/dev/null
               for i in $(seq 1 30); do
                 if run_before_total_deadline 15 docker exec "$candidate" \
-                    wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
-                  candidate_response=$(
-                    printf '%s\n' "$HEALTHCHECK_API_KEY" |
-                    run_before_total_deadline 15 docker exec -i "$candidate" sh -c '
-                      IFS= read -r healthcheck_api_key
-                      {
-                        printf "GET /api/funds HTTP/1.1\r\nHost: localhost\r\nX-Admin-Key: %s\r\nConnection: close\r\n\r\n" \
-                          "$healthcheck_api_key"
-                        sleep 10
-                      } | nc 127.0.0.1 80
-                    '
-                  ) &&
-                  printf '%s' "$candidate_response" |
-                    grep -q '"success":true'; then
+                    wget -q -T 5 -O /dev/null http://127.0.0.1/; then
                   run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
                   return 0
                 fi
@@ -445,10 +438,7 @@ jobs:
                 if backend_is_healthy &&
                   run_before_total_deadline 15 "${COMPOSE[@]}" exec -T frontend \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/ &&
-                  curl -fsS --max-time 5 "$PUBLIC_URL/" >/dev/null &&
-                  printf 'header = "X-Admin-Key: %s"\n' "$HEALTHCHECK_API_KEY" |
-                  curl -fsS --max-time 5 --config - "$PUBLIC_URL/api/funds" |
-                    grep -q '"success":true'; then
+                  curl -fsS --max-time 5 "$PUBLIC_URL/" >/dev/null; then
                   return 0
                 fi
                 sleep 2
@@ -512,11 +502,7 @@ jobs:
                 git checkout --detach "$PREVIOUS_RELEASE_TAG" || release_files_ok=0
                 if [ "$PREVIOUS_ENV_READY" -eq 1 ]; then
                   if cp "$PREVIOUS_ENV_FILE" .env && chmod 600 .env; then
-                    previous_healthcheck_api_key=$(sed -n 's/^ADMIN_API_KEY=//p' .env | head -n 1 | tr -d '\r\n')
-                    if [ -n "$previous_healthcheck_api_key" ]; then
-                      HEALTHCHECK_API_KEY=$previous_healthcheck_api_key
-                    fi
-                    unset DB_USERNAME DB_PASSWORD ADMIN_API_KEY FLYWAY_REPAIR_LEGACY_V7
+                    unset DB_USERNAME DB_PASSWORD FLYWAY_REPAIR_LEGACY_V7
                     unset BACKEND_IMAGE FRONTEND_IMAGE
                   else
                     release_files_ok=0

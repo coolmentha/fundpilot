@@ -45,6 +45,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class KlineService {
+    private final com.fundpilot.backend.fund.service.FundAccessService fundAccessService;
 
     private static final Logger log = LoggerFactory.getLogger(KlineService.class);
 
@@ -60,6 +61,7 @@ public class KlineService {
     private final MarketDataSource marketDataSource;
 
     public KlineView getKline(Long fundId, String period) {
+        fundAccessService.requireOwned(fundId);
         FundEntity fund = fundRepository.findById(fundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + fundId));
 
