@@ -13,8 +13,31 @@
     --color-warning: #F59E0B;
     --color-danger: #EF4444;
     --color-info: #3B82F6;
+    --color-sider: #0B1220;
+    --color-header: rgba(15, 23, 42, 0.88);
+    --color-subtle: rgba(255, 255, 255, 0.05);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='light'] {
+    --color-primary: #2563EB;
+    --color-accent: #7C3AED;
+    --color-bg: #F6F8FB;
+    --color-surface: #FFFFFF;
+    --color-surface-2: #F3F6FA;
+    --color-text: #111827;
+    --color-muted: #4B5563;
+    --color-border: #D7DEE8;
+    --color-success: #15803D;
+    --color-warning: #B45309;
+    --color-danger: #DC2626;
+    --color-info: #2563EB;
+    --color-sider: #FFFFFF;
+    --color-header: rgba(255, 255, 255, 0.9);
+    --color-subtle: rgba(15, 23, 42, 0.05);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+    --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.1);
 }
 
 * { box-sizing: border-box; }
@@ -40,7 +63,7 @@ body {
 
 .app-sider {
     border-right: 1px solid var(--color-border);
-    background: #0B1220;
+    background: var(--color-sider);
     position: sticky;
     top: 0;
     height: 100vh;
@@ -75,7 +98,7 @@ body {
     height: 64px;
     line-height: normal;
     padding: 0 24px;
-    background: rgba(15, 23, 42, 0.85);
+    background: var(--color-header);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--color-border);
     position: sticky;
@@ -380,7 +403,7 @@ body {
     gap: 9px;
     min-width: 0;
     padding: 11px 12px;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--color-subtle);
     border: 1px solid var(--color-border);
     border-radius: 4px;
 }
@@ -1202,7 +1225,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .sector-bar-wrap {
     height: 6px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--color-subtle);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -1239,7 +1262,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     padding: 10px 12px;
     border: 1px solid var(--color-border);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--color-subtle);
 }
 
 .flow-summary-label {
@@ -1349,7 +1372,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .flow-meter {
     height: 4px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--color-subtle);
     overflow: hidden;
 }
 
@@ -1461,18 +1484,18 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
-    color: #64748B;
-    background: rgba(51, 65, 85, 0.4);
+    color: var(--color-muted);
+    background: var(--color-subtle);
     border: 1px solid transparent;
     transition: background 0.15s, border-color 0.15s;
 }
 
 .kline-ma-tag:hover {
-    background: rgba(71, 85, 105, 0.6);
+    background: color-mix(in srgb, var(--color-muted) 18%, transparent);
 }
 
 .kline-ma-tag.active {
-    background: rgba(71, 85, 105, 0.5);
+    background: color-mix(in srgb, currentColor 14%, transparent);
     border-color: currentColor;
     font-weight: 600;
 }

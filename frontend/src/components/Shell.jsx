@@ -10,12 +10,15 @@ import {
     LogoutOutlined,
     CalendarOutlined,
     QuestionCircleOutlined,
+    MoonOutlined,
+    SunOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
 import {usePendingTransactions} from '../api/hooks.js';
-import {useState} from 'react';
+import {useContext, useState} from 'react';
 import {useSiteAuth} from '../auth/SiteAuthContext.js';
+import {ThemeModeContext} from '../themeMode.js';
 
 const {Header, Content, Sider} = Layout;
 
@@ -84,6 +87,8 @@ export default function Shell() {
     const {data: pending} = usePendingTransactions();
     const pendingCount = pending?.length ?? 0;
     const [moreOpen, setMoreOpen] = useState(false);
+    const {themeMode, toggleTheme} = useContext(ThemeModeContext);
+    const isDark = themeMode === 'dark';
 
     const meta = PAGE_META[selected] || {title: 'FundPilot', subtitle: ''};
 
@@ -112,12 +117,12 @@ export default function Shell() {
 
     return (
         <Layout className="app-shell">
-            <Sider width={220} theme="dark" className="app-sider">
+            <Sider width={220} theme={themeMode} className="app-sider">
                 <div className="brand">
                     <span className="brand-dot"/>
                     Fund Pilot
                 </div>
-                <Menu theme="dark" mode="inline" selectedKeys={[selected]}
+                <Menu theme={themeMode} mode="inline" selectedKeys={[selected]}
                       items={siderItems} onClick={({key}) => go(key)}/>
             </Sider>
             <Layout>
@@ -126,6 +131,10 @@ export default function Shell() {
                         <div className="page-title">{meta.title}</div>
                         <div className="page-subtitle">{meta.subtitle}</div>
                     </div>
+                    <Tooltip title={isDark ? '切换到白天模式' : '切换到黑夜模式'}>
+                        <Button type="text" icon={isDark ? <SunOutlined/> : <MoonOutlined/>}
+                                onClick={toggleTheme} aria-label={isDark ? '切换到白天模式' : '切换到黑夜模式'}/>
+                    </Tooltip>
                     <Tooltip title="退出">
                         <Button type="text" icon={<LogoutOutlined/>} onClick={logout} aria-label="退出登录"/>
                     </Tooltip>

@@ -13,6 +13,7 @@ Applies to JavaScript and JSX under `frontend/src`.
 - API error codes are added to the shared `errorTitles` mapping when the backend introduces a user-facing `ErrorCode`.
 - JSX imports, callbacks, and derived state must pass ESLint without disabled core or Hooks rules.
 - Top-level route pages are loaded with `React.lazy` under one `React.Suspense` boundary. Keep the shared shell eager so navigation and authentication layout stay stable.
+- Theme-aware custom styles use the `--color-*` variables in `src/styles.css`; Ant Design theme tokens stay centralized in `src/main.jsx`. Do not add hard-coded dark backgrounds to page components.
 
 ## Forbidden Patterns
 
@@ -20,6 +21,7 @@ Applies to JavaScript and JSX under `frontend/src`.
 String(instant).slice(0, 19);  // displays UTC as if it were local time
 globalHandle = value;          // render-time module mutation
 const helper = () => useQueryClient(); // Hook hidden behind a non-use name
+.panel { background: #0f172a; } // breaks light mode; use var(--color-surface)
 ```
 
 Use shared formatting, component-local closures, and `use*` custom Hook names instead.
