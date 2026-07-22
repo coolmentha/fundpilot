@@ -15,8 +15,11 @@ import org.springframework.scheduling.annotation.Async;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -155,6 +159,38 @@ class MarketRealtimeCacheTest {
         verify(push2Client, never()).fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString());
         verify(push2Client, never()).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyString());
         verify(push2Client, never()).fetchNorthboundRaw();
+    }
+
+    @Test
+    void refreshFundEstimates_失败基金在冷却期内不重复请求且到期后恢复() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("270042", FundStatus.HOLDING);
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-10T05:30:00Z"));
+        FundEstimateSnapshot recovered = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(estimateService.fetchEstimateResult("270042"))
+                .thenReturn(FundEstimateResult.failed(EstimateStatus.PARSE_ERROR))
+                .thenReturn(FundEstimateResult.available(recovered));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), clock,
+                mock(MarketRealtimeRedisStore.class));
+
+        cache.refreshFundEstimates();
+        cache.refreshFundEstimates();
+
+        verify(estimateService, times(1)).fetchEstimateResult("270042");
+        assertThat(cache.getEstimateStatus("270042")).isEqualTo(EstimateStatus.PARSE_ERROR);
+
+        clock.advance(Duration.ofMinutes(5));
+        cache.refreshFundEstimates();
+
+        verify(estimateService, times(2)).fetchEstimateResult("270042");
+        assertThat(cache.getEstimates(List.of("270042"))).containsEntry("270042", recovered);
+        assertThat(cache.getEstimateStatus("270042")).isEqualTo(EstimateStatus.AVAILABLE);
     }
 
     @Test
@@ -309,5 +345,32 @@ class MarketRealtimeCacheTest {
         fund.setFundCode(code);
         fund.setStatus(status);
         return fund;
+    }
+
+    private static final class MutableClock extends Clock {
+        private final AtomicReference<Instant> instant;
+
+        private MutableClock(Instant initialInstant) {
+            this.instant = new AtomicReference<>(initialInstant);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant.get();
+        }
+
+        private void advance(Duration duration) {
+            instant.updateAndGet(current -> current.plus(duration));
+        }
     }
 }

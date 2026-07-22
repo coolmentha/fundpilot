@@ -23,6 +23,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -58,6 +60,7 @@ public class MarketRealtimeCache {
 
     private static final Logger log = LoggerFactory.getLogger(MarketRealtimeCache.class);
     private static final DateTimeFormatter ESTIMATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final Duration ESTIMATE_FAILURE_BACKOFF = Duration.ofMinutes(5);
     private static final List<String> MARKET_BREADTH_SECIDS = List.of(
             "1.000001", // 上证指数：沪市宽度
             "0.399001", // 深证成指：深市宽度
@@ -79,6 +82,7 @@ public class MarketRealtimeCache {
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
     private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
+    private final Map<String, Instant> estimateRetryAfter = new ConcurrentHashMap<>();
 
     @PostConstruct
     void restoreFromRedis() {
@@ -316,6 +320,9 @@ public class MarketRealtimeCache {
                     invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
                     continue;
                 }
+                if (isEstimateRetryCoolingDown(fundCode)) {
+                    continue;
+                }
                 try {
                     FundEstimateResult result = fundEstimateService.fetchEstimateResult(fundCode);
                     FundEstimateSnapshot snapshot = result.snapshot();
@@ -323,11 +330,14 @@ public class MarketRealtimeCache {
                     if (status == EstimateStatus.AVAILABLE) {
                         estimateCache.put(fundCode, snapshot);
                         estimateStatuses.put(fundCode, EstimateStatus.AVAILABLE);
+                        estimateRetryAfter.remove(fundCode);
                     } else {
                         invalidateEstimate(fundCode, status);
+                        recordEstimateFailureBackoff(fundCode, status);
                     }
                 } catch (RuntimeException e) {
                     invalidateEstimate(fundCode, EstimateStatus.PARSE_ERROR);
+                    recordEstimateFailureBackoff(fundCode, EstimateStatus.PARSE_ERROR);
                     log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
                 }
             }
@@ -361,6 +371,26 @@ public class MarketRealtimeCache {
         }
         estimateCache.remove(fundCode);
         estimateStatuses.put(fundCode, status);
+    }
+
+    private boolean isEstimateRetryCoolingDown(String fundCode) {
+        Instant retryAfter = estimateRetryAfter.get(fundCode);
+        if (retryAfter == null || !retryAfter.isAfter(clock.instant())) {
+            estimateRetryAfter.remove(fundCode);
+            return false;
+        }
+        return true;
+    }
+
+    private void recordEstimateFailureBackoff(String fundCode, EstimateStatus status) {
+        if (fundCode == null) {
+            return;
+        }
+        if (status.isFailure()) {
+            estimateRetryAfter.put(fundCode, clock.instant().plus(ESTIMATE_FAILURE_BACKOFF));
+        } else {
+            estimateRetryAfter.remove(fundCode);
+        }
     }
 
     private void persist() {

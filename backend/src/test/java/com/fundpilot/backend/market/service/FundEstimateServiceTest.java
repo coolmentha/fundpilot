@@ -10,10 +10,16 @@ import org.junit.jupiter.api.Test;
 
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FundEstimateServiceTest {
@@ -59,10 +65,9 @@ class FundEstimateServiceTest {
     }
 
     @Test
-    void 东方财富失效时降级同花顺估值() {
+    void 同花顺优先返回估值且不访问东方财富() {
         EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
         ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
-        when(client.fetchGzRaw("016664")).thenReturn("<html>页面未找到</html>");
         when(thsClient.fetchEstimateRaw("016664")).thenReturn(
                 "vm_fd_016664='2026-07-17;0930-1130,1300-1500|2026-07-20~2.9763~0930,3.05294,2.9763,0;1500,3.10100,2.9763,0;';");
 
@@ -72,9 +77,27 @@ class FundEstimateServiceTest {
         assertThat(result.snapshot().estimatedChangePct()).isEqualByComparingTo("0.04189765816617948");
         assertThat(result.snapshot().estimateTime()).isEqualTo("2026-07-20 15:00");
         assertThat(result.snapshot().baseNavDate()).isEqualTo("2026-07-17");
+        verify(client, never()).fetchGzRaw("016664");
+    }
+
+    @Test
+    void 同花顺解析失败后在冷却期内直接使用东方财富() {
+        EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
+        ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
+        when(thsClient.fetchEstimateRaw("000001")).thenReturn("vm_fd_000001='broken';");
+        when(client.fetchGzRaw("000001")).thenReturn("jsonpgz({\"fundcode\":\"000001\",\"gsz\":\"1.234\","
+                + "\"gszzl\":\"1.20\",\"gztime\":\"2026-07-20 15:00\",\"jzrq\":\"2026-07-17\"});");
+        FundEstimateService service = service(client, thsClient);
+
+        assertThat(service.fetchEstimateResult("000001").status()).isEqualTo(EstimateStatus.AVAILABLE);
+        assertThat(service.fetchEstimateResult("000001").status()).isEqualTo(EstimateStatus.AVAILABLE);
+
+        verify(thsClient, times(1)).fetchEstimateRaw("000001");
+        verify(client, times(2)).fetchGzRaw("000001");
     }
 
     private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient) {
-        return new FundEstimateService(client, thsClient, new MarketDataMetrics(new SimpleMeterRegistry()));
+        return new FundEstimateService(client, thsClient, new MarketDataMetrics(new SimpleMeterRegistry()),
+                Clock.fixed(Instant.parse("2026-07-20T07:00:00Z"), ZoneOffset.UTC));
     }
 }
