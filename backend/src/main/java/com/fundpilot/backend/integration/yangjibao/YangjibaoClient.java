@@ -59,9 +59,7 @@ public class YangjibaoClient {
         String sign = anonymous ? signer.anonymous(path, ts, secret) : signer.authenticated(path, token, ts, secret);
         try {
             String body = client.get().uri(path).headers(headers -> {
-                if (token != null && !token.isBlank()) {
-                    headers.set("Authorization", token);
-                }
+                headers.set("Authorization", token == null ? "" : token);
                 headers.set("Request-Time", Long.toString(ts));
                 headers.set("Request-Sign", sign);
             }).retrieve().body(String.class);

@@ -23,6 +23,7 @@ class YangjibaoClientTest {
             assertThat(client.createQrCode()).isEqualTo(new YangjibaoClient.QrCode("qr-1", "https://qr.example"));
             var request = server.takeRequest();
             assertThat(request.getPath()).isEqualTo("/qr_code");
+            assertThat(request.getHeader("Authorization")).isEmpty();
             assertThat(request.getHeaders().get("Request-Time")).isNotBlank();
             assertThat(request.getHeaders().get("Request-Sign")).hasSize(32);
         }
