@@ -68,6 +68,7 @@ services:
     image: ${FRONTEND_IMAGE}
     container_name: fundpilot-frontend
     restart: unless-stopped
+    stop_grace_period: 2s
     depends_on:
       - backend
     expose:
