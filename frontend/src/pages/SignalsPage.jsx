@@ -1,5 +1,18 @@
 import {useState} from 'react';
-import {App, Button, Card, DatePicker, Form, InputNumber, Modal, Popconfirm, Select, Space, Table, Typography} from 'antd';
+import {
+    App,
+    Button,
+    Card,
+    DatePicker,
+    Form,
+    InputNumber,
+    Modal,
+    Popconfirm,
+    Select,
+    Space,
+    Table,
+    Typography
+} from 'antd';
 import {Link, useNavigate, useSearchParams} from 'react-router-dom';
 import {ReloadOutlined} from '@ant-design/icons';
 import {
@@ -72,11 +85,12 @@ export default function SignalsPage() {
     const holdingShares = (id) => Number(funds?.find((fund) => fund.id === id)?.holdingShares || 0);
     const openConfirm = (signal) => {
         const isSell = signal.signalType === 'SELL';
+        const isLogicBroken = isSell && signal.reason === 'LOGIC_BROKEN';
         const maxShares = holdingShares(signal.fundId);
         setModal({open: true, signal});
         form.setFieldsValue({
             actualAmount: isSell ? undefined : signal.suggestedMeasure?.value,
-            actualShares: isSell && maxShares > 0
+            actualShares: isLogicBroken ? maxShares : isSell && maxShares > 0
                 ? Math.min(Number(signal.suggestedMeasure?.value || 0), maxShares) : undefined,
         });
     };
@@ -108,6 +122,7 @@ export default function SignalsPage() {
         ),
     };
     const isSell = modal.signal?.signalType === 'SELL';
+    const isLogicBroken = isSell && modal.signal?.reason === 'LOGIC_BROKEN';
     const currentHoldingShares = holdingShares(modal.signal?.fundId);
     const transactionColumn = {
         title: '交易', width: 120, render: (_, signal) => signal.relatedTransactionId ? (
@@ -172,15 +187,17 @@ export default function SignalsPage() {
                    okButtonProps={{disabled: isSell && !fundsReady}} destroyOnHidden>
                 <Form form={form} layout="vertical">
                     {isSell ? (
-                        <Form.Item label={`实际卖出份额（当前持仓 ${currentHoldingShares.toFixed(2)} 份）`}
+                        <Form.Item label={isLogicBroken
+                            ? `逻辑止损卖出份额（全仓，当前持仓 ${currentHoldingShares.toFixed(2)} 份）`
+                            : `实际卖出份额（当前持仓 ${currentHoldingShares.toFixed(2)} 份）`}
                                    name="actualShares" rules={[
                                        {required: true, message: '请输入份额'},
                                        {validator: (_, value) => value <= currentHoldingShares
                                            ? Promise.resolve()
                                            : Promise.reject(new Error('卖出份额不能超过当前持仓'))},
-                                   ]}>
+                        ]}>
                             <InputNumber min={0.000001} max={currentHoldingShares || undefined}
-                                         precision={6} className="full-width"/>
+                                         precision={6} className="full-width" disabled={isLogicBroken}/>
                         </Form.Item>
                     ) : (
                         <Form.Item label="实际下单金额" name="actualAmount"

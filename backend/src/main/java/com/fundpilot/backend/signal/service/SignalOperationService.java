@@ -5,8 +5,8 @@ import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
-import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.fund.service.ShareScale;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
@@ -20,8 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.Clock;
+import java.time.Instant;
 
 /**
  * 信号操作确认服务(issue #14):用户回应 SignalLog 的统一入口。
@@ -37,7 +37,7 @@ import java.time.Clock;
  *   <tr><td>BUILD</td><td>写 PENDING INCREASE 交易(amount=actualAmount)</td></tr>
  *   <tr><td>ADD tierN</td><td>写 INCREASE 交易(存量兼容,不再推进 tierNAddedAt)</td></tr>
  *   <tr><td>SELL TRAILING_STOP</td><td>写 PENDING DECREASE 交易(shares=actualShares)</td></tr>
- *   <tr><td>SELL LOGIC_BROKEN</td><td>锁基金后按 CONFIRMED 事实持仓写全仓 PENDING DECREASE</td></tr>
+ *   <tr><td>SELL LOGIC_BROKEN</td><td>校验全仓请求后按锁内 CONFIRMED 事实持仓写 PENDING DECREASE</td></tr>
  * </table>
  *
  * <h3>偏离说明</h3>
@@ -163,15 +163,19 @@ public class SignalOperationService {
         }
         BigDecimal shares;
         if (reason == SignalReason.LOGIC_BROKEN) {
-            requireShares(request);
+            BigDecimal requestedShares = requireShares(request);
             Long fundId = fund.getId();
             FundEntity lockedFund = fundRepository.findByIdForUpdate(fundId)
                     .orElseThrow(() -> new BusinessException(
                             ErrorCode.FUND_NOT_FOUND, "Fund #" + fundId + " 不存在"));
-            shares = fundPositionService.getHoldingShares(lockedFund.getId());
+            shares = ShareScale.normalize(fundPositionService.getHoldingShares(lockedFund.getId()));
             if (shares == null || shares.signum() <= 0) {
                 throw new BusinessException(ErrorCode.INSUFFICIENT_HOLDING_SHARES,
                         "逻辑止损确认时已无可卖持仓");
+            }
+            if (requestedShares.compareTo(shares) != 0) {
+                throw new BusinessException(ErrorCode.SIGNAL_OPERATION_VALUE_INVALID,
+                                            "逻辑止损必须全仓卖出，实际份额必须等于当前持仓");
             }
             fund = lockedFund;
         } else {

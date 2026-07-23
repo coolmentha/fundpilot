@@ -6,10 +6,10 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
-import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.fund.service.FundPositionService;
+import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundAccessService;
+import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.signal.controller.ConfirmOperationRequest;
 import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import com.fundpilot.backend.signal.enums.SignalReason;
@@ -23,16 +23,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SignalOperationServiceUnitTest {
@@ -97,7 +96,7 @@ class SignalOperationServiceUnitTest {
     }
 
     @Test
-    void confirmOperation_逻辑止损忽略部分卖出输入并按锁内事实持仓清仓() {
+    void confirmOperation_逻辑止损按锁内事实持仓清仓() {
         SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.LOGIC_BROKEN);
         when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
         when(signalActionabilityService.isActionable(signal)).thenReturn(true);
@@ -107,10 +106,28 @@ class SignalOperationServiceUnitTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         FundTransactionEntity transaction = service.confirmOperation(1L, 11L,
-                new ConfirmOperationRequest(11L, null, BigDecimal.ONE));
+                                                                     new ConfirmOperationRequest(11L, null,
+                                                                                                 new BigDecimal(
+                                                                                                         "100")));
 
         assertThat(transaction.getShares()).isEqualByComparingTo("100");
         verify(fundRepository).findByIdForUpdate(1L);
+    }
+
+    @Test
+    void confirmOperation_逻辑止损拒绝部分卖出输入() {
+        SignalLogEntity signal = signal(11L, 1L, SignalType.SELL, SignalReason.LOGIC_BROKEN);
+        when(signalLogRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(signal));
+        when(signalActionabilityService.isActionable(signal)).thenReturn(true);
+        when(fundRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(signal.getFundEntity()));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        assertThatThrownBy(() -> service.confirmOperation(1L, 11L,
+                                                          new ConfirmOperationRequest(11L, null, BigDecimal.ONE)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                                        ex -> assertThat(ex.getCode()).isEqualTo(
+                                                ErrorCode.SIGNAL_OPERATION_VALUE_INVALID.name()));
+        verify(fundTransactionRepository, never()).save(any(FundTransactionEntity.class));
     }
 
     @Test
