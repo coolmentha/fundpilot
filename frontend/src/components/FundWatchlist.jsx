@@ -8,6 +8,7 @@ import {buildFundWatchlistRows, estimateStatusText, selectHoldingRows} from '../
 import QueryErrorState from './QueryErrorState.jsx';
 import FundGroupTabs from './FundGroupTabs.jsx';
 import {ALL_GROUPS_KEY, filterFundsByGroup, getStoredFundGroup, storeFundGroup} from '../fundGroups.js';
+import {valuationStatusText} from './valuationStatusText.js';
 
 /**
  * 自选基金行情列表:展示所有持仓/观察基金的实时涨跌(来自 fundgz 盘中估值)。
@@ -101,7 +102,7 @@ export default function FundWatchlist() {
                     ? '盘中估值'
                     : r.investmentTarget === 'QDII' && r.valuationSource === 'LATEST_CONFIRMED_NAV'
                         ? `确认净值 ${date(r.valuationDate)}${r.valuationFirstSeenAt ? ` · 平台发现 ${datetime(r.valuationFirstSeenAt)}` : ''}`
-                        : '净值已确认')}
+                        : valuationStatusText(r))}
             </span>,
         },
     ];
