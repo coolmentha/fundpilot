@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -38,28 +39,87 @@ class FundPnlServiceDateTest {
     @Mock CurrentUserService currentUserService;
 
     @Test
-    void QDII优先使用最新确认净值收益() {
-        Clock clock = Clock.fixed(Instant.parse("2026-07-20T08:00:00Z"), ZoneOffset.UTC);
+    void QDII按北京时间首次发现当天使用最新确认净值收益() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-21T00:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
                 fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
         FundEntity fund = fund();
         fund.setInvestmentTarget(InvestmentTarget.QDII);
+        List<FundNavHistoryEntity> navs = List.of(
+                nav("2026-07-17T00:00:00Z", "1.10", "2026-07-20T16:30:00Z"),
+                nav("2026-07-16T00:00:00Z", "1.00", "2026-07-20T16:30:00Z"));
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
-                .thenReturn(List.of(
-                        nav("2026-07-17T00:00:00Z", "1.10"),
-                        nav("2026-07-16T00:00:00Z", "1.00")));
+                .thenReturn(navs);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
-        FundPnlService.Pnl pnl = service.computeForFund(fund);
+        FundPnlService.Pnl single = service.computeForFund(fund);
 
-        assertThat(pnl.dailyChangePct()).isEqualByComparingTo("0.10");
-        assertThat(pnl.dailyPnl()).isEqualByComparingTo("10.00");
-        assertThat(pnl.isEstimated()).isFalse();
-        assertThat(pnl.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
-        assertThat(pnl.valuationDate()).isEqualTo(Instant.parse("2026-07-17T00:00:00Z"));
-        assertThat(pnl.valuationFirstSeenAt()).isEqualTo(Instant.parse("2026-07-20T11:00:00Z"));
+        assertThat(single.dailyChangePct()).isEqualByComparingTo("0.10");
+        assertThat(single.dailyPnl()).isEqualByComparingTo("10.00");
+        assertThat(single.isEstimated()).isFalse();
+        assertThat(single.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
+        assertThat(single.valuationDate()).isEqualTo(Instant.parse("2026-07-17T00:00:00Z"));
+        assertThat(single.valuationFirstSeenAt()).isEqualTo(Instant.parse("2026-07-20T16:30:00Z"));
         verifyNoInteractions(marketRealtimeCache);
+
+        FundNavHistoryRepository.LatestNavProjection latest = projection(1L, navs.get(0));
+        FundNavHistoryRepository.LatestNavProjection previous = projection(1L, navs.get(1));
+        FundTransactionRepository.HoldingSharesProjection holdingShares =
+                holdingSharesProjection(1L, "100");
+        when(fundNavHistoryRepository.findLatestTwoByFundIds(List.of(1L)))
+                .thenReturn(List.of(latest, previous));
+        when(fundTransactionRepository.aggregateConfirmedShares(List.of(1L)))
+                .thenReturn(List.of(holdingShares));
+        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketRealtimeCache.getEstimateStatuses(List.of("510300"))).thenReturn(Map.of());
+
+        FundPnlService.Pnl batch = service.computeForFunds(List.of(fund)).get(1L);
+
+        assertThat(batch.dailyChangePct()).isEqualByComparingTo(single.dailyChangePct());
+        assertThat(batch.dailyPnl()).isEqualByComparingTo(single.dailyPnl());
+        assertThat(batch.valuationDate()).isEqualTo(single.valuationDate());
+    }
+
+    @Test
+    void QDII首次发现次日今日收益归零且单基金与批量结果一致() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-21T08:00:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+        FundEntity fund = fund();
+        fund.setInvestmentTarget(InvestmentTarget.QDII);
+        fund.setCostPerShare(new BigDecimal("1.00"));
+        List<FundNavHistoryEntity> navs = List.of(
+                nav("2026-07-17T00:00:00Z", "1.10", "2026-07-20T11:00:00Z"),
+                nav("2026-07-16T00:00:00Z", "1.00", "2026-07-20T11:00:00Z"));
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(navs);
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl single = service.computeForFund(fund);
+
+        FundNavHistoryRepository.LatestNavProjection latest = projection(1L, navs.get(0));
+        FundNavHistoryRepository.LatestNavProjection previous = projection(1L, navs.get(1));
+        FundTransactionRepository.HoldingSharesProjection holdingShares =
+                holdingSharesProjection(1L, "100");
+        when(fundNavHistoryRepository.findLatestTwoByFundIds(List.of(1L)))
+                .thenReturn(List.of(latest, previous));
+        when(fundTransactionRepository.aggregateConfirmedShares(List.of(1L)))
+                .thenReturn(List.of(holdingShares));
+        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketRealtimeCache.getEstimateStatuses(List.of("510300")))
+                .thenReturn(Map.of("510300", EstimateStatus.NOT_ATTEMPTED));
+        FundPnlService.Pnl batch = service.computeForFunds(List.of(fund)).get(1L);
+
+        assertThat(single.dailyChangePct()).isZero();
+        assertThat(single.dailyPnl()).isZero();
+        assertThat(single.holdingAmount()).isEqualByComparingTo("110.00");
+        assertThat(single.totalPnl()).isEqualByComparingTo("10.00");
+        assertThat(batch.dailyChangePct()).isEqualByComparingTo(single.dailyChangePct());
+        assertThat(batch.dailyPnl()).isEqualByComparingTo(single.dailyPnl());
+        assertThat(batch.holdingAmount()).isEqualByComparingTo(single.holdingAmount());
+        assertThat(batch.totalPnl()).isEqualByComparingTo(single.totalPnl());
+        assertThat(batch.valuationDate()).isEqualTo(single.valuationDate());
     }
 
     @Test
@@ -171,11 +231,36 @@ class FundPnlServiceDateTest {
     }
 
     private static FundNavHistoryEntity nav(String date, String accumulatedNav) {
+        return nav(date, accumulatedNav, "2026-07-20T11:00:00Z");
+    }
+
+    private static FundNavHistoryEntity nav(String date, String accumulatedNav, String firstSeenAt) {
         FundNavHistoryEntity entity = new FundNavHistoryEntity();
         entity.setNavDate(Instant.parse(date));
         entity.setNav(new BigDecimal(accumulatedNav));
         entity.setAccumulatedNav(new BigDecimal(accumulatedNav));
-        entity.setFirstSeenAt(Instant.parse("2026-07-20T11:00:00Z"));
+        entity.setFirstSeenAt(Instant.parse(firstSeenAt));
         return entity;
+    }
+
+    private static FundNavHistoryRepository.LatestNavProjection projection(
+            Long fundId, FundNavHistoryEntity nav) {
+        FundNavHistoryRepository.LatestNavProjection projection =
+                mock(FundNavHistoryRepository.LatestNavProjection.class);
+        when(projection.getFundId()).thenReturn(fundId);
+        when(projection.getNavDate()).thenReturn(nav.getNavDate());
+        when(projection.getNav()).thenReturn(nav.getNav());
+        when(projection.getAccumulatedNav()).thenReturn(nav.getAccumulatedNav());
+        when(projection.getFirstSeenAt()).thenReturn(nav.getFirstSeenAt());
+        return projection;
+    }
+
+    private static FundTransactionRepository.HoldingSharesProjection holdingSharesProjection(
+            Long fundId, String shares) {
+        FundTransactionRepository.HoldingSharesProjection projection =
+                mock(FundTransactionRepository.HoldingSharesProjection.class);
+        when(projection.getFundId()).thenReturn(fundId);
+        when(projection.getHoldingShares()).thenReturn(new BigDecimal(shares));
+        return projection;
     }
 }

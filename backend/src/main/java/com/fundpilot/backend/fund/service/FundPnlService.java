@@ -56,7 +56,7 @@ public class FundPnlService {
     /**
      * 聚合单基金的涨跌与盈亏(issue #38)。
      * <p>普通基金经 {@link DailyChangeResolver} 三态判定(估值前0/当日估值/净值实际)，
-     * QDII 两期净值齐备时优先使用最新确认净值收益。
+     * QDII 仅在最新净值首次发现的北京时间当天使用确认净值结算收益。
      * 今日盈亏 = 最近确认市值 × 今日涨跌幅,总盈亏按最近确认净值 / 当日估值 / 实际净值切换(详见 ADR-0008)。
      *
      * @param fundId 基金 ID
@@ -122,15 +122,18 @@ public class FundPnlService {
         BigDecimal latestUnitNav = latestTwo.size() >= 1 ? latestTwo.get(0).getNav() : null;
         BigDecimal previousUnitNav = latestTwo.size() >= 2 ? latestTwo.get(1).getNav() : null;
         boolean todayNavConfirmed = isTodayNavConfirmed(latestTwo);
-        boolean confirmedNavSelected = todayNavConfirmed
-                || (fund.getInvestmentTarget() == InvestmentTarget.QDII && latestTwo.size() >= 2);
+        boolean qdii = fund.getInvestmentTarget() == InvestmentTarget.QDII;
+        boolean confirmedNavSelected = qdii
+                ? latestTwo.size() >= 2 && isLatestNavFirstSeenToday(latestTwo)
+                : todayNavConfirmed;
         boolean standardNavSupported = FundMarketDataCapability.supportsStandardNav(fund);
 
-        // QDII 净值可能滞后公布；两期确认净值齐备时优先展示最新确认收益。
+        // QDII 按平台发现日结算；其他日期不复用历史收益，也不混入盘中估值。
         EstimateStatus estimateStatus = confirmedNavSelected ? EstimateStatus.AVAILABLE
+                : qdii ? EstimateStatus.STALE
                 : !standardNavSupported ? EstimateStatus.UNAVAILABLE
                 : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
-        Optional<FundEstimateSnapshot> estimate = confirmedNavSelected || !standardNavSupported
+        Optional<FundEstimateSnapshot> estimate = confirmedNavSelected || qdii || !standardNavSupported
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode(), batchEstimates);
         DailyChangeResult changeResult = standardNavSupported || confirmedNavSelected
@@ -213,6 +216,13 @@ public class FundPnlService {
         Instant latestDate = latestTwo.get(0).getNavDate();
         // navDate 落库为 UTC 0 点,与 today 对齐比较
         return !latestDate.isBefore(today);
+    }
+
+    /** QDII 的收益确认日以平台首次发现时间为准，而不是可能滞后的净值日期。 */
+    private boolean isLatestNavFirstSeenToday(List<FundNavHistoryEntity> latestTwo) {
+        Instant firstSeenAt = latestTwo.get(0).getFirstSeenAt();
+        return firstSeenAt != null
+                && ChinaTradingDate.toUtcDate(firstSeenAt).equals(ChinaTradingDate.toUtcDate(clock.instant()));
     }
 
     /** 持仓市值 = 份额 × 最新净值。不乘涨跌幅——净值就是净值,份额锁死。 */

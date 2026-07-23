@@ -137,7 +137,7 @@ N 个前端客户端共享同一份缓存。
 - 两个 `ApplicationReadyEvent` 监听器都必须标记 `@Async`；指数/板块/资金与基金估值的外部 I/O 均不得占用 readiness 事件线程。
 - 实时行情监听器调用 `refreshRealtimeWithoutEstimates()`；独立监听器调用基金估值预热，保证盘后重启也能重新取得当日最后估值。
 - 普通基金今日净值未落库时禁止用 T-1 对 T-2 冒充今日涨跌。
-- QDII 已有两期确认净值时，收益服务优先使用最新两期净值并返回真实 `valuationDate`，不要求最新日期等于今天；前端合并估值缓存时不得覆盖该确认收益。
+- QDII 收益确认日按最新净值 `firstSeenAt` 的北京时间自然日判定，不按可能滞后的 `navDate` 判定。仅确认日使用按 `navDate DESC` 取得的最新两期净值计算今日收益；次日起今日涨跌/盈亏固定为 0，最近确认净值仍用于市值和总盈亏，且不混用盘中估值。
 - 收益测试不能只手工构造 `InvestmentTarget.QDII`；必须另有创建链路测试证明真实基金会持久化该分类。
 
 ### 14:50 串行契约
@@ -175,7 +175,8 @@ N 个前端客户端共享同一份缓存。
 | 应用启动 | 后台异步预热指数/板块/资金和基金估值；外部接口延迟不阻塞健康检查 |
 | 晚间净值远端日期晚于本地最新日期 | 不要求等于今天，在短事务内增量落库 |
 | FOF/QDII 新净值仍滞后今天 | 按真实 navDate 落库，不受 fundgz 状态阻断 |
-| QDII 两期确认净值齐备且同时存在盘中估值 | 使用最新两期确认净值计算收益，`isEstimated=false`，展示最新 `valuationDate` |
+| QDII 最新净值 `firstSeenAt` 为北京时间今天且已有两期净值 | 按 `navDate DESC` 的最新两期净值计算收益，`isEstimated=false`，展示最新 `valuationDate` |
+| QDII 最新净值 `firstSeenAt` 早于北京时间今天 | 今日涨跌/盈亏为 0；最近确认净值继续计算市值/总盈亏，不读取盘中估值 |
 | 存量基金名称含 QDII 且 `investment_target IS NULL` | V26 回填为 `QDII` |
 | 存量基金已有非空 `investment_target` | V26 保持原值，不覆盖人工或既有分类 |
 
@@ -188,7 +189,8 @@ N 个前端客户端共享同一份缓存。
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
 - **Good**:QDII 在北京时间 22:29 首次返回当日 `gztime`,估值专用调度将状态从 STALE 更新为 AVAILABLE
-- **Good**:QDII 最新净值日仍为 7 月 17 日时，收益按 7 月 17 日与上一期确认净值计算并显示净值日；盘中估值不覆盖确认收益
+- **Good**:QDII 的 7 月 17 日净值在 7 月 20 日首次发现，7 月 20 日按该净值与上一期计算收益并显示真实净值日；同日发现多条时取 `navDate` 最大者
+- **Good**:到 7 月 21 日没有新发现净值时，QDII 今日涨跌/盈亏为 0，市值和总盈亏仍按 7 月 17 日最新确认净值计算
 - **Good**:通过基金搜索创建名称含 QDII 的基金，`investmentTarget` 自动保存为 `QDII`
 - **Good**:中国节假日晚间境外市场正常交易,估值专用刷新不受 A 股交易日历阻断
 - **Good**:东方财富启动预热超时,应用 readiness 仍可及时完成,缓存等待后台任务或下次定时刷新
@@ -202,6 +204,7 @@ N 个前端客户端共享同一份缓存。
 - **Bad**:用 fundgz.jzrq 必须等于今天作为净值入库门卫，导致 QDII/FOF 漏更新
 - **Bad**:估值已进入当日阶段后发生空响应/失败,收益服务仍用上一期已公布净值冒充当前持仓市值/总盈亏
 - **Bad**:普通基金今日净值未落库时用最近两期落库净值计算,把昨日收益标成今日收益
+- **Bad**:QDII 只判断已有两期净值而忽略最新净值 `firstSeenAt`，导致次日重复结算同一段收益
 - **Bad**:观察列表把独立估值接口结果覆盖到已由后端选定的 QDII 确认收益
 - **Bad**:测试手工设置 QDII 枚举但真实创建链路从不写该字段，导致测试通过而生产分支永远不命中
 - **Bad**:实时任务用上海午夜 Instant 查询 UTC DATE 行,导致交易日永远错位 8 小时
@@ -227,7 +230,7 @@ N 个前端客户端共享同一份缓存。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
 - `DailyChangeResolverTest`:断言 STALE/NOT_ATTEMPTED 返回 0，AVAILABLE 使用估值，UNAVAILABLE/TIMEOUT/PARSE_ERROR 返回未知，当日净值始终优先。
 - `FundPnlServiceTest`:断言估值阶段开始前使用最近确认单位净值；估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
-- `FundPnlServiceDateTest`:断言 QDII 最新净值日期早于今天且估值同时存在时，仍使用最新两期确认净值、上一期单位净值作为收益基准，并返回真实 `valuationDate`。
+- `FundPnlServiceDateTest`:固定 `Clock`，断言 QDII 最新净值 `firstSeenAt` 的北京时间当天使用按 `navDate DESC` 取得的最新两期净值；次日今日涨跌/盈亏为 0，但市值/总盈亏仍使用最新确认净值；单基金与批量结果一致。
 - `querySafety.test.js`:断言观察列表合并独立估值接口时保留 QDII 的确认收益、`isEstimated=false` 和 `valuationDate`。
 - `FundServiceTest`:通过真实创建入口断言名称含 QDII 时 `FundView.investmentTarget=QDII`；CI 在 PostgreSQL 上执行 V26 与 Hibernate validate。
 - `MarketDataFetchJobTest`:用 `InOrder` 断言 `fetchBatch(2)` 完成后才生成信号。
@@ -282,6 +285,22 @@ public void warmFundEstimatesAfterReady() {
 
 // STALE/NOT_ATTEMPTED:今日涨跌 0,市值使用最近确认净值。
 // UNAVAILABLE/TIMEOUT/PARSE_ERROR:返回未知,不冒充交易中的当前值。
+```
+
+### Wrong:QDII 只要有两期净值就重复展示收益
+
+```java
+boolean confirmedNavSelected = qdii && latestTwo.size() >= 2;
+```
+
+### Correct:QDII 只在最新净值的发现日结算一次
+
+```java
+boolean confirmedNavSelected = qdii
+        && latestTwo.size() >= 2
+        && latestTwo.get(0).getFirstSeenAt() != null
+        && ChinaTradingDate.toUtcDate(latestTwo.get(0).getFirstSeenAt())
+                .equals(ChinaTradingDate.toUtcDate(clock.instant()));
 ```
 
 ### Wrong:只在收益测试里手工设置 QDII
