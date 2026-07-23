@@ -51,13 +51,13 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 候选镜像必须在停写前拉取。进入维护前检查未来 60 分钟安全区间不得与北京时间 `02:00-04:15`、工作日 `14:00-15:15` 相交；正常发布使用 30 分钟绝对截止，总维护/回滚使用 55 分钟截止并预留 5 分钟紧急停服。
 - 维护和回滚中的 `docker`、Compose、`pg_dump`、`pg_restore`、探活等外部命令必须用绝对截止时间与 `timeout --foreground --kill-after=5s` 双重约束。提交前命令按 30 分钟前向截止裁剪，rollback/提交后命令按 55 分钟总截止裁剪，禁止只依赖 Bash 收到 TERM 后执行 trap。
 - 部署在同一 SSH 脚本中用上一 release 的 Compose 停止 frontend/backend、等待固定 `fundpilot-db` 容器、生成并校验 `pg_dump -Fc`。
-- 候选 backend 使用 `DEPLOYMENT_VALIDATION_MODE=true`：不注册 Scheduler，Pending 补偿和交易日历启动监听器不得写库。
+- 生产部署直接使用 `DEPLOYMENT_VALIDATION_MODE=false` 启动 backend；维护窗口内旧应用已停止，先完成新 backend 健康检查再提交发布状态。
 - 候选 frontend 仅接入内部 `fundpilot_default` 网络，必须验证静态页和带 `X-Admin-Key` 的 `/api/funds` 反代，不得提前连接外部 Caddy 网络。
 - 部署探活的 Key 必须通过 stdin 传给 HTTP 客户端，不得出现在 `curl`、`wget`、`docker` 或 `timeout` 的进程参数中；回滚探活必须从旧 `.env` 读取上一版本 Key，并兼容不要求 Key 的旧 release。
 - 候选前端的原始 HTTP 探活必须在容器内读取 stdin 中的 Key，由容器内管道构造请求并短暂保持写端打开，同时在宿主机完整捕获响应后再匹配 JSON；禁止让 BusyBox `nc` 直接收到请求端 EOF，或把其输出直接接到 `grep -q`，两者都会提前关闭连接并让有反代延迟的 Nginx 请求记录 `499`。
 - 容器内 Nginx 探活必须使用 `http://127.0.0.1/`，禁止使用可能优先解析到未监听 IPv6 回环的 `localhost`。
 - 远程 Compose 命令必须显式传 `--env-file "$VPS_PATH/.env"`；切换到上一 release 后仍从根目录环境文件读取数据库凭据，禁止依赖 Compose 随版本/工作目录变化的隐式 `.env` 搜索。
-- 候选验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再以正常模式重启 backend、接入正式 frontend，并验证公网首页和带 `X-Admin-Key` 的 `/api/funds`。
+- 新 backend 健康检查和候选 frontend 验证通过后原子提交 `.deployed-state` 并解除数据库回滚，再接入正式 frontend，并验证公网首页和带 `X-Admin-Key` 的 `/api/funds`。
 - 发布失败时先保持应用停止，恢复发布前数据库备份，再启动上一 tag；恢复失败或没有上一 tag 时保持应用停止并让工作流失败。
 - 提交后的正常 backend 或公网 frontend 启动失败时停止对外服务并报错，不得恢复旧数据库覆盖后台任务或用户写入。
 - ERR/HUP/INT/TERM 始终进入同一个阶段分派 trap；以原子落盘 `.deployed-state` 中本次 `DEPLOYMENT_TOKEN` 判断是否已提交。提交前恢复数据库和旧状态，提交后只停止 backend/frontend，不得依赖相邻两行命令切换 trap。
@@ -84,7 +84,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 | 其他 missing/failed/元数据漂移 | 禁止 repair | 启动失败 |
 | 数据库备份为空或不可列出 | 不启动新版本 | 部署失败 |
 | 新版本健康检查失败 | 恢复数据库和上一 tag | 回滚后工作流仍失败 |
-| 候选 backend/frontend 验证失败 | 尚未接入公网，恢复数据库和上一 digest | 回滚后工作流仍失败 |
+| 新版本 backend/frontend 验证失败 | 尚未接入公网，恢复数据库和上一 digest | 回滚后工作流仍失败 |
 | 提交后正常 backend 或公网入口失败 | 停止对外服务，不恢复数据库 | 工作流失败，保留新数据库状态 |
 | 未来 60 分钟安全区间与定时任务禁区相交 | 不进入维护窗口 | 发布失败，旧版本继续运行 |
 | 正常发布超过 30 分钟 | watchdog 发送 TERM，按当前提交阶段处理 | 发布失败 |
@@ -95,7 +95,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 - Good：登录请求验证 Key 后签发 HttpOnly 持久会话 Cookie；刷新、关闭或重启浏览器后先重新验证 Cookie，成功才恢复业务界面。
 - Good：生产存在唯一旧 V7 Missing，repair 标记 `DELETED` 后 V1-V18 严格校验通过。
-- Good：候选 backend 无调度/启动写，候选 frontend 只在内部网络完成 API 反代验证，失败时安全恢复备份。
+- Good：新 backend 先完成健康检查，候选 frontend 只在内部网络完成 API 反代验证，失败时按发布前备份回滚。
 - Good：候选前端原始 HTTP 探活在容器内保持请求写端打开，宿主完整读取响应后再判断成功，Nginx 反代慢于静态页时仍返回 200。
 - Good：部署使用 backend/frontend digest；Git tag 被移动时在停写前拒绝发布。
 - Good：镜像先拉取，维护前确认未来 60 分钟不跨 cron 禁区；前向命令按 30 分钟截止，rollback/提交后按 55 分钟截止，命令忽略 TERM 时 5 秒后强制 KILL。
@@ -107,9 +107,8 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Bad：只做前端登录页，后端普通业务 API 仍可匿名调用。
 - Bad：把原始 Key 写入 localStorage/sessionStorage/普通 Cookie，或读取浏览器状态后不经服务端验证就挂载业务界面。
 - Bad：使用 `*:missing` 让任意缺失迁移继续启动。
-- Bad：新版本运行且允许写入后再恢复部署前备份，会覆盖用户新数据。
+- Bad：正式 frontend 接入 Caddy、允许用户写入后仍恢复部署前备份，会覆盖用户新数据。
 - Bad：使用 `latest` 回滚，无法证明恢复的是哪一版。
-- Bad：候选 backend 开着 Scheduler 等待前端探活，回滚会删除这段窗口的定时写入。
 - Bad：正式 frontend 接入 Caddy 后仍允许数据库回滚，会覆盖健康等待窗口的用户写入。
 - Bad：只用静态 Nginx 或直接后端验证 BusyBox `nc`；这无法复现 Nginx 等待上游时因客户端 EOF 产生的 `499`。
 - Bad：只在脚本启动时检查当前时刻，镜像拉取或备份变慢后仍可能跨入 cron 窗口。
@@ -175,8 +174,8 @@ flyway.validate();
 ```sh
 stop_previous_release
 backup_and_verify_database
-start_read_only_candidate_backend
+start_normal_backend
 smoke_candidate_frontend_on_internal_network
 commit_digest_state
-start_normal_backend_and_public_frontend
+start_public_frontend
 ```

@@ -267,7 +267,6 @@ jobs:
               target_tag=$1
               target_backend_image=${2:-}
               target_frontend_image=${3:-}
-              validation_mode=${4:-false}
               {
                 printf 'DB_USERNAME=%s\n' "$DB_USERNAME"
                 printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
@@ -275,7 +274,6 @@ jobs:
                 printf 'FUNDPILOT_BOOTSTRAP_USERNAME=%s\n' "$FUNDPILOT_BOOTSTRAP_USERNAME"
                 printf 'FUNDPILOT_BOOTSTRAP_PASSWORD=%s\n' "$FUNDPILOT_BOOTSTRAP_PASSWORD"
                 printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
-                printf 'DEPLOYMENT_VALIDATION_MODE=%s\n' "$validation_mode"
                 printf 'TAG=%s\n' "$target_tag"
                 if [ -n "$target_backend_image" ]; then
                   printf 'BACKEND_IMAGE=%s\n' "$target_backend_image"
@@ -536,7 +534,7 @@ jobs:
               git checkout --detach "$PREVIOUS_RELEASE_TAG"
             else
               git checkout --detach "$RELEASE_TAG"
-              write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
+              write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"
             fi
             run_before_total_deadline 30 docker network inspect deploy_sub2api-network >/dev/null
 
@@ -564,7 +562,7 @@ jobs:
             BACKUP_READY=1
 
             git checkout --detach "$RELEASE_TAG"
-            write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" true
+            write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"
             {
               printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG"
               printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
@@ -577,13 +575,8 @@ jobs:
             wait_for_backend
             smoke_candidate_frontend
 
-            write_env "$IMAGE_TAG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" false
             mv .deployed-state.next .deployed-state
             stop_maintenance_watchdog
-            if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d --force-recreate backend || ! wait_for_backend; then
-              echo "release committed but normal backend startup failed; database was not rolled back" >&2
-              post_commit_abort
-            fi
             if ! TAG="$IMAGE_TAG" run_before_total_deadline 180 "${COMPOSE[@]}" up -d frontend || ! wait_for_release; then
               echo "release committed but public frontend smoke test failed; database was not rolled back" >&2
               post_commit_abort
