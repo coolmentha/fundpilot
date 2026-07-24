@@ -1,8 +1,8 @@
-import {Card, Descriptions, Skeleton, Space, Tabs, Typography, Button} from 'antd';
+import {Alert, Button, Card, Descriptions, Skeleton, Space, Tabs, Typography} from 'antd';
 import {Link, useParams} from 'react-router-dom';
-import {ArrowLeftOutlined} from '@ant-design/icons';
-import {useFund, useFundFeeRates} from '../api/hooks.js';
-import {date, datetime, money, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
+import {ArrowLeftOutlined, EditOutlined} from '@ant-design/icons';
+import {useFund, useFundFeeRates, usePendingSignals, usePendingTransactions} from '../api/hooks.js';
+import {date, datetime, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
 import SignalTab from './FundSignalTab.jsx';
@@ -11,6 +11,7 @@ import FundTransactionTab from './FundTransactionTab.jsx';
 import FundDcaTab from './FundDcaTab.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import {estimateStatusText} from '../querySafety.js';
+import {redemptionLadderText} from '../feeRates.js';
 
 const {Title, Text} = Typography;
 
@@ -23,11 +24,16 @@ export default function FundDetailPage() {
     const id = Number(fundId);
     const {data: fund, isLoading, isError, refetch} = useFund(id);
     const {data: feeRates} = useFundFeeRates(id);
+    const {data: pendingTransactions} = usePendingTransactions();
+    const {data: pendingSignals} = usePendingSignals();
 
     if (isLoading) return <Card><Skeleton active paragraph={{rows: 6}}/></Card>;
     if (isError) return <Card><QueryErrorState onRetry={refetch} description="基金详情加载失败"/></Card>;
     if (!fund) return <Card><Title level={4}>基金不存在</Title></Card>;
 
+    const pendingTransactionCount = pendingTransactions?.filter((transaction) => transaction.fundId === id).length ?? 0;
+    const pendingSignalCount = pendingSignals?.filter((signal) => signal.fundId === id).length ?? 0;
+    const redemptionRates = redemptionLadderText(feeRates?.redemptionLadder);
     const items = [
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
@@ -43,7 +49,19 @@ export default function FundDetailPage() {
                 <Title level={4} style={{margin: 0}}>{fund.fundName}</Title>
                 <Text type="secondary" className="num-cell">{fund.fundCode}</Text>
             </Space>
-        }>
+        } extra={<Link to={`/funds?editId=${id}`}><Button icon={<EditOutlined/>}>编辑基金</Button></Link>}>
+            {(pendingTransactionCount > 0 || pendingSignalCount > 0) && (
+                <Alert type="warning" showIcon style={{marginBottom: 16}}
+                       title="有待处理事项"
+                       description={<Space wrap>
+                           {pendingTransactionCount > 0 && (
+                               <Link to={`/confirm?fundId=${id}`}>待确认交易 {pendingTransactionCount} 笔</Link>
+                           )}
+                           {pendingSignalCount > 0 && (
+                               <Link to={`/signals?fundId=${id}`}>待回应信号 {pendingSignalCount} 条</Link>
+                           )}
+                       </Space>}/>
+            )}
             <Descriptions column={{xs: 1, sm: 2, md: 3}} size="small" style={{marginBottom: 16}}>
                 <Descriptions.Item label="类型"><StatusTag value={fund.fundCategory}/></Descriptions.Item>
                 <Descriptions.Item label="子类">{text(fund.fundSubType)}</Descriptions.Item>
@@ -84,7 +102,7 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="总盈亏">
                     <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
                 </Descriptions.Item>
-                <Descriptions.Item label="收益计算依据" span={2}>
+                <Descriptions.Item label="收益计算依据">
                     {fund.valuationSource === 'INTRADAY_ESTIMATE'
                         ? `盘中估值${fund.estimateTime ? `（${fund.estimateTime}）` : ''}，基准净值日 ${fund.baseNavDate || '-'}，计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
                         : fund.valuationSource === 'CONFIRMED_NAV'
@@ -95,10 +113,25 @@ export default function FundDetailPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
                 <Descriptions.Item label="参考费率">
-                    {feeRates && feeRates.discountRate != null
-                        ? <span className="num-cell">申购 {(Number(feeRates.discountRate)*100).toFixed(2)}%</span>
+                    {feeRates?.discountRate != null
+                        ? <span className="num-cell">申购优惠 {percent(feeRates.discountRate)}</span>
                         : <span className="muted">未爬取</span>}
                 </Descriptions.Item>
+                <Descriptions.Item label="申购原费率">
+                    {feeRates?.purchaseRate != null
+                        ? <span className="num-cell">{percent(feeRates.purchaseRate)}</span>
+                        : <span className="muted">未爬取</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="赎回费率">
+                    {redemptionRates
+                        ? <span className="num-cell">{redemptionRates}</span>
+                        : <span className="muted">未爬取</span>}
+                </Descriptions.Item>
+                {feeRates?.salesServiceFee != null && (
+                    <Descriptions.Item label="销售服务费（年化）">
+                        <span className="num-cell">{percent(feeRates.salesServiceFee)}</span>
+                    </Descriptions.Item>
+                )}
             </Descriptions>
             <Tabs defaultActiveKey="transaction" items={items}/>
         </Card>

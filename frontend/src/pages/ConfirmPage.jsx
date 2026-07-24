@@ -24,10 +24,13 @@ export default function ConfirmPage() {
     const confirmTx = useConfirmTransaction();
     const cancelTx = useCancelTransaction();
     const [editing, setEditing] = useState(null);
-    const [params] = useSearchParams();
+    const [params, setParams] = useSearchParams();
     const targetSignalId = Number(params.get('signalId'));
     const targetTransactionId = Number(params.get('transactionId'));
+    const fundIdParam = params.get('fundId');
+    const fundId = fundIdParam ? Number(fundIdParam) : null;
     const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
+    const visibleTransactions = fundId ? (transactions || []).filter((transaction) => transaction.fundId === fundId) : transactions || [];
 
     const confirm = async (id) => {
         await confirmTx.mutateAsync(id);
@@ -85,13 +88,16 @@ export default function ConfirmPage() {
 
     return (
         <Card title={<Title level={4}>操作确认</Title>} extra={
-            <Button icon={<ReloadOutlined/>} onClick={() => refetch()}>刷新</Button>
+            <Space>
+                {fundId && <Button type="link" onClick={() => setParams({})}>查看全部</Button>}
+                <Button icon={<ReloadOutlined/>} onClick={() => refetch()}>刷新</Button>
+            </Space>
         }>
             <Text type="secondary" style={{display: 'block', marginBottom: 16}}>
-                汇总所有基金待净值确认的交易，可手动确认或撤销。
+                {fundId ? `仅显示 ${fundName(fundId)} 的待净值确认交易。` : '汇总所有基金待净值确认的交易，可手动确认或撤销。'}
             </Text>
             {isError ? <QueryErrorState onRetry={refetch} description="待处理交易加载失败"/> : (
-                <Table rowKey="id" size="small" loading={isLoading} dataSource={transactions || []}
+                <Table rowKey="id" size="small" loading={isLoading} dataSource={visibleTransactions}
                        columns={columns} pagination={false} scroll={{x: 1240}}
                        rowClassName={(row) => row.id === targetTransactionId || row.signalLogId === targetSignalId
                            ? 'row-target' : ''}

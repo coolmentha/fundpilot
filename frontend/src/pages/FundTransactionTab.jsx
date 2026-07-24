@@ -8,6 +8,7 @@ import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import PendingTransactionEditModal from '../components/PendingTransactionEditModal.jsx';
 import {adjustmentFromTarget, canEditPendingTransaction} from '../transactionEditing.js';
+import {redemptionLadderText} from '../feeRates.js';
 
 const {Title} = Typography;
 
@@ -42,12 +43,7 @@ export default function FundTransactionTab({fundId}) {
     const currentFund = funds?.find((fund) => fund.id === fundId);
     const currentHoldingShares = Number(currentFund?.holdingShares ?? 0);
     const {data: feeRates} = useFundFeeRates(fundId);
-    const redemptionHint = feeRates?.redemptionLadder?.length
-        ? feeRates.redemptionLadder.map((tier, index) => {
-            const boundary = tier.maxDays == null ? `${index ? feeRates.redemptionLadder[index - 1].maxDays : 0}天以上` : `${tier.maxDays}天以内`;
-            return `${boundary} ${(Number(tier.rate) * 100).toFixed(2)}%`;
-        }).join('；')
-        : null;
+    const redemptionHint = redemptionLadderText(feeRates?.redemptionLadder);
 
     const columns = [
         {title: '交易日期', dataIndex: 'tradeDate', width: 170, render: datetime},

@@ -1,9 +1,9 @@
-import {useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography} from 'antd';
 import {AppstoreOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import dayjs from 'dayjs';
-import {Link} from 'react-router-dom';
+import {Link, useSearchParams} from 'react-router-dom';
 import {useArchiveFund, useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
 import {date, datetime, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
@@ -39,6 +39,7 @@ export default function FundsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeGroup, setActiveGroup] = useState(getStoredFundGroup);
     const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+    const [params, setParams] = useSearchParams();
     const initialHoldingShares = Form.useWatch('initialHoldingShares', form);
     const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
     const rows = buildFundPositionWarnings(funds);
@@ -72,7 +73,7 @@ export default function FundsPage() {
         setSearchQuery('');
         setOpen(true);
     };
-    const openEdit = (fund) => {
+    const openEdit = useCallback((fund) => {
         setEditing(fund);
         form.setFieldsValue({
             fundCode: fund.fundCode,
@@ -85,7 +86,19 @@ export default function FundsPage() {
             groupNames: (fund.groups || []).map((group) => group.name),
         });
         setOpen(true);
-    };
+    }, [form]);
+
+    useEffect(() => {
+        const editId = Number(params.get('editId'));
+        if (!editId || !funds) return;
+        const fund = funds.find((item) => item.id === editId);
+        if (!fund) return;
+        const timer = window.setTimeout(() => {
+            openEdit(fund);
+            setParams({});
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [funds, openEdit, params, setParams]);
 
     // 搜索框选中候选:一次性回填 code/name/类型/子类/跟踪指数
     const onSelectCandidate = (value, option) => {
