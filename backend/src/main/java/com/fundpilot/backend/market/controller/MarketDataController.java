@@ -3,6 +3,7 @@ package com.fundpilot.backend.market.controller;
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.market.service.KlineService;
 import com.fundpilot.backend.market.service.MarketIndicatorProvider;
+import com.fundpilot.backend.market.service.MarketRealtimeCache;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +27,7 @@ public class MarketDataController {
 
     private final MarketIndicatorProvider marketIndicatorProvider;
     private final KlineService klineService;
+    private final MarketRealtimeCache marketRealtimeCache;
 
     @GetMapping("/api/funds/{fundId}/market-indicators/today")
     public ApiResponse<MarketIndicatorSnapshotView> today(@PathVariable Long fundId) {
@@ -45,5 +47,11 @@ public class MarketDataController {
             @PathVariable Long fundId,
             @RequestParam(name = "period", defaultValue = "daily") String period) {
         return ApiResponse.ok(klineService.getKline(fundId, period));
+    }
+
+    /** 基金详情当日分时图，只读后台实时缓存。 */
+    @GetMapping("/api/funds/{fundId}/intraday")
+    public ApiResponse<FundIntradayView> intraday(@PathVariable Long fundId) {
+        return ApiResponse.ok(FundIntradayView.from(marketRealtimeCache.getIntraday(fundId)));
     }
 }

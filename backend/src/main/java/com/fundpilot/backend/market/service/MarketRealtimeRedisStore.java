@@ -1,6 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
@@ -50,6 +51,13 @@ public class MarketRealtimeRedisStore {
             List<SectorSnapshot> sectors,
             MoneyFlowSnapshot moneyFlow,
             Map<String, FundEstimateSnapshot> estimates,
-            Map<String, EstimateStatus> estimateStatuses) {
+            Map<String, EstimateStatus> estimateStatuses,
+            Map<String, FundIntradayChart> intradayCharts) {
+
+        public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
+                        MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
+                        Map<String, EstimateStatus> estimateStatuses) {
+            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of());
+        }
     }
 }

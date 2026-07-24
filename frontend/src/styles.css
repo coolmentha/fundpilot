@@ -1509,6 +1509,11 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     min-height: 360px;
 }
 
+.intraday-chart-container {
+    width: 100%;
+    min-height: 360px;
+}
+
 .kline-loading {
     position: absolute;
     top: 50%;

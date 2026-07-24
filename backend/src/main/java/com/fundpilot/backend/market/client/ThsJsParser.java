@@ -26,6 +26,22 @@ public final class ThsJsParser {
 
     /** 解析同花顺盘中估值分钟线，取最后一个有效点计算相对基准净值涨跌幅。 */
     public static FundEstimateSnapshot parseFundEstimate(String raw) {
+        FundIntradayChart chart = parseFundIntradayChart(raw);
+        return chart == null ? null : parseFundEstimateFrom(chart);
+    }
+
+    public static FundEstimateSnapshot parseFundEstimateFrom(FundIntradayChart chart) {
+        if (chart.points().isEmpty()) {
+            return null;
+        }
+        BigDecimal latestNav = chart.points().getLast().nav();
+        BigDecimal changePct = latestNav.subtract(chart.baseNav()).divide(chart.baseNav(), MathContext.DECIMAL64);
+        return new FundEstimateSnapshot(changePct, chart.estimateDate() + " " + chart.points().getLast().time(),
+                chart.baseNavDate());
+    }
+
+    /** 解析同花顺盘中分钟估值线。无有效点时返回 null，单点仅可用于估值快照、不可绘制曲线。 */
+    public static FundIntradayChart parseFundIntradayChart(String raw) {
         String payload = ScriptPayloadExtractor.assignedValueByPrefix(raw, "vm_fd_");
         if (payload == null) {
             return null;
@@ -35,22 +51,18 @@ public final class ThsJsParser {
             String baseNavDate = sides[0].split(";", 2)[0];
             String[] estimate = sides[1].split("~", 3);
             BigDecimal baseNav = new BigDecimal(estimate[1]);
-            String[] points = estimate[2].split(";");
-            String[] latest = null;
-            for (int i = points.length - 1; i >= 0; i--) {
-                String[] candidate = points[i].split(",");
-                if (candidate.length >= 2 && candidate[0].length() == 4 && !candidate[1].isBlank()) {
-                    latest = candidate;
-                    break;
+            List<FundIntradayChart.Point> points = new ArrayList<>();
+            for (String csv : estimate[2].split(";")) {
+                String[] candidate = csv.split(",");
+                if (candidate.length >= 2 && candidate[0].matches("\\d{4}") && !candidate[1].isBlank()) {
+                    String time = candidate[0].substring(0, 2) + ":" + candidate[0].substring(2, 4);
+                    points.add(new FundIntradayChart.Point(time, new BigDecimal(candidate[1])));
                 }
             }
-            if (latest == null) {
+            if (points.isEmpty()) {
                 return null;
             }
-            BigDecimal latestNav = new BigDecimal(latest[1]);
-            BigDecimal changePct = latestNav.subtract(baseNav).divide(baseNav, MathContext.DECIMAL64);
-            String time = latest[0].substring(0, 2) + ":" + latest[0].substring(2, 4);
-            return new FundEstimateSnapshot(changePct, estimate[0] + " " + time, baseNavDate);
+            return new FundIntradayChart(estimate[0], baseNavDate, baseNav, List.copyOf(points));
         } catch (RuntimeException e) {
             throw new IllegalStateException("同花顺盘中估值解析失败", e);
         }
