@@ -25,18 +25,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # 复用 main CI 写入的 Maven 依赖缓存，避免在 Docker BuildKit 内下载完整依赖树。
-      - name: Setup JDK 25
-        uses: actions/setup-java@v5
+      # 使用固定 Maven/JDK 构建镜像，宿主 Maven 缓存挂载到容器内复用。
+      - name: Cache Maven repository
+        uses: actions/cache@v4
         with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-3.9.11-${{ hashFiles('backend/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-3.9.11-
 
       # tag 仅从已通过 main CI 的提交创建，无需在发布阶段重复执行测试。
-      - name: Package backend
-        working-directory: backend
-        run: ./mvnw -B package -Dmaven.test.skip=true
+      - name: Package backend with Maven image
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/backend:/workspace" \
+            -v "$HOME/.m2:/root/.m2" \
+            -w /workspace \
+            maven:3.9.11-eclipse-temurin-25 \
+            mvn -B package -Dmaven.test.skip=true
 
       - uses: docker/setup-buildx-action@v3
 
