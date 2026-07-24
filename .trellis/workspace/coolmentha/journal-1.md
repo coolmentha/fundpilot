@@ -72,3 +72,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 分时图指标切换
+
+**Date**: 2026-07-24
+**Task**: 分时图指标切换
+**Branch**: `feature/fund-intraday-metric-toggle`
+
+### Summary
+
+基金今日分时默认展示相对基准净值的涨跌幅，支持切换净值，并完成前端验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `05188ca` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
