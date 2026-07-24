@@ -38,3 +38,37 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 基金详情当日分时图发布
+
+**Date**: 2026-07-24
+**Task**: 基金详情当日分时图发布
+**Branch**: `main`
+
+### Summary
+
+同花顺分钟线接入实时缓存和基金详情 Tab，PR #124 通过 CI 并以 v0.5.103 部署。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b9b76c7` | (see git log) |
+| `a4906a5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
