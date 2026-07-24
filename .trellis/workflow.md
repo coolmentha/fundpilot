@@ -154,6 +154,7 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 - Simple conversation or small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
 - Complex task: ask whether you may create a Trellis task and enter planning. If the user says no, do not do broad inline implementation; explain, clarify scope, or suggest a smaller split.
 - User approval to create a task is not approval to start implementation. Planning still happens first.
+- Business-related requirement clarification: before `trellis-brainstorm`, ensure the `grill-with-docs` skill chain exists: `.agents/skills/grill-with-docs/SKILL.md`, `.agents/skills/grilling/SKILL.md`, and `.agents/skills/domain-modeling/SKILL.md`. If any are missing, use the environment's skill installer to install `https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs`, `https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling`, and `https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling` into `.agents/skills/`; if installation cannot complete, state the blocker and do not silently skip the review. Business-related includes domain terms, user workflows, state transitions, transactions, signals, valuation, or other financial rules.
 
 ### Planning Artifacts
 
@@ -190,7 +191,7 @@ Complex task: ask the user if you can create a Trellis task and enter the planni
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
-Load `trellis-brainstorm`; stay in planning.
+For business-related requirement clarification, first ensure the `grill-with-docs` skill chain is installed from the configured project source, then load `grill-with-docs` before `trellis-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
@@ -203,7 +204,7 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
      into a sub-agent. -->
 
 [workflow-state:planning-inline]
-Load `trellis-brainstorm`; stay in planning.
+For business-related requirement clarification, first ensure the `grill-with-docs` skill chain is installed from the configured project source, then load `grill-with-docs` before `trellis-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
@@ -274,7 +275,8 @@ When a user request matches one of these intents inside an active task, route fi
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 
-- Planning or unclear requirements -> `trellis-brainstorm`.
+- Business-related planning or clarification -> ensure the `grill-with-docs` skill chain is installed, then run `grill-with-docs` before `trellis-brainstorm`.
+- Non-business planning or unclear requirements -> `trellis-brainstorm`.
 - `in_progress` implementation/check -> dispatch `trellis-implement` / `trellis-check`.
 - Repeated debugging -> `trellis-break-loop`; spec updates -> `trellis-update-spec`.
 
@@ -282,7 +284,8 @@ When a user request matches one of these intents inside an active task, route fi
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-- Planning or unclear requirements -> `trellis-brainstorm`.
+- Business-related planning or clarification -> ensure the `grill-with-docs` skill chain is installed, then run `grill-with-docs` before `trellis-brainstorm`.
+- Non-business planning or unclear requirements -> `trellis-brainstorm`.
 - Before editing -> `trellis-before-dev`; after editing -> `trellis-check`.
 - Repeated debugging -> `trellis-break-loop`; spec updates -> `trellis-update-spec`.
 
@@ -329,7 +332,7 @@ Skip when `python ./.trellis/scripts/task.py current --source` already points to
 
 #### 1.1 Requirement exploration `[required · repeatable]`
 
-Load the `trellis-brainstorm` skill and explore requirements interactively with the user per the skill's guidance.
+First classify whether the request is business-related. For domain terms, user workflows, state transitions, transactions, signals, valuation, or other financial rules, ensure the `grill-with-docs` skill chain exists: `.agents/skills/grill-with-docs/SKILL.md`, `.agents/skills/grilling/SKILL.md`, and `.agents/skills/domain-modeling/SKILL.md`. If any are absent, install the three skills from `https://github.com/mattpocock/skills/tree/main/skills/engineering/grill-with-docs`, `https://github.com/mattpocock/skills/tree/main/skills/productivity/grilling`, and `https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling` into `.agents/skills/` using the environment's skill installer; if unavailable or unsuccessful, report the blocker before continuing. Load `grill-with-docs` to pressure-test the domain language and existing decisions, then load `trellis-brainstorm` and explore requirements interactively with the user per its guidance. Non-business work loads `trellis-brainstorm` directly.
 
 The brainstorm skill will guide you to:
 - Ask one question at a time
