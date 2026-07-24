@@ -1,4 +1,3 @@
-import React from 'react';
 import {Card, Tabs} from 'antd';
 import KlineChart from '../components/KlineChart.jsx';
 import FundIntradayChart from '../components/FundIntradayChart.jsx';

@@ -6,6 +6,7 @@ vi.mock('../components/FundIntradayChart.jsx', () => ({default: () => <div>intra
 vi.mock('../components/KlineChart.jsx', () => ({default: () => <div>kline-chart</div>}));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.React = React;
 window.matchMedia = window.matchMedia || (() => ({matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn()}));
 globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
 
