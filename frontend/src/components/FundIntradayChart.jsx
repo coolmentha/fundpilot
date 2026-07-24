@@ -1,5 +1,5 @@
-import {useEffect, useRef} from 'react';
-import {Empty} from 'antd';
+import {useEffect, useRef, useState} from 'react';
+import {Empty, Segmented} from 'antd';
 import {dispose, init} from 'klinecharts';
 import {useFundIntraday} from '../api/hooks.js';
 
@@ -7,8 +7,11 @@ import {useFundIntraday} from '../api/hooks.js';
 export default function FundIntradayChart({fundId}) {
     const containerRef = useRef(null);
     const chartRef = useRef(null);
+    const [metric, setMetric] = useState('percent');
     const {data: intraday, isLoading} = useFundIntraday(fundId);
     const pointCount = intraday?.points?.length ?? 0;
+    const baseNav = Number(intraday?.baseNav);
+    const usePercentAxis = metric === 'percent' && Number.isFinite(baseNav) && baseNav > 0;
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
@@ -33,14 +36,29 @@ export default function FundIntradayChart({fundId}) {
         const points = intraday?.points || [];
         if (!chartRef.current || points.length < 2) return;
         chartRef.current.resize();
-        chartRef.current.applyNewData(points.map((point) => ({
+        const data = points.map((point) => ({
             timestamp: new Date(`${intraday.estimateDate}T${point.time}:00+08:00`).getTime(),
             open: Number(point.nav), high: Number(point.nav), low: Number(point.nav), close: Number(point.nav),
-        })));
-    }, [intraday]);
+        }));
+        // klinecharts 的百分比纵轴以首个可见点为 0%；插入并固定基准净值确保其对应后端 baseNav。
+        if (usePercentAxis) {
+            data.unshift({timestamp: data[0].timestamp - 60_000, open: baseNav, high: baseNav, low: baseNav, close: baseNav});
+        }
+        chartRef.current.setStyles({yAxis: {type: usePercentAxis ? 'percentage' : 'normal'}});
+        chartRef.current.setScrollEnabled(!usePercentAxis);
+        chartRef.current.setZoomEnabled(!usePercentAxis);
+        chartRef.current.setPriceVolumePrecision(usePercentAxis ? 2 : 4, 0);
+        chartRef.current.applyNewData(data);
+    }, [intraday, usePercentAxis, baseNav]);
 
     const empty = !isLoading && pointCount < 2;
     return <>
+        {!empty && <div className="kline-toolbar">
+            <Segmented size="small" value={metric} onChange={setMetric} options={[
+                {label: '涨跌幅', value: 'percent'},
+                {label: '净值', value: 'nav'},
+            ]}/>
+        </div>}
         <div ref={containerRef} className="intraday-chart-container" style={empty ? {display: 'none'} : undefined}/>
         {empty && <Empty description="暂无当日分时数据"/>}
     </>;
