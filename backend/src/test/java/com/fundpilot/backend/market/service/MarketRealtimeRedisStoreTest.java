@@ -33,7 +33,7 @@ class MarketRealtimeRedisStoreTest {
         MarketRealtimeRedisStore.Snapshot expected = new MarketRealtimeRedisStore.Snapshot(
                 List.of(new IndexRealtimeSnapshot("1.000001", "上证指数", new BigDecimal("3500.12"),
                         new BigDecimal("12.34"), new BigDecimal("0.0035"), new BigDecimal("123456"))),
-                new MarketBreadthSnapshot(3000, 2000),
+                new MarketBreadthSnapshot(3000, 2000, 42, 25),
                 List.of(new SectorSnapshot("BK0420", "航空机场", new BigDecimal("0.01"),
                         new BigDecimal("1000"), new BigDecimal("200"))),
                 new MoneyFlowSnapshot(new BigDecimal("300"), Instant.parse("2026-07-20T06:00:00Z")),

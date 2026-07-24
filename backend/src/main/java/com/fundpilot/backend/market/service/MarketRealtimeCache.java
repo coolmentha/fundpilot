@@ -9,8 +9,11 @@ import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
+import com.fundpilot.backend.market.client.MarketLimitCounts;
 import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
 import com.fundpilot.backend.market.client.SectorSnapshot;
+import com.fundpilot.backend.market.client.ThsIndexFlashClient;
+import com.fundpilot.backend.market.client.ThsJsParser;
 import com.fundpilot.backend.user.event.WatchedIndicesChangedEvent;
 import com.fundpilot.backend.user.service.UserConfigService;
 import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
@@ -75,6 +78,7 @@ public class MarketRealtimeCache {
     private final MarketDataMetrics marketDataMetrics;
     private final Clock clock;
     private final MarketRealtimeRedisStore redisStore;
+    private final ThsIndexFlashClient thsIndexFlashClient;
 
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
     private volatile List<IndexRealtimeSnapshot> indexCache = List.of();
@@ -90,7 +94,8 @@ public class MarketRealtimeCache {
     void restoreFromRedis() {
         redisStore.load().ifPresent(snapshot -> {
             indexCache = snapshot.indices() == null ? List.of() : List.copyOf(snapshot.indices());
-            breadthCache = snapshot.breadth();
+            MarketBreadthSnapshot restoredBreadth = snapshot.breadth();
+            breadthCache = restoredBreadth != null && restoredBreadth.hasLimitCounts() ? restoredBreadth : null;
             sectorCache = snapshot.sectors() == null ? List.of() : List.copyOf(snapshot.sectors());
             moneyFlowCache = snapshot.moneyFlow();
             if (snapshot.estimateStatuses() != null) {
@@ -262,10 +267,13 @@ public class MarketRealtimeCache {
                     .toList();
 
             MarketBreadthSnapshot breadth = EastmoneyJsParser.parseMarketBreadth(raw, MARKET_BREADTH_SECIDS);
-            if (breadth != null) {
-                breadthCache = breadth;
+            MarketLimitCounts limits = fetchMarketLimitCounts();
+            if (breadth != null && limits != null) {
+                breadthCache = new MarketBreadthSnapshot(
+                        breadth.risingCount(), breadth.fallingCount(),
+                        limits.limitUpCount(), limits.limitDownCount());
             }
-            if (snapshotsBySecid.isEmpty() && breadth == null) {
+            if (snapshotsBySecid.isEmpty() && (breadth == null || limits == null)) {
                 result = "empty";
             }
             persist();
@@ -292,6 +300,24 @@ public class MarketRealtimeCache {
             log.warn("行业板块刷新失败,保留旧缓存: {}", e.getMessage());
         } finally {
             marketDataMetrics.record("EastmoneyPush2Client", "fetchSectors", result, startedAt);
+        }
+    }
+
+    private MarketLimitCounts fetchMarketLimitCounts() {
+        long startedAt = System.nanoTime();
+        String result = "success";
+        try {
+            MarketLimitCounts counts = ThsJsParser.parseMarketLimitCounts(thsIndexFlashClient.fetchIndexFlashRaw());
+            if (counts == null) {
+                result = "empty";
+            }
+            return counts;
+        } catch (RuntimeException e) {
+            result = metricResult(e);
+            log.warn("同花顺涨跌停统计刷新失败,保留旧市场宽度缓存: {}", e.getMessage());
+            return null;
+        } finally {
+            marketDataMetrics.record("ThsIndexFlashClient", "fetchIndexFlash", result, startedAt);
         }
     }
 

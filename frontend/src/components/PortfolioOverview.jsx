@@ -38,15 +38,21 @@ export default function PortfolioOverview() {
     const missingEstimateCount = Math.max(holdingFundCount - coveredFundCount, estimateFetchFailedCount);
     const risingStockCount = breadth?.risingCount;
     const fallingStockCount = breadth?.fallingCount;
+    const limitUpCount = breadth?.limitUpCount;
+    const limitDownCount = breadth?.limitDownCount;
     const hasBreadth = Number.isFinite(risingStockCount)
         && Number.isFinite(fallingStockCount)
+        && Number.isFinite(limitUpCount)
+        && Number.isFinite(limitDownCount)
         && risingStockCount >= 0
-        && fallingStockCount >= 0;
+        && fallingStockCount >= 0
+        && limitUpCount >= 0
+        && limitDownCount >= 0;
     const breadthTotal = hasBreadth ? risingStockCount + fallingStockCount : 0;
     const risingPercent = breadthTotal > 0 ? (risingStockCount / breadthTotal) * 100 : 0;
     const fallingPercent = breadthTotal > 0 ? 100 - risingPercent : 0;
     const breadthAriaLabel = breadthTotal > 0
-        ? `沪深京股票上涨 ${risingStockCount} 只，占 ${risingPercent.toFixed(1)}%；下跌 ${fallingStockCount} 只，占 ${fallingPercent.toFixed(1)}%`
+        ? `沪深京股票上涨 ${risingStockCount} 只，占 ${risingPercent.toFixed(1)}%；下跌 ${fallingStockCount} 只，占 ${fallingPercent.toFixed(1)}%；涨停 ${limitUpCount} 只；跌停 ${limitDownCount} 只`
         : '沪深京股票涨跌数据暂不可用';
 
     return (
@@ -113,6 +119,14 @@ export default function PortfolioOverview() {
                             <span className="market-breadth-down" style={{width: `${fallingPercent}%`}}/>
                         </>
                     )}
+                </div>
+                <div className="market-breadth-summary">
+                    <span className="market-breadth-stat up">
+                        涨停 <strong>{hasBreadth ? limitUpCount : '-'}</strong>
+                    </span>
+                    <span className="market-breadth-stat down">
+                        跌停 <strong>{hasBreadth ? limitDownCount : '-'}</strong>
+                    </span>
                 </div>
                 <div className="overview-hint muted">
                     {isBreadthError && !breadth ? '行情暂不可用' : '沪深京股票'}
