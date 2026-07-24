@@ -57,4 +57,22 @@ class ThsJsParserTest {
     void parseIndexKline_total为零返回空结果() {
         assertThat(ThsJsParser.parseIndexKline("callback({\"total\":0,\"data\":\"\"})").bars()).isEmpty();
     }
+
+    @Test
+    void parseMarketLimitCounts_取分钟数组末项() {
+        String raw = """
+                {"zdt_data":{"zd_time":["14:59","15:00"],"ztzs":[25,42],"dtzs":[10,25]}}
+                """;
+
+        assertThat(ThsJsParser.parseMarketLimitCounts(raw)).isEqualTo(new MarketLimitCounts(42, 25));
+    }
+
+    @Test
+    void parseMarketLimitCounts_数组长度不一致返回空() {
+        String raw = """
+                {"zdt_data":{"zd_time":["15:00"],"ztzs":[42],"dtzs":[10,25]}}
+                """;
+
+        assertThat(ThsJsParser.parseMarketLimitCounts(raw)).isNull();
+    }
 }

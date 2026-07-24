@@ -148,6 +148,32 @@ public final class ThsJsParser {
         }
     }
 
+    /** 解析同花顺大盘涨跌停分钟统计的最新一个有效点。 */
+    public static MarketLimitCounts parseMarketLimitCounts(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode data = MAPPER.readTree(raw).path("zdt_data");
+            JsonNode times = data.path("zd_time");
+            JsonNode limitUps = data.path("ztzs");
+            JsonNode limitDowns = data.path("dtzs");
+            if (!times.isArray() || times.isEmpty() || !limitUps.isArray() || !limitDowns.isArray()
+                    || times.size() != limitUps.size() || times.size() != limitDowns.size()) {
+                return null;
+            }
+            int last = times.size() - 1;
+            if (!times.get(last).asText("").matches("(?:09|10|11|13|14|15):[0-5]\\d")) {
+                return null;
+            }
+            Integer limitUp = nonNegativeInt(limitUps.get(last));
+            Integer limitDown = nonNegativeInt(limitDowns.get(last));
+            return limitUp == null || limitDown == null ? null : new MarketLimitCounts(limitUp, limitDown);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("同花顺涨跌停统计 JSON 解析失败", e);
+        }
+    }
+
     private static Map<String, BigDecimal> parseDatedValues(String raw, String variablePrefix) {
         String json = ScriptPayloadExtractor.assignedValueByPrefix(raw, variablePrefix);
         if (json == null) {
@@ -172,6 +198,10 @@ public final class ThsJsParser {
         } catch (java.io.IOException | NumberFormatException e) {
             throw new IllegalStateException("同花顺基金净值解析失败", e);
         }
+    }
+
+    private static Integer nonNegativeInt(JsonNode node) {
+        return node.isIntegralNumber() && node.canConvertToInt() && node.intValue() >= 0 ? node.intValue() : null;
     }
 
     private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.BASIC_ISO_DATE;

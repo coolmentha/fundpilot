@@ -38,7 +38,7 @@ public class MarketRealtimeController {
                 .map(IndexRealtimeView::from).toList());
     }
 
-    /** 沪深京上涨、下跌股票家数。 */
+    /** 沪深京股票上涨、下跌、涨停、跌停家数。 */
     @GetMapping("/breadth")
     public ApiResponse<MarketBreadthView> breadth() {
         return ApiResponse.ok(MarketBreadthView.from(cache.getBreadth()));

@@ -29,7 +29,7 @@ GET /api/funds/{fundId}/kline?period=daily|weekly|monthly → KlineView
 
 ```java
 public List<IndexRealtimeSnapshot> getIndices();        // 读进程内副本，刷新后写穿 Redis
-public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌家数
+public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌、涨停、跌停家数
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
@@ -109,9 +109,10 @@ N 个前端客户端共享同一份缓存。
 
 - 固定汇总三个市场 secid:`1.000001`(沪市)、`0.399001`(深市)、`0.899050`(北交所)。
 - `f104` 为上涨家数，`f105` 为下跌家数；三者分别求和后写入 `MarketBreadthSnapshot`。
+- 同花顺 `https://q.10jqka.com.cn/api.php?t=indexflash` 的 `zdt_data.zd_time`、`ztzs`、`dtzs` 必须为等长非空数组；取末项的非负整数作为涨停、跌停家数。客户端每轮先访问主页建立内存 Cookie 会话，再请求统计接口；不得保存、配置或记录 Cookie 值。
 - 这些字段表示当日有涨跌状态的沪深京股票，不等于全部上市 A 股总数，前端文案使用“大盘涨跌 / 沪深京股票”。
 - 市场宽度与用户 `watchedIndices` 解耦。缓存刷新时将自选 secid 与固定三个 secid 去重合并，一次调用 `fetchIndexRealtimeRaw`，再分别投影到 `indexCache` 与 `breadthCache`。
-- 任一固定市场缺失，或任一 `f104/f105` 缺失、非整数、负数时，解析结果为 null；不得发布部分市场合计，已有 `breadthCache` 保持不变。
+- 任一固定市场缺失，任一 `f104/f105` 缺失、非整数、负数，或同花顺主页、接口、解析失败时，不得发布部分市场合计，已有完整 `breadthCache` 保持不变。旧 Redis 两项快照不恢复，直到取得四项完整快照。
 - 前端进度条左红表示上涨、右绿表示下跌，比例分母仅为 `risingCount + fallingCount`，平盘不参与。合计为 0 或接口数据为空时显示空轨道。
 
 ### 交易时段判断契约
@@ -161,8 +162,8 @@ N 个前端客户端共享同一份缓存。
 | 指数/市场宽度/板块/资金缓存为空(首次启动/全失败) | 返回空列表/null,前端显示「暂无数据」 |
 | 基金估值尚未完成首次尝试 | 视为估值阶段尚未开始，今日涨跌为 0，当前市值使用最近确认净值 |
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
-| 三个市场宽度字段完整 | 汇总 `f104/f105` 并更新 `breadthCache` |
-| 任一市场或家数字段缺失 | 保留旧 `breadthCache`;首次无缓存时接口 data=null |
+| 上涨、下跌、涨停、跌停四项完整 | 汇总 `f104/f105` 与同花顺分钟数组末项并更新 `breadthCache` |
+| 任一市场、家数字段、同花顺主页或接口缺失/失败 | 保留旧完整 `breadthCache`;首次无缓存时接口 data=null |
 | 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
 | 今日净值未落库且状态为 `STALE/NOT_ATTEMPTED` | 今日涨跌为 0，当前市值/总盈亏使用最近确认净值，不计算昨日涨跌 |
 | 今日净值未落库且状态为 `UNAVAILABLE` | 今日涨跌/盈亏返回未知；持仓市值/总盈亏使用最近确认净值 |
