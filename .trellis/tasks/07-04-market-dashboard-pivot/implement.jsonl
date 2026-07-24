@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "后端编码规范：Controller不写逻辑、@RequiredArgsConstructor、ErrorCode枚举、Actuator、数据源降级链等硬性规范"}
-{"file": ".trellis/spec/frontend/index.md", "reason": "前端编码规范：组件结构、样式约定、API hooks 模式"}
-{"file": "CONTEXT.md", "reason": "领域术语词典：行情数据源、盘中估值、今日涨跌、基金子类型等核心概念定义"}
-{"file": ".trellis/tasks/07-04-market-dashboard-pivot/design.md", "reason": "本任务 UI/UX 设计：配色方案、组件设计、K线图选型、实时刷新策略、文件结构"}
-{"file": ".trellis/tasks/07-04-market-dashboard-pivot/design-technical.md", "reason": "本任务后端技术设计：Feign客户端、解析器、缓存层、REST接口、SQL迁移、类与方法签名"}
