@@ -240,11 +240,17 @@ export function invalidateSignalQueries(queryClient) {
     queryClient.invalidateQueries({queryKey: ['signals-today']});
     queryClient.invalidateQueries({queryKey: ['signals-range']});
 }
+export function invalidateConfirmOperationQueries(queryClient) {
+    invalidateSignalQueries(queryClient);
+    queryClient.invalidateQueries({queryKey: ['transactions-pending']});
+    queryClient.invalidateQueries({queryKey: ['fund-transactions']});
+    queryClient.invalidateQueries({queryKey: ['funds']});
+}
 export function useConfirmOperation(fundId) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => post(`/api/funds/${fundId}/operations`, body),
-        onSuccess: () => invalidateSignalQueries(qc),
+        onSuccess: () => invalidateConfirmOperationQueries(qc),
     });
 }
 

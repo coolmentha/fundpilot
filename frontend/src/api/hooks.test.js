@@ -12,6 +12,7 @@ import {
     deleteDcaPlan,
     invalidateDcaBudgetSummary,
     invalidateDcaPlanQueries,
+    invalidateConfirmOperationQueries,
     invalidateSignalQueries,
     requestAdminAction,
     saveAdminUser,
@@ -28,6 +29,23 @@ describe('signal query invalidation', () => {
             [{queryKey: ['signals-pending']}],
             [{queryKey: ['signals-today']}],
             [{queryKey: ['signals-range']}],
+        ]);
+    });
+});
+
+describe('confirm operation query invalidation', () => {
+    it('refreshes the new pending transaction and affected fund projections', () => {
+        const queryClient = {invalidateQueries: vi.fn()};
+
+        invalidateConfirmOperationQueries(queryClient);
+
+        expect(queryClient.invalidateQueries.mock.calls).toEqual([
+            [{queryKey: ['signals-pending']}],
+            [{queryKey: ['signals-today']}],
+            [{queryKey: ['signals-range']}],
+            [{queryKey: ['transactions-pending']}],
+            [{queryKey: ['fund-transactions']}],
+            [{queryKey: ['funds']}],
         ]);
     });
 });

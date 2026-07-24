@@ -36,7 +36,7 @@ export default function DashboardPage() {
         {title: '信号时间', dataIndex: 'signalDate', width: 170, render: datetime},
         {
             title: '', width: 100, render: (_, r) => r.signalType !== 'NONE' && (
-                <Button type="primary" size="small" onClick={() => navigate('/confirm')}>去确认</Button>
+                <Button type="primary" size="small" onClick={() => navigate(`/signals?fundId=${r.fundId}`)}>去确认</Button>
             ),
         },
     ];
@@ -61,7 +61,7 @@ export default function DashboardPage() {
             ) : (
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
-                    <Card className="kpi-card kpi-amber" onClick={() => navigate('/confirm')}
+                    <Card className="kpi-card kpi-amber" onClick={() => navigate('/signals')}
                           hoverable style={{cursor: 'pointer'}}>
                         <Statistic title={<span className="kpi-label">待确认操作</span>}
                                    value={pendingCount} prefix={<ThunderboltOutlined/>}/>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
 
             {/* 待确认信号 */}
             <Card title={<Title level={4}>待确认操作</Title>}
-                  extra={pendingCount > 0 ? <Link to="/confirm">全部 →</Link> : null}>
+                  extra={pendingCount > 0 ? <Link to="/signals">全部 →</Link> : null}>
                 <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pending || []} columns={pendingColumns}
                        pagination={false} scroll={{x: 760}}
                        locale={{emptyText: <EmptyState description="暂无待确认信号"/>}}/>

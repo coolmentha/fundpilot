@@ -12,6 +12,7 @@ import com.fundpilot.backend.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -140,6 +141,18 @@ public class YangjibaoImportService {
         session.token = null;
     }
 
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Shanghai")
+    void purgeExpiredSessions() {
+        Instant now = Instant.now();
+        sessions.forEach((id, session) -> {
+            if (now.isAfter(session.expiresAt)) {
+                synchronized (session) {
+                    if (now.isAfter(session.expiresAt)) expire(id, session);
+                }
+            }
+        });
+    }
+
     private ImportResult importOne(PreviewItem item, YangjibaoImportController.ExistingMode mode) {
         Optional<FundEntity> existing = findOwnedFund(item.fundCode());
         if (existing.isEmpty()) {
@@ -182,7 +195,7 @@ public class YangjibaoImportService {
         return userId == 0L ? fundRepository.findByFundCode(fundCode)
                 : fundRepository.findByFundCodeAndOwnerId(fundCode, userId);
     }
-    private void expire(String id, Session session) { session.token = null; session.status = "EXPIRED"; sessions.remove(id); }
+    private void expire(String id, Session session) { session.token = null; session.status = "EXPIRED"; sessions.remove(id, session); }
     private BusinessException invalid(String message) { return new BusinessException(ErrorCode.YANGJIBAO_SESSION_INVALID, message); }
 
     public record SessionView(String sessionId, String status, String qrUrl, Instant expiresAt) {}

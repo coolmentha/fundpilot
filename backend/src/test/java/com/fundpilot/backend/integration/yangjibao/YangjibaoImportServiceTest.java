@@ -116,4 +116,18 @@ class YangjibaoImportServiceTest {
                 .isEqualTo(com.fundpilot.backend.exception.ErrorCode.YANGJIBAO_SESSION_NOT_FOUND.name());
         verify(client, never()).qrState(anyString());
     }
+
+    @Test
+    void proactivelyPurgesExpiredAbandonedSessions() {
+        when(client.createQrCode()).thenReturn(new YangjibaoClient.QrCode("qr", "https://qr"));
+        ReflectionTestUtils.setField(service, "ttl", Duration.ofSeconds(-1));
+        String id = service.create().sessionId();
+
+        service.purgeExpiredSessions();
+
+        assertThatThrownBy(() -> service.state(id))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getCode())
+                .isEqualTo(com.fundpilot.backend.exception.ErrorCode.YANGJIBAO_SESSION_NOT_FOUND.name());
+    }
 }
