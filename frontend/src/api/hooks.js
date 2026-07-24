@@ -500,3 +500,13 @@ export function useFundKline(fundId, period = 'daily') {
         refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
     });
 }
+
+/** 基金详情当日分时数据，交易时段每 30 秒读取后端缓存。 */
+export function useFundIntraday(fundId) {
+    return useQuery({
+        queryKey: ['funds', fundId, 'intraday'],
+        queryFn: () => get(`/api/funds/${fundId}/intraday`),
+        enabled: !!fundId,
+        refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
+    });
+}

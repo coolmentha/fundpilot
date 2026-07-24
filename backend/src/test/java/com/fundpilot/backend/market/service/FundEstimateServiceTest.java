@@ -77,6 +77,8 @@ class FundEstimateServiceTest {
         assertThat(result.snapshot().estimatedChangePct()).isEqualByComparingTo("0.04189765816617948");
         assertThat(result.snapshot().estimateTime()).isEqualTo("2026-07-20 15:00");
         assertThat(result.snapshot().baseNavDate()).isEqualTo("2026-07-17");
+        assertThat(result.intradayChart().points()).hasSize(2);
+        assertThat(result.intradayChart().points().getLast().time()).isEqualTo("15:00");
         verify(client, never()).fetchGzRaw("016664");
     }
 

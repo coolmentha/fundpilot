@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.user.service.UserConfigService;
@@ -259,6 +260,34 @@ class MarketRealtimeCacheTest {
         assertThat(cache.getEstimates(List.of("510300"))).isEmpty();
         assertThat(cache.hasEstimateFetchFailed("510300")).isFalse();
         assertThat(cache.getEstimateStatus("510300")).isEqualTo(EstimateStatus.UNAVAILABLE);
+    }
+
+    @Test
+    void refreshFundEstimates_当天至少两点的同花顺分钟线才缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        UserConfigService userConfigService = mock(UserConfigService.class);
+        FundRepository fundRepository = mock(FundRepository.class);
+        FundEntity fund = fund("510300", FundStatus.HOLDING);
+        FundEstimateSnapshot estimate = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        FundIntradayChart chart = new FundIntradayChart("2026-07-10", "2026-07-09", new BigDecimal("1.0000"), List.of(
+                new FundIntradayChart.Point("13:29", new BigDecimal("1.0110")),
+                new FundIntradayChart.Point("13:30", new BigDecimal("1.0123"))));
+        when(fundRepository.findAll()).thenReturn(List.of(fund));
+        when(fundRepository.findById(1L)).thenReturn(Optional.of(fund));
+        when(estimateService.fetchEstimateResult("510300"))
+                .thenReturn(FundEstimateResult.available(estimate, chart))
+                .thenReturn(FundEstimateResult.available(estimate));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class));
+
+        cache.refreshFundEstimates();
+        assertThat(cache.getIntraday(1L)).isEqualTo(chart);
+
+        cache.refreshFundEstimates();
+        assertThat(cache.getIntraday(1L)).isNull();
     }
 
     @Test

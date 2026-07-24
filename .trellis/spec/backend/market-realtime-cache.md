@@ -377,3 +377,59 @@ if (breadth != null) {
 
 **Extensibility**:`MoneyFlowSnapshot` 是 record,未来加字段只需扩 record + 解析器,
 不影响现有 API 契约(新字段对旧前端透明)。
+
+---
+
+## Scenario: 基金详情当日分时
+
+### 1. Scope / Trigger
+
+- 基金详情需要当日分钟曲线，不能由浏览器直连外部行情源或用单点估值拼接。
+
+### 2. Signatures
+
+```text
+GET /api/funds/{fundId}/intraday -> FundIntradayView | null
+MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
+```
+
+`FundIntradayView` 返回 `estimateDate`、`baseNav` 和按 `HH:mm` 升序的 `points[{time, nav}]`。
+
+### 3. Contracts
+
+- 同花顺分钟估值响应一次解析出估值快照与分钟点；东方财富 fundgz 仅作为原有单点估值后备。
+- 仅当估值状态为 `AVAILABLE` 且分钟点不少于两个时，写入内存副本和 Redis `Snapshot.intradayCharts`。
+- 用户请求只读缓存；前端交易时段每 30 秒轮询后端，不得请求同花顺。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 行为 |
+| --- | --- |
+| 同花顺当日有效点 >= 2 | 缓存并返回分时图 |
+| 同花顺有效点 < 2 | 保留单点估值语义，分时图为空 |
+| 同花顺失败、过期或解析失败 | 清除旧分时缓存，分时图为空 |
+| 东方财富后备成功 | 保留既有估值，分时图为空 |
+
+### 5. Good/Base/Bad Cases
+
+- **Good**:同花顺 243 个北京时间当日点进入缓存，详情页展示“今日分时”。
+- **Base**:盘前只返回一个点，今日涨跌可用但分时页显示空态。
+- **Bad**:前端收到东方财富单点后自行绘制直线，伪造分钟走势。
+
+### 6. Tests Required
+
+- `FundEstimateServiceTest` 断言同花顺结果携带完整分钟点且不调用东方财富。
+- `MarketRealtimeCacheTest` 断言两点曲线可读、无曲线结果清除旧缓存。
+- 前端 Tab 测试断言默认分时并可切换 K 线 / 走势图。
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: 在 Controller 中触发外部请求，且把后备单点伪造成曲线。
+return fundEstimateService.fetchEstimate(code);
+```
+
+```java
+// Correct: 只暴露后台刷新时写入的同花顺分钟线缓存。
+return FundIntradayView.from(marketRealtimeCache.getIntraday(fundId));
+```

@@ -6,6 +6,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.EastmoneyJsParser;
 import com.fundpilot.backend.market.client.EastmoneyPush2Client;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
@@ -81,6 +82,7 @@ public class MarketRealtimeCache {
     private volatile List<SectorSnapshot> sectorCache = List.of();
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
+    private final Map<String, FundIntradayChart> intradayCache = new ConcurrentHashMap<>();
     private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
     private final Map<String, Instant> estimateRetryAfter = new ConcurrentHashMap<>();
 
@@ -101,6 +103,13 @@ public class MarketRealtimeCache {
                         estimateCache.put(code, estimate);
                     } else {
                         estimateStatuses.put(code, status);
+                    }
+                });
+            }
+            if (snapshot.intradayCharts() != null) {
+                snapshot.intradayCharts().forEach((code, chart) -> {
+                    if (estimateCache.containsKey(code) && chart != null && chart.points().size() >= 2) {
+                        intradayCache.put(code, chart);
                     }
                 });
             }
@@ -140,6 +149,17 @@ public class MarketRealtimeCache {
         return fundCodes.stream()
                 .filter(estimateCache::containsKey)
                 .collect(Collectors.toMap(Function.identity(), estimateCache::get));
+    }
+
+    /** 读取基金详情的当日分时缓存；请求链路不访问外部行情源。 */
+    public FundIntradayChart getIntraday(Long fundId) {
+        if (fundId == null) {
+            return null;
+        }
+        return fundRepository.findById(fundId)
+                .map(FundEntity::getFundCode)
+                .map(intradayCache::get)
+                .orElse(null);
     }
 
     /** 当前进程最近一次刷新该基金估值是否失败。 */
@@ -329,6 +349,11 @@ public class MarketRealtimeCache {
                     EstimateStatus status = classifyFreshness(result);
                     if (status == EstimateStatus.AVAILABLE) {
                         estimateCache.put(fundCode, snapshot);
+                        if (result.intradayChart() != null && result.intradayChart().points().size() >= 2) {
+                            intradayCache.put(fundCode, result.intradayChart());
+                        } else {
+                            intradayCache.remove(fundCode);
+                        }
                         estimateStatuses.put(fundCode, EstimateStatus.AVAILABLE);
                         estimateRetryAfter.remove(fundCode);
                     } else {
@@ -370,6 +395,7 @@ public class MarketRealtimeCache {
             return;
         }
         estimateCache.remove(fundCode);
+        intradayCache.remove(fundCode);
         estimateStatuses.put(fundCode, status);
     }
 
@@ -396,7 +422,7 @@ public class MarketRealtimeCache {
     private void persist() {
         redisStore.save(new MarketRealtimeRedisStore.Snapshot(
                 indexCache, breadthCache, sectorCache, moneyFlowCache,
-                Map.copyOf(estimateCache), Map.copyOf(estimateStatuses)));
+                Map.copyOf(estimateCache), Map.copyOf(estimateStatuses), Map.copyOf(intradayCache)));
     }
 
 }

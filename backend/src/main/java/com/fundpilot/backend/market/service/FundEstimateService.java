@@ -3,6 +3,7 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.market.client.EastmoneyFundGzClient;
 import com.fundpilot.backend.market.client.EastmoneyJsParser;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
+import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.ThsFundEstimateClient;
 import com.fundpilot.backend.market.client.ThsJsParser;
 import lombok.RequiredArgsConstructor;
@@ -54,13 +55,14 @@ public class FundEstimateService {
         EstimateStatus thsFailure = EstimateStatus.UNAVAILABLE;
         if (shouldTryThs(fundCode)) {
             try {
-                FundEstimateSnapshot snapshot = ThsJsParser.parseFundEstimate(
+                FundIntradayChart intradayChart = ThsJsParser.parseFundIntradayChart(
                         thsFundEstimateClient.fetchEstimateRaw(fundCode));
+                FundEstimateSnapshot snapshot = intradayChart == null ? null : ThsJsParser.parseFundEstimateFrom(intradayChart);
                 metrics.record("ThsFundEstimateClient", "fetchEstimate",
                         snapshot == null ? "empty" : "success", startedAt);
                 if (snapshot != null) {
                     thsRetryAfter.remove(fundCode);
-                    return FundEstimateResult.available(snapshot);
+                    return FundEstimateResult.available(snapshot, intradayChart);
                 }
             } catch (IllegalStateException ex) {
                 metrics.record("ThsFundEstimateClient", "fetchEstimate", "parse_error", startedAt);
