@@ -1,8 +1,6 @@
 package com.fundpilot.backend.user.service;
 
-import com.fundpilot.backend.user.entity.SiteUserEntity;
-import com.fundpilot.backend.user.entity.UserRole;
-import com.fundpilot.backend.user.repository.SiteUserRepository;
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundGroupRepository;
 import com.fundpilot.backend.user.repository.UserConfigRepository;
@@ -26,8 +24,7 @@ class UserAuthConfiguration {}
 @Component
 @RequiredArgsConstructor
 public class InitialAdminInitializer implements ApplicationRunner {
-    private final SiteUserRepository repository;
-    private final PasswordService passwordService;
+    private final UserAdministrationApi users;
     private final BootstrapAdminProperties properties;
     private final FundRepository fundRepository;
     private final FundGroupRepository fundGroupRepository;
@@ -40,23 +37,10 @@ public class InitialAdminInitializer implements ApplicationRunner {
         if (properties.username() == null || properties.username().isBlank()
                 || properties.password() == null || properties.password().isBlank()
                 ) return;
-        SiteUserEntity existing = repository.findByUsername(properties.username().trim()).orElse(null);
-        if (existing != null) {
-            fundRepository.claimUnowned(existing.getId());
-            fundGroupRepository.claimUnowned(existing.getId());
-            userConfigRepository.claimUnowned(existing.getId());
-            portfolioSnapshotRepository.claimUnowned(existing.getId());
-            return;
-        }
-        SiteUserEntity admin = new SiteUserEntity();
-        admin.setUsername(properties.username().trim());
-        admin.setPasswordHash(passwordService.hash(properties.password()));
-        admin.setRole(UserRole.ADMIN);
-        admin.setEnabled(true);
-        SiteUserEntity saved = repository.save(admin);
-        fundRepository.claimUnowned(saved.getId());
-        fundGroupRepository.claimUnowned(saved.getId());
-        userConfigRepository.claimUnowned(saved.getId());
-        portfolioSnapshotRepository.claimUnowned(saved.getId());
+        long userId = users.ensureBootstrapAdmin(properties.username(), properties.password()).id();
+        fundRepository.claimUnowned(userId);
+        fundGroupRepository.claimUnowned(userId);
+        userConfigRepository.claimUnowned(userId);
+        portfolioSnapshotRepository.claimUnowned(userId);
     }
 }

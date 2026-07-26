@@ -61,6 +61,7 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     void setUp() {
         tradingCalendarRepository.insertTradingDayIfAbsent(LATEST_TRADING_DAY);
         fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
@@ -250,9 +251,16 @@ class SignalOperationServiceTest extends AbstractIntegrationTest {
     @Test
     void confirmOperation_路径基金与信号基金不一致时拒绝() {
         SignalLogEntity signal = persistSignal(SignalType.SELL, null, SignalReason.LOGIC_BROKEN);
+        FundEntity anotherFund = new FundEntity();
+        anotherFund.setOwnerId(testActorId());
+        anotherFund.setFundCode("159915");
+        anotherFund.setFundName("创业板ETF");
+        anotherFund.setFundCategory(FundCategory.BROAD_BASE);
+        entityManager.persist(anotherFund);
         entityManager.flush();
 
-        assertThatThrownBy(() -> service.confirmOperation(fund.getId() + 1, signal.getId(),
+        Long anotherFundId = anotherFund.getId();
+        assertThatThrownBy(() -> service.confirmOperation(anotherFundId, signal.getId(),
                 new ConfirmOperationRequest(signal.getId(), null, new BigDecimal("100"))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("不属于");

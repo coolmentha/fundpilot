@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 
 @Service
 @RequiredArgsConstructor
@@ -35,11 +35,11 @@ public class PortfolioReturnService {
     private final FundLotRepository lotRepository;
     private final FundLotRedemptionRepository redemptionRepository;
     private final FundPnlService fundPnlService;
-    private final CurrentUserService currentUserService;
+    private final CurrentActorApi currentActorApi;
 
     public PortfolioReturnView getReturns() {
-        long userId = currentUserService.userId();
-        List<FundEntity> funds = userId == 0L ? fundRepository.findAll() : fundRepository.findAllByOwnerId(userId);
+        long userId = currentActorApi.userId();
+        List<FundEntity> funds = fundRepository.findAllByOwnerId(userId);
         java.util.Set<Long> fundIds = funds.stream().map(FundEntity::getId).collect(java.util.stream.Collectors.toSet());
         Map<Long, FundPnlService.Pnl> pnlByFund = fundPnlService.computeForFunds(funds);
         List<FundTransactionEntity> transactions = transactionRepository.findByStatus(FundTransactionStatus.CONFIRMED).stream()

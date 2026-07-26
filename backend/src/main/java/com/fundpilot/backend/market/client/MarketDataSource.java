@@ -9,15 +9,19 @@ import java.util.List;
  *
  * @see MarketDataSourceChain
  */
-public interface MarketDataSource {
+@Deprecated(forRemoval = false)
+public interface MarketDataSource extends FundNavHistorySource, FundCatalogSource, IndexKlineSource {
 
     /** 基金净值历史(用于算回撤/年线/60 日新高)。 */
+    @Override
     List<FundNavSnapshot> fetchNavHistory(String fundCode);
 
     /** 全量基金字典(用于回填 fundSubType/benchmarkIndexCode)。 */
+    @Override
     List<FundDictEntry> fetchFundDict();
 
     /** 指数日 K(用于算沪深 300 基准收益/回撤 + 跟踪指数量能)。 */
+    @Override
     IndexKline fetchIndexKline(String indexCode, String range);
 
     /**
@@ -27,6 +31,7 @@ public interface MarketDataSource {
      * @param klt       K 线周期:101=日、102=周、103=月
      * @param lmt       K 线根数上限(如 "400")
      */
+    @Override
     default IndexKline fetchIndexKlineWithPeriod(String indexCode, String klt, String lmt) {
         // 默认实现:不支持周期的数据源降级为日 K(range 占位 "6")
         return fetchIndexKline(indexCode, "6");

@@ -83,6 +83,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void listPending_跨基金只返回待处理交易且按交易时间倒序() {
         FundEntity fundA = persistFund();
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setStatus(FundStatus.HOLDING);
@@ -106,6 +107,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     @Test
     void listPending_仓储会话关闭后仍可读取基金类型() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("968001");
         fund.setFundName("QDII 测试基金");
         fund.setStatus(FundStatus.HOLDING);
@@ -234,6 +236,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
         // task 07-08:TRANSFER_OUT + targetFundId -> 转出(A)+转入(B)两条互指,转入 amount/shares 均空待确认回填
         FundEntity fundA = persistFund();
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setStatus(FundStatus.HOLDING);
@@ -498,6 +501,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
     void updatePending_转换只允许改转出腿并同步交易日期() {
         FundEntity fundA = persistFund();
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setStatus(FundStatus.HOLDING);
@@ -522,6 +526,7 @@ class FundTransactionServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setStatus(FundStatus.HOLDING);

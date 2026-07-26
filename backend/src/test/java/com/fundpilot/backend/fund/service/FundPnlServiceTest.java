@@ -258,6 +258,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistHoldingFundWithCode(String code, String name) {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode(code);
         fund.setFundName(name);
         fund.setStatus(FundStatus.HOLDING);
@@ -266,6 +267,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistPendingFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("159825");
         fund.setFundName("半导体ETF");
         fund.setStatus(FundStatus.PENDING_HOLDING);

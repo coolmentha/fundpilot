@@ -178,6 +178,7 @@ class TransactionConfirmServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund(String code, String name) {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode(code);
         fund.setFundName(name);
         fund.setStatus(FundStatus.HOLDING);

@@ -12,6 +12,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.productcatalog.adapter.api.fee.FundFeeApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +36,7 @@ public class FundTransactionService {
     private final FundTransactionRepository fundTransactionRepository;
     private final FundRepository fundRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final FundFeeService fundFeeService;
+    private final FundFeeApi fundFeeApi;
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundPositionService fundPositionService;
 
@@ -78,7 +79,8 @@ public class FundTransactionService {
         }
         BigDecimal expectedShares = null;
         if ("READY".equals(reason) && isBuy(tx.getSource())) {
-            BigDecimal rate = fundFeeService.getFeeByFundId(tx.getFundEntity().getId()).discountRate();
+            BigDecimal rate = fundFeeApi.findByFundCode(tx.getFundEntity().getFundCode())
+                    .map(FundFeeApi.FeeSchedule::discountRate).orElse(null);
             rate = rate == null ? BigDecimal.ZERO : rate;
             expectedShares = ShareScale.normalize(tx.getAmount().multiply(BigDecimal.ONE.subtract(rate))
                     .divide(nav, java.math.MathContext.DECIMAL64));

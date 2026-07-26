@@ -14,8 +14,8 @@ import com.fundpilot.backend.market.client.MoneyFlowSnapshot;
 import com.fundpilot.backend.market.client.SectorSnapshot;
 import com.fundpilot.backend.market.client.ThsIndexFlashClient;
 import com.fundpilot.backend.market.client.ThsJsParser;
-import com.fundpilot.backend.user.event.WatchedIndicesChangedEvent;
-import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.marketdata.adapter.api.watchedindex.WatchedIndicesApi;
+import com.fundpilot.backend.marketdata.application.event.watchedindex.WatchedIndicesChanged;
 import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -73,7 +73,7 @@ public class MarketRealtimeCache {
 
     private final EastmoneyPush2Client push2Client;
     private final FundEstimateService fundEstimateService;
-    private final UserConfigService userConfigService;
+    private final WatchedIndicesApi watchedIndicesApi;
     private final FundRepository fundRepository;
     private final MarketDataMetrics marketDataMetrics;
     private final Clock clock;
@@ -125,6 +125,12 @@ public class MarketRealtimeCache {
     /** 读指数缓存(已按用户关注列表过滤,顺序按请求 secid 顺序)。 */
     public List<IndexRealtimeSnapshot> getIndices() {
         return indexCache;
+    }
+
+    public List<IndexRealtimeSnapshot> getIndices(List<String> indexCodes) {
+        Map<String, IndexRealtimeSnapshot> byCode = indexCache.stream()
+                .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity()));
+        return indexCodes.stream().map(byCode::get).filter(java.util.Objects::nonNull).toList();
     }
 
     /** 读沪深京股票市场宽度缓存。 */
@@ -205,12 +211,12 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 用户关注指数变更时即时刷新指数与市场宽度缓存(由 UserConfigService.update 发的事件触发)。
+     * 用户关注指数变更时即时刷新指数与市场宽度缓存。
      * <p>不受交易时段限制——用户改了关注列表就是想立刻看,即便盘后也应展示最新选中的指数行情
      * (东方财富盘后仍可返回收盘数据)。仅刷新指数,板块/资金/估值由各自周期维护。
      */
     @EventListener
-    public void onWatchedIndicesChanged(@SuppressWarnings("unused") WatchedIndicesChangedEvent event) {
+    public void onWatchedIndicesChanged(@SuppressWarnings("unused") WatchedIndicesChanged event) {
         refreshIndices();
     }
 
@@ -220,7 +226,7 @@ public class MarketRealtimeCache {
      * <p>修复 bug:定时 Job({@link com.fundpilot.backend.market.job.MarketRealtimeRefreshJob})
      * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
      * {@code indexCache} 初始空,工作台显示「暂无关注指数」直到用户重新配置触发
-     * {@link WatchedIndicesChangedEvent}。启动时刷一次,盘后/周末也能展示收盘数据
+     * {@link WatchedIndicesChanged}。启动时刷一次,盘后/周末也能展示收盘数据
      * (东方财富盘后返回收盘值)。同一请求还会预热固定沪深京市场宽度。基金估值请求数随基金数量增长，
      * 由独立异步监听器预热，避免 ApplicationReadyEvent 阻塞应用启动。
      *
@@ -252,7 +258,7 @@ public class MarketRealtimeCache {
         long startedAt = System.nanoTime();
         String result = "success";
         try {
-            List<String> watchedSecids = userConfigService.getWatchedIndices();
+            List<String> watchedSecids = watchedIndicesApi.findAllForRefresh();
             Set<String> requestedSecids = new LinkedHashSet<>(watchedSecids);
             requestedSecids.addAll(MARKET_BREADTH_SECIDS);
 

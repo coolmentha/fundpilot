@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * user_config 表 + UserConfigEntity schema 对齐验证。
  *
- * <p>UserConfig 保存 {@code watchedIndices} 与可选的 {@code monthlyDcaBudget}。
+ * <p>UserConfig 仅保存可选的 {@code monthlyDcaBudget}；旧关注指数列由 MarketData 迁移保留。
  */
 class UserConfigSchemaIntegrationTest extends AbstractIntegrationTest {
 
@@ -29,42 +29,42 @@ class UserConfigSchemaIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     @Transactional
-    void userConfigPersistsWatchedIndices() {
+    void userConfigPersistsMonthlyDcaBudget() {
         UserConfigEntity config = existingOrNewConfig();
-        config.setWatchedIndices("1.000001,1.000300,0.399006");
+        config.setMonthlyDcaBudget(new BigDecimal("1234.56"));
 
         UserConfigEntity saved = userConfigRepository.save(config);
         entityManager.flush();
         entityManager.clear();
 
         UserConfigEntity reloaded = userConfigRepository.findById(saved.getId()).orElseThrow();
-        assertThat(reloaded.getWatchedIndices()).isEqualTo("1.000001,1.000300,0.399006");
+        assertThat(reloaded.getMonthlyDcaBudget()).isEqualByComparingTo("1234.56");
     }
 
     @Test
     @Transactional
-    void watchedIndicesNullable_未配置时允许为空() {
+    void monthlyDcaBudgetNullable_未配置时允许为空() {
         UserConfigEntity config = existingOrNewConfig();
-        config.setWatchedIndices(null);
-        // watchedIndices 不设(null),用默认指数列表由服务层兜底
+        config.setMonthlyDcaBudget(null);
 
         UserConfigEntity saved = userConfigRepository.save(config);
         entityManager.flush();
         entityManager.clear();
 
         UserConfigEntity reloaded = userConfigRepository.findById(saved.getId()).orElseThrow();
-        assertThat(reloaded.getWatchedIndices()).isNull();
+        assertThat(reloaded.getMonthlyDcaBudget()).isNull();
     }
 
     @Test
     @Transactional
     void activeUserConfig_数据库只允许一行() {
         UserConfigEntity first = existingOrNewConfig();
-        first.setWatchedIndices("1.000001");
+        first.setMonthlyDcaBudget(new BigDecimal("100"));
         userConfigRepository.saveAndFlush(first);
 
         UserConfigEntity second = new UserConfigEntity();
-        second.setWatchedIndices("1.000300");
+        second.setOwnerId(testActorId());
+        second.setMonthlyDcaBudget(new BigDecimal("200"));
 
         assertThatThrownBy(() -> userConfigRepository.saveAndFlush(second))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
@@ -98,6 +98,10 @@ class UserConfigSchemaIntegrationTest extends AbstractIntegrationTest {
     }
 
     private UserConfigEntity existingOrNewConfig() {
-        return userConfigRepository.findAll().stream().findFirst().orElseGet(UserConfigEntity::new);
+        return userConfigRepository.findAllByOwnerId(testActorId()).stream().findFirst().orElseGet(() -> {
+            UserConfigEntity config = new UserConfigEntity();
+            config.setOwnerId(testActorId());
+            return config;
+        });
     }
 }

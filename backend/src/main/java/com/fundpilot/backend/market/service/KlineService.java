@@ -8,10 +8,9 @@ import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.IndexKline;
-import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.market.client.IndexKlineSource;
 import com.fundpilot.backend.market.controller.KlineView;
-import com.fundpilot.backend.market.entity.IndexKlineEntity;
-import com.fundpilot.backend.market.repository.IndexKlineRepository;
+import com.fundpilot.backend.marketdata.adapter.api.indexkline.IndexKlineApi;
 import com.fundpilot.backend.market.service.support.SecidFormat;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -57,8 +56,8 @@ public class KlineService {
 
     private final FundRepository fundRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final IndexKlineRepository indexKlineRepository;
-    private final MarketDataSource marketDataSource;
+    private final IndexKlineApi indexKlineApi;
+    private final IndexKlineSource indexKlineSource;
 
     public KlineView getKline(Long fundId, String period) {
         fundAccessService.requireOwned(fundId);
@@ -68,7 +67,7 @@ public class KlineService {
         if (isIndexLike(fund.getFundSubType()) && fund.getBenchmarkIndexCode() != null) {
             String indexCode = fund.getBenchmarkIndexCode();
             // 1. 主路径:读本地日 K 缓存,聚合出日/周/月 K
-            List<IndexKlineEntity> cached = indexKlineRepository.findByIndexCodeOrderByTradeDateAsc(indexCode);
+            List<IndexKlineApi.Bar> cached = indexKlineApi.findAll(indexCode);
             if (!cached.isEmpty()) {
                 return new KlineView("kline", indexCode, aggregate(cached, period));
             }
@@ -76,7 +75,7 @@ public class KlineService {
             Optional<String> secid = SecidFormat.fromIndexCode(indexCode);
             if (secid.isPresent()) {
                 try {
-                    IndexKline kline = marketDataSource.fetchIndexKlineWithPeriod(
+                    IndexKline kline = indexKlineSource.fetchIndexKlineWithPeriod(
                             secid.get(), mapPeriod(period), KLINE_LIMIT);
                     return new KlineView("kline", indexCode,
                             kline.bars().stream()
@@ -97,36 +96,36 @@ public class KlineService {
      * 把日 K 缓存按 period 聚合。daily 原样;weekly 按周一分组;monthly 按月首分组。
      * 每组:open=首日 open、high=max、low=min、close=末日 close、volume=sum,date=末日(蜡烛绘在周期末)。
      */
-    private List<KlineView.Bar> aggregate(List<IndexKlineEntity> daily, String period) {
+    private List<KlineView.Bar> aggregate(List<IndexKlineApi.Bar> daily, String period) {
         if (period == null || "daily".equalsIgnoreCase(period) || "d".equalsIgnoreCase(period)) {
             return daily.stream().map(KlineService::toBar).toList();
         }
-        Map<Instant, List<IndexKlineEntity>> groups = new LinkedHashMap<>();
+        Map<Instant, List<IndexKlineApi.Bar>> groups = new LinkedHashMap<>();
         boolean weekly = "weekly".equalsIgnoreCase(period) || "w".equalsIgnoreCase(period);
-        for (IndexKlineEntity e : daily) {
-            var d = e.getTradeDate().atZone(ZoneOffset.UTC);
+        for (IndexKlineApi.Bar e : daily) {
+            var d = e.tradeDate().atZone(ZoneOffset.UTC);
             Instant key = (weekly ? d.with(DayOfWeek.MONDAY) : d.withDayOfMonth(1))
                     .truncatedTo(java.time.temporal.ChronoUnit.DAYS)
                     .toInstant();
             groups.computeIfAbsent(key, k -> new ArrayList<>()).add(e);
         }
         List<KlineView.Bar> result = new ArrayList<>(groups.size());
-        for (List<IndexKlineEntity> group : groups.values()) {
-            IndexKlineEntity first = group.get(0);
-            IndexKlineEntity last = group.get(group.size() - 1);
-            BigDecimal high = group.stream().map(IndexKlineEntity::getHigh)
+        for (List<IndexKlineApi.Bar> group : groups.values()) {
+            IndexKlineApi.Bar first = group.get(0);
+            IndexKlineApi.Bar last = group.get(group.size() - 1);
+            BigDecimal high = group.stream().map(IndexKlineApi.Bar::high)
                     .filter(java.util.Objects::nonNull).max(BigDecimal::compareTo).orElse(null);
-            BigDecimal low = group.stream().map(IndexKlineEntity::getLow)
+            BigDecimal low = group.stream().map(IndexKlineApi.Bar::low)
                     .filter(java.util.Objects::nonNull).min(BigDecimal::compareTo).orElse(null);
-            long vol = group.stream().mapToLong(g -> g.getVolume() == null ? 0 : g.getVolume()).sum();
-            result.add(new KlineView.Bar(last.getTradeDate(), first.getOpen(), last.getClose(), high, low, vol));
+            long vol = group.stream().mapToLong(g -> g.volume() == null ? 0 : g.volume()).sum();
+            result.add(new KlineView.Bar(last.tradeDate(), first.open(), last.close(), high, low, vol));
         }
         return result;
     }
 
-    private static KlineView.Bar toBar(IndexKlineEntity e) {
-        return new KlineView.Bar(e.getTradeDate(), e.getOpen(), e.getClose(),
-                e.getHigh(), e.getLow(), e.getVolume() == null ? 0L : e.getVolume());
+    private static KlineView.Bar toBar(IndexKlineApi.Bar e) {
+        return new KlineView.Bar(e.tradeDate(), e.open(), e.close(),
+                e.high(), e.low(), e.volume() == null ? 0L : e.volume());
     }
 
     private KlineView buildNavView(FundEntity fund) {

@@ -9,7 +9,7 @@ import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.market.client.FundEstimateSnapshot;
 import com.fundpilot.backend.market.service.EstimateStatus;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,7 +36,7 @@ class FundPnlServiceDateTest {
     @Mock FundRepository fundRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
     @Mock MarketRealtimeCache marketRealtimeCache;
-    @Mock CurrentUserService currentUserService;
+    @Mock CurrentActorApi currentUserService;
 
     @Test
     void QDII按北京时间首次发现当天使用最新确认净值收益() {

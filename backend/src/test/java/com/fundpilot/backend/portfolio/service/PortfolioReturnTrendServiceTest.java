@@ -2,7 +2,7 @@ package com.fundpilot.backend.portfolio.service;
 
 import com.fundpilot.backend.portfolio.entity.PortfolioReturnSnapshotEntity;
 import com.fundpilot.backend.portfolio.repository.PortfolioReturnSnapshotRepository;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -27,11 +27,15 @@ class PortfolioReturnTrendServiceTest {
         var first = row("2026-07-01T00:00:00Z", "1100", "130", "120", "0", "0");
         var peak = row("2026-07-02T00:00:00Z", "1100", "160", "150", "0", "0");
         var last = row("2026-07-03T00:00:00Z", "1100", "140", "130", "40", "2");
-        when(repository.findTopByBusinessDateBeforeOrderByBusinessDateDesc(from)).thenReturn(Optional.of(baseline));
-        when(repository.findByBusinessDateBetweenOrderByBusinessDateAsc(from, to)).thenReturn(List.of(first, peak, last));
+        when(repository.findTopByOwnerIdAndBusinessDateBeforeOrderByBusinessDateDesc(7L, from))
+                .thenReturn(Optional.of(baseline));
+        when(repository.findByOwnerIdAndBusinessDateBetweenOrderByBusinessDateAsc(7L, from, to))
+                .thenReturn(List.of(first, peak, last));
 
+        CurrentActorApi actors = mock(CurrentActorApi.class);
+        when(actors.userId()).thenReturn(7L);
         var service = new PortfolioReturnTrendService(repository, mock(PortfolioReturnService.class),
-                Clock.fixed(to, ZoneOffset.UTC), mock(CurrentUserService.class));
+                Clock.fixed(to, ZoneOffset.UTC), actors);
         var result = service.getTrend("30D", from, to);
 
         assertThat(result.intervalReturn()).isEqualByComparingTo("40");

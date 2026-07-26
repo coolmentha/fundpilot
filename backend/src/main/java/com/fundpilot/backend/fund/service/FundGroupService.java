@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +31,7 @@ public class FundGroupService {
 
     private final FundGroupRepository fundGroupRepository;
     private final FundRepository fundRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentActorApi currentActorApi;
 
     @Transactional(readOnly = true)
     public List<FundGroupView> list() {
@@ -73,7 +73,7 @@ public class FundGroupService {
         for (int index = 0; index < items.size(); index++) {
             FundGroupSaveRequest.Item item = items.get(index);
             FundGroupEntity group = item.id() == null ? new FundGroupEntity() : byId.get(item.id());
-            if (group.getOwnerId() == null && currentUserService.userId() != 0L) group.setOwnerId(currentUserService.userId());
+            if (group.getOwnerId() == null) group.setOwnerId(currentActorApi.userId());
             group.setName(names.get(index));
             group.setSortOrder(index);
             saved.add(fundGroupRepository.save(group));
@@ -98,7 +98,7 @@ public class FundGroupService {
             FundGroupEntity group = byName.get(key(name));
             if (group == null) {
                 group = new FundGroupEntity();
-                if (currentUserService.userId() != 0L) group.setOwnerId(currentUserService.userId());
+                group.setOwnerId(currentActorApi.userId());
                 group.setName(name);
                 group.setSortOrder(nextOrder++);
                 group = fundGroupRepository.save(group);
@@ -110,14 +110,13 @@ public class FundGroupService {
     }
 
     private List<FundGroupEntity> groups() {
-        long userId = currentUserService.userId();
-        return userId == 0L ? fundGroupRepository.findAllByOrderBySortOrderAscIdAsc()
-                : fundGroupRepository.findAllByOwnerIdOrderBySortOrderAscIdAsc(userId);
+        long userId = currentActorApi.userId();
+        return fundGroupRepository.findAllByOwnerIdOrderBySortOrderAscIdAsc(userId);
     }
 
     private List<FundEntity> funds() {
-        long userId = currentUserService.userId();
-        return userId == 0L ? fundRepository.findAll() : fundRepository.findAllByOwnerId(userId);
+        long userId = currentActorApi.userId();
+        return fundRepository.findAllByOwnerId(userId);
     }
 
     private List<FundGroupView> toViews(List<FundGroupEntity> groups, List<FundEntity> funds) {

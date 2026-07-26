@@ -17,7 +17,7 @@ import com.fundpilot.backend.support.AbstractIntegrationTest;
 import com.fundpilot.backend.user.entity.UserConfigEntity;
 import com.fundpilot.backend.user.repository.UserConfigRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import com.fundpilot.backend.fund.service.FundAccessService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
     UserConfigService userConfigService;
 
     @Autowired
-    CurrentUserService currentUserService;
+    CurrentActorApi currentUserService;
 
     @Autowired
     FundAccessService fundAccessService;
@@ -146,12 +146,14 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
     private void saveBudget(String value) {
         UserConfigEntity config = userConfigRepository.findAll().stream()
                 .findFirst().orElseGet(UserConfigEntity::new);
+        config.setOwnerId(testActorId());
         config.setMonthlyDcaBudget(new BigDecimal(value));
         userConfigRepository.save(config);
     }
 
     private FundDcaPlanEntity savePlan(DcaFrequency frequency, String amount, Integer dayOfMonth) {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("budget-" + fundRepository.count());
         fund.setFundName("预算测试基金");
         fundRepository.save(fund);
@@ -183,6 +185,7 @@ class DcaBudgetSummaryServiceTest extends AbstractIntegrationTest {
 
     private FundEntity saveTransactionFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("transaction-" + fundRepository.count());
         fund.setFundName("定投交易测试基金");
         return fundRepository.save(fund);

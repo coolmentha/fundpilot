@@ -1,15 +1,22 @@
 package com.fundpilot.backend.user;
 
-import com.fundpilot.backend.admin.security.AdminSessionTokenService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi.Actor;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi.ActorRole;
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi.CreateUserRequest;
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi.Role;
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi.UserResult;
+import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
+import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
+import com.fundpilot.backend.identityaccess.domain.user.UserRole;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
-import com.fundpilot.backend.user.entity.SiteUserEntity;
-import com.fundpilot.backend.user.entity.UserRole;
-import com.fundpilot.backend.user.repository.SiteUserRepository;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,24 +28,30 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.http.MediaType;
 
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "fundpilot.admin.api-key=test-admin-key")
 class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
-    @Autowired SiteUserRepository userRepository;
+    @Autowired UserAdministrationApi users;
     @Autowired FundRepository fundRepository;
     @Autowired FundNavHistoryRepository navRepository;
-    @Autowired AdminSessionTokenService sessions;
+    @Autowired SessionTokenGateway sessions;
+    @Autowired FundProductApi productCatalogApi;
+    @Autowired PortfolioFundApi portfolioFundApi;
 
     @Test
     void usersSeeOnlyOwnedFundsAndShareNavByCode() throws Exception {
-        SiteUserEntity alice = user("isolation-alice");
-        SiteUserEntity bob = user("isolation-bob");
-        FundEntity aliceFund = fund(alice.getId(), "000001", "Alice Fund");
-        FundEntity bobFund = fund(bob.getId(), "000001", "Bob Fund");
+        UserResult admin = users.ensureBootstrapAdmin("isolation-admin", "test-password");
+        Actor adminActor = new Actor(admin.id(), ActorRole.ADMIN, true);
+        UserResult alice = user(adminActor, "isolation-alice");
+        UserResult bob = user(adminActor, "isolation-bob");
+        FundEntity aliceFund = fund(alice.id(), "000001", "Alice Fund");
+        FundEntity bobFund = fund(bob.id(), "000001", "Bob Fund");
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
         nav.setFundEntity(aliceFund);
         nav.setFundCode("000001");
@@ -59,13 +72,36 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
                 .extracting(FundNavHistoryEntity::getId).containsExactly(nav.getId());
     }
 
-    private SiteUserEntity user(String username) {
-        SiteUserEntity user = new SiteUserEntity();
-        user.setUsername(username);
-        user.setPasswordHash("test-only");
-        user.setRole(UserRole.USER);
-        user.setEnabled(true);
-        return userRepository.save(user);
+    @Test
+    void watchedIndicesAreIsolatedByAuthenticatedOwner() throws Exception {
+        UserResult admin = users.ensureBootstrapAdmin("isolation-admin", "test-password");
+        Actor adminActor = new Actor(admin.id(), ActorRole.ADMIN, true);
+        UserResult alice = user(adminActor, "watched-indices-alice");
+        UserResult bob = user(adminActor, "watched-indices-bob");
+
+        mockMvc.perform(put("/api/market-data/watched-indices")
+                        .cookie(cookie(alice))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"indexCodes\":[\"1.000300\",\"1.000001\",\"1.000300\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.indexCodes[0]").value("1.000300"))
+                .andExpect(jsonPath("$.data.indexCodes[1]").value("1.000001"))
+                .andExpect(jsonPath("$.data.indexCodes.length()").value(2));
+
+        mockMvc.perform(get("/api/market-data/watched-indices").cookie(cookie(bob)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.indexCodes[0]").value("1.000001"))
+                .andExpect(jsonPath("$.data.indexCodes[1]").value("1.000300"))
+                .andExpect(jsonPath("$.data.indexCodes[2]").value("0.399006"));
+
+        mockMvc.perform(get("/api/market-data/watched-indices").cookie(cookie(alice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.indexCodes[0]").value("1.000300"))
+                .andExpect(jsonPath("$.data.indexCodes.length()").value(2));
+    }
+
+    private UserResult user(Actor admin, String username) {
+        return users.create(admin, new CreateUserRequest(username, "test-password", Role.USER));
     }
 
     private FundEntity fund(Long ownerId, String code, String name) {
@@ -74,10 +110,17 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
         fund.setFundCode(code);
         fund.setFundName(name);
         fund.setFundCategory(FundCategory.BROAD_BASE);
-        return fundRepository.save(fund);
+        var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
+                code, name, null, null));
+        fund.setProductId(product.id());
+        FundEntity saved = fundRepository.save(fund);
+        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
+                saved.getId(), ownerId, product.id(), saved.isPositionWarningEnabled(),
+                saved.getPositionWarningRatio()));
+        return saved;
     }
 
-    private Cookie cookie(SiteUserEntity user) {
-        return new Cookie(AdminSessionTokenService.COOKIE_NAME, sessions.issue(user.getId(), user.getRole()));
+    private Cookie cookie(UserResult user) {
+        return new Cookie(AuthenticationFilter.COOKIE_NAME, sessions.issue(user.id(), UserRole.USER));
     }
 }

@@ -10,7 +10,7 @@ import com.fundpilot.backend.market.client.FundIntradayChart;
 import com.fundpilot.backend.market.client.IndexRealtimeSnapshot;
 import com.fundpilot.backend.market.client.MarketBreadthSnapshot;
 import com.fundpilot.backend.market.client.ThsIndexFlashClient;
-import com.fundpilot.backend.user.service.UserConfigService;
+import com.fundpilot.backend.marketdata.adapter.api.watchedindex.WatchedIndicesApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
@@ -51,7 +51,7 @@ class MarketRealtimeCacheTest {
                 List.of(index), new MarketBreadthSnapshot(3000, 2000, 42, 25), List.of(), null,
                 Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE))));
         MarketRealtimeCache cache = new MarketRealtimeCache(
-                mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(UserConfigService.class),
+                mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
                 mock(FundRepository.class), mock(MarketDataMetrics.class), CLOCK, redisStore, mock(ThsIndexFlashClient.class));
 
         cache.restoreFromRedis();
@@ -65,9 +65,9 @@ class MarketRealtimeCacheTest {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
         ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of("1.000300"));
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of("1.000300"));
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn("""
                 {"data":{"diff":[
                   {"f2":400000,"f3":20,"f4":800,"f6":1000,"f12":"000300","f14":"沪深300"},
@@ -97,9 +97,9 @@ class MarketRealtimeCacheTest {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
         ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"data":{"diff":[
@@ -138,8 +138,8 @@ class MarketRealtimeCacheTest {
                 """;
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn(raw);
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenThrow(new IllegalStateException("403"));
-        UserConfigService userConfigService = mock(UserConfigService.class);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, mock(FundEstimateService.class), userConfigService, mock(FundRepository.class),
                 mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class), indexFlashClient);
@@ -154,9 +154,9 @@ class MarketRealtimeCacheTest {
     void refreshAll_基金估值覆盖持仓和观察池基金() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
 
         FundEntity holding = fund("510300", FundStatus.HOLDING);
         FundEntity watching = fund("159825", FundStatus.PENDING_HOLDING);
@@ -178,7 +178,7 @@ class MarketRealtimeCacheTest {
     void refreshFundEstimates_只刷新基金估值() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("270042", FundStatus.HOLDING);
         when(fundRepository.findAll()).thenReturn(List.of(fund));
@@ -199,7 +199,7 @@ class MarketRealtimeCacheTest {
     void refreshFundEstimates_失败基金在冷却期内不重复请求且到期后恢复() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("270042", FundStatus.HOLDING);
         MutableClock clock = new MutableClock(Instant.parse("2026-07-10T05:30:00Z"));
@@ -231,9 +231,9 @@ class MarketRealtimeCacheTest {
     void onApplicationReady_不在启动线程逐只刷新基金估值() throws Exception {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,
                 mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
@@ -250,7 +250,7 @@ class MarketRealtimeCacheTest {
     void warmFundEstimatesAfterReady_异步预热全部基金估值() throws Exception {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("510300", FundStatus.HOLDING);
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
@@ -273,12 +273,12 @@ class MarketRealtimeCacheTest {
     void refreshAll_成功后空响应会删除旧估值并标记不可用() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("510300", FundStatus.HOLDING);
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult("510300"))
                 .thenReturn(FundEstimateResult.available(snapshot))
@@ -299,7 +299,7 @@ class MarketRealtimeCacheTest {
     void refreshFundEstimates_当天至少两点的同花顺分钟线才缓存() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("510300", FundStatus.HOLDING);
         FundEstimateSnapshot estimate = new FundEstimateSnapshot(
@@ -327,12 +327,12 @@ class MarketRealtimeCacheTest {
     void refreshAll_成功后异常会删除旧估值并标记失败() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("510300", FundStatus.HOLDING);
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult("510300"))
                 .thenReturn(FundEstimateResult.available(snapshot))
@@ -352,14 +352,14 @@ class MarketRealtimeCacheTest {
     void refreshAll_旧日期估值不进入缓存且后续当天估值可恢复() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("510300", FundStatus.HOLDING);
         FundEstimateSnapshot stale = new FundEstimateSnapshot(
                 new BigDecimal("0.0100"), "2026-07-09 15:00", "2026-07-08");
         FundEstimateSnapshot current = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult("510300"))
                 .thenReturn(FundEstimateResult.available(stale))
@@ -384,12 +384,12 @@ class MarketRealtimeCacheTest {
     void refreshAll_货币基金直接标记不可用且不调用普通估值源() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
-        UserConfigService userConfigService = mock(UserConfigService.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         FundRepository fundRepository = mock(FundRepository.class);
         FundEntity fund = fund("000009", FundStatus.HOLDING);
         fund.setFundName("易方达天天理财货币A");
         fund.setInvestmentTarget(InvestmentTarget.MONEY_MARKET);
-        when(userConfigService.getWatchedIndices()).thenReturn(List.of());
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, fundRepository, mock(MarketDataMetrics.class), CLOCK,

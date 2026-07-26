@@ -42,7 +42,7 @@ export default function FundTransactionTab({fundId}) {
     const isTransferOut = source === 'TRANSFER_OUT';
     const currentFund = funds?.find((fund) => fund.id === fundId);
     const currentHoldingShares = Number(currentFund?.holdingShares ?? 0);
-    const {data: feeRates} = useFundFeeRates(fundId);
+    const {data: feeRates} = useFundFeeRates(currentFund?.fundCode);
     const redemptionHint = redemptionLadderText(feeRates?.redemptionLadder);
 
     const columns = [

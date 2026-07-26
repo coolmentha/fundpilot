@@ -1,7 +1,12 @@
 import {useState} from 'react';
 import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
 import {ImportOutlined} from '@ant-design/icons';
-import {useUpdateUserConfig, useUserConfig} from '../api/hooks.js';
+import {
+    useReplaceWatchedIndices,
+    useUpdateUserConfig,
+    useUserConfig,
+    useWatchedIndices,
+} from '../api/hooks.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import YangjibaoImportModal from '../components/YangjibaoImportModal.jsx';
 import {isQueryDataReady} from '../querySafety.js';
@@ -29,20 +34,29 @@ const INDEX_OPTIONS = [
 export default function SettingsPage() {
     const {message} = App.useApp();
     const {data: config, isLoading, isError, refetch} = useUserConfig();
+    const watchedIndices = useWatchedIndices();
     const updateConfig = useUpdateUserConfig();
+    const replaceWatchedIndices = useReplaceWatchedIndices();
     const [selectedOverride, setSelectedOverride] = useState(null);
     const [monthlyBudgetOverride, setMonthlyBudgetOverride] = useState(undefined);
     const [importOpen, setImportOpen] = useState(false);
-    const selected = selectedOverride ?? config?.watchedIndices ?? [];
+    const selected = selectedOverride ?? watchedIndices.data?.indexCodes ?? [];
     const monthlyDcaBudget = monthlyBudgetOverride === undefined
         ? (config?.monthlyDcaBudget ?? null)
         : monthlyBudgetOverride;
     const configReady = isQueryDataReady({data: config, isLoading, isError});
+    const watchedIndicesReady = isQueryDataReady(watchedIndices);
 
-    const save = async () => {
+    const saveMonthlyBudget = async () => {
         if (!configReady) return;
-        await updateConfig.mutateAsync({watchedIndices: selected, monthlyDcaBudget});
-        message.success('用户配置已更新');
+        await updateConfig.mutateAsync({monthlyDcaBudget});
+        message.success('月度定投预算已更新');
+    };
+
+    const saveWatchedIndices = async () => {
+        if (!watchedIndicesReady) return;
+        await replaceWatchedIndices.mutateAsync(selected);
+        message.success('关注指数已更新');
     };
 
     return (
@@ -60,6 +74,8 @@ export default function SettingsPage() {
                         className="full-width"
                         disabled={!configReady}
                     />
+                    <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
+                            onClick={saveMonthlyBudget}>保存月度预算</Button>
                 </div>
                 <div>
                     <Text type="secondary" style={{display: 'block', marginBottom: 8}}>关注指数</Text>
@@ -74,14 +90,15 @@ export default function SettingsPage() {
                         options={INDEX_OPTIONS}
                         optionFilterProp="label"
                         style={{width: '100%'}}
-                        loading={isLoading}
-                        disabled={!configReady}
+                        loading={watchedIndices.isLoading}
+                        disabled={!watchedIndicesReady}
                         maxTagCount="responsive"
                     />
+                    <Button type="primary" loading={replaceWatchedIndices.isPending}
+                            disabled={!watchedIndicesReady} onClick={saveWatchedIndices}>保存关注指数</Button>
                 </div>
                 {isError && <QueryErrorState onRetry={refetch} description="用户配置加载失败"/>}
-                <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
-                        onClick={save}>保存配置</Button>
+                {watchedIndices.isError && <QueryErrorState onRetry={watchedIndices.refetch} description="关注指数加载失败"/>}
             </Space>
         </Card>
         <Card title={<Title level={4}>数据导入</Title>}>

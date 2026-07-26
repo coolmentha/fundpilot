@@ -3,11 +3,11 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -28,22 +28,26 @@ class DailyNavConfirmServiceEventTest {
     @Test
     void confirmTodayNav_新净值落库后发布基金净值更新事件() {
         FundRepository fundRepository = mock(FundRepository.class);
-        FundNavHistoryRepository navRepository = mock(FundNavHistoryRepository.class);
+        PublishedNavApi publishedNavApi = mock(PublishedNavApi.class);
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         DailyNavConfirmService service = new DailyNavConfirmService(
-                fundRepository, navRepository, marketDataSource, eventPublisher,
+                fundRepository, publishedNavApi, marketDataSource, eventPublisher,
                 new RequiresNewTransactionExecutor(), Clock.fixed(today(), ZoneOffset.UTC));
 
         FundEntity fund = new FundEntity();
         fund.setId(1L);
+        fund.setProductId(11L);
         fund.setFundCode("510300");
         Instant today = ChinaTradingDate.toUtcDate(today());
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(fundRepository.findById(1L)).thenReturn(Optional.of(fund));
-        when(navRepository.findFirstByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(Optional.empty());
+        when(publishedNavApi.latest(11L)).thenReturn(Optional.empty());
         when(marketDataSource.fetchNavHistory("510300")).thenReturn(List.of(
                 new FundNavSnapshot(today, new BigDecimal("1.25"), new BigDecimal("1.25"))));
+        when(publishedNavApi.publishNewer(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(new PublishedNavApi.PublishedNav(11L, "510300", today,
+                        new BigDecimal("1.25"), new BigDecimal("1.25"), today())));
 
         service.confirmTodayNav();
 
@@ -53,22 +57,26 @@ class DailyNavConfirmServiceEventTest {
     @Test
     void confirmNavForDate_上一交易日净值可跨夜补拉() {
         FundRepository fundRepository = mock(FundRepository.class);
-        FundNavHistoryRepository navRepository = mock(FundNavHistoryRepository.class);
+        PublishedNavApi publishedNavApi = mock(PublishedNavApi.class);
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         DailyNavConfirmService service = new DailyNavConfirmService(
-                fundRepository, navRepository, marketDataSource, eventPublisher,
+                fundRepository, publishedNavApi, marketDataSource, eventPublisher,
                 new RequiresNewTransactionExecutor(), Clock.fixed(today(), ZoneOffset.UTC));
         Instant previousTradingDay = Instant.parse("2026-07-14T00:00:00Z");
         FundEntity fund = new FundEntity();
         fund.setId(1L);
+        fund.setProductId(11L);
         fund.setFundCode("510300");
         when(fundRepository.findAll()).thenReturn(List.of(fund));
         when(fundRepository.findById(1L)).thenReturn(Optional.of(fund));
-        when(navRepository.findFirstByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(Optional.empty());
+        when(publishedNavApi.latest(11L)).thenReturn(Optional.empty());
         when(marketDataSource.fetchNavHistory("510300")).thenReturn(List.of(
                 new FundNavSnapshot(previousTradingDay, new BigDecimal("1.24"),
                         new BigDecimal("1.24"))));
+        when(publishedNavApi.publishNewer(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(new PublishedNavApi.PublishedNav(11L, "510300", previousTradingDay,
+                        new BigDecimal("1.24"), new BigDecimal("1.24"), today())));
 
         service.confirmNavForDate(previousTradingDay);
 
@@ -79,19 +87,20 @@ class DailyNavConfirmServiceEventTest {
     @Test
     void confirmNavForDate_历史接口只有晚于目标日期的净值时不发布更新事件() {
         FundRepository fundRepository = mock(FundRepository.class);
-        FundNavHistoryRepository navRepository = mock(FundNavHistoryRepository.class);
+        PublishedNavApi publishedNavApi = mock(PublishedNavApi.class);
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         DailyNavConfirmService service = new DailyNavConfirmService(
-                fundRepository, navRepository, marketDataSource, eventPublisher,
+                fundRepository, publishedNavApi, marketDataSource, eventPublisher,
                 new RequiresNewTransactionExecutor(), Clock.fixed(today(), ZoneOffset.UTC));
         Instant targetDate = Instant.parse("2026-07-14T00:00:00Z");
         Instant laterDate = Instant.parse("2026-07-15T00:00:00Z");
         FundEntity fund = new FundEntity();
         fund.setId(1L);
+        fund.setProductId(11L);
         fund.setFundCode("510300");
         when(fundRepository.findAll()).thenReturn(List.of(fund));
-        when(navRepository.findFirstByFundEntity_IdOrderByNavDateDesc(1L)).thenReturn(Optional.empty());
+        when(publishedNavApi.latest(11L)).thenReturn(Optional.empty());
         when(marketDataSource.fetchNavHistory("510300")).thenReturn(List.of(
                 new FundNavSnapshot(laterDate, new BigDecimal("1.23"), new BigDecimal("1.23"))));
 

@@ -4,6 +4,7 @@ import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.exception.ErrorCode;
 import com.fundpilot.backend.fund.client.FundFeeSnapshot;
 import com.fundpilot.backend.fund.client.RedemptionTier;
+import com.fundpilot.backend.productcatalog.adapter.api.fee.FundFeeApi;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundLotRedemptionEntity;
@@ -38,7 +39,7 @@ public class TransactionConfirmSupport {
     private static final Logger log = LoggerFactory.getLogger(TransactionConfirmSupport.class);
     private static final MathContext MATH = MathContext.DECIMAL64;
 
-    private final FundFeeService fundFeeService;
+    private final FundFeeApi fundFeeApi;
     private final FundLotRepository fundLotRepository;
     private final FundLotRedemptionRepository fundLotRedemptionRepository;
     private final FundPositionService fundPositionService;
@@ -53,7 +54,7 @@ public class TransactionConfirmSupport {
      */
     public void onBuyConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
-        FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
+        FundFeeSnapshot fee = feeSchedule(tx.getFundEntity());
         BigDecimal discountRate = fee.discountRate() != null ? fee.discountRate() : BigDecimal.ZERO;
 
         BigDecimal feeAmount = tx.getAmount().multiply(discountRate, MATH);
@@ -104,7 +105,7 @@ public class TransactionConfirmSupport {
     public void onSellConfirmed(FundTransactionEntity tx, BigDecimal navValue) {
         Long fundId = tx.getFundEntity().getId();
         lockAndValidateSellShares(tx);
-        FundFeeSnapshot fee = fundFeeService.getFeeByFundId(fundId);
+        FundFeeSnapshot fee = feeSchedule(tx.getFundEntity());
         List<RedemptionTier> ladder = fee.redemptionLadder();
 
         BigDecimal remaining = tx.getShares();
@@ -247,5 +248,14 @@ public class TransactionConfirmSupport {
             }
         }
         return BigDecimal.ZERO;
+    }
+
+    private FundFeeSnapshot feeSchedule(FundEntity fund) {
+        return fundFeeApi.findByFundCode(fund.getFundCode())
+                .map(schedule -> new FundFeeSnapshot(schedule.discountRate(),
+                        schedule.redemptionLadder().stream().map(tier ->
+                                new RedemptionTier(tier.maxDays(), tier.rate())).toList(),
+                        schedule.salesServiceFee()))
+                .orElse(FundFeeSnapshot.empty());
     }
 }

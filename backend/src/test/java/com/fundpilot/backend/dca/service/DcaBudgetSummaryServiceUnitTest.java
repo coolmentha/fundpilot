@@ -4,7 +4,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,12 +39,13 @@ class DcaBudgetSummaryServiceUnitTest {
     DcaPlanForecastService dcaPlanForecastService;
 
     @Mock
-    CurrentUserService currentUserService;
+    CurrentActorApi currentUserService;
 
     private DcaBudgetSummaryService service;
 
     @BeforeEach
     void setUp() {
+        when(currentUserService.userId()).thenReturn(7L);
         service = new DcaBudgetSummaryService(
                 userConfigService,
                 fundTransactionRepository,
@@ -58,8 +59,8 @@ class DcaBudgetSummaryServiceUnitTest {
 
     @Test
     void currentMonth_按非取消Invest总额计算超额() {
-        when(fundTransactionRepository.sumAmountBySourceAndStatusNotAndTradeDateBetween(
-                FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END))
+        when(fundTransactionRepository.sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+                7L, FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END))
                 .thenReturn(new BigDecimal("650"));
         when(dcaPlanForecastService.currentMonthRemainingAmount()).thenReturn(BigDecimal.ZERO);
         when(userConfigService.getMonthlyDcaBudget()).thenReturn(new BigDecimal("500"));
@@ -70,14 +71,14 @@ class DcaBudgetSummaryServiceUnitTest {
         assertThat(view.projectedAmount()).isEqualByComparingTo("650");
         assertThat(view.remainingAmount()).isEqualByComparingTo("0");
         assertThat(view.overBudgetAmount()).isEqualByComparingTo("150");
-        verify(fundTransactionRepository).sumAmountBySourceAndStatusNotAndTradeDateBetween(
-                FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END);
+        verify(fundTransactionRepository).sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+                7L, FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END);
     }
 
     @Test
     void currentMonth_预算为空时保留金额且不生成剩余超额() {
-        when(fundTransactionRepository.sumAmountBySourceAndStatusNotAndTradeDateBetween(
-                FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END))
+        when(fundTransactionRepository.sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+                7L, FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, MONTH_START, MONTH_END))
                 .thenReturn(null);
         when(dcaPlanForecastService.currentMonthRemainingAmount()).thenReturn(BigDecimal.ZERO);
         when(userConfigService.getMonthlyDcaBudget()).thenReturn(null);

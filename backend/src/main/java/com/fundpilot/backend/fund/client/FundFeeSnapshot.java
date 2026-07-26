@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 基金费率快照:{@code FundFeeService} 从 DB 读出返给调用方({@code TransactionConfirmSupport})。
+ * legacy Accounting 内部费率快照，由 ProductCatalog 公开 API 映射后用于交易确认。
  *
  * @param discountRate      优惠申购费率(小数,如 0.0015 表 0.15%),买入扣费用此;{@code null} 表费率缺失
  * @param redemptionLadder  赎回费率阶梯(按持有期升序);空列表表费率缺失,卖出不扣赎回费

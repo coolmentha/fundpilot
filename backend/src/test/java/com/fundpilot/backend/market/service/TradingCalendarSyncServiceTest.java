@@ -1,7 +1,7 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.client.SinaTradingCalendarClient;
-import com.fundpilot.backend.market.repository.TradingCalendarRepository;
+import com.fundpilot.backend.marketdata.adapter.api.tradingcalendar.TradingCalendarApi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,15 +25,15 @@ import static org.mockito.Mockito.when;
 class TradingCalendarSyncServiceTest {
 
     @Mock private SinaTradingCalendarClient sinaTradingCalendarClient;
-    @Mock private TradingCalendarRepository tradingCalendarRepository;
+    @Mock private TradingCalendarApi tradingCalendarApi;
     @InjectMocks private TradingCalendarSyncService service;
 
     @Test
     void sync_逐日使用原子插入并累计实际新增数() throws IOException {
         when(sinaTradingCalendarClient.fetchTradingCalendarRaw()).thenReturn(loadSample());
-        when(tradingCalendarRepository.findMaxCalendarDate()).thenReturn(Optional.empty());
+        when(tradingCalendarApi.maxDate()).thenReturn(Optional.empty());
         AtomicInteger calls = new AtomicInteger();
-        when(tradingCalendarRepository.insertTradingDayIfAbsent(any()))
+        when(tradingCalendarApi.addTradingDays(any()))
                 .thenAnswer(invocation -> calls.getAndIncrement() == 0 ? 1 : 0);
 
         int added = service.sync();
@@ -48,13 +48,13 @@ class TradingCalendarSyncServiceTest {
         List<Instant> dates = com.fundpilot.backend.market.client.SinaTradingCalendarParser.parse(raw);
         Instant maxDate = dates.get(dates.size() - 2);
         when(sinaTradingCalendarClient.fetchTradingCalendarRaw()).thenReturn(raw);
-        when(tradingCalendarRepository.findMaxCalendarDate()).thenReturn(Optional.of(maxDate));
-        when(tradingCalendarRepository.insertTradingDayIfAbsent(any())).thenReturn(1);
+        when(tradingCalendarApi.maxDate()).thenReturn(Optional.of(maxDate));
+        when(tradingCalendarApi.addTradingDays(any())).thenReturn(1);
 
         int added = service.sync();
 
         assertThat(added).isEqualTo(1);
-        verify(tradingCalendarRepository).insertTradingDayIfAbsent(dates.get(dates.size() - 1));
+        verify(tradingCalendarApi).addTradingDays(List.of(dates.get(dates.size() - 1)));
     }
 
     @Test
@@ -62,13 +62,13 @@ class TradingCalendarSyncServiceTest {
         String raw = loadSample();
         List<Instant> dates = com.fundpilot.backend.market.client.SinaTradingCalendarParser.parse(raw);
         when(sinaTradingCalendarClient.fetchTradingCalendarRaw()).thenReturn(raw);
-        when(tradingCalendarRepository.insertTradingDayIfAbsent(any())).thenReturn(0);
+        when(tradingCalendarApi.addTradingDays(any())).thenReturn(0);
 
         int added = service.syncFull();
 
         assertThat(added).isZero();
-        verify(tradingCalendarRepository, times(dates.size())).insertTradingDayIfAbsent(any());
-        verify(tradingCalendarRepository, times(0)).findMaxCalendarDate();
+        verify(tradingCalendarApi, times(dates.size())).addTradingDays(any());
+        verify(tradingCalendarApi, times(0)).maxDate();
     }
 
     private String loadSample() throws IOException {

@@ -1,14 +1,10 @@
 package com.fundpilot.backend.user.event;
 
 /**
- * 用户关注指数列表变更事件。
+ * 旧 UserConfig 关注指数变更事件的保留类型。
  *
- * <p>配置保存成功后由 {@code UserConfigService.update} 发布,行情缓存层监听后即时刷新指数缓存,
- * 让前端不必等下一个 30s cron 周期就能看到新关注列表的行情(尤其在非交易时段,cron 不跑,
- * 没有事件就永远看不到)。
- *
- * <p>用 Spring 事件而非直接注入缓存,避免 UserConfigService ↔ MarketRealtimeCache 循环依赖
- * (后者读 getWatchedIndices,前者若直接调后者就会成环)。
+ * <p>V39 后关注指数由 MarketData 拥有，此事件不再发布；保留该类型仅为了让历史排障记录
+ * 和已编译的扩展代码仍可识别，后续 contract migration 再删除。
  */
 public record WatchedIndicesChangedEvent() {
 }

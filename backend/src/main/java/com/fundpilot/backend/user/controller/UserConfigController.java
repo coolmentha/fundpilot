@@ -10,10 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.util.List;
-
 /**
- * 用户配置 Controller:单用户场景,管理可选月度定投预算与关注指数列表。
+ * 用户配置 Controller:管理可选月度定投预算。
  * <p>GET 取配置;PUT 覆盖配置。逻辑下沉 {@link UserConfigService}。
  */
 @RestController
@@ -30,9 +28,9 @@ public class UserConfigController {
 
     @PutMapping
     public ApiResponse<UserConfigView> update(@RequestBody UserConfigUpdateRequest request) {
-        return ApiResponse.ok(userConfigService.update(request.watchedIndices(), request.monthlyDcaBudget()));
+        return ApiResponse.ok(userConfigService.update(request.monthlyDcaBudget()));
     }
 
-    public record UserConfigUpdateRequest(List<String> watchedIndices, BigDecimal monthlyDcaBudget) {
+    public record UserConfigUpdateRequest(BigDecimal monthlyDcaBudget) {
     }
 }

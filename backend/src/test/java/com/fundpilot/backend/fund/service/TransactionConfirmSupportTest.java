@@ -12,6 +12,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.repository.FundLotRedemptionRepository;
 import com.fundpilot.backend.fund.repository.FundLotRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.productcatalog.adapter.api.fee.FundFeeApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,14 +36,14 @@ import static org.mockito.Mockito.*;
 
 /**
  * {@link TransactionConfirmSupport} 单测:验证申购费扣除 + FIFO 赎回费匹配 + 费率缺失降级 + 卖超抛异常。
- * <p>用 mock 隔离 FundFeeService/FundLotRepository/FundPositionService,聚焦扣费公式 + FIFO 遍历逻辑。
+ * <p>用 mock 隔离 ProductCatalog 费率 API/FundLotRepository/FundPositionService,聚焦扣费公式 + FIFO 遍历逻辑。
  */
 @ExtendWith(MockitoExtension.class)
 class TransactionConfirmSupportTest {
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
-    @Mock private FundFeeService fundFeeService;
+    @Mock private FundFeeApi fundFeeApi;
     @Mock private FundLotRepository fundLotRepository;
     @Mock private FundLotRedemptionRepository fundLotRedemptionRepository;
     @Mock private FundPositionService fundPositionService;
@@ -67,7 +68,7 @@ class TransactionConfirmSupportTest {
     void onBuyConfirmed_有优惠费率_扣费后算shares() {
         // amount=1000, discountRate=0.0015(0.15%), nav=1.5
         // fee=1.50, netAmount=998.50, shares=998.50/1.5=665.6667
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+        stubFee(
                 new FundFeeSnapshot(new BigDecimal("0.0015"), List.of(), null));
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("665.6667"));
 
@@ -91,7 +92,7 @@ class TransactionConfirmSupportTest {
     @Test
     void onBuyConfirmed_费率缺失_降级不扣费() {
         // fee 缺失 → fee=0, shares=amount/nav(原逻辑)
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        stubFee(FundFeeSnapshot.empty());
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("666.6667"));
 
         FundTransactionEntity tx = buyTx(new BigDecimal("1000"), Instant.parse("2026-07-05T00:00:00Z"));
@@ -110,7 +111,7 @@ class TransactionConfirmSupportTest {
 
         support.onExistingPositionConfirmed(tx, new BigDecimal("1.20"));
 
-        verifyNoInteractions(fundFeeService);
+        verifyNoInteractions(fundFeeApi);
         verify(fundLotRepository).save(argThat(lot ->
                 lot.getAcquireTxId().equals(tx.getId())
                         && lot.getAcquireDate().equals(openedAt)
@@ -128,7 +129,7 @@ class TransactionConfirmSupportTest {
         List<RedemptionTier> ladder = List.of(
                 new RedemptionTier(7, new BigDecimal("0.015")),
                 new RedemptionTier(null, BigDecimal.ZERO));
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+        stubFee(
                 new FundFeeSnapshot(null, ladder, null));
 
         FundLotEntity lot = lot(100, Instant.parse("2026-06-30T00:00:00Z"));
@@ -148,7 +149,7 @@ class TransactionConfirmSupportTest {
         List<RedemptionTier> ladder = List.of(
                 new RedemptionTier(7, new BigDecimal("0.015")),
                 new RedemptionTier(null, BigDecimal.ZERO));
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+        stubFee(
                 new FundFeeSnapshot(null, ladder, null));
         FundLotEntity lot = lot(100, Instant.parse("2026-07-01T16:30:00Z"));
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
@@ -162,7 +163,7 @@ class TransactionConfirmSupportTest {
 
     @Test
     void onSellConfirmed_持有期使用交易发生日而非确认日() {
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(new FundFeeSnapshot(null, List.of(
+        stubFee(new FundFeeSnapshot(null, List.of(
                 new RedemptionTier(7, new BigDecimal("0.015")),
                 new RedemptionTier(null, BigDecimal.ZERO)), null));
         FundLotEntity lot = lot(100, Instant.parse("2026-06-30T00:00:00Z"));
@@ -192,7 +193,7 @@ class TransactionConfirmSupportTest {
                 new RedemptionTier(30, new BigDecimal("0.0075")),
                 new RedemptionTier(365, new BigDecimal("0.005")),
                 new RedemptionTier(null, BigDecimal.ZERO));
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+        stubFee(
                 new FundFeeSnapshot(null, ladder, null));
 
         FundLotEntity lotA = lot(150, Instant.parse("2026-06-25T00:00:00Z")); // 10 天
@@ -211,7 +212,7 @@ class TransactionConfirmSupportTest {
 
     @Test
     void onSellConfirmed_费率缺失_降级不扣赎回费() {
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        stubFee(FundFeeSnapshot.empty());
 
         FundLotEntity lot = lot(100, Instant.parse("2026-06-30T00:00:00Z"));
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of(lot));
@@ -235,7 +236,7 @@ class TransactionConfirmSupportTest {
 
     @Test
     void onSellConfirmed_事实持仓含调增份额_部分lot不足按零费率降级() {
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(
+        stubFee(
                 new FundFeeSnapshot(null,
                         List.of(new RedemptionTier(null, new BigDecimal("0.01"))), null));
         FundLotEntity lot = lot(50, Instant.parse("2026-06-30T00:00:00Z"));
@@ -255,7 +256,7 @@ class TransactionConfirmSupportTest {
     @Test
     void onSellConfirmed_无lot且没有合法调增份额_抛INSUFFICIENT_LOTS() {
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        stubFee(FundFeeSnapshot.empty());
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of());
 
         FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
@@ -269,7 +270,7 @@ class TransactionConfirmSupportTest {
     void onSellConfirmed_无lot但全部为合法调增份额_按零费率确认() {
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
         when(fundPositionService.getUntrackedHoldingShares(1L)).thenReturn(new BigDecimal("100"));
-        when(fundFeeService.getFeeByFundId(1L)).thenReturn(FundFeeSnapshot.empty());
+        stubFee(FundFeeSnapshot.empty());
         when(fundLotRepository.findOpenLotsByFundIdOrderByAcquireDateAsc(1L)).thenReturn(List.of());
 
         FundTransactionEntity tx = sellTx(new BigDecimal("100"), Instant.parse("2026-07-05T00:00:00Z"));
@@ -320,6 +321,14 @@ class TransactionConfirmSupportTest {
     }
 
     // ===== helpers =====
+
+    private void stubFee(FundFeeSnapshot snapshot) {
+        var tiers = snapshot.redemptionLadder().stream().map(tier ->
+                new FundFeeApi.RedemptionTier(tier.maxDays(), tier.rate())).toList();
+        when(fundFeeApi.findByFundCode("001071")).thenReturn(Optional.of(
+                new FundFeeApi.FeeSchedule(null, snapshot.discountRate(), snapshot.salesServiceFee(),
+                        tiers, Instant.EPOCH)));
+    }
 
     private FundTransactionEntity buyTx(BigDecimal amount, Instant confirmTime) {
         FundTransactionEntity tx = new FundTransactionEntity();

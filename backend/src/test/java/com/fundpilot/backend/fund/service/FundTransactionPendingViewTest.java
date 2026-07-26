@@ -1,6 +1,5 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.fund.client.FundFeeSnapshot;
 import com.fundpilot.backend.fund.controller.FundTransactionView;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
@@ -10,6 +9,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
+import com.fundpilot.backend.productcatalog.adapter.api.fee.FundFeeApi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,13 +33,14 @@ class FundTransactionPendingViewTest {
     @Mock FundNavHistoryRepository navRepository;
     @Mock TransactionConfirmSupport confirmSupport;
     @Mock FundPositionService positionService;
-    @Mock FundFeeService feeService;
+    @Mock FundFeeApi feeApi;
     @Mock FundAccessService fundAccessService;
 
     @Test
     void 待确认买入仅在交易日净值入库后返回预计份额() {
         FundEntity fund = new FundEntity();
         fund.setId(1L);
+        fund.setFundCode("001071");
         FundTransactionEntity tx = new FundTransactionEntity();
         tx.setId(2L);
         tx.setFundEntity(fund);
@@ -53,10 +55,11 @@ class FundTransactionPendingViewTest {
         when(fundAccessService.isOwned(fund)).thenReturn(true);
         when(navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
                 eq(1L), any(), any())).thenReturn(List.of(nav));
-        when(feeService.getFeeByFundId(1L)).thenReturn(
-                new FundFeeSnapshot(new BigDecimal("0.0015"), List.of(), null));
+        when(feeApi.findByFundCode("001071")).thenReturn(Optional.of(
+                new FundFeeApi.FeeSchedule(null, new BigDecimal("0.0015"), null,
+                        List.of(), Instant.EPOCH)));
         FundTransactionService service = new FundTransactionService(fundAccessService, transactionRepository, fundRepository,
-                navRepository, feeService, confirmSupport, positionService);
+                navRepository, feeApi, confirmSupport, positionService);
 
         FundTransactionView view = service.listPending().getFirst();
 

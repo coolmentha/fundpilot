@@ -68,7 +68,7 @@ export default function AdminPage() {
                                     loading={adminAction.isPending}>刷新行情</Button>
                         </Popconfirm>
                     }>
-                        <Text type="secondary">通过行情数据源降级链刷新所有未归档基金的净值和指标快照。</Text>
+                        <Text type="secondary">通过行情数据源降级链刷新所有有效组合基金的净值和指标快照。</Text>
                     </Card>
                     <Card size="small" title="基金字典同步" extra={
                         <Popconfirm title="拉取全量基金字典并更新本地缓存？" onConfirm={() =>

@@ -1,12 +1,11 @@
 package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
+import com.fundpilot.backend.marketdata.adapter.api.indicator.MarketIndicatorApi;
 import com.fundpilot.backend.market.repository.MarketIndicatorSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 /**
  * 行情指标快照落库服务——封装「同日重跑覆盖」的幂等 upsert 语义。
@@ -17,25 +16,33 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MarketIndicatorSnapshotService {
 
-    private final MarketIndicatorSnapshotRepository snapshotRepository;
+    private final MarketIndicatorApi marketIndicatorApi;
+    private final MarketIndicatorSnapshotRepository legacySnapshotRepository;
 
     @Transactional
     public MarketIndicatorSnapshotEntity upsert(MarketIndicatorSnapshotEntity template) {
         Long fundId = template.getFundEntity().getId();
         template.setFundCode(template.getFundEntity().getFundCode());
-        Optional<MarketIndicatorSnapshotEntity> existing =
-                snapshotRepository.findByFundEntity_IdAndSnapshotDate(fundId, template.getSnapshotDate());
-        if (existing.isPresent()) {
-            MarketIndicatorSnapshotEntity entity = existing.get();
-            entity.setCurrentNav(template.getCurrentNav());
-            entity.setPriceAboveYearLine(template.isPriceAboveYearLine());
-            entity.setYearLineRising(template.isYearLineRising());
-            entity.setWeeklyMacdState(template.getWeeklyMacdState());
-            entity.setVolumeState(template.getVolumeState());
-            entity.setWeeklyDropPercent(template.getWeeklyDropPercent());
-            entity.setSixtyDayHigh(template.isSixtyDayHigh());
-            return snapshotRepository.save(entity);
+        Long productId = template.getFundEntity().getProductId();
+        if (productId == null) {
+            return legacySnapshotRepository.findByFundEntity_IdAndSnapshotDate(fundId, template.getSnapshotDate())
+                    .map(existing -> {
+                        existing.setCurrentNav(template.getCurrentNav());
+                        existing.setPriceAboveYearLine(template.isPriceAboveYearLine());
+                        existing.setYearLineRising(template.isYearLineRising());
+                        existing.setWeeklyMacdState(template.getWeeklyMacdState());
+                        existing.setVolumeState(template.getVolumeState());
+                        existing.setWeeklyDropPercent(template.getWeeklyDropPercent());
+                        existing.setSixtyDayHigh(template.isSixtyDayHigh());
+                        return legacySnapshotRepository.save(existing);
+                    }).orElseGet(() -> legacySnapshotRepository.save(template));
         }
-        return snapshotRepository.save(template);
+        marketIndicatorApi.upsert(new MarketIndicatorApi.Upsert(fundId, productId,
+                template.getFundCode(), template.getSnapshotDate(), template.getCurrentNav(),
+                template.isPriceAboveYearLine(), template.isYearLineRising(),
+                template.getWeeklyMacdState() == null ? null : template.getWeeklyMacdState().name(),
+                template.getVolumeState() == null ? null : template.getVolumeState().name(),
+                template.getWeeklyDropPercent(), template.isSixtyDayHigh()));
+        return template;
     }
 }

@@ -2,6 +2,8 @@ package com.fundpilot.backend.market.controller;
 
 import com.fundpilot.backend.common.ApiResponse;
 import com.fundpilot.backend.market.service.MarketRealtimeCache;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
+import com.fundpilot.backend.marketdata.adapter.api.watchedindex.WatchedIndicesApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,11 +32,13 @@ import java.util.Map;
 public class MarketRealtimeController {
 
     private final MarketRealtimeCache cache;
+    private final CurrentActorApi actors;
+    private final WatchedIndicesApi watchedIndices;
 
     /** 用户关注指数的实时行情(前端 5-10s 轮询)。 */
     @GetMapping("/indices/realtime")
     public ApiResponse<List<IndexRealtimeView>> indices() {
-        return ApiResponse.ok(cache.getIndices().stream()
+        return ApiResponse.ok(cache.getIndices(watchedIndices.findByOwner(actors.userId())).stream()
                 .map(IndexRealtimeView::from).toList());
     }
 

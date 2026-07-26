@@ -276,6 +276,7 @@ class DcaSuggestionJobTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("161725");
         fund.setFundName("测试基金");
         return fundRepository.save(fund);

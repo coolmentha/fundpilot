@@ -52,6 +52,7 @@ class FundGroupServiceTest extends AbstractIntegrationTest {
     void save_删除分组只解除关联_基金仍保留() {
         var group = fundGroupService.save(request(null, "核心")).get(0);
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);

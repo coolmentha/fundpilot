@@ -7,6 +7,7 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +41,9 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
 
     @Autowired
     FundNavHistoryRepository fundNavHistoryRepository;
+
+    @Autowired
+    FundProductApi productCatalogApi;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
@@ -119,7 +123,10 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     private FundEntity persistFund(String code) {
+        FundProductApi.ProductReference product = productCatalogApi.ensure(
+                new FundProductApi.EnsureProduct(code, "测试基金", null, null));
         FundEntity fund = new FundEntity();
+        fund.setProductId(product.id());
         fund.setFundCode(code);
         fund.setFundName("测试基金");
         return fundRepository.save(fund);
@@ -131,10 +138,13 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         entity.setNavDate(date);
         entity.setNav(new BigDecimal(nav));
         entity.setAccumulatedNav(new BigDecimal(nav));
-        fundNavHistoryRepository.save(entity);
+        FundNavHistoryEntity saved = fundNavHistoryRepository.save(entity);
+        jdbcTemplate.update("UPDATE fund_nav_history SET fund_product_id = ? WHERE id = ?",
+                fund.getProductId(), saved.getId());
     }
 
     private String uniqueCode() {
-        return "T" + System.nanoTime();
+        String value = Long.toString(System.nanoTime());
+        return "T" + value.substring(Math.max(0, value.length() - 12));
     }
 }

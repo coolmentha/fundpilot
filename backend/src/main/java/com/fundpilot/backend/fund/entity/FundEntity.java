@@ -28,6 +28,8 @@ public class FundEntity extends AbstractEntity {
     public static final BigDecimal DEFAULT_POSITION_WARNING_RATIO = new BigDecimal("0.30");
     @Column(name = "owner_id")
     private Long ownerId;
+    @Column(name = "product_id")
+    private Long productId;
     private String fundCode;
 
     private String fundName;

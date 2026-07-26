@@ -1,4 +1,6 @@
 spring:
+  modulith:
+    detection-strategy: explicitly-annotated
   application:
     name: fundpilot-backend
   task:

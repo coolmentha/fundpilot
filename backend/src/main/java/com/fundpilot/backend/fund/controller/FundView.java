@@ -46,6 +46,7 @@ import java.util.List;
  */
 public record FundView(
         Long id,
+        Long portfolioFundId,
         String fundCode,
         String fundName,
         FundCategory fundCategory,
@@ -81,8 +82,13 @@ public record FundView(
 
     /** 从 Entity 映射到视图 DTO(盈亏字段为 null,isEstimated=false,供新建/更新等不需盈亏的场景用)。 */
     public static FundView from(FundEntity fund) {
+        return from(fund, (Long) null);
+    }
+
+    public static FundView from(FundEntity fund, Long portfolioFundId) {
         return new FundView(
                 fund.getId(),
+                portfolioFundId,
                 fund.getFundCode(),
                 fund.getFundName(),
                 fund.getFundCategory(),
@@ -103,8 +109,13 @@ public record FundView(
 
     /** 从 Entity + 盈亏结果映射到视图 DTO(列表/详情等需展示盈亏的场景用)。 */
     public static FundView from(FundEntity fund, FundPnlService.Pnl pnl) {
+        return from(fund, pnl, null);
+    }
+
+    public static FundView from(FundEntity fund, FundPnlService.Pnl pnl, Long portfolioFundId) {
         return new FundView(
                 fund.getId(),
+                portfolioFundId,
                 fund.getFundCode(),
                 fund.getFundName(),
                 fund.getFundCategory(),

@@ -5,7 +5,7 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.user.service.UserConfigService;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +25,7 @@ public class DcaBudgetSummaryService {
     private final FundTransactionRepository fundTransactionRepository;
     private final DcaScheduleService dcaScheduleService;
     private final DcaPlanForecastService dcaPlanForecastService;
-    private final CurrentUserService currentUserService;
+    private final CurrentActorApi currentActorApi;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -33,11 +33,9 @@ public class DcaBudgetSummaryService {
         Instant now = clock.instant();
         Instant monthStart = dcaScheduleService.startOfCurrentMonth(now);
         Instant monthEnd = dcaScheduleService.startOfNextMonth(now);
-        long userId = currentUserService.userId();
-        BigDecimal investedAmount = nonNull(userId == 0L
-                ? fundTransactionRepository.sumAmountBySourceAndStatusNotAndTradeDateBetween(
-                        FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, monthStart, monthEnd)
-                : fundTransactionRepository.sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
+        long userId = currentActorApi.userId();
+        BigDecimal investedAmount = nonNull(
+                fundTransactionRepository.sumAmountByOwnerIdAndSourceAndStatusNotAndTradeDateBetween(
                         userId, FundTransactionSource.INVEST, FundTransactionStatus.CANCELLED, monthStart, monthEnd));
 
         BigDecimal futureAmount = dcaPlanForecastService.currentMonthRemainingAmount();

@@ -3,14 +3,13 @@ package com.fundpilot.backend.market.service;
 import com.fundpilot.backend.common.ChinaTradingDate;
 import com.fundpilot.backend.common.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
-import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
-import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.market.client.FundNavHistorySource;
 import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
+import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,8 +33,8 @@ import java.util.List;
 public class DailyNavConfirmService {
 
     private final FundRepository fundRepository;
-    private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final MarketDataSource marketDataSource;
+    private final PublishedNavApi publishedNavApi;
+    private final FundNavHistorySource marketDataSource;
     private final ApplicationEventPublisher eventPublisher;
     private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
     private final Clock clock;
@@ -51,7 +50,7 @@ public class DailyNavConfirmService {
     public void confirmNavForDate(Instant targetDate) {
         Instant normalizedTargetDate = ChinaTradingDate.toUtcDate(targetDate);
         List<FundTarget> funds = fundRepository.findAll().stream()
-                .map(fund -> new FundTarget(fund.getId(), fund.getFundCode(), fund.getFundName(),
+                .map(fund -> new FundTarget(fund.getId(), fund.getProductId(), fund.getFundCode(), fund.getFundName(),
                         fund.getInvestmentTarget()))
                 .toList();
         int confirmed = 0;
@@ -79,8 +78,11 @@ public class DailyNavConfirmService {
         if (!FundMarketDataCapability.supportsStandardNav(fund.target(), fund.name())) {
             return false;
         }
-        Instant localLatest = fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(fund.id())
-                .map(FundNavHistoryEntity::getNavDate).orElse(Instant.MIN);
+        if (fund.productId() == null) {
+            throw new IllegalStateException("基金缺少产品关联: " + fund.id());
+        }
+        Instant localLatest = publishedNavApi.latest(fund.productId())
+                .map(PublishedNavApi.PublishedNav::navDate).orElse(Instant.MIN);
         if (!localLatest.isBefore(targetDate)) {
             return false;
         }
@@ -97,37 +99,25 @@ public class DailyNavConfirmService {
         if (candidates.isEmpty()) {
             return false;
         }
-        return requiresNewTransactionExecutor.execute(() -> persistNewer(fund.id(), candidates));
+        return requiresNewTransactionExecutor.execute(() -> persistNewer(fund, candidates));
     }
 
-    private boolean persistNewer(Long fundId, List<FundNavSnapshot> candidates) {
-        FundEntity fund = fundRepository.findById(fundId).orElse(null);
-        if (fund == null) {
+    private boolean persistNewer(FundTarget target, List<FundNavSnapshot> candidates) {
+        FundEntity fund = fundRepository.findById(target.id()).orElse(null);
+        if (fund == null || fund.getProductId() == null) {
             return false;
         }
-        Instant latest = fundNavHistoryRepository.findFirstByFundEntity_IdOrderByNavDateDesc(fundId)
-                .map(FundNavHistoryEntity::getNavDate).orElse(Instant.MIN);
-        List<FundNavHistoryEntity> toInsert = candidates.stream()
-                .filter(snapshot -> snapshot.navDate().isAfter(latest))
-                .map(s -> {
-                    FundNavHistoryEntity entity = new FundNavHistoryEntity();
-                    entity.setFundEntity(fund);
-                    entity.setFundCode(fund.getFundCode());
-                    entity.setNavDate(s.navDate());
-                    entity.setNav(s.nav());
-                    entity.setAccumulatedNav(s.accumulatedNav());
-                    entity.setFirstSeenAt(clock.instant());
-                    return entity;
-                })
-                .toList();
-        if (!toInsert.isEmpty()) {
-            fundNavHistoryRepository.saveAll(toInsert);
+        List<PublishedNavApi.PublishedNav> published = publishedNavApi.publishNewer(
+                new PublishedNavApi.PublishNavs(fund.getId(), fund.getProductId(), fund.getFundCode(),
+                        candidates.stream().map(snapshot -> new PublishedNavApi.NavCandidate(
+                                snapshot.navDate(), snapshot.nav(), snapshot.accumulatedNav())).toList()));
+        if (!published.isEmpty()) {
             eventPublisher.publishEvent(new FundNavUpdatedEvent(fund.getId()));
             return true;
         }
         return false;
     }
 
-    private record FundTarget(Long id, String code, String name, InvestmentTarget target) {
+    private record FundTarget(Long id, Long productId, String code, String name, InvestmentTarget target) {
     }
 }

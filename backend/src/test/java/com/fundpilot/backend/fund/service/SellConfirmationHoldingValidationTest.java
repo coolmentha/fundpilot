@@ -153,6 +153,7 @@ class SellConfirmationHoldingValidationTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setStatus(FundStatus.HOLDING);

@@ -91,6 +91,7 @@ class KlineServiceTest extends AbstractIntegrationTest {
     @Transactional
     void 无缓存且无基准_降级净值走势() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("000001");
         fund.setFundName("主动基金");
         fund.setFundSubType(FundSubType.ACTIVE); // 非指数型
@@ -103,6 +104,7 @@ class KlineServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistIndexFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("161725");
         fund.setFundName("测试指数基金");
         fund.setFundSubType(FundSubType.INDEX);

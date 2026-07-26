@@ -29,13 +29,20 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
 import java.util.List;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
+import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.portfolio.adapter.api.fundgrouping.PortfolioGroupingApi;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 基金服务(issue #16 + ADR-0005):基金 CRUD 业务逻辑,Controller 只做 HTTP 路由,逻辑下沉到本层。
  * <p>新建时类型字段(fundSubType/fundCategory/benchmarkIndexCode)优先用前端从字典搜索带入的值;
  * 缺省时后端按 fundName 兜底跑 {@link FundTypeClassifier} 识别(尽力填+可覆盖,CONTEXT.md「基金类型自动识别」)。
- * 不再调 {@code FundDictBackfillService.backfillAll()} 批量回填——字典搜索已替代该职责。
+ * 产品身份由 ProductCatalog 统一登记，legacy 字段仅在后续切片完成前双写。
  * 返回 {@link FundView} DTO,不直接暴露 {@link FundEntity}。
  */
 @Slf4j
@@ -44,7 +51,6 @@ import com.fundpilot.backend.user.service.CurrentUserService;
 public class FundService {
 
     private final FundRepository fundRepository;
-    private final FundArchiveService fundArchiveService;
     private final FundPnlService fundPnlService;
     private final MarketDataFetchService marketDataFetchService;
     private final FundNavHistoryRepository fundNavHistoryRepository;
@@ -52,19 +58,33 @@ public class FundService {
     private final TransactionConfirmSupport transactionConfirmSupport;
     private final FundGroupService fundGroupService;
     private final ApplicationEventPublisher eventPublisher;
-    private final CurrentUserService currentUserService;
+    private final CurrentActorApi currentActorApi;
+    private final FundProductApi productCatalogApi;
+    private final PortfolioFundApi portfolioFundApi;
+    private final PortfolioGroupingApi portfolioGroupingApi;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
     /** 查全部基金(含今日涨跌/持仓盈亏,issue #18)。 */
     @Transactional(readOnly = true)
     public List<FundView> list() {
-        long userId = currentUserService.userId();
-        List<FundEntity> funds = userId == 0L ? fundRepository.findAll()
-                : fundRepository.findAllByOwnerId(userId);
+        long userId = currentActorApi.userId();
+        Map<Long, PortfolioFundApi.PortfolioFund> portfolioByLegacyFundId = portfolioFundApi
+                .findByOwner(userId).stream()
+                .filter(portfolioFund -> portfolioFund.legacyFundId() != null)
+                .collect(Collectors.toMap(PortfolioFundApi.PortfolioFund::legacyFundId,
+                        Function.identity()));
+        List<FundEntity> funds = fundRepository.findAllByOwnerId(userId).stream()
+                .filter(fund -> {
+                    var portfolioFund = portfolioByLegacyFundId.get(fund.getId());
+                    return portfolioFund != null
+                            && portfolioFund.validity() == PortfolioFundApi.Validity.TRACKED;
+                })
+                .toList();
         var pnlByFund = fundPnlService.computeForFunds(funds);
         return funds.stream()
-                .map(fund -> FundView.from(fund, pnlByFund.get(fund.getId())))
+                .map(fund -> FundView.from(fund, pnlByFund.get(fund.getId()),
+                        portfolioByLegacyFundId.get(fund.getId()).id()))
                 .toList();
     }
 
@@ -81,20 +101,21 @@ public class FundService {
      */
     @Transactional
     public FundView create(FundCreateRequest request) {
-        if ((request.fundCode() == null || request.fundCode().isBlank())
-                && (request.fundName() == null || request.fundName().isBlank())) {
-            throw new BusinessException(ErrorCode.MISSING_FUND_IDENTITY, "基金代码和名称至少填一个");
+        if (request.fundCode() == null || request.fundCode().isBlank()
+                || request.fundName() == null || request.fundName().isBlank()) {
+            throw new BusinessException(ErrorCode.MISSING_FUND_IDENTITY, "基金代码和名称不能为空");
         }
         BigDecimal initialHoldingShares = ShareScale.normalize(request.initialHoldingShares());
         if (initialHoldingShares != null && initialHoldingShares.signum() <= 0) {
             throw new BusinessException(ErrorCode.INITIAL_HOLDING_SHARES_INVALID, "初始持仓份额必须大于 0");
         }
         FundEntity fund = new FundEntity();
-        long userId = currentUserService.userId();
-        fund.setOwnerId(userId == 0L ? null : userId);
+        long userId = currentActorApi.userId();
+        fund.setOwnerId(userId);
         fund.setFundCode(request.fundCode());
         fund.setFundName(request.fundName());
         fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
+        fund.setProductId(ensureProduct(fund).id());
 
         // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填)
         FundTypeClassification fallback = request.fundSubType() == null && request.fundCategory() == null
@@ -114,6 +135,11 @@ public class FundService {
 
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
+        var portfolioFund = portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
+                saved.getId(), userId, Objects.requireNonNull(saved.getProductId()),
+                saved.isPositionWarningEnabled(), saved.getPositionWarningRatio()));
+        portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
+                userId, portfolioFund.id(), request.groupNames()));
 
         // initialHoldingShares 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后生成交易核算金额。
         if (initialHoldingShares != null) {
@@ -123,7 +149,7 @@ public class FundService {
             eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));
         }
 
-        return FundView.from(saved);
+        return FundView.from(saved, portfolioFund.id());
     }
 
     /**
@@ -193,13 +219,16 @@ public class FundService {
     @Transactional(readOnly = true)
     public FundView get(Long id) {
         FundEntity fund = requireFund(id);
-        return FundView.from(fund, fundPnlService.computeForFund(fund.getId()));
+        var portfolioFund = requireTrackedPortfolioFund(fund);
+        return FundView.from(fund, fundPnlService.computeForFund(fund.getId()),
+                portfolioFund.id());
     }
 
     /** 更新基金;仅合并请求中非 null 的字段(含类型字段,用户可覆盖自动识别结果)。 */
     @Transactional
     public FundView update(Long id, FundCreateRequest request) {
         FundEntity fund = requireFund(id);
+        requireTrackedPortfolioFund(fund);
         if (request.fundName() != null) {
             fund.setFundName(request.fundName());
             if (fund.getInvestmentTarget() == null) {
@@ -225,14 +254,15 @@ public class FundService {
         if (groups != null) {
             fund.setGroups(groups);
         }
-        return FundView.from(fundRepository.save(fund));
-    }
-
-    /** 归档基金(级联软删),委托 {@link FundArchiveService}。 */
-    @Transactional
-    public void archive(Long id) {
-        requireFund(id);
-        fundArchiveService.archive(id);
+        fund.setProductId(ensureProduct(fund).id());
+        FundEntity saved = fundRepository.save(fund);
+        var portfolioFund = requirePortfolioFund(saved);
+        portfolioFund = portfolioFundApi.configureWarning(new PortfolioFundApi.ConfigurePositionWarning(
+                saved.getOwnerId(), portfolioFund.id(), saved.isPositionWarningEnabled(),
+                saved.getPositionWarningRatio()));
+        portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
+                saved.getOwnerId(), portfolioFund.id(), request.groupNames()));
+        return FundView.from(saved, portfolioFund.id());
     }
 
     /**
@@ -250,6 +280,13 @@ public class FundService {
                 ? InvestmentTarget.QDII : null;
     }
 
+    private FundProductApi.ProductReference ensureProduct(FundEntity fund) {
+        FundProductApi.InvestmentTarget target = fund.getInvestmentTarget() == null ? null
+                : FundProductApi.InvestmentTarget.valueOf(fund.getInvestmentTarget().name());
+        return productCatalogApi.ensure(new FundProductApi.EnsureProduct(
+                fund.getFundCode(), fund.getFundName(), null, target));
+    }
+
     private BigDecimal normalizePositionWarningRatio(BigDecimal ratio) {
         BigDecimal value = ratio != null ? ratio : FundEntity.DEFAULT_POSITION_WARNING_RATIO;
         if (value.signum() <= 0 || value.compareTo(BigDecimal.ONE) > 0) {
@@ -259,9 +296,24 @@ public class FundService {
         return value;
     }
 
+    private PortfolioFundApi.PortfolioFund requirePortfolioFund(FundEntity fund) {
+        return portfolioFundApi.findOwnedByLegacyFundId(fund.getOwnerId(), fund.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "legacy fund 缺少 PortfolioFund 映射: " + fund.getId()));
+    }
+
+    private PortfolioFundApi.PortfolioFund requireTrackedPortfolioFund(FundEntity fund) {
+        var portfolioFund = requirePortfolioFund(fund);
+        if (portfolioFund.validity() != PortfolioFundApi.Validity.TRACKED) {
+            throw new BusinessException(ErrorCode.FUND_NOT_FOUND,
+                    "Fund #" + fund.getId() + " 不存在");
+        }
+        return portfolioFund;
+    }
+
     private FundEntity requireFund(Long id) {
-        long userId = currentUserService.userId();
-        return (userId == 0L ? fundRepository.findById(id) : fundRepository.findByIdAndOwnerId(id, userId))
+        long userId = currentActorApi.userId();
+        return fundRepository.findByIdAndOwnerId(id, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + id + " 不存在"));
     }
 }

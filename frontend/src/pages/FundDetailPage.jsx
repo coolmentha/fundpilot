@@ -23,7 +23,7 @@ export default function FundDetailPage() {
     const {fundId} = useParams();
     const id = Number(fundId);
     const {data: fund, isLoading, isError, refetch} = useFund(id);
-    const {data: feeRates} = useFundFeeRates(id);
+    const {data: feeRates} = useFundFeeRates(fund?.fundCode);
     const {data: pendingTransactions} = usePendingTransactions();
     const {data: pendingSignals} = usePendingSignals();
 

@@ -2,7 +2,7 @@ package com.fundpilot.backend.market.service;
 
 import com.fundpilot.backend.market.client.SinaTradingCalendarClient;
 import com.fundpilot.backend.market.client.SinaTradingCalendarParser;
-import com.fundpilot.backend.market.repository.TradingCalendarRepository;
+import com.fundpilot.backend.marketdata.adapter.api.tradingcalendar.TradingCalendarApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,7 +35,7 @@ import java.util.Optional;
 public class TradingCalendarSyncService {
 
     private final SinaTradingCalendarClient sinaTradingCalendarClient;
-    private final TradingCalendarRepository tradingCalendarRepository;
+    private final TradingCalendarApi tradingCalendarApi;
 
     /** 日常增量同步:空表全量初始化,非空表只写当前最大日期之后的数据。 */
     @Transactional
@@ -53,7 +53,7 @@ public class TradingCalendarSyncService {
         String raw = sinaTradingCalendarClient.fetchTradingCalendarRaw();
         List<Instant> tradingDays = SinaTradingCalendarParser.parse(raw);
         Optional<Instant> maxDate = incremental
-                ? tradingCalendarRepository.findMaxCalendarDate()
+                ? tradingCalendarApi.maxDate()
                 : Optional.empty();
         List<Instant> candidates = maxDate
                 .map(max -> tradingDays.stream().filter(date -> date.isAfter(max)).toList())
@@ -61,7 +61,7 @@ public class TradingCalendarSyncService {
 
         int added = 0;
         for (Instant date : candidates) {
-            added += tradingCalendarRepository.insertTradingDayIfAbsent(date);
+            added += tradingCalendarApi.addTradingDays(List.of(date));
         }
 
         log.info("交易日历{}同步完成(新浪源):候选 {} 条,新增 {} 条,新浪返回 {} 条,当前最大日期={}",

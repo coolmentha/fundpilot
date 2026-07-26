@@ -42,6 +42,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     void setUp() {
         today = ChinaTradingDate.toUtcDate(Instant.now());
         fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(FundCategory.BROAD_BASE);
@@ -176,6 +177,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     void confirmPendingTransactions_转换两腿当日净值均有_批量联动确认() {
         // task 07-08:转出腿确认后回填转入 amount 并递归确认转入腿
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setFundCategory(FundCategory.SECTOR);
@@ -215,6 +217,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     void confirmPendingTransactions_仅转出基金有净值_两腿都保持PENDING() {
         // B 当日无净值:转换必须原子确认,两腿都保留 PENDING
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setFundCategory(FundCategory.SECTOR);
@@ -271,6 +274,7 @@ class NavConfirmAndCancelServiceTest extends AbstractIntegrationTest {
     @Test
     void cancel_转换交易两条腿一起CANCELLED() {
         FundEntity fundB = new FundEntity();
+        fundB.setOwnerId(testActorId());
         fundB.setFundCode("161725");
         fundB.setFundName("招商白酒");
         fundB.setFundCategory(FundCategory.SECTOR);

@@ -45,6 +45,7 @@ class SignalQueryServiceTransactionTest extends AbstractIntegrationTest {
             tradingCalendarRepository.insertTradingDayIfAbsent(
                     today.minus(1, java.time.temporal.ChronoUnit.DAYS));
             FundEntity fund = new FundEntity();
+            fund.setOwnerId(testActorId());
             fund.setFundCode("510500");
             fund.setFundName("中证500ETF");
             fund.setFundCategory(FundCategory.BROAD_BASE);

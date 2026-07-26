@@ -36,11 +36,11 @@ export function useFund(id) {
     });
 }
 
-/** 基金字典搜索(ADR-0005):搜索框自动补全候选列表。 */
+/** 产品目录搜索:新建组合基金时提供自动补全候选。 */
 export function useFundSearch(query) {
     return useQuery({
         queryKey: ['fund-search', query],
-        queryFn: () => get(`/api/funds/search?q=${encodeURIComponent(query)}`),
+        queryFn: () => get(`/api/products?q=${encodeURIComponent(query)}`),
         enabled: !!query && query.trim().length > 0,
     });
 }
@@ -56,12 +56,22 @@ export function useSaveFund() {
     });
 }
 
-export function useArchiveFund() {
+export function useVoidPortfolioFund() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (id) => del(`/api/funds/${id}`),
-        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+        mutationFn: voidPortfolioFund,
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['transactions-pending']});
+            qc.invalidateQueries({queryKey: ['signals-pending']});
+            qc.invalidateQueries({queryKey: ['dca-plans']});
+        },
     });
+}
+
+export function voidPortfolioFund({portfolioFundId, reason}) {
+    return post(`/api/portfolio-funds/${portfolioFundId}/void`, {reason, confirmed: true});
 }
 export function useCreateFund() {
     const qc = useQueryClient();
@@ -277,12 +287,15 @@ export function usePendingTransactions() {
         ...realtimeQueryOptions,
     });
 }
-export function useFundFeeRates(fundId) {
+export function useFundFeeRates(fundCode) {
     return useQuery({
-        queryKey: ['fund-fee-rates', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/fee-rates`),
-        enabled: !!fundId,
+        queryKey: ['fund-fee-rates', fundCode],
+        queryFn: () => getFundFeeRates(fundCode),
+        enabled: !!fundCode,
     });
+}
+export function getFundFeeRates(fundCode) {
+    return get(`/api/products/${encodeURIComponent(fundCode)}/fees`);
 }
 export function useCancelTransaction() {
     const qc = useQueryClient();
@@ -347,14 +360,38 @@ export function useUpdateUserConfig() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => put('/api/user-config', body),
-        // 配置更新后既刷配置页,也强制失效指数行情查询——后端已发事件即时刷缓存,
-        // 前端必须重取才能立刻看到新关注指数,否则要等下一轮 5s 轮询。
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['user-config']});
-            qc.invalidateQueries({queryKey: ['market', 'indices']});
             invalidateDcaBudgetSummary(qc);
         },
     });
+}
+
+// ===== MarketData 关注指数 =====
+export function useWatchedIndices() {
+    return useQuery({
+        queryKey: ['market-data', 'watched-indices'],
+        queryFn: getWatchedIndices,
+    });
+}
+
+export function useReplaceWatchedIndices() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: replaceWatchedIndices,
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['market-data', 'watched-indices']});
+            qc.invalidateQueries({queryKey: ['market', 'indices']});
+        },
+    });
+}
+
+export function getWatchedIndices() {
+    return get('/api/market-data/watched-indices');
+}
+
+export function replaceWatchedIndices(indexCodes) {
+    return put('/api/market-data/watched-indices', {indexCodes});
 }
 
 // ===== 养基宝持仓导入 =====
@@ -391,7 +428,7 @@ export function useMarketIndicatorsToday(fundId) {
 const ADMIN_ACTION_PATHS = {
     generate: '/api/admin/signals/generate',
     'confirm-nav': '/api/admin/transactions/confirm-nav',
-    'sync-dict': '/api/admin/fund-dict/sync',
+    'sync-dict': '/api/admin/products/catalog/sync',
     'sync-calendar': '/api/admin/market-data/sync-trading-calendar',
     refresh: '/api/admin/market-data/refresh',
 };

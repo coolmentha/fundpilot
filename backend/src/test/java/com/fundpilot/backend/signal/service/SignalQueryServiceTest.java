@@ -65,6 +65,7 @@ class SignalQueryServiceTest extends AbstractIntegrationTest {
      */
     private FundEntity newFund(String code, String name) {
         FundEntity f = new FundEntity();
+        f.setOwnerId(testActorId());
         f.setFundCode(code);
         f.setFundName(name);
         f.setFundCategory(FundCategory.BROAD_BASE);

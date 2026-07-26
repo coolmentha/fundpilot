@@ -27,7 +27,7 @@ public interface FundRepository extends JpaRepository<FundEntity, Long> {
     int claimUnowned(@Param("ownerId") Long ownerId);
 
     /**
-     * 查所有 fundSubType 为 null 的行,供 {@code FundDictBackfillService.backfillAll} 批量回填。
+     * 查所有 fundSubType 为 null 的 legacy 行。
      */
     List<FundEntity> findByFundSubTypeIsNull();
 

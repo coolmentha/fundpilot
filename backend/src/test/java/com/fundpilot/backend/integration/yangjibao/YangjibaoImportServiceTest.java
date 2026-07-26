@@ -5,7 +5,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundPositionService;
 import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.fund.service.FundTransactionService;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +30,7 @@ class YangjibaoImportServiceTest {
     @Mock FundPositionService positionService;
     @Mock FundService fundService;
     @Mock FundTransactionService transactionService;
-    @Mock CurrentUserService currentUserService;
+    @Mock CurrentActorApi currentUserService;
     YangjibaoImportService service;
 
     @BeforeEach
@@ -39,7 +39,7 @@ class YangjibaoImportServiceTest {
         lenient().doAnswer(invocation -> {
             invocation.getArgument(1, Runnable.class).run();
             return null;
-        }).when(currentUserService).runAs(anyLong(), any(Runnable.class));
+        }).when(currentUserService).runAsSystem(anyLong(), any(Runnable.class));
         service = new YangjibaoImportService(client, fundRepository, positionService, fundService, transactionService,
                 currentUserService, Runnable::run);
         ReflectionTestUtils.setField(service, "ttl", Duration.ofMinutes(30));

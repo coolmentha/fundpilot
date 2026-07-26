@@ -1,6 +1,5 @@
 package com.fundpilot.backend.market.client;
 
-import com.fundpilot.backend.fund.client.EastmoneyFundFeeClient;
 import com.fundpilot.backend.market.service.MarketDataMetrics;
 import feign.Client;
 import feign.RequestInterceptor;
@@ -11,6 +10,7 @@ import feign.Feign;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -116,21 +116,6 @@ public class EastmoneyClientConfig {
     }
 
     /**
-     * 注册 {@link EastmoneyFundFeeClient} 为 Spring Bean(fundf10.eastmoney.com 域名,基金费率页)。
-     * 费率页在第五个域名 fundf10,故独立 target;共享同一限流桶。返回 HTML 由 FundFeeHtmlParser 解析。
-     */
-    @Bean
-    public EastmoneyFundFeeClient eastmoneyFundFeeClient(
-            @Value("${eastmoney.fundf10-base-url:https://fundf10.eastmoney.com}") String fundf10BaseUrl) {
-        return Feign.builder()
-                .client(new RateLimitedClient(SHARED_LIMITER))
-                .requestInterceptor(requestInterceptor())
-                .retryer(retryer())
-                .options(options())
-                .target(EastmoneyFundFeeClient.class, fundf10BaseUrl);
-    }
-
-    /**
      * 注册 {@link CsindexClient} 为 Spring Bean(www.csindex.com.cn 域名,中证指数公司官方接口)。
      * <p>借鉴 akshare {@code stock_zh_index_hist_csindex}:中证公司是 CSI 主题指数(930xxx)的发布方,
      * 其接口不封 IP、不要求 Referer,可替代被 VPS IP 限流的 push2his 拉指数日 K。
@@ -176,10 +161,11 @@ public class EastmoneyClientConfig {
      * @param metrics    外部数据源调用指标
      */
     @Bean
-    public MarketDataSource marketDataSource(CsindexMarketDataSource csindex,
-                                             EastmoneyMarketDataSource eastmoney,
-                                             ThsMarketDataSource ths,
-                                             MarketDataMetrics metrics) {
+    @Primary
+    public MarketDataSourceChain marketDataSource(CsindexMarketDataSource csindex,
+                                                  EastmoneyMarketDataSource eastmoney,
+                                                  ThsMarketDataSource ths,
+                                                  MarketDataMetrics metrics) {
         return new MarketDataSourceChain(java.util.List.of(csindex, ths, eastmoney), metrics);
     }
 

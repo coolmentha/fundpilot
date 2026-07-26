@@ -1,7 +1,6 @@
 package com.fundpilot.backend.fund.service.support;
 
-import com.fundpilot.backend.market.entity.TradingCalendarEntity;
-import com.fundpilot.backend.market.repository.TradingCalendarRepository;
+import com.fundpilot.backend.marketdata.adapter.api.tradingcalendar.TradingCalendarApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,26 +18,20 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TradingCalendarService {
 
-    private final TradingCalendarRepository tradingCalendarRepository;
+    private final TradingCalendarApi tradingCalendarApi;
 
     public boolean isTradingDay(Instant date) {
-        return tradingCalendarRepository.findByCalendarDate(date)
-                .map(TradingCalendarEntity::isTradingDay)
-                .orElse(false);
+        return tradingCalendarApi.isTradingDay(date);
     }
 
     /** 查给定日期之前最近一个 A 股交易日，周末会返回周五。 */
     public Optional<Instant> latestTradingDayOnOrBefore(Instant date) {
-        return tradingCalendarRepository
-                .findTopByCalendarDateLessThanEqualAndTradingDayTrueOrderByCalendarDateDesc(date)
-                .map(TradingCalendarEntity::getCalendarDate);
+        return tradingCalendarApi.latestOnOrBefore(date);
     }
 
     /** 查给定日期之前最近一个 A 股交易日，不包含给定日期。 */
     public Optional<Instant> latestTradingDayBefore(Instant date) {
-        return tradingCalendarRepository
-                .findTopByCalendarDateLessThanAndTradingDayTrueOrderByCalendarDateDesc(date)
-                .map(TradingCalendarEntity::getCalendarDate);
+        return tradingCalendarApi.latestBefore(date);
     }
 
     /**
@@ -47,6 +40,6 @@ public class TradingCalendarService {
      * @return (from, to] 区间内的交易日数
      */
     public long daysBetweenTradingDays(Instant fromExclusive, Instant toInclusive) {
-        return tradingCalendarRepository.countTradingDaysBetween(fromExclusive, toInclusive);
+        return tradingCalendarApi.countBetween(fromExclusive, toInclusive);
     }
 }

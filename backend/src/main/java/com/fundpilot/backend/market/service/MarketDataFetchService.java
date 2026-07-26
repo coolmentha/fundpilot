@@ -11,11 +11,11 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.IndexKline;
-import com.fundpilot.backend.market.client.MarketDataSource;
-import com.fundpilot.backend.market.entity.IndexKlineEntity;
+import com.fundpilot.backend.market.client.FundNavHistorySource;
+import com.fundpilot.backend.market.client.IndexKlineSource;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
 import com.fundpilot.backend.market.enums.WeeklyMacdState;
-import com.fundpilot.backend.market.repository.IndexKlineRepository;
+import com.fundpilot.backend.marketdata.adapter.api.indexkline.IndexKlineApi;
 import com.fundpilot.backend.market.service.support.*;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -40,7 +40,7 @@ import java.util.function.Supplier;
  * 的当日市场指标,落 {@code market_indicator_snapshot}。
  * <p>分批策略:{@code Math.abs(fundId.hashCode()) % 3 == batchNumber} 切片,
  * 14:30 跑 batch 0、14:40 跑 batch 1、14:50 跑 batch 2。
- * <p>失败降级:单只基金 {@link MarketDataSource} 抛异常时记日志继续,不影响其他基金;
+ * <p>失败降级:单只基金外部行情能力抛异常时记日志继续,不影响其他基金;
  * 该基金当天不写 snapshot,后续 {@code SignalGenerationJob} 读不到时出
  * {@code signalType=NONE, reason=INSUFFICIENT_MARKET_DATA}。
  */
@@ -55,9 +55,10 @@ public class MarketDataFetchService {
 
     private final FundRepository fundRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final MarketDataSource marketDataSource;
+    private final FundNavHistorySource navHistorySource;
+    private final IndexKlineSource indexKlineSource;
     private final MarketIndicatorSnapshotService snapshotService;
-    private final IndexKlineRepository indexKlineRepository;
+    private final IndexKlineApi indexKlineApi;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
     private final RequiresNewTransactionExecutor requiresNewTransactionExecutor;
@@ -123,7 +124,7 @@ public class MarketDataFetchService {
         }
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());
 
-        List<FundNavSnapshot> navHistory = marketDataSource.fetchNavHistory(fund.getFundCode());
+        List<FundNavSnapshot> navHistory = navHistorySource.fetchNavHistory(fund.getFundCode());
         if (navHistory == null || navHistory.isEmpty()) {
             throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY, "fund_code=" + fund.getFundCode() + " 净值历史为空");
         }
@@ -160,10 +161,10 @@ public class MarketDataFetchService {
             try {
                 // benchmarkIndexCode 是 "000300.SH" 人类可读格式,转 secid "1.000300" 调东方财富接口
                 String secid = SecidFormat.fromIndexCode(indexCode).orElse(indexCode);
-                String limit = indexKlineRepository.existsByIndexCode(indexCode)
+                String limit = indexKlineApi.exists(indexCode)
                         ? INDEX_KLINE_INCREMENTAL_LIMIT : INDEX_KLINE_FULL_LIMIT;
                 indexKline = indexKlines.computeIfAbsent(indexCode,
-                        ignored -> marketDataSource.fetchIndexKline(secid, limit));
+                        ignored -> indexKlineSource.fetchIndexKline(secid, limit));
                 VolumeStateCalculator.calculate(indexKline).ifPresent(template::setVolumeState);
             } catch (RuntimeException ex) {
                 log.warn("fund_id={} 指数 K 线拉取失败,volumeState 留空: {}", fundId, ex.getMessage());
@@ -223,27 +224,12 @@ public class MarketDataFetchService {
      */
     private void upsertIndexKline(String indexCode, IndexKline kline) {
         if (indexCode == null || indexCode.isBlank()) return;
-        Map<Instant, IndexKlineEntity> existing = indexKlineRepository
-                .findByIndexCodeOrderByTradeDateAsc(indexCode).stream()
-                .collect(java.util.stream.Collectors.toMap(IndexKlineEntity::getTradeDate, e -> e));
-        List<IndexKlineEntity> toSave = kline.bars().stream()
-                .map(b -> {
-                    IndexKlineEntity entity = existing.getOrDefault(b.date(), new IndexKlineEntity());
-                    if (entity.getId() == null) {
-                        entity.setIndexCode(indexCode);
-                        entity.setTradeDate(b.date());
-                    }
-                    entity.setOpen(b.open());
-                    entity.setHigh(b.high());
-                    entity.setLow(b.low());
-                    entity.setClose(b.close());
-                    entity.setVolume(b.volume());
-                    return entity;
-                })
+        List<IndexKlineApi.Bar> bars = kline.bars().stream()
+                .map(b -> new IndexKlineApi.Bar(b.date(), b.open(), b.high(), b.low(), b.close(), b.volume()))
                 .toList();
-        if (!toSave.isEmpty()) {
-            indexKlineRepository.saveAll(toSave);
-            log.debug("指数 K 线缓存写入 indexCode={} 更新 {} 条", indexCode, toSave.size());
+        if (!bars.isEmpty()) {
+            int changed = indexKlineApi.upsert(indexCode, bars);
+            log.debug("指数 K 线缓存写入 indexCode={} 更新 {} 条", indexCode, changed);
         }
     }
 }

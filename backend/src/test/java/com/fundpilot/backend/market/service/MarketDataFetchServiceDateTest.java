@@ -8,7 +8,7 @@ import com.fundpilot.backend.fund.service.FundNavUpdatedEvent;
 import com.fundpilot.backend.market.client.FundNavSnapshot;
 import com.fundpilot.backend.market.client.MarketDataSource;
 import com.fundpilot.backend.market.entity.MarketIndicatorSnapshotEntity;
-import com.fundpilot.backend.market.repository.IndexKlineRepository;
+import com.fundpilot.backend.marketdata.adapter.api.indexkline.IndexKlineApi;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -34,11 +34,11 @@ class MarketDataFetchServiceDateTest {
         FundNavHistoryRepository navRepository = mock(FundNavHistoryRepository.class);
         MarketDataSource marketDataSource = mock(MarketDataSource.class);
         MarketIndicatorSnapshotService snapshotService = mock(MarketIndicatorSnapshotService.class);
-        IndexKlineRepository indexKlineRepository = mock(IndexKlineRepository.class);
+        IndexKlineApi indexKlineApi = mock(IndexKlineApi.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         MarketDataFetchService service = new MarketDataFetchService(
-                fundRepository, navRepository, marketDataSource, snapshotService, indexKlineRepository, clock,
+                fundRepository, navRepository, marketDataSource, marketDataSource, snapshotService, indexKlineApi, clock,
                 eventPublisher, new RequiresNewTransactionExecutor());
 
         FundEntity fund = new FundEntity();
