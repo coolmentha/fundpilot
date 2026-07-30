@@ -1,4 +1,4 @@
-package com.fundpilot.backend.common;
+package com.fundpilot.backend.platform.transaction;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;

@@ -18,7 +18,7 @@ vi.mock('./pages/FundDetailPage.jsx', () => ({
     },
 }));
 vi.mock('./pages/DcaManagementPage.jsx', () => ({default: () => <div>dca</div>}));
-vi.mock('./pages/SignalsPage.jsx', () => ({default: () => <div>signals</div>}));
+vi.mock('./pages/SignalsPage.jsx', () => ({default: () => <div>advice</div>}));
 vi.mock('./pages/ConfirmPage.jsx', () => ({default: () => <div>confirm</div>}));
 vi.mock('./pages/SettingsPage.jsx', () => ({default: () => <div>settings</div>}));
 vi.mock('./pages/AdminPage.jsx', () => ({default: () => <div>admin</div>}));

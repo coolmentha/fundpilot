@@ -12,5 +12,7 @@ public interface PortfolioFundRepository {
 
     List<PortfolioFund> findByOwnerId(long ownerId);
 
+    List<PortfolioFund> findAllTracked();
+
     PortfolioFund save(PortfolioFund portfolioFund);
 }

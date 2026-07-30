@@ -20,6 +20,10 @@ class FundProductRepositoryImpl implements FundProductRepository {
     @Override public Optional<FundProduct> findById(long id) {
         return repository.findById(id).map(FundProductPersistenceMapper::toDomain);
     }
+    @Override public List<FundProduct> findByIds(Set<Long> ids) {
+        return ids.isEmpty() ? List.of() : repository.findAllById(ids).stream()
+                .map(FundProductPersistenceMapper::toDomain).toList();
+    }
     @Override public Optional<FundProduct> findByFundCode(String fundCode) {
         return repository.findByFundCode(fundCode).map(FundProductPersistenceMapper::toDomain);
     }

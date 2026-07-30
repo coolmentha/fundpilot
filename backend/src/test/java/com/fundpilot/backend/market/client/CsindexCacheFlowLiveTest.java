@@ -1,7 +1,6 @@
-package com.fundpilot.backend.market.client;
+package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 
-import com.fundpilot.backend.market.entity.IndexKlineEntity;
-import com.fundpilot.backend.market.repository.IndexKlineRepository;
+import com.fundpilot.backend.marketdata.adapter.api.indexkline.IndexKlineApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -27,7 +26,7 @@ class CsindexCacheFlowLiveTest extends AbstractIntegrationTest {
     MarketDataSource marketDataSource;
 
     @Autowired
-    IndexKlineRepository indexKlineRepository;
+    IndexKlineApi indexKlineApi;
 
     @Test
     void 链首csindex_拉取930713日K_成功返回OHLCV() {
@@ -62,27 +61,14 @@ class CsindexCacheFlowLiveTest extends AbstractIntegrationTest {
         IndexKline kline = marketDataSource.fetchIndexKline("2.930713", "6");
         String indexCode = "930713.CSI";
 
-        // 清理同 code 残留(事务内,末尾回滚)
-        indexKlineRepository.deleteAllInBatch(
-                indexKlineRepository.findByIndexCodeOrderByTradeDateAsc(indexCode));
+        List<IndexKlineApi.Bar> toInsert = kline.bars().stream().limit(5)
+                .map(b -> new IndexKlineApi.Bar(b.date(), b.open(), b.high(), b.low(), b.close(), b.volume()))
+                .toList();
+        indexKlineApi.upsert(indexCode, toInsert);
 
-        List<IndexKlineEntity> toInsert = kline.bars().stream().limit(5).map(b -> {
-            IndexKlineEntity e = new IndexKlineEntity();
-            e.setIndexCode(indexCode);
-            e.setTradeDate(b.date());
-            e.setOpen(b.open());
-            e.setHigh(b.high());
-            e.setLow(b.low());
-            e.setClose(b.close());
-            e.setVolume(b.volume());
-            return e;
-        }).toList();
-        indexKlineRepository.saveAll(toInsert);
-        indexKlineRepository.flush();
-
-        List<IndexKlineEntity> readBack = indexKlineRepository.findByIndexCodeOrderByTradeDateAsc(indexCode);
+        List<IndexKlineApi.Bar> readBack = indexKlineApi.findAll(indexCode);
         assertThat(readBack).hasSize(5);
-        assertThat(readBack.getFirst().getOpen()).isEqualByComparingTo(kline.bars().getFirst().open());
-        assertThat(readBack.getLast().getClose()).isEqualByComparingTo(kline.bars().get(4).close());
+        assertThat(readBack.getFirst().open()).isEqualByComparingTo(kline.bars().getFirst().open());
+        assertThat(readBack.getLast().close()).isEqualByComparingTo(kline.bars().get(4).close());
     }
 }

@@ -20,6 +20,16 @@ public class FundGroupingQueryHandler {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<GroupMembershipResult> memberships(long ownerId) {
+        return groups.memberships(ownerId).stream()
+                .map(group -> new GroupMembershipResult(group.portfolioFundId(), group.groupId(), group.groupName()))
+                .toList();
+    }
+
     public record GroupResult(long id, String name, int sortOrder, long portfolioFundCount) {
+    }
+
+    public record GroupMembershipResult(long portfolioFundId, long groupId, String groupName) {
     }
 }

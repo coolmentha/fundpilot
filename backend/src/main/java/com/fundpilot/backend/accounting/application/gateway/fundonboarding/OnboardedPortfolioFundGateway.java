@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 public interface OnboardedPortfolioFundGateway {
 
     /** 在调用方同一本地事务内建立组合关系；失败抛 {@link Rejected}，由 Handler 转为账目错误语义。 */
-    OnboardedPortfolioFund track(long ownerId, long fundProductId, boolean positionWarningEnabled,
+    OnboardedPortfolioFund track(Long legacyFundId, long ownerId, long fundProductId, boolean positionWarningEnabled,
                                  BigDecimal positionWarningRatio);
 
     record OnboardedPortfolioFund(long portfolioFundId, long ownerId, long fundProductId) {

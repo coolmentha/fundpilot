@@ -47,6 +47,11 @@ class PositionRepositoryImpl implements PositionRepository {
         return positions.findByOwnerId(ownerId).stream().map(PositionRepositoryImpl::toDomain).toList();
     }
 
+    @Override
+    public void removeByPortfolioFund(long portfolioFundId) {
+        positions.findByPortfolioFundId(portfolioFundId).ifPresent(positions::delete);
+    }
+
     private static Position toDomain(PositionJpaEntity entity) {
         return Position.rehydrate(entity.getId(),
                 entity.getVersion() == null ? 0L : entity.getVersion(),

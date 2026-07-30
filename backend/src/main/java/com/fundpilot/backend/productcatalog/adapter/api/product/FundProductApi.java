@@ -4,6 +4,7 @@ import com.fundpilot.backend.productcatalog.application.command.catalogsync.Prod
 import com.fundpilot.backend.productcatalog.application.query.productsearch.ProductSearchQueryHandler;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,10 @@ public class FundProductApi {
 
     public Optional<Product> findById(long id) {
         return queries.findById(id).map(FundProductApi::from);
+    }
+
+    public List<Product> findByIds(Set<Long> ids) {
+        return queries.findByIds(ids).stream().map(FundProductApi::from).toList();
     }
 
     public ProductReference ensure(EnsureProduct request) {

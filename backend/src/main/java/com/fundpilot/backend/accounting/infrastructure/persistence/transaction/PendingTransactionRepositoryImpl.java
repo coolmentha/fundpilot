@@ -11,14 +11,15 @@ class PendingTransactionRepositoryImpl implements PendingTransactionRepository {
     private final JdbcTemplate jdbcTemplate;
 
     @Override
-    public boolean existsByLegacyFundId(long legacyFundId) {
+    public boolean existsByPortfolioFund(long portfolioFundId, Long legacyFundId) {
         Boolean exists = jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1
                     FROM fund_transaction
-                    WHERE fund_id = ? AND status = 'PENDING' AND deleted_date IS NULL
+                    WHERE (portfolio_fund_id = ? OR (? IS NOT NULL AND fund_id = ?))
+                      AND status = 'PENDING' AND deleted_date IS NULL
                 )
-                """, Boolean.class, legacyFundId);
+                """, Boolean.class, portfolioFundId, legacyFundId, legacyFundId);
         return Boolean.TRUE.equals(exists);
     }
 }

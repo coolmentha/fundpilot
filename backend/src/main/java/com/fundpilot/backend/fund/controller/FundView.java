@@ -1,7 +1,6 @@
 package com.fundpilot.backend.fund.controller;
 
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.FundGroupEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.fund.enums.FundSubType;
@@ -9,11 +8,10 @@ import com.fundpilot.backend.fund.enums.InvestmentPhilosophy;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.enums.OperationMode;
 import com.fundpilot.backend.fund.service.FundPnlService;
-import com.fundpilot.backend.market.service.EstimateStatus;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -147,10 +145,6 @@ public record FundView(
     }
 
     private static List<Group> groupsOf(FundEntity fund) {
-        return fund.getGroups().stream()
-                .sorted(Comparator.comparingInt(FundGroupEntity::getSortOrder)
-                        .thenComparing(FundGroupEntity::getId))
-                .map(group -> new Group(group.getId(), group.getName()))
-                .toList();
+        return List.of();
     }
 }

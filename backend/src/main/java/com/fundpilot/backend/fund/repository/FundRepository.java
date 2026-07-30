@@ -4,7 +4,6 @@ import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,11 +12,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface FundRepository extends JpaRepository<FundEntity, Long> {
-    @Override
-    @EntityGraph(attributePaths = "groups")
-    List<FundEntity> findAll();
-
-    @EntityGraph(attributePaths = "groups")
     List<FundEntity> findAllByOwnerId(Long ownerId);
 
     Optional<FundEntity> findByIdAndOwnerId(Long id, Long ownerId);

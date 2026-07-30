@@ -3,7 +3,6 @@ package com.fundpilot.backend.fund.repository;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
-import com.fundpilot.backend.signal.enums.SignalType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -14,7 +13,6 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 public interface FundTransactionRepository extends JpaRepository<FundTransactionEntity, Long> {
 
@@ -57,20 +55,6 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
             "from fund_transaction where status='CONFIRMED' and deleted_date is null " +
             "and fund_id in (:fundIds) group by fund_id", nativeQuery = true)
     List<HoldingSharesProjection> aggregateConfirmedShares(@Param("fundIds") Collection<Long> fundIds);
-
-    /**
-     * 按基金 + 信号类型 + 档位 + 状态查交易(issue #13 移动止盈份额来源 A1 规则)。
-     * 找 {@code signalLog.signalType=ADD AND signalLog.triggerTier=:tier AND status=CONFIRMED} 的加仓交易,
-     * 取其 shares 作为该档移动止盈的卖出份额。建仓份额用 signalType=BUILD。
-     */
-    List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndSignalLogEntity_TriggerTierAndStatus(
-            Long fundId, SignalType signalType, Integer triggerTier, FundTransactionStatus status);
-
-    /**
-     * 按基金 + 信号类型 + 状态查交易(issue #13 建仓份额来源)。
-     */
-    List<FundTransactionEntity> findByFundEntity_IdAndSignalLogEntity_SignalTypeAndStatus(
-            Long fundId, SignalType signalType, FundTransactionStatus status);
 
     /**
      * 查某基金全部交易(归档级联逐个软删用,软删行由 @SQLRestriction 自动过滤)。
@@ -131,15 +115,6 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
             @Param("planIds") Collection<Long> planIds,
             @Param("start") java.time.Instant start,
             @Param("end") java.time.Instant end);
-
-    /** 同一 SignalLog 只能生成一笔未软删交易。 */
-    boolean existsBySignalLogEntity_Id(Long signalLogId);
-
-    @Query("select t.signalLogEntity.id from FundTransactionEntity t " +
-            "where t.signalLogEntity.id in :signalIds")
-    Set<Long> findRespondedSignalIds(@Param("signalIds") Collection<Long> signalIds);
-
-    List<FundTransactionEntity> findBySignalLogEntity_IdIn(Collection<Long> signalIds);
 
     /** 定投并发最终兜底：数据库唯一索引冲突时返回 0，不污染当前事务。 */
     @Modifying

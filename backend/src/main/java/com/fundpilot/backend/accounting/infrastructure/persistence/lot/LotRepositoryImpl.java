@@ -44,6 +44,14 @@ class LotRepositoryImpl implements LotRepository {
     }
 
     @Override
+    public List<Lot> findByPortfolioFundIds(Collection<Long> portfolioFundIds) {
+        if (portfolioFundIds.isEmpty()) {
+            return List.of();
+        }
+        return lots.findByPortfolioFundIdIn(portfolioFundIds).stream().map(LotRepositoryImpl::toDomain).toList();
+    }
+
+    @Override
     public void saveRedemptions(List<LotRedemption> newRedemptions) {
         if (newRedemptions.isEmpty()) {
             return;

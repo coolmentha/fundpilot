@@ -51,9 +51,29 @@ public class TransactionLedgerCommandHandler {
      * 转入腿并双向互指，返回转出（触发）腿。
      */
     @Transactional
-    public LedgerResult recordManual(long ownerId, long portfolioFundId, TransactionSource source,
+    public LedgerResult recordManual(long ownerId, long portfolioFundId, Source source,
                                      BigDecimal amount, BigDecimal shares, Instant tradeDate,
                                      Long targetPortfolioFundId) {
+        return recordManualInternal(ownerId, portfolioFundId,
+                source == null ? null : TransactionSource.valueOf(source.name()),
+                amount, shares, tradeDate, targetPortfolioFundId);
+    }
+
+    @Transactional
+    public LedgerResult recordManualForLegacyFund(long ownerId, long legacyFundId, Source source,
+                                                   BigDecimal amount, BigDecimal shares, Instant tradeDate,
+                                                   Long targetLegacyFundId) {
+        long portfolioFundId = requireTradableLegacyFund(ownerId, legacyFundId);
+        Long targetPortfolioFundId = targetLegacyFundId == null ? null
+                : requireTradableLegacyFund(ownerId, targetLegacyFundId);
+        return recordManualInternal(ownerId, portfolioFundId,
+                source == null ? null : TransactionSource.valueOf(source.name()),
+                amount, shares, tradeDate, targetPortfolioFundId);
+    }
+
+    private LedgerResult recordManualInternal(long ownerId, long portfolioFundId, TransactionSource source,
+                                              BigDecimal amount, BigDecimal shares, Instant tradeDate,
+                                              Long targetPortfolioFundId) {
         if (source == null) {
             throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED, "交易来源必填");
         }
@@ -88,6 +108,48 @@ public class TransactionLedgerCommandHandler {
         requireTradable(ownerId, portfolioFundId);
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
                 ownerId, source, amount, shares, tradeDate, signalLogId, dcaPlanId));
+        LedgerTransaction saved = transactions.save(transaction);
+        publishCreated(saved, clock.instant());
+        return LedgerResult.from(saved);
+    }
+
+    /** Discipline 建议回应创建待确认账目，建议 ID 是跨模块幂等键。 */
+    @Transactional
+    public LedgerResult placePendingForAdvice(long ownerId, long portfolioFundId, Source source,
+                                              BigDecimal amount, BigDecimal shares, Instant tradeDate,
+                                              long disciplineAdviceId) {
+        requireTradable(ownerId, portfolioFundId);
+        if (transactions.existsByDisciplineAdviceId(disciplineAdviceId)) {
+            throw failure(TransactionLedgerFailure.Code.ADVICE_ALREADY_RESPONDED,
+                    "建议 #" + disciplineAdviceId + " 已创建账目");
+        }
+        LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
+                ownerId, TransactionSource.valueOf(source.name()), amount, shares, tradeDate, null, null,
+                disciplineAdviceId));
+        LedgerTransaction saved = transactions.save(transaction);
+        publishCreated(saved, clock.instant());
+        return LedgerResult.from(saved);
+    }
+
+    /** 投资计划按北京业务日幂等创建待确认 INVEST 流水。 */
+    @Transactional
+    public LedgerResult placePendingForInvestmentPlan(long ownerId, long portfolioFundId,
+                                                       BigDecimal amount, Instant tradeDate,
+                                                       long investmentPlanId) {
+        requireTradable(ownerId, portfolioFundId);
+        if (tradeDate == null) {
+            throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED, "交易发生时间不能为空");
+        }
+        Instant businessDate = com.fundpilot.backend.sharedkernel.BusinessDay.toDateLabel(tradeDate);
+        Instant nextBusinessDate = businessDate.plus(java.time.Duration.ofDays(1));
+        if (transactions.existsByInvestmentPlanAndTradeDateBetween(
+                investmentPlanId, businessDate, nextBusinessDate)) {
+            throw failure(TransactionLedgerFailure.Code.INVESTMENT_PLAN_ALREADY_EXECUTED,
+                    "投资计划 #" + investmentPlanId + " 当日已生成账目");
+        }
+        LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
+                ownerId, TransactionSource.INVEST, amount, null, businessDate, null, null, null,
+                investmentPlanId));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, clock.instant());
         return LedgerResult.from(saved);
@@ -189,7 +251,8 @@ public class TransactionLedgerCommandHandler {
         LedgerTransaction inLeg = LedgerTransaction.rehydrate(
                 pendingInLegPlaceholder(targetPortfolioFundId, ownerId, tradeDate).id(),
                 targetPortfolioFundId, ownerId, TransactionSource.TRANSFER_IN, TransactionStatus.PENDING,
-                null, null, null, null, null, tradeDate, null, null, now, outLeg.id(), null, null);
+                null, null, null, null, null, tradeDate, null, null, now, outLeg.id(), null, null, null,
+                null);
         LedgerTransaction savedInLeg = transactions.save(inLeg);
 
         outLeg.linkRelated(savedInLeg.id());
@@ -207,7 +270,7 @@ public class TransactionLedgerCommandHandler {
                                                       Instant tradeDate) {
         return transactions.save(LedgerTransaction.rehydrate(0L, portfolioFundId, ownerId,
                 TransactionSource.TRANSFER_IN, TransactionStatus.PENDING, null, null, null, null, null,
-                tradeDate, null, null, clock.instant(), null, null, null));
+                tradeDate, null, null, clock.instant(), null, null, null, null, null));
     }
 
     private void publishCreated(LedgerTransaction saved, Instant occurredAt) {
@@ -272,22 +335,42 @@ public class TransactionLedgerCommandHandler {
         return new TransactionLedgerFailure(code, message);
     }
 
+    private long requireTradableLegacyFund(long ownerId, long legacyFundId) {
+        return portfolioFunds.findByLegacyFundId(legacyFundId)
+                .filter(fund -> fund.ownerId() == ownerId && fund.tradable())
+                .map(TradedPortfolioFundGateway.TradedPortfolioFund::portfolioFundId)
+                .orElseThrow(() -> failure(TransactionLedgerFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
+                        "基金不存在: " + legacyFundId));
+    }
+
     public record LedgerResult(long transactionId, long portfolioFundId, long ownerId, String source,
                                String status, BigDecimal amount, BigDecimal shares, BigDecimal nav,
                                BigDecimal fee, BigDecimal feeRate, Instant tradeDate,
-                               Instant confirmTime, Instant cancelTime, Long relatedTransactionId,
-                               Long signalLogId, Long dcaPlanId) {
+                               Instant confirmTime, Instant cancelTime, Instant createdDate, Long relatedTransactionId,
+                                Long signalLogId, Long dcaPlanId, Long disciplineAdviceId,
+                                Long investmentPlanId) {
         public static LedgerResult from(LedgerTransaction transaction) {
             return new LedgerResult(transaction.id(), transaction.portfolioFundId(),
                     transaction.ownerId(), transaction.source().name(), transaction.status().name(),
                     transaction.amount(), transaction.shares(), transaction.nav(), transaction.fee(),
                     transaction.feeRate(), transaction.tradeDate(), transaction.confirmTime(),
-                    transaction.cancelTime(), transaction.relatedTransactionId(),
-                    transaction.signalLogId(), transaction.dcaPlanId());
+                    transaction.cancelTime(), transaction.createdDate(), transaction.relatedTransactionId(),
+                    transaction.signalLogId(), transaction.dcaPlanId(), transaction.disciplineAdviceId(),
+                    transaction.investmentPlanId());
         }
     }
 
     public record TargetHoldingResult(BigDecimal previousShares, BigDecimal targetShares,
                                       LedgerResult transaction) {
+    }
+
+    public enum Source {
+        INCREASE,
+        DECREASE,
+        TRANSFER_IN,
+        TRANSFER_OUT,
+        INVEST,
+        ADJUST_IN,
+        ADJUST_OUT
     }
 }

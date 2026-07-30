@@ -17,7 +17,7 @@ class PortfolioCorrectionCommandHandlerTest {
 
     @Test
     void requiresExplicitConfirmation() {
-        var handler = handler(new FakeGateway(), legacyFundId -> false);
+        var handler = handler(new FakeGateway(), (portfolioFundId, legacyFundId) -> false);
 
         assertFailure(() -> handler.voidPortfolioFund(3L, 11L, "代码错误", false),
                 PortfolioCorrectionFailure.Code.VOID_CONFIRMATION_REQUIRED);
@@ -25,7 +25,7 @@ class PortfolioCorrectionCommandHandlerTest {
 
     @Test
     void requiresReason() {
-        var handler = handler(new FakeGateway(), legacyFundId -> false);
+        var handler = handler(new FakeGateway(), (portfolioFundId, legacyFundId) -> false);
 
         assertFailure(() -> handler.voidPortfolioFund(3L, 11L, " ", true),
                 PortfolioCorrectionFailure.Code.VOID_REASON_REQUIRED);
@@ -33,7 +33,7 @@ class PortfolioCorrectionCommandHandlerTest {
 
     @Test
     void hidesPortfolioFundOwnedByAnotherUser() {
-        var handler = handler(new FakeGateway(), legacyFundId -> false);
+        var handler = handler(new FakeGateway(), (portfolioFundId, legacyFundId) -> false);
 
         assertFailure(() -> handler.voidPortfolioFund(4L, 11L, "代码错误", true),
                 PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND);
@@ -41,7 +41,7 @@ class PortfolioCorrectionCommandHandlerTest {
 
     @Test
     void blocksTrackedPortfolioFundWithPendingTransactions() {
-        var handler = handler(new FakeGateway(), legacyFundId -> true);
+        var handler = handler(new FakeGateway(), (portfolioFundId, legacyFundId) -> true);
 
         assertFailure(() -> handler.voidPortfolioFund(3L, 11L, "代码错误", true),
                 PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_HAS_PENDING_TRANSACTIONS);
@@ -50,7 +50,7 @@ class PortfolioCorrectionCommandHandlerTest {
     @Test
     void voidsOnceAndKeepsFirstAuditOnRetry() {
         FakeGateway gateway = new FakeGateway();
-        var handler = handler(gateway, legacyFundId -> false);
+        var handler = handler(gateway, (portfolioFundId, legacyFundId) -> false);
 
         var first = handler.voidPortfolioFund(3L, 11L, " 代码错误 ", true);
         var retry = handler.voidPortfolioFund(3L, 11L, "不同原因", true);
@@ -68,7 +68,7 @@ class PortfolioCorrectionCommandHandlerTest {
         gateway.rejection = new CorrectablePortfolioFundGateway.Rejected(
                 CorrectablePortfolioFundGateway.Reason.NOT_FOUND,
                 "目标模块中的组合基金已变化", null);
-        var handler = handler(gateway, legacyFundId -> false);
+        var handler = handler(gateway, (portfolioFundId, legacyFundId) -> false);
 
         assertFailure(() -> handler.voidPortfolioFund(3L, 11L, "代码错误", true),
                 PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND);

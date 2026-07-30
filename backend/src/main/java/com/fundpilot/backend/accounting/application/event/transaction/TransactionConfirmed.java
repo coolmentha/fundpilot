@@ -11,5 +11,5 @@ public record TransactionConfirmed(long transactionId, long portfolioFundId, lon
                                    String source, BigDecimal amount, BigDecimal shares,
                                    BigDecimal nav, BigDecimal fee, Instant tradeDate,
                                    Instant confirmedAt, Long signalLogId, Long dcaPlanId,
-                                   long version, Instant occurredAt) {
+                                   Long disciplineAdviceId, Long investmentPlanId, long version, Instant occurredAt) {
 }

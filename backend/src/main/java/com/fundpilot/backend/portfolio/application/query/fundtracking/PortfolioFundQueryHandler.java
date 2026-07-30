@@ -31,6 +31,21 @@ public class PortfolioFundQueryHandler {
     }
 
     @Transactional(readOnly = true)
+    public List<PortfolioFundResult> findAllTracked() {
+        return portfolioFunds.findAllTracked().stream().map(PortfolioFundResult::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PortfolioFundResult> findById(long portfolioFundId) {
+        return portfolioFunds.findById(portfolioFundId).map(PortfolioFundResult::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PortfolioFundResult> findByLegacyFundId(long legacyFundId) {
+        return portfolioFunds.findByLegacyFundId(legacyFundId).map(PortfolioFundResult::from);
+    }
+
+    @Transactional(readOnly = true)
     public Optional<PortfolioFundResult> findOwnedByLegacyFundId(long ownerId, long legacyFundId) {
         return portfolioFunds.findByLegacyFundId(legacyFundId)
                 .filter(portfolioFund -> portfolioFund.ownerId() == ownerId)

@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {App, Button, Dropdown, Space, Table, Tag, Tooltip, Typography} from 'antd';
 import {
     CheckCircleOutlined,
@@ -15,6 +15,7 @@ import {
     useDcaManagementPlans,
     useDcaPlanAction,
     useDeleteDcaPlan,
+    useFunds,
     useUpdateDcaPlan,
 } from '../api/hooks.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
@@ -37,11 +38,16 @@ const actionCopy = {
 export default function DcaManagementPage() {
     const {message, modal} = App.useApp();
     const plansQuery = useDcaManagementPlans();
+    const fundsQuery = useFunds();
     const budgetQuery = useDcaBudgetSummary();
     const updatePlan = useUpdateDcaPlan();
     const planAction = useDcaPlanAction();
     const deletePlan = useDeleteDcaPlan();
     const [editing, setEditing] = useState(null);
+    const plans = useMemo(() => {
+        const fundsByPortfolioId = new Map((fundsQuery.data ?? []).map(fund => [fund.portfolioFundId, fund]));
+        return (plansQuery.data ?? []).map(plan => ({...fundsByPortfolioId.get(plan.portfolioFundId), ...plan}));
+    }, [fundsQuery.data, plansQuery.data]);
 
     const onEdit = async (values) => {
         await updatePlan.mutateAsync({id: editing.id, body: values});
@@ -172,14 +178,14 @@ export default function DcaManagementPage() {
                 <div className="section-heading">
                     <div>
                         <h2>定投计划</h2>
-                        <Text type="secondary">{plansQuery.data?.length ?? 0} 个计划</Text>
+                        <Text type="secondary">{plans.length} 个计划</Text>
                     </div>
                 </div>
                 {plansQuery.isError ? (
                     <QueryErrorState onRetry={plansQuery.refetch} description="定投计划加载失败"/>
                 ) : (
                     <Table rowKey="id" size="small" loading={plansQuery.isLoading}
-                           dataSource={plansQuery.data} columns={columns}
+                           dataSource={plans} columns={columns}
                            rowClassName={(plan) => plan.status !== 'EFFECTIVE' ? 'dca-plan-row-inactive' : ''}
                            pagination={{pageSize: 20, hideOnSinglePage: true}}
                            locale={{emptyText: <EmptyState description="暂无定投计划"/>}}/>

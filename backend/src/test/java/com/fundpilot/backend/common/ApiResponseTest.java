@@ -1,4 +1,4 @@
-package com.fundpilot.backend.common;
+package com.fundpilot.backend.platform.web;
 
 import org.junit.jupiter.api.Test;
 

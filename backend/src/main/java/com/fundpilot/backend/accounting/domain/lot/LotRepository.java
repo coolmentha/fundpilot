@@ -15,6 +15,9 @@ public interface LotRepository {
 
     List<Lot> findByPortfolioFund(long portfolioFundId);
 
+    /** 组合收益查询所需的批量 lot 读取。 */
+    List<Lot> findByPortfolioFundIds(Collection<Long> portfolioFundIds);
+
     void saveRedemptions(List<LotRedemption> redemptions);
 
     List<LotRedemption> findRedemptionsBySellTransactionIds(Collection<Long> sellTransactionIds);

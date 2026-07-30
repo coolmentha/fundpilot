@@ -43,6 +43,18 @@ public class PortfolioFundApi {
         return queries.findOwned(ownerId, portfolioFundId).map(PortfolioFundApi::from);
     }
 
+    public List<PortfolioFund> findAllTracked() {
+        return queries.findAllTracked().stream().map(PortfolioFundApi::from).toList();
+    }
+
+    public Optional<PortfolioFund> findById(long portfolioFundId) {
+        return queries.findById(portfolioFundId).map(PortfolioFundApi::from);
+    }
+
+    public Optional<PortfolioFund> findByLegacyFundId(long legacyFundId) {
+        return queries.findByLegacyFundId(legacyFundId).map(PortfolioFundApi::from);
+    }
+
     public Optional<PortfolioFund> findOwnedByLegacyFundId(long ownerId, long legacyFundId) {
         return queries.findOwnedByLegacyFundId(ownerId, legacyFundId).map(PortfolioFundApi::from);
     }

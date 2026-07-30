@@ -6,6 +6,7 @@ import java.util.Set;
 
 public interface FundProductRepository {
     Optional<FundProduct> findById(long id);
+    List<FundProduct> findByIds(Set<Long> ids);
     Optional<FundProduct> findByFundCode(String fundCode);
     List<FundProduct> findByFundCodes(Set<String> fundCodes);
     List<FundProduct> search(String query, int limit);

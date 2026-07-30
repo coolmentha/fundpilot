@@ -29,7 +29,7 @@ export default function App() {
                     <Route path="/funds" element={<FundsPage/>}/>
                     <Route path="/funds/:fundId" element={<FundDetailPage/>}/>
                     <Route path="/dca" element={<DcaManagementPage/>}/>
-                    <Route path="/signals" element={<SignalsPage/>}/>
+                    <Route path="/advice" element={<SignalsPage/>}/>
                     <Route path="/confirm" element={<ConfirmPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>
                     <Route path="/admin" element={<AdminRoute/>}/>

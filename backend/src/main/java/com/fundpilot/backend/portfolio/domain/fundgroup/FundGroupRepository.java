@@ -9,8 +9,13 @@ public interface FundGroupRepository {
 
     List<GroupSummary> summarize(long ownerId);
 
+    List<GroupMembership> memberships(long ownerId);
+
     void assignByNames(long ownerId, long portfolioFundId, Long legacyFundId, List<String> names);
 
     record GroupSummary(long id, String name, int sortOrder, long portfolioFundCount) {
+    }
+
+    record GroupMembership(long portfolioFundId, long groupId, String groupName, int sortOrder) {
     }
 }

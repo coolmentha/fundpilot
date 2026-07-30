@@ -142,7 +142,7 @@ describe('DCA plan deletion', () => {
     it('uses DELETE for the selected plan', () => {
         deleteDcaPlan(7);
 
-        expect(del).toHaveBeenCalledWith('/api/dca-plans/7');
+        expect(del).toHaveBeenCalledWith('/api/investment-plans/7');
     });
 
     it('invalidates all plan projections and budget summary', () => {

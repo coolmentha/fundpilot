@@ -48,6 +48,9 @@ class PortfolioFundRepositoryImpl implements PortfolioFundRepository {
         PortfolioFundJpaEntity entity = portfolioFund.id() == null
                 ? PortfolioFundPersistenceMapper.toEntity(portfolioFund)
                 : repository.findById(portfolioFund.id()).orElseThrow();
+        if (entity.getLegacyFundId() == null) {
+            entity.setLegacyFundId(createLegacyBridge(portfolioFund.ownerId(), portfolioFund.fundProductId()));
+        }
         PortfolioFundPersistenceMapper.copyMutable(portfolioFund, entity);
         PortfolioFund saved = PortfolioFundPersistenceMapper.toDomain(repository.save(entity));
         if (saved.validity() == PortfolioFundValidity.VOIDED && saved.legacyFundId() != null) {
@@ -58,5 +61,25 @@ class PortfolioFundRepositoryImpl implements PortfolioFundRepository {
                     """, Timestamp.from(saved.voidedAt()), saved.legacyFundId());
         }
         return saved;
+    }
+
+    @Override
+    public List<PortfolioFund> findAllTracked() {
+        return repository.findByValidityOrderById(PortfolioFundValidity.TRACKED).stream()
+                .map(PortfolioFundPersistenceMapper::toDomain)
+                .toList();
+    }
+
+    private long createLegacyBridge(long ownerId, long fundProductId) {
+        Long id = jdbcTemplate.queryForObject("""
+                INSERT INTO fund (version, created_date, updated_date, owner_id, product_id,
+                                  fund_code, fund_name, status, position_warning_enabled,
+                                  position_warning_ratio)
+                SELECT 0, now(), now(), ?, id, fund_code, fund_name, 'WATCHING', true, 0.30
+                FROM fund_product WHERE id = ? AND deleted_date IS NULL
+                RETURNING id
+                """, Long.class, ownerId, fundProductId);
+        if (id == null) throw new IllegalStateException("无法创建 legacy fund bridge: " + fundProductId);
+        return id;
     }
 }

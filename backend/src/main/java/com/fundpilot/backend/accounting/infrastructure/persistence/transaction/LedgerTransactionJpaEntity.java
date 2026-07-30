@@ -74,16 +74,12 @@ class LedgerTransactionJpaEntity {
 
     private BigDecimal fee;
 
-    @Column(name = "fee_rate")
     private BigDecimal feeRate;
 
-    @Column(name = "trade_date")
     private Instant tradeDate;
 
-    @Column(name = "confirm_time")
     private Instant confirmTime;
 
-    @Column(name = "cancel_time")
     private Instant cancelTime;
 
     @Column(name = "related_fund_transaction_id")
@@ -92,6 +88,11 @@ class LedgerTransactionJpaEntity {
     @Column(name = "signal_log_id")
     private Long signalLogId;
 
-    @Column(name = "dca_plan_id")
     private Long dcaPlanId;
+
+    @Column(name = "discipline_advice_id")
+    private Long disciplineAdviceId;
+
+    @Column(name = "investment_plan_id")
+    private Long investmentPlanId;
 }

@@ -23,7 +23,7 @@ vi.mock('../api/hooks.js', () => ({
 }));
 vi.mock('./FundTransactionTab.jsx', () => ({default: () => <div>交易流水内容</div>}));
 vi.mock('./FundStrategyTab.jsx', () => ({default: () => <div>策略参数内容</div>}));
-vi.mock('./FundSignalTab.jsx', () => ({default: () => <div>交易信号内容</div>}));
+vi.mock('./FundSignalTab.jsx', () => ({default: () => <div>纪律建议内容</div>}));
 vi.mock('./FundMarketTab.jsx', () => ({default: () => <div>行情指标内容</div>}));
 vi.mock('./FundDcaTab.jsx', () => ({default: () => <div>定投计划内容</div>}));
 
@@ -63,12 +63,12 @@ describe('FundDetailPage', () => {
         ));
 
         expect(container.textContent).toContain('待确认交易 2 笔');
-        expect(container.textContent).toContain('待回应信号 1 条');
+        expect(container.textContent).toContain('待回应建议 1 条');
         expect(container.textContent).toContain('持有不超过 7 天 1.50%');
         expect(container.textContent).toContain('持有超过 7 天 0.00%');
         expect(container.textContent).toContain('销售服务费（年化）');
         expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
-            '/confirm?fundId=1', '/signals?fundId=1', '/funds?editId=1',
+            '/confirm?fundId=1', '/advice?fundId=1', '/funds?editId=1',
         ]));
     });
 });

@@ -5,6 +5,7 @@ import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNavReposito
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -20,12 +21,29 @@ class PublishedNavRepositoryImpl implements PublishedNavRepository {
     }
 
     @Override
+    public List<PublishedNav> findLatestByProductIds(Set<Long> fundProductIds) {
+        return fundProductIds.isEmpty() ? List.of() : repository.findLatestByFundProductIds(fundProductIds)
+                .stream().map(PublishedNavPersistenceMapper::toDomain).toList();
+    }
+
+    @Override
+    public List<PublishedNav> findLatestTwoByProductIds(Set<Long> fundProductIds) {
+        return fundProductIds.isEmpty() ? List.of() : repository.findLatestTwoByFundProductIds(fundProductIds)
+                .stream().map(PublishedNavPersistenceMapper::toDomain).toList();
+    }
+
+    @Override
     public List<PublishedNav> findByProductIdAndDateRange(long fundProductId, Instant startInclusive,
                                                           Instant endExclusive) {
         return repository
                 .findByFundProductIdAndNavDateGreaterThanEqualAndNavDateLessThanOrderByNavDateAsc(
                         fundProductId, startInclusive, endExclusive)
                 .stream().map(PublishedNavPersistenceMapper::toDomain).toList();
+    }
+
+    @Override
+    public Optional<java.math.BigDecimal> findPeakAccumulatedNav(long fundProductId, Instant startInclusive) {
+        return repository.findPeakAccumulatedNav(fundProductId, startInclusive);
     }
 
     @Override

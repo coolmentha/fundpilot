@@ -1,6 +1,8 @@
 spring:
   modulith:
     detection-strategy: explicitly-annotated
+    events:
+      republish-outstanding-events-on-restart: true
   application:
     name: fundpilot-backend
   task:
@@ -43,6 +45,9 @@ management:
       show-details: when-authorized
 
 fundpilot:
+  investment-plan-scheduler:
+    # true 使用 InvestmentPlan + Accounting 新链路；false 仅在回切时恢复 legacy DCA 调度器。
+    enabled: ${INVESTMENT_PLAN_SCHEDULER_ENABLED:true}
   auth:
     bootstrap:
       username: ${FUNDPILOT_BOOTSTRAP_USERNAME:}

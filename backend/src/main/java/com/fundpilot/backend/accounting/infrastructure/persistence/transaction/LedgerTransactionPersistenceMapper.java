@@ -17,7 +17,8 @@ final class LedgerTransactionPersistenceMapper {
                 entity.getAmount(), entity.getShares(), entity.getNav(), entity.getFee(),
                 entity.getFeeRate(), entity.getTradeDate(), entity.getConfirmTime(),
                 entity.getCancelTime(), entity.getCreatedDate(), entity.getRelatedTransactionId(),
-                entity.getSignalLogId(), entity.getDcaPlanId());
+                entity.getSignalLogId(), entity.getDcaPlanId(), entity.getDisciplineAdviceId(),
+                entity.getInvestmentPlanId());
     }
 
     /** 把聚合状态写回实体；身份列（组合基金、legacy fund、来源、幂等键）只在新建时设置。 */
@@ -41,6 +42,8 @@ final class LedgerTransactionPersistenceMapper {
         entity.setSource(transaction.source().name());
         entity.setSignalLogId(transaction.signalLogId());
         entity.setDcaPlanId(transaction.dcaPlanId());
+        entity.setDisciplineAdviceId(transaction.disciplineAdviceId());
+        entity.setInvestmentPlanId(transaction.investmentPlanId());
         applyState(entity, transaction);
         return entity;
     }

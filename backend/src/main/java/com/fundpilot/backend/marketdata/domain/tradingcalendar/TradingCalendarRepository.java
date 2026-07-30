@@ -9,6 +9,7 @@ public interface TradingCalendarRepository {
     Optional<Instant> latestOnOrBefore(Instant date);
     Optional<Instant> latestBefore(Instant date);
     Optional<Instant> maxDate();
+    List<Instant> tradingDaysBetween(Instant startInclusive, Instant endExclusive);
     long countBetween(Instant fromExclusive, Instant toInclusive);
     int addIfAbsent(List<TradingDay> tradingDays);
 }

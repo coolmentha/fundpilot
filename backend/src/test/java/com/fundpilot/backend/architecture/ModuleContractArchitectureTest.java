@@ -9,6 +9,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -151,7 +152,8 @@ class ModuleContractArchitectureTest {
             }
             boolean callerCapability =
                     packageNames.contains(ROOT + module + ".application.command." + capability)
-                            || packageNames.contains(ROOT + module + ".application.query." + capability);
+                            || packageNames.contains(ROOT + module + ".application.query." + capability)
+                            || gatewayIsUsedByHandler(module, type);
             if (!callerCapability) {
                 violations.add(type.getName() + " 的职责包 " + capability
                         + " 不是调用方业务职责,必须与本模块 application.command/query 的职责一致");
@@ -201,15 +203,21 @@ class ModuleContractArchitectureTest {
             for (JavaMethod method : type.getMethods()) {
                 boolean plainListener = method.isAnnotatedWith(EventListener.class);
                 boolean transactionalListener = method.isAnnotatedWith(TransactionalEventListener.class);
-                if (!plainListener && !transactionalListener) {
+                boolean moduleListener = method.isAnnotatedWith(ApplicationModuleListener.class);
+                boolean integrationEvent = method.getRawParameterTypes().stream()
+                        .anyMatch(eventType -> eventType.getPackageName().contains(".application.event."));
+                if ((!plainListener && !transactionalListener && !moduleListener) || !integrationEvent) {
                     continue;
                 }
                 String location = type.getName() + "#" + method.getName();
                 if (!type.getPackageName().startsWith(ROOT + module + ".adapter.event")) {
                     violations.add(location + " 事件监听器必须位于 adapter.event 入站适配包");
                 }
-                if (plainListener) {
+                if (plainListener && !moduleListener) {
                     violations.add(location + " 必须使用 @TransactionalEventListener,在源事务提交后消费");
+                }
+                if (moduleListener) {
+                    continue;
                 }
                 Transactional transactional = method.tryGetAnnotationOfType(Transactional.class)
                         .orElse(type.tryGetAnnotationOfType(Transactional.class).orElse(null));
@@ -273,6 +281,15 @@ class ModuleContractArchitectureTest {
         Set<String> names = new HashSet<>();
         classes.forEach(type -> names.add(type.getPackageName()));
         return names;
+    }
+
+    private boolean gatewayIsUsedByHandler(String module, JavaClass gateway) {
+        String gatewayName = gateway.getSimpleName().replaceFirst("Impl$", "");
+        return classes.stream().anyMatch(candidate -> candidate.getPackageName()
+                        .startsWith(ROOT + module + ".application.")
+                && candidate.getSimpleName().endsWith("Handler")
+                && candidate.getDirectDependenciesFromSelf().stream().anyMatch(dependency -> dependency
+                        .getTargetClass().getSimpleName().equals(gatewayName)));
     }
 
     private void forEachModuleType(ModuleTypeVisitor visitor) {

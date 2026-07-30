@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.enums;
 
-import com.fundpilot.backend.common.EnumValue;
+import com.fundpilot.backend.sharedkernel.enums.EnumValue;
 
 public enum OperationMode implements EnumValue {
     OPEN_END("开放式"),

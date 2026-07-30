@@ -1,7 +1,7 @@
 package com.fundpilot.backend.fund.service.support;
 
-import com.fundpilot.backend.market.client.FundEstimateSnapshot;
-import com.fundpilot.backend.market.service.EstimateStatus;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

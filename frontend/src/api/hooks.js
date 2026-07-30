@@ -9,7 +9,7 @@ const realtimeQueryOptions = {
 
 // ===== 基金 =====
 export function useFunds() {
-    return useQuery({queryKey: ['funds'], queryFn: () => get('/api/funds'), ...realtimeQueryOptions});
+    return useQuery({queryKey: ['funds'], queryFn: () => get('/api/insights/portfolio/funds/current'), ...realtimeQueryOptions});
 }
 
 export function useFundGroups() {
@@ -30,7 +30,7 @@ export function useSaveFundGroups() {
 export function useFund(id) {
     return useQuery({
         queryKey: ['funds', id],
-        queryFn: () => get(`/api/funds/${id}`),
+        queryFn: () => get(`/api/insights/portfolio/funds/${id}`),
         enabled: !!id,
         ...realtimeQueryOptions,
     });
@@ -95,25 +95,25 @@ export function useUpdateFund() {
 }
 
 // ===== 策略 =====
-export function useStrategies(fundId) {
+export function useStrategies(portfolioFundId) {
     return useQuery({
-        queryKey: ['strategies', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/strategies`),
-        enabled: !!fundId,
+        queryKey: ['strategies', portfolioFundId],
+        queryFn: () => get(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}`),
+        enabled: !!portfolioFundId,
     });
 }
-export function useActiveStrategy(fundId) {
+export function useActiveStrategy(portfolioFundId) {
     return useQuery({
-        queryKey: ['strategy-active', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/strategies/active`),
-        enabled: !!fundId,
+        queryKey: ['strategy-active', portfolioFundId],
+        queryFn: () => get(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}/active`),
+        enabled: !!portfolioFundId,
     });
 }
-export function useStrategyRecommendation(fundId) {
+export function useStrategyRecommendation(portfolioFundId) {
     return useQuery({
-        queryKey: ['strategy-recommendation', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/strategies/recommendation`),
-        enabled: !!fundId,
+        queryKey: ['strategy-recommendation', portfolioFundId],
+        queryFn: () => get(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}/recommendation`),
+        enabled: !!portfolioFundId,
     });
 }
 const useInvalidateStrategies = (fundId) => {
@@ -123,45 +123,45 @@ const useInvalidateStrategies = (fundId) => {
         qc.invalidateQueries({queryKey: ['strategy-active', fundId]});
     };
 };
-export function useCreateStrategy(fundId) {
-    const onSuccess = useInvalidateStrategies(fundId);
-    return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/strategies`, body), onSuccess});
+export function useCreateStrategy(portfolioFundId) {
+    const onSuccess = useInvalidateStrategies(portfolioFundId);
+    return useMutation({mutationFn: (body) => post(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}`, body), onSuccess});
 }
 export function useUpdateStrategy(fundId) {
     const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({
-        mutationFn: ({id, body}) => put(`/api/strategies/${id}`, body),
+        mutationFn: ({id, body}) => put(`/api/discipline/strategies/${id}`, body),
         onSuccess,
     });
 }
 export function useStrategyAction(fundId) {
     const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({
-        mutationFn: ({id, action}) => post(`/api/strategies/${id}/${action}`),
+        mutationFn: ({id, action}) => post(`/api/discipline/strategies/${id}/${action}`),
         onSuccess,
     });
 }
 
 // ===== 定投计划 =====
-export function useDcaPlans(fundId) {
+export function useDcaPlans(portfolioFundId) {
     return useQuery({
-        queryKey: ['dca-plans', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/dca-plans`),
-        enabled: !!fundId,
+        queryKey: ['dca-plans', portfolioFundId],
+        queryFn: () => get(`/api/investment-plans/portfolio-funds/${portfolioFundId}`),
+        enabled: !!portfolioFundId,
     });
 }
 export function useDcaManagementPlans() {
     return useQuery({
         queryKey: ['dca-plans', 'all'],
-        queryFn: () => get('/api/dca-plans'),
+        queryFn: () => get('/api/investment-plans'),
         ...realtimeQueryOptions,
     });
 }
-export function useActiveDcaPlan(fundId) {
+export function useActiveDcaPlan(portfolioFundId) {
     return useQuery({
-        queryKey: ['dca-active', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/dca-plans/active`),
-        enabled: !!fundId,
+        queryKey: ['dca-active', portfolioFundId],
+        queryFn: () => get(`/api/investment-plans/portfolio-funds/${portfolioFundId}/active`),
+        enabled: !!portfolioFundId,
     });
 }
 export function invalidateDcaPlanQueries(queryClient) {
@@ -173,26 +173,26 @@ const useInvalidateDcaPlans = () => {
     const qc = useQueryClient();
     return () => invalidateDcaPlanQueries(qc);
 };
-export function useCreateDcaPlan(fundId) {
-    const onSuccess = useInvalidateDcaPlans(fundId);
-    return useMutation({mutationFn: (body) => post(`/api/funds/${fundId}/dca-plans`, body), onSuccess});
+export function useCreateDcaPlan(portfolioFundId) {
+    const onSuccess = useInvalidateDcaPlans();
+    return useMutation({mutationFn: (body) => post(`/api/investment-plans/portfolio-funds/${portfolioFundId}`, body), onSuccess});
 }
 export function useUpdateDcaPlan(fundId) {
     const onSuccess = useInvalidateDcaPlans(fundId);
     return useMutation({
-        mutationFn: ({id, body}) => put(`/api/dca-plans/${id}`, body),
+        mutationFn: ({id, body}) => put(`/api/investment-plans/${id}`, body),
         onSuccess,
     });
 }
 export function useDcaPlanAction(fundId) {
     const onSuccess = useInvalidateDcaPlans(fundId);
     return useMutation({
-        mutationFn: ({id, action}) => post(`/api/dca-plans/${id}/${action}`),
+        mutationFn: ({id, action}) => post(`/api/investment-plans/${id}/${action}`),
         onSuccess,
     });
 }
 export function deleteDcaPlan(id) {
-    return del(`/api/dca-plans/${id}`);
+    return del(`/api/investment-plans/${id}`);
 }
 export function useDeleteDcaPlan() {
     const onSuccess = useInvalidateDcaPlans();
@@ -202,8 +202,23 @@ export function useDeleteDcaPlan() {
 export function useDcaBudgetSummary() {
     return useQuery({
         queryKey: ['dca-budget-summary'],
-        queryFn: () => get('/api/dca/budget-summary'),
+        queryFn: () => get('/api/investment-plan-budget/summary'),
         ...realtimeQueryOptions,
+    });
+}
+
+export function useInvestmentPlanBudget() {
+    return useQuery({queryKey: ['investment-plan-budget'], queryFn: () => get('/api/investment-plan-budget')});
+}
+
+export function useUpdateInvestmentPlanBudget() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (monthlyBudget) => put('/api/investment-plan-budget', {monthlyBudget}),
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['investment-plan-budget']});
+            invalidateDcaBudgetSummary(qc);
+        },
     });
 }
 
@@ -212,29 +227,29 @@ export function invalidateDcaBudgetSummary(queryClient) {
 }
 
 // ===== 信号 =====
-export function useSignalsToday(fundId) {
+export function useSignalsToday(portfolioFundId) {
     return useQuery({
-        queryKey: ['signals-today', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/signals/today`),
-        enabled: !!fundId,
+        queryKey: ['signals-today', portfolioFundId],
+        queryFn: () => get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}/latest`),
+        enabled: !!portfolioFundId,
         ...realtimeQueryOptions,
     });
 }
-export function useSignalsRange(fundId, from, to) {
+export function useSignalsRange(portfolioFundId, from, to) {
     return useQuery({
-        queryKey: ['signals-range', fundId, from, to],
-        queryFn: () => get(`/api/funds/${fundId}/signals?from=${from}&to=${to}`),
-        enabled: !!fundId && !!from && !!to,
+        queryKey: ['signals-range', portfolioFundId, from, to],
+        queryFn: () => get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}?from=${from}&to=${to}`),
+        enabled: !!portfolioFundId && !!from && !!to,
     });
 }
 export function usePendingSignals() {
-    return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/signals/pending'), ...realtimeQueryOptions});
+    return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/discipline/advice/pending'), ...realtimeQueryOptions});
 }
 export function usePortfolioSummary() {
-    return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/portfolio/summary'), ...realtimeQueryOptions});
+    return useQuery({queryKey: ['portfolio-summary'], queryFn: () => get('/api/insights/portfolio/summary'), ...realtimeQueryOptions});
 }
 export function usePortfolioReturns() {
-    return useQuery({queryKey: ['portfolio-returns'], queryFn: () => get('/api/portfolio/returns'), ...realtimeQueryOptions});
+    return useQuery({queryKey: ['portfolio-returns'], queryFn: () => get('/api/insights/portfolio/returns'), ...realtimeQueryOptions});
 }
 export function usePortfolioReturnTrends(period, from, to) {
     const params = new URLSearchParams({period});
@@ -242,7 +257,7 @@ export function usePortfolioReturnTrends(period, from, to) {
     if (to) params.set('to', to);
     return useQuery({
         queryKey: ['portfolio-return-trends', period, from, to],
-        queryFn: () => get(`/api/portfolio/return-trends?${params}`),
+        queryFn: () => get(`/api/insights/portfolio/return-trends?${params}`),
     });
 }
 export function invalidateSignalQueries(queryClient) {
@@ -256,10 +271,12 @@ export function invalidateConfirmOperationQueries(queryClient) {
     queryClient.invalidateQueries({queryKey: ['fund-transactions']});
     queryClient.invalidateQueries({queryKey: ['funds']});
 }
-export function useConfirmOperation(fundId) {
+export function useConfirmOperation(_fundId) {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (body) => post(`/api/funds/${fundId}/operations`, body),
+        mutationFn: (body) => post(`/api/discipline/advice/${body.adviceId}/accept`, {
+            amount: body.actualAmount, shares: body.actualShares, tradeDate: null,
+        }),
         onSuccess: () => invalidateConfirmOperationQueries(qc),
     });
 }
@@ -267,17 +284,17 @@ export function useConfirmOperation(fundId) {
 export function useIgnoreSignal() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({fundId, signalId}) => post(`/api/funds/${fundId}/signals/${signalId}/ignore`),
+        mutationFn: ({signalId}) => post(`/api/discipline/advice/${signalId}/ignore`),
         onSuccess: () => invalidateSignalQueries(qc),
     });
 }
 
 // ===== 交易 =====
-export function useFundTransactions(fundId) {
+export function useFundTransactions(portfolioFundId) {
     return useQuery({
-        queryKey: ['fund-transactions', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/transactions`),
-        enabled: !!fundId,
+        queryKey: ['fund-transactions', portfolioFundId],
+        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/transactions`),
+        enabled: !!portfolioFundId,
     });
 }
 export function usePendingTransactions() {
@@ -339,29 +356,14 @@ export function useUpdateTransaction() {
 export function updatePendingTransaction(id, body) {
     return put(`/api/transactions/${id}`, body);
 }
-export function useCreateManualTransaction(fundId) {
+export function useCreateManualTransaction(portfolioFundId) {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (body) => post(`/api/funds/${fundId}/transactions`, body),
+        mutationFn: (body) => post(`/api/portfolio-funds/${portfolioFundId}/transactions`, body),
         onSuccess: () => {
             // 转换模式会在另一只基金建转入腿,需刷新全部基金摘要;非转换也刷新当前基金流水
-            qc.invalidateQueries({queryKey: ['fund-transactions', fundId]});
+            qc.invalidateQueries({queryKey: ['fund-transactions', portfolioFundId]});
             qc.invalidateQueries({queryKey: ['funds']});
-            invalidateDcaBudgetSummary(qc);
-        },
-    });
-}
-
-// ===== 用户配置 =====
-export function useUserConfig() {
-    return useQuery({queryKey: ['user-config'], queryFn: () => get('/api/user-config')});
-}
-export function useUpdateUserConfig() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: (body) => put('/api/user-config', body),
-        onSuccess: () => {
-            qc.invalidateQueries({queryKey: ['user-config']});
             invalidateDcaBudgetSummary(qc);
         },
     });
@@ -416,11 +418,11 @@ export function useRunYangjibaoImport() {
 }
 
 // ===== 行情 =====
-export function useMarketIndicatorsToday(fundId) {
+export function useMarketIndicatorsToday(portfolioFundId) {
     return useQuery({
-        queryKey: ['market-today', fundId],
-        queryFn: () => get(`/api/funds/${fundId}/market-indicators/today`),
-        enabled: !!fundId,
+        queryKey: ['market-today', portfolioFundId],
+        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/market-indicators/today`),
+        enabled: !!portfolioFundId,
     });
 }
 
@@ -533,11 +535,11 @@ function isChinaMarketOpen(now = new Date()) {
 }
 
 /** 基金 K 线/走势图数据。period: daily/weekly/monthly。盘中(A 股交易时段)每 30s 轮询刷新,非交易时段不轮询。 */
-export function useFundKline(fundId, period = 'daily') {
+export function useFundKline(portfolioFundId, period = 'daily') {
     return useQuery({
-        queryKey: ['funds', fundId, 'kline', period],
-        queryFn: () => get(`/api/funds/${fundId}/kline?period=${period}`),
-        enabled: !!fundId,
+        queryKey: ['funds', portfolioFundId, 'kline', period],
+        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/kline?period=${period}`),
+        enabled: !!portfolioFundId,
         // 函数式 refetchInterval:每次轮询后重新求值。交易时段 30s 刷一次,过 15:00 自动停。
         // react-query structuralSharing 保证数据不变时引用相等,KlineChart effect 不触发、图表不重绘。
         refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
@@ -545,11 +547,11 @@ export function useFundKline(fundId, period = 'daily') {
 }
 
 /** 基金详情当日分时数据，交易时段每 30 秒读取后端缓存。 */
-export function useFundIntraday(fundId) {
+export function useFundIntraday(portfolioFundId) {
     return useQuery({
-        queryKey: ['funds', fundId, 'intraday'],
-        queryFn: () => get(`/api/funds/${fundId}/intraday`),
-        enabled: !!fundId,
+        queryKey: ['funds', portfolioFundId, 'intraday'],
+        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/intraday`),
+        enabled: !!portfolioFundId,
         refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
     });
 }

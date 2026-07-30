@@ -1,4 +1,4 @@
-package com.fundpilot.backend.metrics;
+package com.fundpilot.backend.platform.observability;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;

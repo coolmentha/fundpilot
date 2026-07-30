@@ -1,4 +1,4 @@
-package com.fundpilot.backend.common;
+package com.fundpilot.backend.sharedkernel.time;
 
 import org.junit.jupiter.api.Test;
 

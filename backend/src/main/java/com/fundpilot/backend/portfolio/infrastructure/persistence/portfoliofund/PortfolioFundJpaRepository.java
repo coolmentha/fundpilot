@@ -13,4 +13,6 @@ interface PortfolioFundJpaRepository extends JpaRepository<PortfolioFundJpaEntit
     Optional<PortfolioFundJpaEntity> findByLegacyFundId(long legacyFundId);
 
     List<PortfolioFundJpaEntity> findByOwnerIdOrderById(long ownerId);
+
+    List<PortfolioFundJpaEntity> findByValidityOrderById(PortfolioFundValidity validity);
 }

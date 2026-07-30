@@ -217,7 +217,7 @@ export default function FundsPage() {
             title: '操作', width: 168, render: (_, row) => (
                 <Space size="small" wrap>
                     <Link to={`/funds/${row.id}`}>详情</Link>
-                    <Link to={`/signals?fundId=${row.id}`}>信号</Link>
+                    <Link to={`/advice?fundId=${row.id}`}>建议</Link>
                     <a onClick={() => openEdit(row)}>编辑</a>
                     <a className="danger-link" onClick={() => openVoid(row)}><DeleteOutlined/> 作废</a>
                 </Space>

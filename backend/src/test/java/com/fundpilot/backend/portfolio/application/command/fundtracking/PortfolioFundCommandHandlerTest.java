@@ -130,6 +130,11 @@ class PortfolioFundCommandHandlerTest {
         }
 
         @Override
+        public List<PortfolioFund> findAllTracked() {
+            return portfolioFunds.stream().filter(item -> item.validity().name().equals("TRACKED")).toList();
+        }
+
+        @Override
         public PortfolioFund save(PortfolioFund portfolioFund) {
             if (portfolioFund.id() != null) return portfolioFund;
             PortfolioFund saved = PortfolioFund.rehydrate(nextId++, portfolioFund.legacyFundId(), portfolioFund.ownerId(),

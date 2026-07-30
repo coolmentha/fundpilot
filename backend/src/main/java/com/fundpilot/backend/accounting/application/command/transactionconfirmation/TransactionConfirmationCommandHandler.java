@@ -105,6 +105,18 @@ public class TransactionConfirmationCommandHandler {
         return confirmWhereNavAvailable(pendings, fallbackDate);
     }
 
+    /** 新净值发布后，确认同一产品下净值已齐备的待确认流水。 */
+    @Transactional
+    public int confirmPendingForProduct(long fundProductId, Instant navDate) {
+        return portfolioFundsWithPendingTransactions().stream()
+                .filter(portfolioFundId -> portfolioFunds.find(portfolioFundId)
+                        .map(portfolioFund -> portfolioFund.tradable()
+                                && portfolioFund.fundProductId() == fundProductId)
+                        .orElse(false))
+                .mapToInt(portfolioFundId -> confirmPendingFor(portfolioFundId, navDate))
+                .sum();
+    }
+
     /** 返回仍有 PENDING 流水的组合基金 ID，供调度入口按基金拆分独立事务。 */
     @Transactional(readOnly = true)
     public List<Long> portfolioFundsWithPendingTransactions() {
@@ -118,6 +130,9 @@ public class TransactionConfirmationCommandHandler {
         int confirmed = 0;
         for (LedgerTransaction transaction : pendings) {
             if (transaction.status() != TransactionStatus.PENDING) {
+                continue;
+            }
+            if (!isTradable(transaction)) {
                 continue;
             }
             Instant dayLabel = BusinessDay.toDateLabel(transaction.effectiveTradeDate(fallbackDate));
@@ -140,6 +155,9 @@ public class TransactionConfirmationCommandHandler {
     private int tryConfirmConversion(ConversionPair conversion, Instant dayLabel, List<Long> confirmed) {
         LedgerTransaction outLeg = conversion.outLeg();
         LedgerTransaction inLeg = conversion.inLeg();
+        if (!isTradable(outLeg) || !isTradable(inLeg)) {
+            return 0;
+        }
 
         if (outLeg.status() == TransactionStatus.CONFIRMED
                 && inLeg.status() == TransactionStatus.PENDING) {
@@ -248,7 +266,7 @@ public class TransactionConfirmationCommandHandler {
         LedgerTransaction saved = transactions.save(transaction);
         events.publishCancelled(new TransactionCancelled(saved.id(), saved.portfolioFundId(),
                 saved.ownerId(), saved.source().name(), saved.signalLogId(), saved.dcaPlanId(),
-                now, saved.id(), now));
+                saved.disciplineAdviceId(), saved.investmentPlanId(), now, saved.id(), now));
         cancelled.add(saved);
     }
 
@@ -256,7 +274,7 @@ public class TransactionConfirmationCommandHandler {
         events.publishConfirmed(new TransactionConfirmed(saved.id(), saved.portfolioFundId(),
                 saved.ownerId(), saved.source().name(), saved.amount(), saved.shares(), saved.nav(),
                 saved.fee(), saved.tradeDate(), saved.confirmTime(), saved.signalLogId(),
-                saved.dcaPlanId(), saved.id(), occurredAt));
+                saved.dcaPlanId(), saved.disciplineAdviceId(), saved.investmentPlanId(), saved.id(), occurredAt));
     }
 
     /** 卖出份额不得超过 CONFIRMED 事实持仓。 */
@@ -316,6 +334,12 @@ public class TransactionConfirmationCommandHandler {
                     "组合基金已作废，不可记账: " + transaction.portfolioFundId());
         }
         return portfolioFund;
+    }
+
+    private boolean isTradable(LedgerTransaction transaction) {
+        return portfolioFunds.find(transaction.portfolioFundId())
+                .map(TradedPortfolioFundGateway.TradedPortfolioFund::tradable)
+                .orElse(false);
     }
 
     private LedgerTransaction requireOwned(long ownerId, long transactionId) {

@@ -47,7 +47,7 @@ describe('DashboardPage', () => {
     beforeEach(() => {
         api.useFunds.mockReturnValue({data: [{id: 7, fundName: '示例基金', status: 'HOLDING'}], isLoading: false});
         api.usePendingSignals.mockReturnValue({
-            data: [{id: 11, fundId: 7, signalType: 'SELL', suggestedMeasure: null}],
+            data: [{id: 11, fundId: 7, action: 'SELL', suggestedMeasure: null}],
             isLoading: false,
         });
         api.usePortfolioSummary.mockReturnValue({data: {}, isLoading: false});
@@ -60,7 +60,7 @@ describe('DashboardPage', () => {
         container = null;
     });
 
-    it('routes a pending signal to the signal workflow for its fund', async () => {
+    it('routes pending advice to the advice workflow for its fund', async () => {
         container = document.createElement('div');
         document.body.appendChild(container);
         root = createRoot(container);
@@ -72,9 +72,9 @@ describe('DashboardPage', () => {
         ));
 
         const action = [...container.querySelectorAll('button')]
-            .find((button) => button.textContent === '去确认');
+            .find((button) => button.textContent === '去回应');
         await act(async () => action.click());
 
-        expect(container.querySelector('output').textContent).toBe('/signals?fundId=7');
+        expect(container.querySelector('output').textContent).toBe('/advice?fundId=7');
     });
 });

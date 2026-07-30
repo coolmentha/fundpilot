@@ -61,7 +61,7 @@ export default function ConfirmPage() {
                 {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
                 {row.qdii && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
-                {row.signalLogId && <Link to={`/signals?fundId=${row.fundId}`}>来源信号 #{row.signalLogId}</Link>}
+                {row.signalLogId && <Link to={`/advice?fundId=${row.fundId}`}>来源建议 #{row.signalLogId}</Link>}
                 {row.signalReason && <Text type="secondary">
                     {row.signalReason === 'LOGIC_BROKEN' ? '逻辑破坏止损：建议清仓' : '移动止盈：收割部分浮盈'}
                 </Text>}

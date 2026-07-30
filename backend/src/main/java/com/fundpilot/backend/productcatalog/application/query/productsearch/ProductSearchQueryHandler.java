@@ -4,6 +4,7 @@ import com.fundpilot.backend.productcatalog.domain.product.FundProduct;
 import com.fundpilot.backend.productcatalog.domain.product.FundProductRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,11 @@ public class ProductSearchQueryHandler {
     public Optional<ProductResult> findById(long id) {
         if (id <= 0) return Optional.empty();
         return products.findById(id).map(ProductResult::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductResult> findByIds(Set<Long> ids) {
+        return products.findByIds(ids).stream().map(ProductResult::from).toList();
     }
 
     public record ProductResult(long id, String fundCode, String fundName, Type productType,

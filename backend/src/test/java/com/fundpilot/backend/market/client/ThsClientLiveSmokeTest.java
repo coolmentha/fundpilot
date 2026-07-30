@@ -1,4 +1,4 @@
-package com.fundpilot.backend.market.client;
+package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 
 import feign.Feign;
 import org.junit.jupiter.api.Tag;

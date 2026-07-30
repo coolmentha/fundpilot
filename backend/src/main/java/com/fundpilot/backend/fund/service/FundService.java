@@ -1,27 +1,21 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.ErrorCode;
+import com.fundpilot.backend.accounting.adapter.api.fundonboarding.PortfolioFundOnboardingApi;
+import com.fundpilot.backend.discipline.adapter.api.classification.DisciplineClassificationApi;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
 import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
-import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundStatus;
-import com.fundpilot.backend.fund.enums.FundTransactionSource;
-import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
-import com.fundpilot.backend.fund.event.FundCreatedEvent;
-import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.FundTypeClassification;
 import com.fundpilot.backend.fund.service.support.FundTypeClassifier;
-import com.fundpilot.backend.market.service.MarketDataFetchService;
+import com.fundpilot.backend.marketdata.adapter.api.indicatorrefresh.MarketIndicatorRefreshApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,16 +46,13 @@ public class FundService {
 
     private final FundRepository fundRepository;
     private final FundPnlService fundPnlService;
-    private final MarketDataFetchService marketDataFetchService;
-    private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final FundTransactionRepository fundTransactionRepository;
-    private final TransactionConfirmSupport transactionConfirmSupport;
-    private final FundGroupService fundGroupService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final MarketIndicatorRefreshApi marketDataRefresh;
     private final CurrentActorApi currentActorApi;
     private final FundProductApi productCatalogApi;
     private final PortfolioFundApi portfolioFundApi;
     private final PortfolioGroupingApi portfolioGroupingApi;
+    private final PortfolioFundOnboardingApi onboardingApi;
+    private final DisciplineClassificationApi disciplineClassifications;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
 
@@ -93,7 +84,7 @@ public class FundService {
      * <p>fundCode/fundName 二选一即可(CONTEXT.md「基金字典搜索」);两者都缺 → 业务异常。
      * <p><b>初始持仓录入(ADR-0012)</b>:initialHoldingShares 有值时走建仓路径——FundStatus→HOLDING、
      * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认,
-     * 对齐 {@code SignalOperationService.handleBuild} 的状态流转,但确认时机尊重已有持仓盘点语义
+     * 对齐建议回应的状态流转,但确认时机尊重已有持仓盘点语义
      * (用已公布净值核算金额,不等 NavConfirmJob)。无净值可核算则报错不让建(同步确认的硬前提)。
      * <p>initialHoldingShares 为 null → 走原 PENDING_HOLDING 流程；非正数拒绝。
      * <p>@Transactional:initialHoldingShares 路径需写基金+交易原子。同步建仓必须取得净值，
@@ -128,91 +119,39 @@ public class FundService {
                 : (fallback != null ? fallback.benchmarkIndexCode() : null));
         fund.setPositionWarningEnabled(request.positionWarningEnabled() == null || request.positionWarningEnabled());
         fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
-        var groups = fundGroupService.resolveNames(request.groupNames());
-        if (groups != null) {
-            fund.setGroups(groups);
-        }
-
         validateFundCategory(fund.getFundCategory());
         FundEntity saved = fundRepository.save(fund);
-        var portfolioFund = portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
-                saved.getId(), userId, Objects.requireNonNull(saved.getProductId()),
-                saved.isPositionWarningEnabled(), saved.getPositionWarningRatio()));
-        portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
-                userId, portfolioFund.id(), request.groupNames()));
-
-        // initialHoldingShares 有值 → 初始持仓建仓(ADR-0012);须在拉净值之后生成交易核算金额。
+        // 初始持仓先补齐行情；Accounting 在同一本地事务内创建 PortfolioFund、账目、lot 与 Position。
         if (initialHoldingShares != null) {
-            marketDataFetchService.fetchOneFund(saved.getId());
-            openWithExistingPosition(saved, initialHoldingShares, request.costPerShare(), request.openedAt());
-        } else {
-            eventPublisher.publishEvent(new FundCreatedEvent(saved.getId()));
+            marketDataRefresh.refreshOne(new MarketIndicatorRefreshApi.RefreshTarget(saved.getId(),
+                    Objects.requireNonNull(saved.getProductId()), saved.getFundCode(), saved.getFundName(),
+                    saved.getBenchmarkIndexCode(), saved.getInvestmentTarget() == null ? null
+                    : MarketIndicatorRefreshApi.InvestmentTarget.valueOf(saved.getInvestmentTarget().name())));
         }
-
-        return FundView.from(saved, portfolioFund.id());
-    }
-
-    /**
-     * 初始持仓建仓(ADR-0012 + ADR-0013):用最近一期已公布净值同步确认一条 INCREASE 交易 + FundStatus→HOLDING。
-     * 状态流转对齐 {@code SignalOperationService.handleBuild},但确认时机同步，不等 NavConfirmJob。
-     *
-     * <p>costPerShare:用户填的成本单价(可 null,不填默认 T-1 净值;>0 校验);存入 FundEntity.costPerShare。
-     * <p>openedAt:用户填的大致建仓时点(影响移动止盈持仓期高点起算),null 则用 now;须 ≤ 今天。
-     *
-     * @param initialHoldingShares 实际持有份额
-     * @param costPerShare       成本单价(可 null,默认 T-1 净值)
-     * @param openedAt           建仓时间(可 null)
-     * @throws BusinessException 无净值历史可核算时抛 {@link ErrorCode#NAV_HISTORY_EMPTY};
-     *                           openedAt 晚于今天抛 {@link ErrorCode#OPENED_AT_IN_FUTURE};
-     *                           costPerShare ≤ 0 抛参数校验错
-     */
-    private void openWithExistingPosition(FundEntity fund, BigDecimal initialHoldingShares,
-                                          BigDecimal costPerShare, Instant openedAt) {
-        Instant now = Instant.now();
-        // openedAt 未来校验:不允许晚于今天(用户手滑填未来日期)
-        if (openedAt != null && openedAt.isAfter(now)) {
-            throw new BusinessException(ErrorCode.OPENED_AT_IN_FUTURE,
-                    "建仓时间不能晚于今天");
+        PortfolioFundOnboardingApi.OnboardingResult onboarding;
+        try {
+            onboarding = onboardingApi.onboard(new PortfolioFundOnboardingApi.OnboardPortfolioFund(
+                    saved.getId(), userId, Objects.requireNonNull(saved.getProductId()),
+                    saved.isPositionWarningEnabled(), saved.getPositionWarningRatio(), initialHoldingShares,
+                    request.costPerShare(), request.openedAt()));
+        } catch (PortfolioFundOnboardingApi.Failure failure) {
+            throw onboardingFailure(failure);
         }
-        // 最近一期已公布净值(findTop2...Desc 取最近一条;新建基金拉取异步,此处取已落库的)
-        List<FundNavHistoryEntity> recent = fundNavHistoryRepository
-                .findTop2ByFundEntity_IdOrderByNavDateDesc(fund.getId());
-        if (recent.isEmpty() || recent.get(0).getNav() == null
-                || recent.get(0).getNav().signum() <= 0) {
-            throw new BusinessException(ErrorCode.NAV_HISTORY_EMPTY,
-                    "基金 " + fund.getId() + " 无净值历史,无法确认现有份额持仓,请先补净值或稍后建仓");
+        portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
+                userId, onboarding.portfolioFundId(), request.groupNames()));
+        disciplineClassifications.set(new DisciplineClassificationApi.SetClassification(
+                userId, onboarding.portfolioFundId(),
+                DisciplineClassificationApi.Category.valueOf(saved.getFundCategory().name()),
+                request.fundCategory() == null
+                        ? DisciplineClassificationApi.Source.DEFAULT_SUGGESTION
+                        : DisciplineClassificationApi.Source.USER_CONFIRMED));
+        try {
+            marketDataRefresh.refreshOneForPortfolioFund(onboarding.portfolioFundId());
+        } catch (RuntimeException exception) {
+            log.warn("基金开户后刷新行情失败 portfolio_fund={}: {}", onboarding.portfolioFundId(),
+                    exception.getMessage());
         }
-        BigDecimal navValue = recent.get(0).getNav();
-        Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
-
-        // 成本单价:用户填则用,不填默认 T-1 净值;>0 校验
-        BigDecimal effectiveCostPerShare = costPerShare != null ? costPerShare : navValue;
-        if (effectiveCostPerShare.signum() <= 0) {
-            throw new BusinessException(ErrorCode.COST_PER_SHARE_INVALID, "成本单价必须大于 0");
-        }
-
-        // 建仓交易:INCREASE(对齐 handleBuild),直接保存事实份额，金额按最近净值核算。
-        FundTransactionEntity tx = new FundTransactionEntity();
-        tx.setFundEntity(fund);
-        tx.setSource(FundTransactionSource.INCREASE);
-        tx.setAmount(initialHoldingShares.multiply(navValue, MATH));
-        tx.setShares(initialHoldingShares);
-        tx.setNav(navValue);
-        tx.setConfirmTime(effectiveOpenedAt);
-        tx.setTradeDate(effectiveOpenedAt);
-        tx.setStatus(FundTransactionStatus.CONFIRMED);
-        tx.setSignalLogEntity(null);
-        FundTransactionEntity savedTx = fundTransactionRepository.save(tx);
-        transactionConfirmSupport.onExistingPositionConfirmed(savedTx, effectiveCostPerShare);
-
-        // 状态流转:对齐 handleBuild。openedAt/confirmTime 均用用户填建仓时间(6079ba1:建仓流水用建仓时间)
-        fund.setStatus(FundStatus.HOLDING);
-        fund.setOpenedAt(effectiveOpenedAt);
-        fund.setCostPerShare(effectiveCostPerShare);
-        fundRepository.save(fund);
-        log.info("初始持仓建仓 fund={} shares={} nav={} amount={} costPerShare={} openedAt={} confirmTime={}",
-                 fund.getId(), initialHoldingShares, navValue, tx.getAmount(), effectiveCostPerShare, effectiveOpenedAt,
-                 tx.getConfirmTime());
+        return FundView.from(saved, onboarding.portfolioFundId());
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */
@@ -250,10 +189,6 @@ public class FundService {
         if (request.positionWarningRatio() != null) {
             fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
         }
-        var groups = fundGroupService.resolveNames(request.groupNames());
-        if (groups != null) {
-            fund.setGroups(groups);
-        }
         fund.setProductId(ensureProduct(fund).id());
         FundEntity saved = fundRepository.save(fund);
         var portfolioFund = requirePortfolioFund(saved);
@@ -262,6 +197,12 @@ public class FundService {
                 saved.getPositionWarningRatio()));
         portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
                 saved.getOwnerId(), portfolioFund.id(), request.groupNames()));
+        if (request.fundCategory() != null) {
+            disciplineClassifications.set(new DisciplineClassificationApi.SetClassification(
+                    saved.getOwnerId(), portfolioFund.id(),
+                    DisciplineClassificationApi.Category.valueOf(saved.getFundCategory().name()),
+                    DisciplineClassificationApi.Source.USER_CUSTOMIZED));
+        }
         return FundView.from(saved, portfolioFund.id());
     }
 
@@ -294,6 +235,19 @@ public class FundService {
                     "仓位提醒线必须大于 0 且不超过 100%");
         }
         return value;
+    }
+
+    /** legacy Web 入口暂保留既有错误码；新开户事实已由 Accounting 持有。 */
+    private BusinessException onboardingFailure(PortfolioFundOnboardingApi.Failure failure) {
+        ErrorCode code = switch (failure.code()) {
+            case INITIAL_HOLDING_SHARES_INVALID -> ErrorCode.INITIAL_HOLDING_SHARES_INVALID;
+            case COST_PER_SHARE_INVALID -> ErrorCode.COST_PER_SHARE_INVALID;
+            case OPENED_AT_IN_FUTURE -> ErrorCode.OPENED_AT_IN_FUTURE;
+            case NAV_UNAVAILABLE -> ErrorCode.NAV_HISTORY_EMPTY;
+            case PRODUCT_NOT_FOUND, PORTFOLIO_FUND_ALREADY_TRACKED, POSITION_WARNING_INVALID ->
+                    ErrorCode.FUND_NOT_FOUND;
+        };
+        return new BusinessException(code, failure.getMessage());
     }
 
     private PortfolioFundApi.PortfolioFund requirePortfolioFund(FundEntity fund) {

@@ -29,13 +29,11 @@ public class PortfolioCorrectionCommandHandler {
                 .orElseThrow(() -> new PortfolioCorrectionFailure(
                         PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
                         "组合基金不存在: " + portfolioFundId));
-
         if (portfolioFund.validity() == CorrectablePortfolioFundGateway.Validity.TRACKED
-                && portfolioFund.legacyFundId() != null
-                && pendingTransactions.existsByLegacyFundId(portfolioFund.legacyFundId())) {
+                && pendingTransactions.existsByPortfolioFund(portfolioFundId, portfolioFund.legacyFundId())) {
             throw new PortfolioCorrectionFailure(
                     PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_HAS_PENDING_TRANSACTIONS,
-                    "基金存在待确认交易，请先确认或撤销后再作废");
+                    "组合基金存在待确认交易，不能作废");
         }
 
         try {

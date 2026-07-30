@@ -8,7 +8,7 @@ import org.springframework.context.ApplicationContext;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Controller 层冒烟测试(issue #16):验证应用启动 + 8 个 Controller bean 全部注入成功。
+ * Controller 层冒烟测试(issue #16):验证应用启动和当前 Controller bean 注入成功。
  * <p>issue #16 明示本期不写端到端 MockMvc 测试,只验证启动 + 冒烟通。
  * 上下文加载成功即证明端点路径无冲突、所有依赖注入正常。
  */
@@ -18,22 +18,25 @@ class ControllerSmokeTest extends AbstractIntegrationTest {
 
     @Test
     void allControllersLoaded() {
-        // 8 个 Controller 全部应作为 bean 加载(路径/依赖注入无误即通过)
+        // 当前 Controller 应作为 bean 加载(路径/依赖注入无误即通过)
         assertThat(applicationContext.getBean(
                 com.fundpilot.backend.fund.controller.FundController.class)).isNotNull();
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.strategy.controller.StrategyController.class)).isNotNull();
+                com.fundpilot.backend.accounting.adapter.web.transactionhistory.TransactionController.class))
+                .isNotNull();
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.signal.controller.SignalController.class)).isNotNull();
+                com.fundpilot.backend.marketdata.adapter.web.klinequery.FundKlineController.class)).isNotNull();
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.signal.controller.SignalOperationController.class)).isNotNull();
+                com.fundpilot.backend.marketdata.adapter.web.indicatorquery.FundMarketIndicatorController.class))
+                .isNotNull();
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.fund.controller.TransactionCancelController.class)).isNotNull();
-        assertThat(applicationContext.getBean(
-                com.fundpilot.backend.user.controller.UserConfigController.class)).isNotNull();
-        assertThat(applicationContext.getBean(
-                com.fundpilot.backend.market.controller.MarketDataController.class)).isNotNull();
-        assertThat(applicationContext.getBean(
-                com.fundpilot.backend.portfolio.controller.PortfolioController.class)).isNotNull();
+                com.fundpilot.backend.marketdata.adapter.web.realtimevaluation.FundIntradayController.class))
+                .isNotNull();
+        assertThat(applicationContext.getBeansOfType(
+                com.fundpilot.backend.investmentplan.adapter.scheduler.planexecution.InvestmentPlanExecutionJob.class))
+                .hasSize(1);
+        assertThat(applicationContext.getBeansOfType(
+                com.fundpilot.backend.insights.adapter.scheduler.portfolioreturn.PortfolioReturnSnapshotJob.class))
+                .hasSize(1);
     }
 }

@@ -43,14 +43,14 @@ export default function AdminPage() {
                     }>
                         <Text type="secondary">在 Grafana 查看服务指标、任务运行状态和日志。</Text>
                     </Card>
-                    <Card size="small" title="信号生成" extra={
-                        <Popconfirm title="生成今日信号？未回应信号将按最新行情重算。" onConfirm={() =>
-                            run('generate', () => '信号生成完成')}>
+                    <Card size="small" title="建议生成" extra={
+                        <Popconfirm title="生成今日建议？未回应建议将按最新行情重算。" onConfirm={() =>
+                            run('generate', () => '建议生成完成')}>
                             <Button type="primary" icon={<ThunderboltOutlined/>}
-                                    loading={adminAction.isPending}>生成今日信号</Button>
+                                    loading={adminAction.isPending}>生成今日建议</Button>
                         </Popconfirm>
                     }>
-                        <Text type="secondary">每日 14:50 自动触发；手动重跑会更新未回应信号，已生成交易的信号保持不变。</Text>
+                        <Text type="secondary">每日 14:50 自动触发；手动重跑会更新未回应建议，已生成交易的建议保持不变。</Text>
                     </Card>
                     <Card size="small" title="净值确认" extra={
                         <Popconfirm title="按每笔交易发生日补偿确认 PENDING 交易？" onConfirm={() =>

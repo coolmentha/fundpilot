@@ -85,6 +85,19 @@ class FundGroupRepositoryImpl implements FundGroupRepository {
     }
 
     @Override
+    public List<GroupMembership> memberships(long ownerId) {
+        return jdbc.query("""
+                SELECT member.portfolio_fund_id, g.id AS group_id, g.name, g.sort_order
+                FROM portfolio_fund_group_member member
+                JOIN fund_group g ON g.id = member.group_id
+                JOIN portfolio_fund pf ON pf.id = member.portfolio_fund_id
+                WHERE pf.owner_id = ? AND g.owner_id = ? AND g.deleted_date IS NULL
+                ORDER BY member.portfolio_fund_id, g.sort_order, g.id
+                """, (rs, rowNum) -> new GroupMembership(rs.getLong("portfolio_fund_id"),
+                rs.getLong("group_id"), rs.getString("name"), rs.getInt("sort_order")), ownerId, ownerId);
+    }
+
+    @Override
     public void assignByNames(long ownerId, long portfolioFundId, Long legacyFundId,
                               List<String> names) {
         Map<String, FundGroup> existingByKey = new HashMap<>();

@@ -29,12 +29,15 @@ public final class LedgerTransaction {
     private Long relatedTransactionId;
     private final Long signalLogId;
     private final Long dcaPlanId;
+    private final Long disciplineAdviceId;
+    private final Long investmentPlanId;
 
     private LedgerTransaction(Long id, long portfolioFundId, long ownerId, TransactionSource source,
                               TransactionStatus status, BigDecimal amount, BigDecimal shares,
                               BigDecimal nav, BigDecimal fee, BigDecimal feeRate, Instant tradeDate,
                               Instant confirmTime, Instant cancelTime, Instant createdDate,
-                              Long relatedTransactionId, Long signalLogId, Long dcaPlanId) {
+                              Long relatedTransactionId, Long signalLogId, Long dcaPlanId,
+                              Long disciplineAdviceId, Long investmentPlanId) {
         this.id = id;
         this.portfolioFundId = requirePositive(portfolioFundId, "组合基金 ID");
         this.ownerId = requirePositive(ownerId, "用户 ID");
@@ -52,6 +55,8 @@ public final class LedgerTransaction {
         this.relatedTransactionId = relatedTransactionId;
         this.signalLogId = signalLogId;
         this.dcaPlanId = dcaPlanId;
+        this.disciplineAdviceId = disciplineAdviceId;
+        this.investmentPlanId = investmentPlanId;
     }
 
     /** 录入一笔待确认流水；买入类需金额，卖出类需份额。 */
@@ -59,6 +64,26 @@ public final class LedgerTransaction {
                                                  TransactionSource source, BigDecimal amount,
                                                  BigDecimal shares, Instant tradeDate,
                                                  Long signalLogId, Long dcaPlanId) {
+        return placePending(portfolioFundId, ownerId, source, amount, shares, tradeDate,
+                signalLogId, dcaPlanId, null);
+    }
+
+    /** 由 Discipline 建议回应创建的待确认流水，使用新建议 ID 作为幂等来源引用。 */
+    public static LedgerTransaction placePending(long portfolioFundId, long ownerId,
+                                                 TransactionSource source, BigDecimal amount,
+                                                 BigDecimal shares, Instant tradeDate,
+                                                 Long signalLogId, Long dcaPlanId,
+                                                 Long disciplineAdviceId) {
+        return placePending(portfolioFundId, ownerId, source, amount, shares, tradeDate, signalLogId,
+                dcaPlanId, disciplineAdviceId, null);
+    }
+
+    /** 由 InvestmentPlan 执行日生成的待确认流水。 */
+    public static LedgerTransaction placePending(long portfolioFundId, long ownerId,
+                                                 TransactionSource source, BigDecimal amount,
+                                                 BigDecimal shares, Instant tradeDate,
+                                                 Long signalLogId, Long dcaPlanId,
+                                                 Long disciplineAdviceId, Long investmentPlanId) {
         Objects.requireNonNull(source, "交易来源不能为空");
         Objects.requireNonNull(tradeDate, "交易发生时间不能为空");
         if (source.isAdjustment()) {
@@ -67,7 +92,7 @@ public final class LedgerTransaction {
         requireInput(source, amount, shares);
         return new LedgerTransaction(null, portfolioFundId, ownerId, source, TransactionStatus.PENDING,
                 amount, shares, null, null, null, tradeDate, null, null, null, null,
-                signalLogId, dcaPlanId);
+                signalLogId, dcaPlanId, disciplineAdviceId, investmentPlanId);
     }
 
     /** 录入一笔调整流水，创建即确认，不计净值与费用。 */
@@ -83,7 +108,7 @@ public final class LedgerTransaction {
         }
         return new LedgerTransaction(null, portfolioFundId, ownerId, source, TransactionStatus.CONFIRMED,
                 null, normalized, null, null, null, Objects.requireNonNull(tradeDate, "交易发生时间不能为空"),
-                Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null);
+                Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null, null, null);
     }
 
     /** 录入一笔期初持仓流水，创建即确认，按用户输入成本建立后续 FIFO 所需 lot。 */
@@ -94,10 +119,13 @@ public final class LedgerTransaction {
         if (normalized == null || normalized.signum() <= 0) {
             throw new IllegalArgumentException("初始持仓需填正数份额");
         }
+        if (navSnapshot == null || navSnapshot.signum() <= 0) {
+            throw new IllegalArgumentException("初始持仓净值必须为正数");
+        }
         return new LedgerTransaction(null, portfolioFundId, ownerId, TransactionSource.INCREASE,
-                TransactionStatus.CONFIRMED, null, normalized, navSnapshot, null, null,
+                TransactionStatus.CONFIRMED, normalized.multiply(navSnapshot), normalized, navSnapshot, null, null,
                 Objects.requireNonNull(tradeDate, "交易发生时间不能为空"),
-                Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null);
+                Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null, null, null);
     }
 
     public static LedgerTransaction rehydrate(long id, long portfolioFundId, long ownerId,
@@ -105,10 +133,11 @@ public final class LedgerTransaction {
                                               BigDecimal amount, BigDecimal shares, BigDecimal nav,
                                               BigDecimal fee, BigDecimal feeRate, Instant tradeDate,
                                               Instant confirmTime, Instant cancelTime, Instant createdDate,
-                                              Long relatedTransactionId, Long signalLogId, Long dcaPlanId) {
+                                              Long relatedTransactionId, Long signalLogId, Long dcaPlanId,
+                                              Long disciplineAdviceId, Long investmentPlanId) {
         return new LedgerTransaction(requirePositive(id, "交易 ID"), portfolioFundId, ownerId, source,
                 status, amount, shares, nav, fee, feeRate, tradeDate, confirmTime, cancelTime,
-                createdDate, relatedTransactionId, signalLogId, dcaPlanId);
+                createdDate, relatedTransactionId, signalLogId, dcaPlanId, disciplineAdviceId, investmentPlanId);
     }
 
     /**
@@ -244,4 +273,6 @@ public final class LedgerTransaction {
     public Long relatedTransactionId() { return relatedTransactionId; }
     public Long signalLogId() { return signalLogId; }
     public Long dcaPlanId() { return dcaPlanId; }
+    public Long disciplineAdviceId() { return disciplineAdviceId; }
+    public Long investmentPlanId() { return investmentPlanId; }
 }

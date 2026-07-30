@@ -19,6 +19,9 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
 
     List<LedgerTransactionJpaEntity> findByPortfolioFundIdAndStatus(Long portfolioFundId, String status);
 
+    List<LedgerTransactionJpaEntity> findByPortfolioFundIdInAndStatus(Collection<Long> portfolioFundIds,
+                                                                        String status);
+
     boolean existsByPortfolioFundIdAndStatus(Long portfolioFundId, String status);
 
     List<LedgerTransactionJpaEntity> findByStatus(String status);
@@ -48,4 +51,35 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
             @Param("portfolioFundIds") Collection<Long> portfolioFundIds);
 
     boolean existsByDcaPlanIdAndTradeDateBetween(Long dcaPlanId, Instant start, Instant end);
+
+    @Query("select (count(t) > 0) from LedgerTransactionJpaEntity t "
+            + "where t.investmentPlanId = :investmentPlanId and t.tradeDate >= :start and t.tradeDate < :end")
+    boolean existsByInvestmentPlanIdAndTradeDateBetween(@Param("investmentPlanId") Long investmentPlanId,
+                                                         @Param("start") Instant start, @Param("end") Instant end);
+
+    interface InvestmentPlanOccurrenceProjection {
+        Long getInvestmentPlanId();
+        Instant getTradeDate();
+        java.math.BigDecimal getAmount();
+        String getStatus();
+    }
+
+    @Query(value = "select t.investment_plan_id as investmentPlanId, t.trade_date as tradeDate, "
+            + "t.amount as amount, t.status as status from fund_transaction t "
+            + "join investment_plan p on p.id = t.investment_plan_id "
+            + "where p.owner_id = :ownerId and t.source = 'INVEST' and t.trade_date >= :start "
+            + "and t.trade_date < :end and t.deleted_date is null", nativeQuery = true)
+    List<InvestmentPlanOccurrenceProjection> findInvestmentPlanOccurrences(@Param("ownerId") Long ownerId,
+                                                                             @Param("start") Instant start,
+                                                                             @Param("end") Instant end);
+
+    @Query(value = "select coalesce(sum(t.amount), 0) from fund_transaction t "
+            + "join portfolio_fund p on p.id = t.portfolio_fund_id "
+            + "where p.owner_id = :ownerId and p.status = 'TRACKED' and t.source = 'INVEST' "
+            + "and t.status <> 'CANCELLED' and t.trade_date >= :start and t.trade_date < :end "
+            + "and t.deleted_date is null", nativeQuery = true)
+    java.math.BigDecimal sumInvestedAmount(@Param("ownerId") Long ownerId, @Param("start") Instant start,
+                                           @Param("end") Instant end);
+
+    boolean existsByDisciplineAdviceId(Long disciplineAdviceId);
 }

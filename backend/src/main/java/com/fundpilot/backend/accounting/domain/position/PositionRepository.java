@@ -14,4 +14,6 @@ public interface PositionRepository {
     List<Position> findByPortfolioFundIds(Collection<Long> portfolioFundIds);
 
     List<Position> findByOwner(long ownerId);
+
+    void removeByPortfolioFund(long portfolioFundId);
 }

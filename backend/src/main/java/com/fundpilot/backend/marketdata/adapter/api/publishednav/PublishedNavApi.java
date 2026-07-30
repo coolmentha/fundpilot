@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -27,9 +28,21 @@ public class PublishedNavApi {
         return queries.latest(fundProductId).map(PublishedNavApi::from);
     }
 
+    public List<PublishedNav> latestByProductIds(Set<Long> fundProductIds) {
+        return queries.latestByProductIds(fundProductIds).stream().map(PublishedNavApi::from).toList();
+    }
+
+    public List<PublishedNav> latestTwoByProductIds(Set<Long> fundProductIds) {
+        return queries.latestTwoByProductIds(fundProductIds).stream().map(PublishedNavApi::from).toList();
+    }
+
     public List<PublishedNav> history(long fundProductId, Instant startInclusive, Instant endExclusive) {
         return queries.history(fundProductId, startInclusive, endExclusive).stream()
                 .map(PublishedNavApi::from).toList();
+    }
+
+    public Optional<BigDecimal> peakAccumulatedNav(long fundProductId, Instant startInclusive) {
+        return queries.peakAccumulatedNav(fundProductId, startInclusive);
     }
 
     private static PublishedNav from(NavPublishingCommandHandler.PublishedNavResult nav) {

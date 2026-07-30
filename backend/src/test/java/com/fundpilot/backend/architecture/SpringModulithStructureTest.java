@@ -49,7 +49,7 @@ class SpringModulithStructureTest {
         ApplicationModules modules = ApplicationModules.of(FundPilotBackendApplication.class);
 
         assertThat(Set.of("admin", "common", "config", "dca", "exception", "fund",
-                "integration", "market", "metrics", "signal", "strategy", "user"))
+                "integration", "metrics", "signal", "strategy", "user"))
                 .allSatisfy(name -> assertThat(modules.getModuleByName(name)).isEmpty());
     }
 

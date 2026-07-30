@@ -72,6 +72,12 @@ public class PositionCommandHandler {
         return reconcile(portfolioFundId, ownerId);
     }
 
+    /** 作废组合基金后移除可重建持仓投影；重复事件保持无操作。 */
+    @Transactional
+    public void removeVoidedProjection(long portfolioFundId) {
+        positions.removeByPortfolioFund(portfolioFundId);
+    }
+
     private Position loadOrCreate(long portfolioFundId, long ownerId) {
         return positions.findByPortfolioFund(portfolioFundId)
                 .orElseGet(() -> Position.empty(portfolioFundId, ownerId));

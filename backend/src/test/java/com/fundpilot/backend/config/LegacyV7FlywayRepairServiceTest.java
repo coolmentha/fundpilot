@@ -1,4 +1,4 @@
-package com.fundpilot.backend.config;
+package com.fundpilot.backend.platform.persistence.flyway;
 
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;

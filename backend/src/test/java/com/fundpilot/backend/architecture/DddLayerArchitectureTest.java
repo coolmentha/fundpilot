@@ -23,7 +23,6 @@ class DddLayerArchitectureTest {
             "com.fasterxml.jackson.",
             "lombok."
     );
-    private static final int PORTFOLIO_LEGACY_BASELINE = 12;
 
     private final JavaClasses classes = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
@@ -91,7 +90,7 @@ class DddLayerArchitectureTest {
     }
 
     @Test
-    void portfolio旧Mvc例外只能减少() {
+    void portfolio旧Mvc例外为零() {
         long legacyTypes = classes.stream()
                 .filter(type -> type.getPackageName().startsWith(ROOT + "portfolio."))
                 .filter(type -> !type.getSimpleName().equals("package-info"))
@@ -100,7 +99,7 @@ class DddLayerArchitectureTest {
 
         assertThat(legacyTypes)
                 .as("portfolio legacy exception count")
-                .isLessThanOrEqualTo(PORTFOLIO_LEGACY_BASELINE);
+                .isZero();
     }
 
     private void validateDependency(ModuleType sourceType, JavaClass source, JavaClass target,

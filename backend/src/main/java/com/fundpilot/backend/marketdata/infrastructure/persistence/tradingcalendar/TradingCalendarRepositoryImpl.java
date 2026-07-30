@@ -34,6 +34,14 @@ class TradingCalendarRepositoryImpl implements TradingCalendarRepository {
                 rs -> rs.next() ? rs.getObject(1, LocalDate.class) : null);
         return Optional.ofNullable(value).map(TradingCalendarRepositoryImpl::instant);
     }
+    @Override public List<Instant> tradingDaysBetween(Instant startInclusive, Instant endExclusive) {
+        return jdbc.query("""
+                SELECT calendar_date FROM trading_calendar
+                WHERE calendar_date >= ? AND calendar_date < ? AND is_trading_day = true AND deleted_date IS NULL
+                ORDER BY calendar_date
+                """, (rs, row) -> instant(rs.getObject(1, LocalDate.class)), sqlDate(startInclusive),
+                sqlDate(endExclusive));
+    }
     @Override public long countBetween(Instant fromExclusive, Instant toInclusive) {
         Long count = jdbc.queryForObject("""
                 SELECT count(*) FROM trading_calendar

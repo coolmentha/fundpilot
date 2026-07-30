@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.enums.FundStatus;
@@ -12,10 +12,9 @@ import com.fundpilot.backend.fund.service.support.DailyChangeResolver;
 import com.fundpilot.backend.fund.service.support.DailyChangeResult;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
-import com.fundpilot.backend.market.client.FundEstimateSnapshot;
-import com.fundpilot.backend.market.service.MarketRealtimeCache;
-import com.fundpilot.backend.market.service.EstimateStatus;
-import com.fundpilot.backend.market.service.support.FundMarketDataCapability;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * 盈亏与涨跌聚合服务(issue #18,CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
@@ -126,7 +126,7 @@ public class FundPnlService {
         boolean confirmedNavSelected = qdii
                 ? latestTwo.size() >= 2 && isLatestNavFirstSeenToday(latestTwo)
                 : todayNavConfirmed;
-        boolean standardNavSupported = FundMarketDataCapability.supportsStandardNav(fund);
+        boolean standardNavSupported = supportsStandardNav(fund);
 
         // QDII 按平台发现日结算；其他日期不复用历史收益，也不混入盘中估值。
         EstimateStatus estimateStatus = confirmedNavSelected ? EstimateStatus.AVAILABLE
@@ -223,6 +223,21 @@ public class FundPnlService {
         Instant firstSeenAt = latestTwo.get(0).getFirstSeenAt();
         return firstSeenAt != null
                 && ChinaTradingDate.toUtcDate(firstSeenAt).equals(ChinaTradingDate.toUtcDate(clock.instant()));
+    }
+
+    private static boolean supportsStandardNav(FundEntity fund) {
+        if (fund.getInvestmentTarget() == InvestmentTarget.MONEY_MARKET
+                || fund.getInvestmentTarget() == InvestmentTarget.REIT) {
+            return false;
+        }
+        String name = fund.getFundName();
+        if (name == null) {
+            return true;
+        }
+        String normalized = name.toUpperCase(Locale.ROOT);
+        return !normalized.contains("货币")
+                && !normalized.contains("REIT")
+                && !normalized.contains("不动产投资信托");
     }
 
     /** 持仓市值 = 份额 × 最新净值。不乘涨跌幅——净值就是净值,份额锁死。 */

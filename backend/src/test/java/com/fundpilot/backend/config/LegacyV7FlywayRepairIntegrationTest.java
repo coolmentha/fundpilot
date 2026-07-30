@@ -1,4 +1,4 @@
-package com.fundpilot.backend.config;
+package com.fundpilot.backend.platform.persistence.flyway;
 
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.flywaydb.core.Flyway;

@@ -66,6 +66,15 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public List<LedgerTransaction> findByPortfolioFundIdsAndStatus(Collection<Long> portfolioFundIds,
+                                                                    TransactionStatus status) {
+        if (portfolioFundIds.isEmpty()) {
+            return List.of();
+        }
+        return toDomain(transactions.findByPortfolioFundIdInAndStatus(portfolioFundIds, status.name()));
+    }
+
+    @Override
     public List<LedgerTransaction> findByPortfolioFundOrderByTradeDateDesc(long portfolioFundId) {
         return toDomain(transactions.findByPortfolioFundOrderByTradeDateDesc(portfolioFundId));
     }
@@ -99,6 +108,32 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
     public boolean existsByDcaPlanAndTradeDateBetween(long dcaPlanId, Instant startInclusive,
                                                       Instant endExclusive) {
         return transactions.existsByDcaPlanIdAndTradeDateBetween(dcaPlanId, startInclusive, endExclusive);
+    }
+
+    @Override
+    public boolean existsByInvestmentPlanAndTradeDateBetween(long investmentPlanId, Instant startInclusive,
+                                                              Instant endExclusive) {
+        return transactions.existsByInvestmentPlanIdAndTradeDateBetween(
+                investmentPlanId, startInclusive, endExclusive);
+    }
+
+    @Override
+    public List<InvestmentPlanOccurrence> findInvestmentPlanOccurrences(long ownerId, Instant startInclusive,
+                                                                          Instant endExclusive) {
+        return transactions.findInvestmentPlanOccurrences(ownerId, startInclusive, endExclusive).stream()
+                .map(row -> new InvestmentPlanOccurrence(row.getInvestmentPlanId(), row.getTradeDate(),
+                        row.getAmount(), TransactionStatus.valueOf(row.getStatus())))
+                .toList();
+    }
+
+    @Override
+    public java.math.BigDecimal sumInvestedAmount(long ownerId, Instant startInclusive, Instant endExclusive) {
+        return transactions.sumInvestedAmount(ownerId, startInclusive, endExclusive);
+    }
+
+    @Override
+    public boolean existsByDisciplineAdviceId(long disciplineAdviceId) {
+        return transactions.existsByDisciplineAdviceId(disciplineAdviceId);
     }
 
     private LedgerTransaction toDomain(LedgerTransactionJpaEntity entity) {

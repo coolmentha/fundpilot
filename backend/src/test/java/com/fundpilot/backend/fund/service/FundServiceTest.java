@@ -1,7 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.ErrorCode;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
 import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
@@ -10,6 +10,7 @@ import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.portfolio.adapter.api.fundgrouping.PortfolioGroupingApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ class FundServiceTest extends AbstractIntegrationTest {
     @Autowired EntityManager entityManager;
     @Autowired FundProductApi productCatalogApi;
     @Autowired PortfolioFundApi portfolioFundApi;
+    @Autowired PortfolioGroupingApi portfolioGroupingApi;
 
     @Test
     void create_正常创建() {
@@ -69,7 +71,10 @@ class FundServiceTest extends AbstractIntegrationTest {
 
         FundView view = fundService.create(request);
 
-        assertThat(view.groups()).extracting("name").containsExactly("核心", "宽基");
+        assertThat(portfolioGroupingApi.memberships(testActorId()))
+                .filteredOn(group -> group.portfolioFundId() == view.portfolioFundId())
+                .extracting(PortfolioGroupingApi.GroupMembership::groupName)
+                .containsExactly("核心", "宽基");
     }
 
     @Test

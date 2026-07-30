@@ -33,8 +33,8 @@ const {Title, Text} = Typography;
 const {RangePicker} = DatePicker;
 
 const signalColumns = (extraCol) => [
-    {title: '状态', dataIndex: 'actionStatus', width: 100, render: (v) => <StatusTag value={v}/>},
-    {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
+    {title: '状态', dataIndex: 'responseStatus', width: 100, render: (v) => <StatusTag value={v}/>},
+    {title: '类型', dataIndex: 'action', width: 90, render: (v) => <StatusTag value={v}/>},
     {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
     {title: '系数', dataIndex: 'coefficient', width: 80, render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
     {title: '原因', dataIndex: 'reason', render: text},
@@ -43,7 +43,7 @@ const signalColumns = (extraCol) => [
         return m ? <span className="num-cell">{Number(m.value).toFixed(2)} ({text(m.measureUnit)})</span> : '-';
     }},
     {title: '警告', dataIndex: 'warnings', render: (v) => v ? <Text type="warning">{v}</Text> : '-'},
-    {title: '信号时间', dataIndex: 'signalDate', width: 170, render: datetime},
+    {title: '建议时间', dataIndex: 'signalDate', width: 170, render: datetime},
     ...(extraCol ? [extraCol] : []),
 ];
 
@@ -84,7 +84,7 @@ export default function SignalsPage() {
     const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
     const holdingShares = (id) => Number(funds?.find((fund) => fund.id === id)?.holdingShares || 0);
     const openConfirm = (signal) => {
-        const isSell = signal.signalType === 'SELL';
+        const isSell = signal.action === 'SELL';
         const isLogicBroken = isSell && signal.reason === 'LOGIC_BROKEN';
         const maxShares = holdingShares(signal.fundId);
         setModal({open: true, signal});
@@ -95,33 +95,33 @@ export default function SignalsPage() {
         });
     };
     const submit = async () => {
-        if (modal.signal?.signalType === 'SELL' && !fundsReady) return;
+        if (modal.signal?.action === 'SELL' && !fundsReady) return;
         const values = await form.validateFields();
         const transaction = await confirmOp.mutateAsync({
-            signalLogId: modal.signal.id,
+            adviceId: modal.signal.id,
             actualAmount: values.actualAmount ?? null,
             actualShares: values.actualShares ?? null,
         });
-        message.success('信号已采纳，待确认交易已生成');
+        message.success('建议已采纳，待确认交易已生成');
         setModal({open: false, signal: null});
-        navigate(`/confirm?signalId=${modal.signal.id}&transactionId=${transaction.id}`);
+        navigate(`/confirm?transactionId=${transaction.transactionId}`);
     };
     const pendingActionColumn = {
         title: '操作', width: 150, render: (_, signal) => (
             <Space size={0}>
                 <Button type="link" size="small"
-                        disabled={signal.signalType === 'SELL' && !fundsReady}
+                        disabled={signal.action === 'SELL' && !fundsReady}
                         onClick={() => openConfirm(signal)}>采纳</Button>
-                <Popconfirm title="忽略本次信号？" onConfirm={async () => {
-                    await ignoreSignal.mutateAsync({fundId: signal.fundId, signalId: signal.id});
-                    message.success('信号已忽略');
+                <Popconfirm title="忽略本次建议？" onConfirm={async () => {
+                    await ignoreSignal.mutateAsync({signalId: signal.id});
+                    message.success('建议已忽略');
                 }}>
                     <Button type="link" size="small">忽略</Button>
                 </Popconfirm>
             </Space>
         ),
     };
-    const isSell = modal.signal?.signalType === 'SELL';
+    const isSell = modal.signal?.action === 'SELL';
     const isLogicBroken = isSell && modal.signal?.reason === 'LOGIC_BROKEN';
     const currentHoldingShares = holdingShares(modal.signal?.fundId);
     const transactionColumn = {
@@ -135,19 +135,19 @@ export default function SignalsPage() {
 
     return (
         <Space direction="vertical" size={16} className="full-width">
-            <Card title={<Title level={4}>待处理信号</Title>}
+            <Card title={<Title level={4}>待回应建议</Title>}
                   extra={<Button icon={<ReloadOutlined/>} onClick={() => refetchPending()}>刷新</Button>}>
-                {pendingError ? <QueryErrorState onRetry={refetchPending} description="待处理信号加载失败"/> : (
+                {pendingError ? <QueryErrorState onRetry={refetchPending} description="待回应建议加载失败"/> : (
                     <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pendingSignals || []}
                            columns={[
                                {title: '基金', width: 180, render: (_, row) => fundName(row.fundId)},
                                ...signalColumns(pendingActionColumn),
                            ]}
                            pagination={false} scroll={{x: 1050}}
-                           locale={{emptyText: <EmptyState description="暂无待处理信号"/>}}/>
+                           locale={{emptyText: <EmptyState description="暂无待回应建议"/>}}/>
                 )}
             </Card>
-            <Card title={<Title level={4}>今日信号</Title>}
+            <Card title={<Title level={4}>今日建议</Title>}
                   extra={<Button icon={<ReloadOutlined/>} onClick={() => setParams({})}>清空筛选</Button>}>
                 <Space style={{marginBottom: 16}}>
                     <Text type="secondary">基金：</Text>
@@ -157,31 +157,31 @@ export default function SignalsPage() {
                             onChange={(v) => setParams(v ? {fundId: v} : {})}/>
                 </Space>
                 {fundId && todayError ? (
-                    <QueryErrorState onRetry={refetchToday} description="今日信号加载失败"/>
+                    <QueryErrorState onRetry={refetchToday} description="今日建议加载失败"/>
                 ) : fundId ? (
                     <Table rowKey="id" size="small" loading={todayLoading}
                            dataSource={todaySignal ? [todaySignal] : []}
                            columns={signalColumns(transactionColumn)} pagination={false}
-                           locale={{emptyText: <EmptyState description="今日无信号"/>}}/>
+                           locale={{emptyText: <EmptyState description="今日无建议"/>}}/>
                 ) : (
-                    <EmptyState description="选择基金查看今日信号"/>
+                    <EmptyState description="选择基金查看今日建议"/>
                 )}
             </Card>
             {fundId && (
-                <Card title="历史信号查询">
+                <Card title="历史建议查询">
                     <Space style={{marginBottom: 16}}>
                         <RangePicker value={range} onChange={setRange}/>
                     </Space>
                     {rangeError ? (
-                        <QueryErrorState onRetry={refetchRange} description="历史信号加载失败"/>
+                        <QueryErrorState onRetry={refetchRange} description="历史建议加载失败"/>
                     ) : (
                         <Table rowKey="id" size="small" loading={rangeLoading} dataSource={rangeSignals}
                                columns={signalColumns(transactionColumn)} pagination={false}
-                               locale={{emptyText: <EmptyState description="所选区间无信号"/>}}/>
+                               locale={{emptyText: <EmptyState description="所选区间无建议"/>}}/>
                     )}
                 </Card>
             )}
-            <Modal title="采纳交易信号" open={modal.open}
+            <Modal title="采纳纪律建议" open={modal.open}
                    onCancel={() => setModal({open: false, signal: null})}
                    onOk={submit} confirmLoading={confirmOp.isPending}
                    okButtonProps={{disabled: isSell && !fundsReady}} destroyOnHidden>

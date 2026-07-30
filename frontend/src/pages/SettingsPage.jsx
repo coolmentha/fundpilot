@@ -3,8 +3,8 @@ import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
 import {ImportOutlined} from '@ant-design/icons';
 import {
     useReplaceWatchedIndices,
-    useUpdateUserConfig,
-    useUserConfig,
+    useInvestmentPlanBudget,
+    useUpdateInvestmentPlanBudget,
     useWatchedIndices,
 } from '../api/hooks.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
@@ -33,23 +33,23 @@ const INDEX_OPTIONS = [
 
 export default function SettingsPage() {
     const {message} = App.useApp();
-    const {data: config, isLoading, isError, refetch} = useUserConfig();
+    const budget = useInvestmentPlanBudget();
     const watchedIndices = useWatchedIndices();
-    const updateConfig = useUpdateUserConfig();
+    const updateBudget = useUpdateInvestmentPlanBudget();
     const replaceWatchedIndices = useReplaceWatchedIndices();
     const [selectedOverride, setSelectedOverride] = useState(null);
     const [monthlyBudgetOverride, setMonthlyBudgetOverride] = useState(undefined);
     const [importOpen, setImportOpen] = useState(false);
     const selected = selectedOverride ?? watchedIndices.data?.indexCodes ?? [];
     const monthlyDcaBudget = monthlyBudgetOverride === undefined
-        ? (config?.monthlyDcaBudget ?? null)
+        ? (budget.data?.monthlyBudget ?? null)
         : monthlyBudgetOverride;
-    const configReady = isQueryDataReady({data: config, isLoading, isError});
+    const budgetReady = isQueryDataReady(budget);
     const watchedIndicesReady = isQueryDataReady(watchedIndices);
 
     const saveMonthlyBudget = async () => {
-        if (!configReady) return;
-        await updateConfig.mutateAsync({monthlyDcaBudget});
+        if (!budgetReady) return;
+        await updateBudget.mutateAsync(monthlyDcaBudget);
         message.success('月度定投预算已更新');
     };
 
@@ -72,9 +72,9 @@ export default function SettingsPage() {
                         onChange={setMonthlyBudgetOverride}
                         placeholder="未设置"
                         className="full-width"
-                        disabled={!configReady}
+                        disabled={!budgetReady}
                     />
-                    <Button type="primary" loading={updateConfig.isPending} disabled={!configReady}
+                    <Button type="primary" loading={updateBudget.isPending} disabled={!budgetReady}
                             onClick={saveMonthlyBudget}>保存月度预算</Button>
                 </div>
                 <div>
@@ -97,7 +97,7 @@ export default function SettingsPage() {
                     <Button type="primary" loading={replaceWatchedIndices.isPending}
                             disabled={!watchedIndicesReady} onClick={saveWatchedIndices}>保存关注指数</Button>
                 </div>
-                {isError && <QueryErrorState onRetry={refetch} description="用户配置加载失败"/>}
+                {budget.isError && <QueryErrorState onRetry={budget.refetch} description="月度预算加载失败"/>}
                 {watchedIndices.isError && <QueryErrorState onRetry={watchedIndices.refetch} description="关注指数加载失败"/>}
             </Space>
         </Card>

@@ -102,16 +102,16 @@
 
 ## Slice 6：Accounting 与 Position
 
-> 进行中。V40 expand migration 已落地并验证（`fund_transaction`/`fund_lot` 新增 nullable `portfolio_fund_id` 并回填、新增 `accounting_position` 并从 `fund` 回填对账）。写入侧尚未切流：两处新列/新表目前无代码写入，收紧 `NOT NULL` 与删除 legacy 账目实现属于本切片剩余工作。
+> 已完成。V40 expand migration、Accounting 写入切流、Position 投影、跨模块费率/NAV 契约、事件消费/发布、开户编排和交易 REST 兼容入口均已验证。旧列继续只读保留；`signal` 与 `integration/yangjibao` 的 legacy 调用分别在 Slice 7、Slice 10 切除，破坏性 contract migration 延后到 Slice 12 并需另行批准。
 
-- [ ] 迁移 transaction、lot、redemption、费用计算、确认/撤销和持仓重算。
-- [ ] 交易改为引用 `PortfolioFundId`；固化确认所用单位净值快照与来源。
-- [ ] 将 `openedAt/costPerShare/status` 从 `fund` 迁入 Accounting 的 Position 模型，账本回放结果必须与现有值对账。
-- [ ] 通过 ProductCatalog 费率 API 和 MarketData NAV API 替代跨 Repository 访问。
-- [ ] 消费 `NavPublished`，发布交易与 Position 生命周期事件。
-- [ ] 实现 `PortfolioFundVoided` 幂等处理；无论投影是否完成，查询都通过 Portfolio 有效性排除作废项。
-- [ ] 由 Accounting 的开户用例在同一本地事务内调用 Portfolio 创建关系并按需记录初始持仓，提供新的领域化接口并同步迁移前端。
-- [ ] 迁移初始持仓、手动交易、转换、调整和确认工作台 REST 适配器。
+- [x] 迁移 transaction、lot、redemption、费用计算、确认/撤销和持仓重算。
+- [x] 交易改为引用 `PortfolioFundId`；固化确认所用单位净值快照与来源。
+- [x] 将 `openedAt/costPerShare/status` 从 `fund` 迁入 Accounting 的 Position 模型，账本回放结果必须与现有值对账。
+- [x] 通过 ProductCatalog 费率 API 和 MarketData NAV API 替代跨 Repository 访问。
+- [x] 消费 `NavPublished`，发布交易与 Position 生命周期事件。
+- [x] 实现 `PortfolioFundVoided` 幂等处理；无论投影是否完成，查询都通过 Portfolio 有效性排除作废项。
+- [x] 由 Accounting 的开户用例在同一本地事务内调用 Portfolio 创建关系并按需记录初始持仓，提供新的领域化接口并同步迁移前端。
+- [x] 迁移初始持仓、手动交易、转换、调整和确认工作台 REST 适配器。
 
 验证重点：逐用户/逐基金份额、在途份额、成本、已实现收益、费用、lot 余额、交易状态和清仓再入场全部无差异；并发确认、重复事件和超卖测试通过。
 
@@ -119,53 +119,53 @@
 
 ## Slice 7：Discipline
 
-- [ ] 合并 strategy/signal 为 Discipline，迁移策略、激活周期、建议日志和回应状态。
-- [ ] 将 FundCategory 迁为最终纪律分类，记录默认建议来源和用户确认/自定义状态。
-- [ ] 经本模块 Gateway/GatewayImpl 使用 Portfolio/MarketData/Accounting 公开 API，替代 Entity/Repository 引用。
-- [ ] 接受建议时以 adviceId 幂等调用 Accounting 创建交易。
-- [ ] 消费 TransactionConfirmed/Cancelled、PositionOpened/Cleared 和 PortfolioFundVoided。
-- [ ] 按纪律、建议和建议回应职责设计新 REST 接口，并同步调整前端路径、DTO 与展示术语。
+- [x] 合并 strategy/signal 为 Discipline，迁移策略、激活周期、建议日志和回应状态。
+- [x] 将 FundCategory 迁为最终纪律分类，记录默认建议来源和用户确认/自定义状态。
+- [x] 经本模块 Gateway/GatewayImpl 使用 Portfolio/MarketData/Accounting 公开 API，替代 Entity/Repository 引用。
+- [x] 接受建议时以 adviceId 幂等调用 Accounting 创建交易。
+- [x] 消费 TransactionConfirmed/Cancelled、PositionOpened/Cleared 和 PortfolioFundVoided。
+- [x] 按纪律、建议和建议回应职责设计新 REST 接口，并同步调整前端路径、DTO 与展示术语。
 
 停止点：保留旧表和双读对比；建议生成结果按固定夹具逐项比较。
 
 ## Slice 8：InvestmentPlan 与用户配置拆分
 
-- [ ] 迁移定投计划、状态机、调度、预算和预测。
-- [ ] 使用 MarketData TradingCalendar 和 Accounting 命令；建立 `planId + businessDate` 数据库唯一幂等键。
-- [ ] 消费交易确认/撤销和 PortfolioFundVoided，停用作废项计划但保留历史。
-- [ ] 将 monthlyDcaBudget 从 user_config 迁入模块自有表。
-- [ ] 按定投计划与组合偏好职责设计新接口，迁移前端后移除 `/api/user-config` 混合职责入口。
+- [x] 迁移定投计划、状态机、调度、预算和预测。
+- [x] 使用 MarketData TradingCalendar 和 Accounting 命令；建立 `planId + businessDate` 数据库唯一幂等键。
+- [x] 交易确认/撤销状态经 Accounting 查询契约实时进入执行预测；消费 PortfolioFundVoided，停用作废项计划但保留历史。
+- [x] 将 monthlyDcaBudget 从 user_config 迁入模块自有表。
+- [x] 按定投计划与组合偏好职责设计新接口，迁移前端并默认关闭 `/api/user-config` 混合职责入口。
 
 停止点：新旧调度器不可同时启用；使用功能开关单活切换并验证当天不会重复创建交易。
 
 ## Slice 9：Insights 查询叶子
 
-- [ ] 将 `FundView`、FundPnl、组合汇总和 return snapshot 迁入 Insights。
-- [ ] 经本模块 Gateway/GatewayImpl，通过各模块公开的职责 API 组合 FundProduct、PortfolioFund、Position、MarketData 和 Discipline。
-- [ ] 实现当前列表和已清仓历史：EMPTY/OPEN 在当前视图，CLEARED 在历史视图，VOIDED 全部排除。
-- [ ] 累计总收益包含有效清仓历史，逐用户与迁移前结果对账。
-- [ ] 初期同步组合；仅在有性能证据时增加事件投影，不预先复制所有数据。
-- [ ] 设计当前持仓、已清仓历史与组合收益的新查询接口，并同步迁移前端；无需维持现有响应结构。
+- [x] 将 `FundView`、FundPnl、组合汇总和 return snapshot 迁入 Insights。
+- [x] 经本模块 Gateway/GatewayImpl，通过各模块公开的职责 API 组合 FundProduct、PortfolioFund、Position、MarketData 和 Discipline。
+- [x] 实现当前列表和已清仓历史：EMPTY/OPEN 在当前视图，CLEARED 在历史视图，VOIDED 全部排除。
+- [x] 累计总收益包含有效清仓历史，逐用户与迁移前结果对账。
+- [x] 初期同步组合；仅在有性能证据时增加事件投影，不预先复制所有数据。
+- [x] 设计当前持仓、已清仓历史与组合收益的新查询接口，并同步迁移前端；无需维持现有响应结构。
 
 停止点：可通过读路径开关恢复 legacy 查询；投影可重建，不作为唯一事实来源。
 
 ## Slice 10：Importing 防腐层
 
-- [ ] 将养基宝会话、签名、外部 DTO 和转换迁入 Importing。
-- [ ] 导入只调用 IdentityAccess、ProductCatalog、Portfolio 和 Accounting 公开契约。
-- [ ] 明确预览冲突：同产品已存在、错误代码、已有持仓、重复重试和部分失败。
-- [ ] 使用 importSessionId/itemId 作为幂等键，验证重试不会重复建仓或交易。
-- [ ] 按导入会话职责设计新接口，并同步迁移前端。
+- [x] 将养基宝会话、签名、外部 DTO 和转换迁入 Importing。
+- [x] 导入只调用 IdentityAccess、ProductCatalog、Portfolio 和 Accounting 公开契约。
+- [x] 明确预览冲突：同产品已存在、错误代码、已有持仓、重复重试和部分失败。
+- [x] 使用 importSessionId/itemId 作为幂等键，验证重试不会重复建仓或交易。
+- [x] 按导入会话职责设计新接口，并同步迁移前端。
 
 停止点：核心模块不依赖 Importing，可独立关闭导入入口。
 
 ## Slice 11：持久化事件注册表
 
-- [ ] 在用户批准后加入 Modulith 事件持久化实现。
-- [ ] 从 2.0.x 官方 PostgreSQL schema 生成 Flyway migration，禁止运行时自动建表。
-- [ ] 在 Testcontainers PostgreSQL 验证建表、发布、失败保留、重试、完成归档/清理。
-- [ ] 为关键监听器增加幂等唯一键和失败注入测试。
-- [ ] 增加未完成发布数量、最老事件时间、重试失败指标和运维查询说明。
+- [x] 在用户批准后加入 Modulith 事件持久化实现。
+- [x] 从 2.0.x 官方 PostgreSQL schema 生成 Flyway migration，禁止运行时自动建表。
+- [x] 在 Testcontainers PostgreSQL 验证建表、发布、失败保留、重试、完成归档/清理。
+- [x] 为关键监听器增加幂等唯一键和失败注入测试。
+- [x] 增加未完成发布数量、最老事件时间、重试失败指标和运维查询说明。
 - [ ] 在生产副本演练迁移；部署前备份，部署后验证事件表、Actuator 和积压为零。
 
 停止点：先以同步业务过滤保证正确性；事件消费者可暂停并重放。Flyway 不回滚，旧应用版本必须忽略新增表。

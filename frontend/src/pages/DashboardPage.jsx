@@ -27,16 +27,16 @@ export default function DashboardPage() {
         {title: '基金', width: 160, render: (_, r) => (
             <Link to={`/funds/${r.fundId}`}>{fundName(r.fundId)}</Link>
         )},
-        {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
+        {title: '类型', dataIndex: 'action', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
         {title: '建议量', width: 130, render: (_, r) => {
             const m = r.suggestedMeasure;
             return m ? <span className="num-cell">{Number(m.value).toFixed(2)} ({text(m.measureUnit)})</span> : '-';
         }},
-        {title: '信号时间', dataIndex: 'signalDate', width: 170, render: datetime},
+        {title: '建议时间', dataIndex: 'signalDate', width: 170, render: datetime},
         {
-            title: '', width: 100, render: (_, r) => r.signalType !== 'NONE' && (
-                <Button type="primary" size="small" onClick={() => navigate(`/signals?fundId=${r.fundId}`)}>去确认</Button>
+            title: '', width: 100, render: (_, r) => r.action !== 'NONE' && (
+                <Button type="primary" size="small" onClick={() => navigate(`/advice?fundId=${r.fundId}`)}>去回应</Button>
             ),
         },
     ];
@@ -61,7 +61,7 @@ export default function DashboardPage() {
             ) : (
             <Row gutter={[16, 16]}>
                 <Col xs={12} md={6}>
-                    <Card className="kpi-card kpi-amber" onClick={() => navigate('/signals')}
+                    <Card className="kpi-card kpi-amber" onClick={() => navigate('/advice')}
                           hoverable style={{cursor: 'pointer'}}>
                         <Statistic title={<span className="kpi-label">待确认操作</span>}
                                    value={pendingCount} prefix={<ThunderboltOutlined/>}/>
@@ -114,12 +114,12 @@ export default function DashboardPage() {
                 </Col>
             </Row>
 
-            {/* 待确认信号 */}
+            {/* 待回应建议 */}
             <Card title={<Title level={4}>待确认操作</Title>}
-                  extra={pendingCount > 0 ? <Link to="/signals">全部 →</Link> : null}>
+                  extra={pendingCount > 0 ? <Link to="/advice">全部 →</Link> : null}>
                 <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pending || []} columns={pendingColumns}
                        pagination={false} scroll={{x: 760}}
-                       locale={{emptyText: <EmptyState description="暂无待确认信号"/>}}/>
+                       locale={{emptyText: <EmptyState description="暂无待回应建议"/>}}/>
             </Card>
 
             {/* 持仓基金 */}

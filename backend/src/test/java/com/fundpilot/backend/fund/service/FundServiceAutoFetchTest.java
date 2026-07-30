@@ -1,48 +1,52 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.ErrorCode;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
+import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
 import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
-import com.fundpilot.backend.fund.entity.FundLotEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.*;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
-import com.fundpilot.backend.fund.repository.FundLotRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
-import com.fundpilot.backend.market.service.MarketDataFetchService;
+import com.fundpilot.backend.marketdata.adapter.api.indicatorrefresh.MarketIndicatorRefreshApi;
+import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 /**
  * issue #37 验收:建基金后自动拉历史净值。
- * <p>{@link FundService#create} save 基金后发布事件,事务提交后异步调 {@code MarketDataFetchService.fetchOneFund}。
- * 落库行为由 {@code MarketDataFetchServiceTest} 覆盖,本测试验证编排:触发拉取 + 降级不阻断。
- * 用 @MockitoBean 替换 MarketDataFetchService,verify 调用而非真实落库(避免 REQUIRES_NEW 事务可见性问题)。
+ * <p>{@link FundService#create} 保存基金后发布事件，事务提交后异步刷新行情。
  *
  * <p>ADR-0012 初始持仓录入:initialHoldingShares 有值时同步确认建仓交易 + 状态流转,用 doAnswer 模拟
- * fetchOneFund 落净值历史(真实拉取走网络,mock 替换)。
+ * 刷新入口由 mock 替换，避免真实网络调用。
  */
 class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
     @MockitoBean
-    MarketDataFetchService marketDataFetchService;
+    MarketIndicatorRefreshApi marketDataRefresh;
+
+    @MockitoBean
+    PublishedNavApi publishedNavApi;
 
     @Autowired
     FundService fundService;
@@ -57,25 +61,27 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     FundTransactionRepository fundTransactionRepository;
 
     @Autowired
-    FundLotRepository fundLotRepository;
+    PositionApi positionApi;
 
     @Autowired
     EntityManager entityManager;
 
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
     @Test
-    void create_建基金后异步调用fetchOneFund拉取净值() {
+    void create_建基金后异步刷新行情() {
         FundView view = fundService.create(new FundCreateRequest(
                 "161725", "测试基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
 
         assertThat(view.id()).isNotNull();
-        // save 提交后异步调用 fetchOneFund 拉取历史净值,不阻塞 create 返回
-        verify(marketDataFetchService, timeout(2000)).fetchOneFund(view.id());
+        verify(marketDataRefresh, timeout(2000)).refreshOneForPortfolioFund(view.portfolioFundId());
     }
 
     @Test
     void create_净值拉取失败_基金仍创建成功() {
-        // fetchOneFund 抛异常,模拟拉不到净值
-        doThrow(new RuntimeException("东方财富不可达")).when(marketDataFetchService).fetchOneFund(anyLong());
+        doThrow(new RuntimeException("东方财富不可达")).when(marketDataRefresh)
+                .refreshOneForPortfolioFund(anyLong());
 
         FundView view = fundService.create(new FundCreateRequest(
                 "161726", "测试基金2", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH"));
@@ -83,30 +89,29 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         // 拉取失败降级:基金仍创建成功
         assertThat(view.id()).isNotNull();
         assertThat(fundRepository.existsById(view.id())).isTrue();
-        verify(marketDataFetchService, timeout(2000)).fetchOneFund(view.id());
+        verify(marketDataRefresh, timeout(2000)).refreshOneForPortfolioFund(view.portfolioFundId());
     }
 
     @Test
     @Transactional
     void create_录现有份额_用最近净值同步确认建仓交易_状态流转HOLDING() {
-        // fetchOneFund 落一期净值(模拟拉取成功):最近净值 8.0647
         doAnswer(inv -> {
-            Long fundId = inv.getArgument(0);
-            persistNav(fundId, Instant.now(), new BigDecimal("8.0647"));
+            var target = inv.getArgument(0, MarketIndicatorRefreshApi.RefreshTarget.class);
+            persistNav(target.legacyFundId(), Instant.now(), new BigDecimal("8.0647"));
             return null;
-        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        }).when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         FundView view = fundService.create(new FundCreateRequest(
                 "161727", "现有持仓基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
                 new BigDecimal("50.85"), new BigDecimal("6.96"), Instant.now().minusSeconds(60)));
 
-        // 状态流转:HOLDING + openedAt 已设
+        // Position 归 Accounting，legacy fund 状态字段不再回写。
         entityManager.flush();
         entityManager.clear();
-        FundEntity fund = fundRepository.findById(view.id()).orElseThrow();
-        assertThat(fund.getStatus()).isEqualTo(FundStatus.HOLDING);
-        assertThat(fund.getOpenedAt()).isNotNull();
-        assertThat(fund.getCostPerShare()).isEqualByComparingTo("6.96");
+        var position = positionApi.findOwned(testActorId(), view.portfolioFundId()).orElseThrow();
+        assertThat(position.status()).isEqualTo(PositionApi.Status.OPEN);
+        assertThat(position.openedAt()).isNotNull();
+        assertThat(position.costPerShare()).isEqualByComparingTo("6.96");
 
         // 建仓交易直接使用用户份额，金额仅按最近确认净值核算。
         List<FundTransactionEntity> txs = fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id());
@@ -118,22 +123,22 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         assertThat(tx.getNav()).isEqualByComparingTo("8.0647");
         assertThat(tx.getShares()).isEqualByComparingTo("50.85");
         assertThat(tx.getConfirmTime()).isNotNull();
-        assertThat(tx.getSignalLogEntity()).isNull(); // 绕过信号
-        List<FundLotEntity> lots = fundLotRepository.findByFundEntity_Id(view.id());
+        assertThat(tx.getSignalLogId()).isNull(); // 绕过信号
+        List<LotRow> lots = lots(view.id());
         assertThat(lots).hasSize(1);
-        assertThat(lots.get(0).getAcquireTxId()).isEqualTo(tx.getId());
-        assertThat(lots.get(0).getAcquireShares()).isEqualByComparingTo("50.85");
-        assertThat(lots.get(0).getRemainingShares()).isEqualByComparingTo("50.85");
+        assertThat(lots.getFirst().acquireTxId()).isEqualTo(tx.getId());
+        assertThat(lots.getFirst().acquireShares()).isEqualByComparingTo("50.85");
+        assertThat(lots.getFirst().remainingShares()).isEqualByComparingTo("50.85");
     }
 
     @Test
     @Transactional
     void create_录现有份额填建仓时间_openedAt用用户填值() {
         doAnswer(inv -> {
-            Long fundId = inv.getArgument(0);
-            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            var target = inv.getArgument(0, MarketIndicatorRefreshApi.RefreshTarget.class);
+            persistNav(target.legacyFundId(), Instant.now(), new BigDecimal("1.5"));
             return null;
-        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        }).when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         Instant userOpenedAt = Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS);
         FundView view = fundService.create(new FundCreateRequest(
@@ -142,24 +147,24 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
 
         entityManager.flush();
         entityManager.clear();
-        FundEntity fund = fundRepository.findById(view.id()).orElseThrow();
+        var position = positionApi.findOwned(testActorId(), view.portfolioFundId()).orElseThrow();
         // openedAt 用用户填值(历史日期),不是 now(DB timestamp 精度可能截断,按秒比较)
-        assertThat(fund.getOpenedAt().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
+        assertThat(position.openedAt().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
         // 6079ba1:confirmTime 语义改为 openedAt,与建仓时间一致(不再用 now)
         FundTransactionEntity tx = fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id()).get(0);
         assertThat(tx.getConfirmTime().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
-        FundLotEntity lot = fundLotRepository.findByFundEntity_Id(view.id()).get(0);
-        assertThat(lot.getAcquireDate().getEpochSecond()).isEqualTo(userOpenedAt.getEpochSecond());
+        assertThat(lots(view.id()).getFirst().acquireDate().getEpochSecond())
+                .isEqualTo(userOpenedAt.getEpochSecond());
     }
 
     @Test
     void create_录现有份额填未来建仓时间_抛OPENED_AT_IN_FUTURE() {
         // 不加 @Transactional:Service 事务独立运行,抛异常真实回滚
         doAnswer(inv -> {
-            Long fundId = inv.getArgument(0);
-            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            var target = inv.getArgument(0, MarketIndicatorRefreshApi.RefreshTarget.class);
+            persistNav(target.legacyFundId(), Instant.now(), new BigDecimal("1.5"));
             return null;
-        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        }).when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         Instant futureOpenedAt = Instant.now().plus(10, java.time.temporal.ChronoUnit.DAYS);
         long before = fundRepository.count();
@@ -177,10 +182,10 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     @Test
     void create_录现有份额填非正成本单价_抛COST_PER_SHARE_INVALID() {
         doAnswer(inv -> {
-            Long fundId = inv.getArgument(0);
-            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            var target = inv.getArgument(0, MarketIndicatorRefreshApi.RefreshTarget.class);
+            persistNav(target.legacyFundId(), Instant.now(), new BigDecimal("1.5"));
             return null;
-        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        }).when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
                 "161735", "非法成本基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
@@ -208,23 +213,24 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
     @Test
     void create_录现有份额_未配置月度预算仍同步确认() {
         doAnswer(inv -> {
-            Long fundId = inv.getArgument(0);
-            persistNav(fundId, Instant.now(), new BigDecimal("1.5"));
+            var target = inv.getArgument(0, MarketIndicatorRefreshApi.RefreshTarget.class);
+            persistNav(target.legacyFundId(), Instant.now(), new BigDecimal("1.5"));
             return null;
-        }).when(marketDataFetchService).fetchOneFund(anyLong());
+        }).when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         FundView view = fundService.create(new FundCreateRequest(
                 "161739", "无预算基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
                 new BigDecimal("3000")));
 
-        assertThat(fundRepository.findById(view.id()).orElseThrow().getStatus()).isEqualTo(FundStatus.HOLDING);
+        assertThat(positionApi.findOwned(testActorId(), view.portfolioFundId()).orElseThrow().status())
+                .isEqualTo(PositionApi.Status.OPEN);
     }
 
     @Test
     void create_录现有份额且行情拉取异常_整个创建事务回滚() {
         long before = fundRepository.count();
         doThrow(new RuntimeException("行情源不可达"))
-                .when(marketDataFetchService).fetchOneFund(anyLong());
+                .when(marketDataRefresh).refreshOne(any(MarketIndicatorRefreshApi.RefreshTarget.class));
 
         assertThatThrownBy(() -> fundService.create(new FundCreateRequest(
                 "161738", "行情失败基金", FundCategory.BROAD_BASE, FundSubType.ETF, "000300.SH",
@@ -251,6 +257,14 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         assertThat(fundTransactionRepository.findByFundIdOrderByTradeDateDesc(view.id())).isEmpty();
     }
 
+    private List<LotRow> lots(long legacyFundId) {
+        return jdbcTemplate.query("""
+                SELECT acquire_tx_id, acquire_shares, remaining_shares, acquire_date
+                FROM fund_lot WHERE fund_id = ? ORDER BY id
+                """, (rs, rowNum) -> new LotRow(rs.getLong(1), rs.getBigDecimal(2),
+                rs.getBigDecimal(3), rs.getTimestamp(4).toInstant()), legacyFundId);
+    }
+
     private void persistNav(Long fundId, Instant date, BigDecimal accumulatedNav) {
         FundEntity fund = entityManager.find(FundEntity.class, fundId);
         FundNavHistoryEntity nav = new FundNavHistoryEntity();
@@ -259,5 +273,12 @@ class FundServiceAutoFetchTest extends AbstractIntegrationTest {
         nav.setNav(accumulatedNav);
         nav.setAccumulatedNav(accumulatedNav);
         entityManager.persist(nav);
+        when(publishedNavApi.latest(fund.getProductId())).thenReturn(Optional.of(
+                new PublishedNavApi.PublishedNav(fund.getProductId(), fund.getFundCode(), date,
+                        accumulatedNav, accumulatedNav, date)));
+    }
+
+    private record LotRow(long acquireTxId, BigDecimal acquireShares, BigDecimal remainingShares,
+                          Instant acquireDate) {
     }
 }

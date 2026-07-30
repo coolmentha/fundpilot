@@ -42,6 +42,11 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
     void blocksPendingThenVoidsWithoutDeletingLedgerAndRetryKeepsFirstAudit() throws Exception {
         var fund = fundService.create(new FundCreateRequest(
                 "009999", "录入错误基金", FundCategory.BROAD_BASE, FundSubType.INDEX, null));
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT category, source FROM discipline_classification WHERE portfolio_fund_id = ?
+                """, fund.portfolioFundId()))
+                .containsEntry("category", "BROAD_BASE")
+                .containsEntry("source", "USER_CONFIRMED");
         FundEntity fundEntity = entityManager.find(FundEntity.class, fund.id());
         FundTransactionEntity pending = new FundTransactionEntity();
         pending.setFundEntity(fundEntity);
