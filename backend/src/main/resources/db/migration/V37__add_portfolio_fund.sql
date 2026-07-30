@@ -5,8 +5,10 @@ DECLARE
     missing_product_count BIGINT;
     duplicate_tracked_count BIGINT;
 BEGIN
-    SELECT count(*) INTO missing_owner_count FROM fund WHERE owner_id IS NULL;
-    SELECT count(*) INTO missing_product_count FROM fund WHERE product_id IS NULL;
+    SELECT count(*) INTO missing_owner_count
+    FROM fund WHERE deleted_date IS NULL AND owner_id IS NULL;
+    SELECT count(*) INTO missing_product_count
+    FROM fund WHERE deleted_date IS NULL AND product_id IS NULL;
     SELECT count(*) INTO duplicate_tracked_count
     FROM (
         SELECT owner_id, product_id
@@ -76,7 +78,8 @@ SELECT COALESCE(f.version, 0),
        f.deleted_date,
        CASE WHEN f.deleted_date IS NULL THEN NULL ELSE f.owner_id END,
        CASE WHEN f.deleted_date IS NULL THEN NULL ELSE 'LEGACY_ARCHIVED' END
-FROM fund f;
+FROM fund f
+WHERE f.owner_id IS NOT NULL;
 
 CREATE TABLE portfolio_fund_group_member (
     portfolio_fund_id BIGINT NOT NULL REFERENCES portfolio_fund (id) ON DELETE CASCADE,
@@ -94,7 +97,8 @@ JOIN portfolio_fund pf ON pf.legacy_fund_id = fgm.fund_id;
 
 DO $$
 BEGIN
-    IF (SELECT count(*) FROM portfolio_fund) <> (SELECT count(*) FROM fund) THEN
+    IF (SELECT count(*) FROM portfolio_fund)
+            <> (SELECT count(*) FROM fund WHERE owner_id IS NOT NULL) THEN
         RAISE EXCEPTION 'portfolio_fund backfill row count mismatch';
     END IF;
     IF EXISTS (
@@ -109,7 +113,9 @@ BEGIN
         RAISE EXCEPTION 'portfolio_fund backfill reconciliation mismatch';
     END IF;
     IF (SELECT count(*) FROM portfolio_fund_group_member)
-            <> (SELECT count(*) FROM fund_group_member) THEN
+            <> (SELECT count(*) FROM fund_group_member fgm
+                JOIN fund f ON f.id = fgm.fund_id
+                WHERE f.owner_id IS NOT NULL) THEN
         RAISE EXCEPTION 'portfolio_fund group membership backfill row count mismatch';
     END IF;
 END $$;
