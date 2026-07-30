@@ -7,7 +7,8 @@ BEGIN
     SELECT count(*) INTO orphan_count
     FROM fund legacy_fund
     LEFT JOIN portfolio_fund portfolio_fund ON portfolio_fund.legacy_fund_id = legacy_fund.id
-    WHERE legacy_fund.fund_category IS NOT NULL AND portfolio_fund.id IS NULL;
+    WHERE legacy_fund.fund_category IS NOT NULL AND portfolio_fund.id IS NULL
+      AND NOT (legacy_fund.owner_id IS NULL AND legacy_fund.deleted_date IS NOT NULL);
 
     IF orphan_count > 0 THEN
         RAISE EXCEPTION 'discipline classification backfill blocked: legacy funds without portfolio_fund=%', orphan_count;

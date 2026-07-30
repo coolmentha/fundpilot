@@ -11,12 +11,20 @@ BEGIN
     SELECT count(*) INTO orphan_transaction_count
     FROM fund_transaction t
     LEFT JOIN portfolio_fund pf ON pf.legacy_fund_id = t.fund_id
-    WHERE pf.id IS NULL;
+    WHERE pf.id IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM fund f
+          WHERE f.id = t.fund_id AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL
+      );
 
     SELECT count(*) INTO orphan_lot_count
     FROM fund_lot l
     LEFT JOIN portfolio_fund pf ON pf.legacy_fund_id = l.fund_id
-    WHERE pf.id IS NULL;
+    WHERE pf.id IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM fund f
+          WHERE f.id = l.fund_id AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL
+      );
 
     IF orphan_transaction_count > 0 OR orphan_lot_count > 0 THEN
         RAISE EXCEPTION

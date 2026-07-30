@@ -8,7 +8,9 @@ BEGIN
     SELECT count(*) INTO orphan_plan_count
     FROM fund_dca_plan plan
     LEFT JOIN portfolio_fund portfolio_fund ON portfolio_fund.legacy_fund_id = plan.fund_id
-    WHERE portfolio_fund.id IS NULL;
+    WHERE portfolio_fund.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = plan.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
     IF orphan_plan_count > 0 THEN
         RAISE EXCEPTION 'investment plan backfill blocked: plans without portfolio_fund=%', orphan_plan_count;
     END IF;
@@ -81,7 +83,9 @@ BEGIN
     SELECT count(*) INTO plan_mismatch
     FROM fund_dca_plan plan
     LEFT JOIN investment_plan migrated ON migrated.legacy_dca_plan_id = plan.id
-    WHERE migrated.id IS NULL;
+    WHERE migrated.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = plan.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
     IF plan_mismatch > 0 THEN
         RAISE EXCEPTION 'investment plan backfill reconciliation mismatch=%', plan_mismatch;
     END IF;

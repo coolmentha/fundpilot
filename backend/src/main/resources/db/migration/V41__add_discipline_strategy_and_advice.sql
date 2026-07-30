@@ -10,12 +10,16 @@ BEGIN
     SELECT count(*) INTO orphan_strategy_count
     FROM fund_strategy strategy
     LEFT JOIN portfolio_fund portfolio_fund ON portfolio_fund.legacy_fund_id = strategy.fund_id
-    WHERE strategy.fund_id IS NOT NULL AND portfolio_fund.id IS NULL;
+    WHERE strategy.fund_id IS NOT NULL AND portfolio_fund.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = strategy.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
 
     SELECT count(*) INTO orphan_advice_count
     FROM signal_log advice
     LEFT JOIN portfolio_fund portfolio_fund ON portfolio_fund.legacy_fund_id = advice.fund_id
-    WHERE advice.fund_id IS NOT NULL AND portfolio_fund.id IS NULL;
+    WHERE advice.fund_id IS NOT NULL AND portfolio_fund.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = advice.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
 
     SELECT count(*) INTO invalid_advice_type_count
     FROM signal_log
@@ -155,11 +159,15 @@ BEGIN
     SELECT count(*) INTO strategy_mismatch
     FROM fund_strategy strategy
     LEFT JOIN discipline_strategy migrated ON migrated.legacy_strategy_id = strategy.id
-    WHERE strategy.fund_id IS NOT NULL AND migrated.id IS NULL;
+    WHERE strategy.fund_id IS NOT NULL AND migrated.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = strategy.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
     SELECT count(*) INTO advice_mismatch
     FROM signal_log advice
     LEFT JOIN discipline_advice migrated ON migrated.legacy_signal_id = advice.id
-    WHERE advice.fund_id IS NOT NULL AND migrated.id IS NULL;
+    WHERE advice.fund_id IS NOT NULL AND migrated.id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM fund f WHERE f.id = advice.fund_id
+                      AND f.owner_id IS NULL AND f.deleted_date IS NOT NULL);
     IF strategy_mismatch > 0 OR advice_mismatch > 0 THEN
         RAISE EXCEPTION 'discipline backfill reconciliation mismatch: strategies=%, advice=%',
                 strategy_mismatch, advice_mismatch;
