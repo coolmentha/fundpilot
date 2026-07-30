@@ -1,0 +1,59 @@
+package com.fundpilot.backend.marketdata.infrastructure.persistence.publishednav;
+
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNav;
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNavRepository;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
+import com.fundpilot.backend.support.AbstractIntegrationTest;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class PublishedNavRepositoryIntegrationTest extends AbstractIntegrationTest {
+    private static final Instant BASE_TIME = Instant.parse("2026-07-30T00:00:00Z");
+
+    @Autowired
+    private PublishedNavRepository navs;
+
+    @Autowired
+    private FundProductApi products;
+
+    @Test
+    void latestTwoByProductIds_returnsTwoNewestNavsPerProductInDescendingOrder() {
+        long firstProductId = createProduct("first");
+        long secondProductId = createProduct("second");
+        navs.saveAll(List.of(
+                nav(firstProductId, "first", 1),
+                nav(firstProductId, "first", 2),
+                nav(firstProductId, "first", 3),
+                nav(secondProductId, "second", 4),
+                nav(secondProductId, "second", 5),
+                nav(secondProductId, "second", 6)));
+
+        List<PublishedNav> result = navs.findLatestTwoByProductIds(Set.of(firstProductId, secondProductId));
+
+        assertThat(result).extracting(PublishedNav::fundProductId, PublishedNav::navDate)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(firstProductId, BASE_TIME.plus(3, ChronoUnit.DAYS)),
+                        org.assertj.core.groups.Tuple.tuple(firstProductId, BASE_TIME.plus(2, ChronoUnit.DAYS)),
+                        org.assertj.core.groups.Tuple.tuple(secondProductId, BASE_TIME.plus(6, ChronoUnit.DAYS)),
+                        org.assertj.core.groups.Tuple.tuple(secondProductId, BASE_TIME.plus(5, ChronoUnit.DAYS)));
+    }
+
+    private long createProduct(String prefix) {
+        String suffix = Long.toUnsignedString(System.nanoTime(), 36);
+        return products.ensure(new FundProductApi.EnsureProduct(
+                "T" + suffix.substring(Math.max(0, suffix.length() - 12)),
+                prefix + " test product", null, null)).id();
+    }
+
+    private static PublishedNav nav(long productId, String code, int daysAfterBase) {
+        Instant navDate = BASE_TIME.plus(daysAfterBase, ChronoUnit.DAYS);
+        return PublishedNav.publish(null, productId, code, navDate, BigDecimal.ONE, BigDecimal.ONE, navDate);
+    }
+}
