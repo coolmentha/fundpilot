@@ -1,9 +1,8 @@
 package com.fundpilot.backend.fund.entity;
 
-import com.fundpilot.backend.common.AbstractEntity;
+import com.fundpilot.backend.platform.persistence.AbstractEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
-import com.fundpilot.backend.signal.entity.SignalLogEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -44,9 +43,8 @@ public class FundTransactionEntity extends AbstractEntity {
 
     private BigDecimal nav;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "signal_log_id")
-    private SignalLogEntity signalLogEntity;
+    @Column(name = "signal_log_id")
+    private Long signalLogId;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "related_fund_transaction_id")

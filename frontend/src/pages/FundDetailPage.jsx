@@ -16,14 +16,14 @@ import {redemptionLadderText} from '../feeRates.js';
 const {Title, Text} = Typography;
 
 /**
- * 基金详情页：聚合策略 / 信号 / 行情三个 tab，替代独立 /funds/:id/strategies 路由。
+ * 基金详情页：聚合策略 / 建议 / 行情三个 tab，替代独立 /funds/:id/strategies 路由。
  * 顶部展示基金档案，编辑仍在基金管理页进行。
  */
 export default function FundDetailPage() {
     const {fundId} = useParams();
     const id = Number(fundId);
     const {data: fund, isLoading, isError, refetch} = useFund(id);
-    const {data: feeRates} = useFundFeeRates(id);
+    const {data: feeRates} = useFundFeeRates(fund?.fundCode);
     const {data: pendingTransactions} = usePendingTransactions();
     const {data: pendingSignals} = usePendingSignals();
 
@@ -35,11 +35,11 @@ export default function FundDetailPage() {
     const pendingSignalCount = pendingSignals?.filter((signal) => signal.fundId === id).length ?? 0;
     const redemptionRates = redemptionLadderText(feeRates?.redemptionLadder);
     const items = [
-        {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id}/>},
-        {key: 'strategy', label: '策略参数', children: <StrategyTab fundId={id}/>},
-        {key: 'signal', label: '交易信号', children: <SignalTab fundId={id}/>},
-        {key: 'market', label: '行情指标', children: <MarketTab fundId={id} fundSubType={fund.fundSubType}/>},
-        {key: 'dca', label: '定投计划', children: <FundDcaTab fundId={id}/>},
+        {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id} portfolioFundId={fund.portfolioFundId}/>},
+        {key: 'strategy', label: '策略参数', children: <StrategyTab portfolioFundId={fund.portfolioFundId}/>},
+        {key: 'advice', label: '纪律建议', children: <SignalTab portfolioFundId={fund.portfolioFundId}/>},
+        {key: 'market', label: '行情指标', children: <MarketTab portfolioFundId={fund.portfolioFundId} fundSubType={fund.fundSubType}/>},
+        {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}/>},
     ];
 
     return (
@@ -58,7 +58,7 @@ export default function FundDetailPage() {
                                <Link to={`/confirm?fundId=${id}`}>待确认交易 {pendingTransactionCount} 笔</Link>
                            )}
                            {pendingSignalCount > 0 && (
-                               <Link to={`/signals?fundId=${id}`}>待回应信号 {pendingSignalCount} 条</Link>
+                               <Link to={`/advice?fundId=${id}`}>待回应建议 {pendingSignalCount} 条</Link>
                            )}
                        </Space>}/>
             )}

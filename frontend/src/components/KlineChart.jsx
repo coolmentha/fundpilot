@@ -23,7 +23,7 @@ const LINE_COLORS = ['#F59E0B', '#3B82F6', '#A855F7', '#EC4899', '#14B8A6', '#F9
 /** klinecharts 主蜡烛 pane 的固定 id(PaneIdConstants.CANDLE)。createIndicator 要 stack 到主 pane 必须显式传此 id。 */
 const CANDLE_PANE_ID = 'candle_pane';
 
-export default function KlineChart({fundId, fundSubType}) {
+export default function KlineChart({portfolioFundId, fundSubType}) {
     const [period, setPeriod] = useState('daily');
     /** 选中的 MA 周期集合(默认 5/10/20/30)。空集则不画均线。 */
     const [maSelected, setMaSelected] = useState(() => new Set([5, 10, 20, 30]));
@@ -36,7 +36,7 @@ export default function KlineChart({fundId, fundSubType}) {
     /** MA override 进行中标记:供 window error handler 判断是否静默 klinecharts draw 竞态。 */
     const maOverridingRef = useRef(false);
 
-    const {data: kline, isLoading} = useFundKline(fundId, period);
+    const {data: kline, isLoading} = useFundKline(portfolioFundId, period);
     const chartType = kline?.chartType || 'kline';
     const isIndexLike = ['ETF', 'INDEX', 'INDEX_ENHANCED'].includes(fundSubType);
     const showToolbar = isIndexLike && chartType === 'kline';

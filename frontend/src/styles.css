@@ -790,12 +790,12 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     }
 }
 
-/* 危险操作链接(归档/删除等),复用 --color-danger */
+/* 危险操作链接(作废/删除等),复用 --color-danger */
 .danger-link {
     color: var(--color-danger);
 }
 
-/* ===== 操作区危险链接(归档等) ===== */
+/* ===== 操作区危险链接(作废等) ===== */
 .danger-link {
     color: var(--color-danger);
 }

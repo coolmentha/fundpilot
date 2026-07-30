@@ -1,6 +1,6 @@
-package com.fundpilot.backend.market.client;
+package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 
-import com.fundpilot.backend.exception.BusinessException;
+import com.fundpilot.backend.platform.web.error.BusinessException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

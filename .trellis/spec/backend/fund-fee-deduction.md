@@ -43,22 +43,22 @@ fund_transaction   -- 加列(可空)
   ADD COLUMN fee_rate   NUMERIC(19,8)  -- 加权费率(fee / gross,小数)
 ```
 
-### 后端 REST 接口(`FundController`)
+### 后端 REST 接口(`ProductCatalog`)
 
 ```
-GET /api/funds/{id}/fee-rates → ApiResponse<FundFeeView>
-  FundFeeView(purchaseRate, discountRate, salesServiceFee, redemptionLadder)
+GET /api/products/{fundCode}/fees → ApiResponse<FeeResponse>
+  FeeResponse(purchaseRate, discountRate, salesServiceFee, redemptionLadder, fetchedAt)
 ```
 
 ### 服务/辅助类
 
 ```java
-// FundFeeService — 费率爬取与缓存
-FundFeeSnapshot fetchAndSave(String fundCode);   // 爬 jjfl HTML → 解析 → upsert fund_fee
-FundFeeSnapshot getFee(String fundCode);         // 读 DB,缺失返回 FundFeeSnapshot.empty()
-FundFeeSnapshot getFeeByFundId(Long fundId);     // 经 fund → fundCode → getFee
-FundFeeView      getFeeView(Long fundId);        // 给前端
-void             refreshHoldingFunds();          // 遍历 HOLDING 基金刷新
+// ProductCatalog — 产品费率表的所有者
+FundFeeCommandHandler.refresh(String fundCode);          // 事务外抓取,短事务 upsert fund_fee
+FundFeeCommandHandler.findOrRefresh(String fundCode);    // 详情查询缺失时按需抓取
+FundFeeQueryHandler.findByFundCode(String fundCode);     // 只读缓存
+FundFeeApi.findByFundCode(String fundCode);              // Accounting 等模块读取的公开契约
+FundFeeCommandHandler.refreshKnownSchedules();           // 只刷新已有缓存代码
 
 // TransactionConfirmSupport — 买卖确认核心算费(被 NavConfirmService / TransactionConfirmService 共用)
 void onBuyConfirmed (FundTransactionEntity tx, BigDecimal navValue);
@@ -72,7 +72,7 @@ static BigDecimal             parseSalesServiceFee(String html);
 record PurchaseFeeRate(BigDecimal originalRate, BigDecimal discountRate) {}
 record RedemptionTier(Integer maxDays, BigDecimal rate) {}  // maxDays=null → 末档(≥上一档)
 
-// FundFeeRefreshJob
+// productcatalog.adapter.scheduler.feerefresh.FundFeeRefreshJob
 @Scheduled(cron = "0 30 2 * * *", zone = "Asia/Shanghai")  // 北京时间 02:30,早于 03:00 交易确认
 ```
 
@@ -166,7 +166,7 @@ tx.feeRate  = grossAmount > 0 ? totalFee ÷ grossAmount : null
 | 卖出时 `fund_lot` 无可用记录 | 降级:不扣赎回费,`amount = shares × nav`,记 warn | (无,不阻断) |
 | 卖出份额 > 可用 lot 余额总和 | 抛异常,交易不确认 | `INSUFFICIENT_LOTS` |
 | 卖出份额中的 lot 缺口有事实 ADJUST_IN 份额支撑 | 缺口部分按零赎回费确认,记 warn | (无,正常返回) |
-| jjfl HTML 抓取失败(网络/404) | `fetchAndSave` 返回 null,保留旧 `fund_fee` 记录 | (无,记 warn) |
+| jjfl HTML 抓取失败(网络/404) | `refresh` 返回 empty,保留旧 `fund_fee` 记录 | (无,记 warn) |
 | `navValue` 为 null/0 | `ArithmeticException`(divide by zero) | (既有约束,非本任务) |
 
 ---
@@ -261,14 +261,14 @@ if (tx.isBuy()) {
 
 **背景**:`fund_fee` 未爬取 / HTML 解析失败 / 无 lot 记录时,不应阻断交易确认。
 
-**决策**:`getFee` 返回 `FundFeeSnapshot.empty()`(discountRate=0, ladder=空);
+**决策**:ProductCatalog API 返回空 Optional，Accounting 映射为 `FundFeeSnapshot.empty()`(discountRate=0, ladder=空);
 `onBuyConfirmed` / `onSellConfirmed` 用 0 费率继续,记 warn。**不抛异常**。
 这与项目既有「外部数据缺失降级」模式一致(参考 `MarketRealtimeCache` 保留旧缓存 + warn)。
 
 ### 启动线程不刷新逐基金费率
 
-**背景**:`refreshHoldingFunds()` 逐基金访问外部 HTML,受共享限流。放在 `ApplicationReadyEvent` 会让启动时间随持仓数线性增长。
+**背景**:逐基金访问外部 HTML 受限流。放在 `ApplicationReadyEvent` 会让启动时间随缓存数量线性增长。
 
-**决策**:启动时不执行费率爬取；每天北京时间 02:30 定时刷新，必须早于 03:00 `NavConfirmJob`。
+**决策**:启动时不执行费率爬取；每天北京时间 02:30 只刷新已有费率缓存，必须早于 03:00 `NavConfirmJob`。
 若外部源失败或缓存仍缺失,交易确认沿用零费率降级，详情查询可按需抓取。
 `FundFeeRefreshJobTest` 必须断言该 Job 没有 `@EventListener(ApplicationReadyEvent.class)` 方法，并校验 cron/zone 时序。

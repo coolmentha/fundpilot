@@ -34,6 +34,26 @@ assertThat(repository.findMaxCalendarDate()).contains(JULY_10);
 
 Run the affected test after a known row-producing test and in the full suite. Passing only in isolation is not sufficient evidence for shared-schema aggregate tests.
 
+### User-Scoped Integration Tests
+
+Integration tests that call user-scoped services directly must establish the same identity invariants as
+the Web adapter: persist a real `site_user`, bind it through `CurrentActorCommandHandler`, close the
+returned scope after each test, and assign that user's ID to directly persisted `fund`, `fund_group`,
+`user_config`, and portfolio fixtures.
+
+```java
+testActorId = users.ensureBootstrapAdmin("integration-test-admin", "test-password").id();
+actorScope = currentActorCommands.open(CurrentActor.system(testActorId));
+
+FundEntity fund = new FundEntity();
+fund.setOwnerId(testActorId);
+```
+
+Do not add a production fallback actor and do not use `ownerId = null` or `userId = 0` to make a test
+pass. Cross-user tests must create distinct users and explicitly assign each fixture to its intended
+owner. A test for a later ownership rule must use another real, owned aggregate; an inaccessible or
+nonexistent ID is correctly rejected earlier as `FUND_NOT_FOUND`.
+
 ## Forbidden Patterns
 
 ```java
@@ -68,6 +88,7 @@ mvn test
 - Date logic requires boundary tests around UTC/Asia-Shanghai day changes.
 - Database changes require a fresh-schema Flyway migration and Hibernate validation run.
 - Integration-test fixes for shared database state require a clean-schema run of the affected classes and a full-suite run to detect order dependencies.
+- Identity-boundary changes require direct-service integration tests and Web authentication tests in the same full-suite run.
 
 ## Review Checklist
 

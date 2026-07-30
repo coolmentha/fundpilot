@@ -6,10 +6,10 @@ import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
-import com.fundpilot.backend.market.client.FundEstimateSnapshot;
-import com.fundpilot.backend.market.service.EstimateStatus;
-import com.fundpilot.backend.market.service.MarketRealtimeCache;
-import com.fundpilot.backend.user.service.CurrentUserService;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
+import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,7 +36,7 @@ class FundPnlServiceDateTest {
     @Mock FundRepository fundRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
     @Mock MarketRealtimeCache marketRealtimeCache;
-    @Mock CurrentUserService currentUserService;
+    @Mock CurrentActorApi currentUserService;
 
     @Test
     void QDII按北京时间首次发现当天使用最新确认净值收益() {
@@ -221,6 +221,25 @@ class FundPnlServiceDateTest {
         assertThat(pnl.totalPnl()).isEqualByComparingTo("10.00");
         assertThat(pnl.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
         assertThat(pnl.valuationDate()).isEqualTo(Instant.parse("2026-07-09T00:00:00Z"));
+    }
+
+    @Test
+    void 货币基金不读取盘中估值且返回不可用() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+        FundEntity fund = fund();
+        fund.setInvestmentTarget(InvestmentTarget.MONEY_MARKET);
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(nav("2026-07-09T00:00:00Z", "1.20")));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund);
+
+        assertThat(pnl.estimateStatus()).isEqualTo(EstimateStatus.UNAVAILABLE);
+        assertThat(pnl.dailyChangePct()).isNull();
+        verifyNoInteractions(marketRealtimeCache);
     }
 
     private static FundEntity fund() {

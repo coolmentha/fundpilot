@@ -7,9 +7,9 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 const signal = {
     id: 11,
     fundId: 1,
-    signalType: 'SELL',
+    action: 'SELL',
     reason: 'LOGIC_BROKEN',
-    actionStatus: 'PENDING',
+    responseStatus: 'PENDING',
     suggestedMeasure: {value: 1, measureUnit: 'SHARE'},
 };
 

@@ -1,5 +1,12 @@
 package com.fundpilot.backend.support;
 
+import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
+import com.fundpilot.backend.identityaccess.application.command.currentactor.CurrentActorCommandHandler;
+import com.fundpilot.backend.identityaccess.application.gateway.currentactor.ActorContext;
+import com.fundpilot.backend.identityaccess.application.query.currentactor.CurrentActor;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
@@ -23,5 +30,32 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public abstract class AbstractIntegrationTest {
     static {
         TestDatabaseSchema.resetOnce();
+    }
+
+    @Autowired
+    private UserAdministrationApi users;
+
+    @Autowired
+    private CurrentActorCommandHandler currentActorCommands;
+
+    private ActorContext.Scope actorScope;
+    private long testActorId;
+
+    @BeforeEach
+    void bindTestActor() {
+        testActorId = users.ensureBootstrapAdmin("integration-test-admin", "integration-test-password").id();
+        actorScope = currentActorCommands.open(CurrentActor.system(testActorId));
+    }
+
+    @AfterEach
+    void clearTestActor() {
+        if (actorScope != null) {
+            actorScope.close();
+            actorScope = null;
+        }
+    }
+
+    protected final long testActorId() {
+        return testActorId;
     }
 }

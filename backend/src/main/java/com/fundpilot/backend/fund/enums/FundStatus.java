@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.enums;
 
-import com.fundpilot.backend.common.EnumValue;
+import com.fundpilot.backend.sharedkernel.enums.EnumValue;
 
 public enum FundStatus implements EnumValue {
     PENDING_HOLDING("未建仓"),

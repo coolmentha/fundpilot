@@ -1,4 +1,4 @@
-package com.fundpilot.backend.exception;
+package com.fundpilot.backend.platform.web.error;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

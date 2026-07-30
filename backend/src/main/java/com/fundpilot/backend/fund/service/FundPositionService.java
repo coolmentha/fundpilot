@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundTransactionEntity;
 import com.fundpilot.backend.fund.enums.FundTransactionSource;

@@ -21,12 +21,15 @@ const toPercentValues = (source) => {
     return values;
 };
 
-const toPayload = (values) => {
+const toPayload = (values, recommendation, customized) => {
     const payload = {};
     FIELDS.forEach(({key}) => {
         payload[key] = Number(values[key]) / 100;
     });
     payload.cooldownTradingDays = values.cooldownTradingDays;
+    payload.presetFundCategory = recommendation?.fundCategory ?? null;
+    payload.presetVersion = recommendation?.presetVersion ?? null;
+    payload.customized = customized;
     return payload;
 };
 
@@ -57,7 +60,7 @@ export default function StrategyFormModal({open, editing, recommendation, onOk, 
 
     const handleOk = async () => {
         const values = await form.validateFields();
-        onOk(toPayload(values));
+        onOk(toPayload(values, recommendation, customized));
     };
 
     const restoreRecommendation = () => {

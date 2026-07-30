@@ -13,14 +13,14 @@ import {percent} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyFormModal from './StrategyFormModal.jsx';
 
-export default function StrategyTab({fundId}) {
+export default function StrategyTab({portfolioFundId}) {
     const {message} = App.useApp();
-    const {data: strategies, isLoading} = useStrategies(fundId);
-    const {data: active} = useActiveStrategy(fundId);
-    const {data: recommendation, isLoading: recommendationLoading} = useStrategyRecommendation(fundId);
-    const createStrategy = useCreateStrategy(fundId);
-    const updateStrategy = useUpdateStrategy(fundId);
-    const strategyAction = useStrategyAction(fundId);
+    const {data: strategies, isLoading} = useStrategies(portfolioFundId);
+    const {data: active} = useActiveStrategy(portfolioFundId);
+    const {data: recommendation, isLoading: recommendationLoading} = useStrategyRecommendation(portfolioFundId);
+    const createStrategy = useCreateStrategy(portfolioFundId);
+    const updateStrategy = useUpdateStrategy(portfolioFundId);
+    const strategyAction = useStrategyAction(portfolioFundId);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);

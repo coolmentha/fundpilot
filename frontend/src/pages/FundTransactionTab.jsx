@@ -26,12 +26,12 @@ const transactionSourceOptions = [
  * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持七类来源,
  * 买入类填金额、卖出类填份额(份额/金额等净值确认后回填),手动卖出不卡 7 天硬约束。
  */
-export default function FundTransactionTab({fundId}) {
-    const {data: transactions, isLoading} = useFundTransactions(fundId);
+export default function FundTransactionTab({fundId, portfolioFundId}) {
+    const {data: transactions, isLoading} = useFundTransactions(portfolioFundId);
     const {data: funds} = useFunds();
     const cancelTx = useCancelTransaction();
     const confirmTx = useConfirmTransaction();
-    const createManual = useCreateManualTransaction(fundId);
+    const createManual = useCreateManualTransaction(portfolioFundId);
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [adjustmentConfirmation, setAdjustmentConfirmation] = useState(null);
@@ -42,7 +42,7 @@ export default function FundTransactionTab({fundId}) {
     const isTransferOut = source === 'TRANSFER_OUT';
     const currentFund = funds?.find((fund) => fund.id === fundId);
     const currentHoldingShares = Number(currentFund?.holdingShares ?? 0);
-    const {data: feeRates} = useFundFeeRates(fundId);
+    const {data: feeRates} = useFundFeeRates(currentFund?.fundCode);
     const redemptionHint = redemptionLadderText(feeRates?.redemptionLadder);
 
     const columns = [
@@ -107,9 +107,9 @@ export default function FundTransactionTab({fundId}) {
         } else {
             body.amount = values.amount;
         }
-        // 基金转换(task 07-08):转出时选了转入基金,带 targetFundId 让后端建两条互指交易
-        if (values.source === 'TRANSFER_OUT' && values.targetFundId) {
-            body.targetFundId = values.targetFundId;
+        // 基金转换(task 07-08):转出时选了转入基金,带 portfolioFundId 让后端建两条互指交易
+        if (values.source === 'TRANSFER_OUT' && values.targetPortfolioFundId) {
+            body.targetPortfolioFundId = values.targetPortfolioFundId;
         }
         await createTransaction(body);
     };
@@ -160,12 +160,12 @@ export default function FundTransactionTab({fundId}) {
                         </Form.Item>
                     )}
                     {isTransferOut && (
-                        <Form.Item label="转入基金" name="targetFundId"
+                        <Form.Item label="转入基金" name="targetPortfolioFundId"
                                    extra="选填:选了即基金转换(转出A份额->转入B份额),确认时自动算份额与手续费;不选为纯转出单条记录">
                             <Select allowClear showSearch optionFilterProp="label"
                                     placeholder="选择转入基金(留空为纯转出)"
-                                    options={(funds ?? []).filter(f => f.id !== fundId)
-                                        .map(f => ({value: f.id, label: `${f.fundName}(${f.fundCode})`}))}/>
+                                    options={(funds ?? []).filter(f => f.portfolioFundId !== portfolioFundId)
+                                        .map(f => ({value: f.portfolioFundId, label: `${f.fundName}(${f.fundCode})`}))}/>
                         </Form.Item>
                     )}
                     {isSell && (

@@ -18,15 +18,15 @@ const {Text} = Typography;
 
 /**
  * 基金详情 · 定投计划 tab。用户配置一次,系统在定投日 14:55 自动生成 INVEST 交易。
- * 与移动止盈信号解耦:定投负责持续买入,止盈由基金绑定的策略信号独立触发。
+ * 与移动止盈建议解耦:定投负责持续买入,止盈由基金绑定的纪律策略独立触发。
  */
-export default function FundDcaTab({fundId}) {
+export default function FundDcaTab({portfolioFundId}) {
     const {message} = App.useApp();
-    const {data: plans, isLoading} = useDcaPlans(fundId);
-    const {data: active} = useActiveDcaPlan(fundId);
-    const createPlan = useCreateDcaPlan(fundId);
-    const updatePlan = useUpdateDcaPlan(fundId);
-    const planAction = useDcaPlanAction(fundId);
+    const {data: plans, isLoading} = useDcaPlans(portfolioFundId);
+    const {data: active} = useActiveDcaPlan(portfolioFundId);
+    const createPlan = useCreateDcaPlan(portfolioFundId);
+    const updatePlan = useUpdateDcaPlan(portfolioFundId);
+    const planAction = useDcaPlanAction(portfolioFundId);
     const deletePlan = useDeleteDcaPlan();
 
     const [modalOpen, setModalOpen] = useState(false);

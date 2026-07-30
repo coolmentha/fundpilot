@@ -10,8 +10,8 @@ const {Title, Text} = Typography;
 const {RangePicker} = DatePicker;
 
 const signalColumns = [
-    {title: '状态', dataIndex: 'actionStatus', width: 100, render: (v) => <StatusTag value={v}/>},
-    {title: '类型', dataIndex: 'signalType', width: 90, render: (v) => <StatusTag value={v}/>},
+    {title: '状态', dataIndex: 'responseStatus', width: 100, render: (v) => <StatusTag value={v}/>},
+    {title: '类型', dataIndex: 'action', width: 90, render: (v) => <StatusTag value={v}/>},
     {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
     {title: '系数', dataIndex: 'coefficient', width: 80, render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
     {title: '原因', dataIndex: 'reason', render: text},
@@ -20,19 +20,19 @@ const signalColumns = [
         return m ? <span className="num-cell">{Number(m.value).toFixed(2)} ({text(m.measureUnit)})</span> : '-';
     }},
     {title: '警告', dataIndex: 'warnings', render: (v) => v ? <Text type="warning">{v}</Text> : '-'},
-    {title: '信号时间', dataIndex: 'signalDate', width: 170, render: datetime},
+    {title: '建议时间', dataIndex: 'signalDate', width: 170, render: datetime},
 ];
 
 /**
- * 基金详情 · 信号 tab。锁定单只基金，去掉基金选择器（由父路由提供 fundId）。
+ * 基金详情 · 建议 tab。锁定单只基金，去掉基金选择器（由父路由提供 fundId）。
  */
-export default function SignalTab({fundId}) {
+export default function SignalTab({portfolioFundId}) {
     const {
         data: todaySignal,
         isLoading: todayLoading,
         isError: todayError,
         refetch: refetchToday,
-    } = useSignalsToday(fundId);
+    } = useSignalsToday(portfolioFundId);
     const [range, setRange] = useState(null);
     const from = range?.[0]?.format('YYYY-MM-DD');
     const to = range?.[1]?.format('YYYY-MM-DD');
@@ -41,30 +41,30 @@ export default function SignalTab({fundId}) {
         isLoading: rangeLoading,
         isError: rangeError,
         refetch: refetchRange,
-    } = useSignalsRange(fundId, from, to);
+    } = useSignalsRange(portfolioFundId, from, to);
 
     return (
         <Space direction="vertical" size={16} className="full-width">
-            <Card title={<Title level={5}>今日信号</Title>}>
+            <Card title={<Title level={5}>今日建议</Title>}>
                 {todayError ? (
-                    <QueryErrorState onRetry={refetchToday} description="今日信号加载失败"/>
+                    <QueryErrorState onRetry={refetchToday} description="今日建议加载失败"/>
                 ) : (
                     <Table rowKey="id" size="small" loading={todayLoading}
                            dataSource={todaySignal ? [todaySignal] : []}
                            columns={signalColumns} pagination={false} scroll={{x: 760}}
-                           locale={{emptyText: <EmptyState description="今日无信号"/>}}/>
+                           locale={{emptyText: <EmptyState description="今日无建议"/>}}/>
                 )}
             </Card>
-            <Card title={<Title level={5}>历史信号</Title>}>
+            <Card title={<Title level={5}>历史建议</Title>}>
                 <Space style={{marginBottom: 16}}>
                     <RangePicker value={range} onChange={setRange}/>
                 </Space>
                 {rangeError ? (
-                    <QueryErrorState onRetry={refetchRange} description="历史信号加载失败"/>
+                    <QueryErrorState onRetry={refetchRange} description="历史建议加载失败"/>
                 ) : (
                     <Table rowKey="id" size="small" loading={rangeLoading} dataSource={rangeSignals}
                            columns={signalColumns} pagination={false} scroll={{x: 760}}
-                           locale={{emptyText: <EmptyState description="所选区间无信号"/>}}/>
+                           locale={{emptyText: <EmptyState description="所选区间无建议"/>}}/>
                 )}
             </Card>
         </Space>

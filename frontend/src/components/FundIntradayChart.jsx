@@ -4,11 +4,11 @@ import {dispose, init} from 'klinecharts';
 import {useFundIntraday} from '../api/hooks.js';
 
 /** 基金详情当日分时图；数据只来自后端分钟线缓存。 */
-export default function FundIntradayChart({fundId}) {
+export default function FundIntradayChart({portfolioFundId}) {
     const containerRef = useRef(null);
     const chartRef = useRef(null);
     const [metric, setMetric] = useState('percent');
-    const {data: intraday, isLoading} = useFundIntraday(fundId);
+    const {data: intraday, isLoading} = useFundIntraday(portfolioFundId);
     const pointCount = intraday?.points?.length ?? 0;
     const baseNav = Number(intraday?.baseNav);
     const usePercentAxis = metric === 'percent' && Number.isFinite(baseNav) && baseNav > 0;

@@ -7,17 +7,52 @@ vi.mock('./client.js', () => ({
     del: vi.fn(),
 }));
 
-import {del, post, put} from './client.js';
+import {del, get, post, put} from './client.js';
 import {
     deleteDcaPlan,
+    getFundFeeRates,
+    getWatchedIndices,
     invalidateDcaBudgetSummary,
     invalidateDcaPlanQueries,
     invalidateConfirmOperationQueries,
     invalidateSignalQueries,
     requestAdminAction,
+    replaceWatchedIndices,
     saveAdminUser,
     updatePendingTransaction,
+    voidPortfolioFund,
 } from './hooks.js';
+
+describe('portfolio fund voiding', () => {
+    it('posts the reason and explicit irreversible confirmation', () => {
+        voidPortfolioFund({portfolioFundId: 17, reason: '基金代码录入错误'});
+
+        expect(post).toHaveBeenCalledWith('/api/portfolio-funds/17/void', {
+            reason: '基金代码录入错误',
+            confirmed: true,
+        });
+    });
+});
+
+describe('product fee rates', () => {
+    it('queries fees by encoded product code', () => {
+        getFundFeeRates('019736 A');
+
+        expect(get).toHaveBeenCalledWith('/api/products/019736%20A/fees');
+    });
+});
+
+describe('watched indices', () => {
+    it('uses the MarketData owned endpoint for reads and replacements', () => {
+        getWatchedIndices();
+        replaceWatchedIndices(['1.000001', '1.000300']);
+
+        expect(get).toHaveBeenCalledWith('/api/market-data/watched-indices');
+        expect(put).toHaveBeenCalledWith('/api/market-data/watched-indices', {
+            indexCodes: ['1.000001', '1.000300'],
+        });
+    });
+});
 
 describe('signal query invalidation', () => {
     it('refreshes pending, today, and range queries after a signal response', () => {
@@ -54,7 +89,7 @@ describe('admin actions', () => {
     it.each([
         ['generate', '/api/admin/signals/generate'],
         ['confirm-nav', '/api/admin/transactions/confirm-nav'],
-        ['sync-dict', '/api/admin/fund-dict/sync'],
+        ['sync-dict', '/api/admin/products/catalog/sync'],
         ['sync-calendar', '/api/admin/market-data/sync-trading-calendar'],
         ['refresh', '/api/admin/market-data/refresh'],
     ])('routes %s through the authenticated API client', (action, path) => {
@@ -107,7 +142,7 @@ describe('DCA plan deletion', () => {
     it('uses DELETE for the selected plan', () => {
         deleteDcaPlan(7);
 
-        expect(del).toHaveBeenCalledWith('/api/dca-plans/7');
+        expect(del).toHaveBeenCalledWith('/api/investment-plans/7');
     });
 
     it('invalidates all plan projections and budget summary', () => {

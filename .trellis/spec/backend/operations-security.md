@@ -10,6 +10,7 @@
 HTTP Header: X-Admin-Key: <secret>
 Browser session: HttpOnly host-only cookie fundpilot_session=<signed opaque token>
 Config: fundpilot.admin.api-key=${ADMIN_API_KEY:}
+Config: fundpilot.admin.session-secret=${ADMIN_SESSION_SECRET:}
 Config: fundpilot.flyway.legacy-v7-repair.enabled=${FLYWAY_REPAIR_LEGACY_V7:false}
 Config: fundpilot.deployment.validation-mode=${DEPLOYMENT_VALIDATION_MODE:false}
 
@@ -22,6 +23,13 @@ GET /api/auth/verify
 ```
 
 ```java
+CurrentActorApi.Actor CurrentActorApi.current();
+long CurrentActorApi.userId();
+void CurrentActorApi.runAsSystem(long userId, Runnable action);
+List<Long> UserDirectoryApi.activeUserIds();
+```
+
+```java
 void LegacyV7FlywayRepairService.migrate(Flyway flyway);
 FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 ```
@@ -30,7 +38,7 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 ## 3. Contracts
 
-- `AdminApiKeyFilter` 保护 `/api` 和所有 `/api/**`；静态资源、Actuator 与定时任务不受影响。
+- `AuthenticationFilter` 保护 `/api` 和所有 `/api/**`；静态资源与 Actuator 不受影响。
 - 访问 Key 使用常量时间比较，不进入 URL、请求体、日志、localStorage、sessionStorage、Cookie 或前端构建变量。浏览器只在登录请求 Header 中提交一次 Key，后端签发不含原始 Key 的 HMAC 签名会话 Cookie。
 - 会话 Cookie 必须为 host-only、`HttpOnly`、`SameSite=Strict`，生产 HTTPS 下带 `Secure`，有效期 30 天。业务 API 同时接受有效会话 Cookie和 `X-Admin-Key`，后者仅供脚本、部署探活和首次登录。
 - 未认证时前端只渲染登录页，业务路由与查询 hooks 不得挂载。页面启动通过 `GET /api/auth/verify` 重验 Cookie，验证成功前不得挂载业务界面。
@@ -39,7 +47,11 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - 已认证请求返回 401 时必须推进认证代次、清空 React Query 缓存并回到登录页；管理页复用全站登录态，不得再次采集 Key。
 - API client 必须按认证代次关联请求；旧代次的迟到 401 不得退出已完成的新登录。
 - 所有 `/api/**` 成功和失败响应必须返回 `Cache-Control: no-store, private` 与 `Vary: X-Admin-Key`，退出后不得依赖浏览器或代理继续持有敏感响应。
-- 服务端 Key 未配置时失败关闭，不得匿名放行。
+- 服务端 Key 未配置时，携带 `X-Admin-Key` 的兼容认证失败关闭为 503；用户名/密码和已签名会话仍按各自凭据验证，不得匿名放行。
+- `X-Admin-Key` 只能映射到一个真实、启用的 ADMIN 用户；无可映射管理员时返回 401，禁止签发或恢复 `userId=0` 等虚拟全局身份。
+- ADMIN 调用普通入口时必须使用自己的真实 userId 并执行 owner-scoped 查询；只有显式管理入口可以执行跨用户操作，且 Handler 必须再次校验 ADMIN 角色。
+- Web Filter 负责把真实身份绑定到 `ActorContext`；Application Handler、模块 API 不得读取 HTTP、`RequestContextHolder` 或 `SecurityContext`。线程未绑定 actor 时必须失败，不得回退为全局身份。
+- Scheduler 必须通过 `UserDirectoryApi.activeUserIds()` 枚举启用用户，并对每个用户调用 `CurrentActorApi.runAsSystem(userId, action)`；禁止用空 actor 或特殊 userId 执行全局批处理。
 - Flyway 默认严格校验，禁止 `ignoreMigrationPatterns: '*:missing'` 或 `versioned:missing`。
 - repair 开关开启时，只有唯一 `MISSING_SUCCESS`、version `7`、description `dca take profit replaces timing`、script `V7__dca_take_profit_replaces_timing.sql` 可以进入 repair。
 - repair 前拒绝其他 missing/future/failed 与 checksum、description、type 不匹配；repair 后必须只有 V7 为 `DELETED`，不得 removed 或 aligned 其他迁移。合法 pending migration 必须先正常 migrate，再执行最终严格 validate，禁止用前置 validate 阻断版本升级。
@@ -70,9 +82,14 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 
 | 条件 | 行为 | HTTP / 结果 |
 |---|---|---|
-| `ADMIN_API_KEY` 为空 | 所有 `/api/**` 请求失败关闭 | 503 `ADMIN_AUTH_NOT_CONFIGURED` |
+| `ADMIN_API_KEY` 为空且请求携带 `X-Admin-Key` | 兼容 Key 认证失败关闭 | 503 `ADMIN_AUTH_NOT_CONFIGURED` |
+| `ADMIN_API_KEY` 为空且使用有效用户名/密码或会话 | 按真实用户继续认证 | 登录或原端点响应 |
 | API Header 缺失或不匹配 | 不进入 Controller | 401 `ADMIN_UNAUTHORIZED` |
-| API Header 匹配 | 执行对应业务 Controller | 原端点响应 |
+| API Header 匹配但无启用 ADMIN 用户 | 不创建虚拟身份 | 401 `ADMIN_UNAUTHORIZED` |
+| API Header 匹配且存在启用 ADMIN 用户 | 绑定该真实管理员后执行 Controller | 原端点响应 |
+| USER 访问 `/api/admin/**` | Filter 拒绝，Handler 仍保留角色校验 | 403 `ADMIN_FORBIDDEN` |
+| ADMIN 访问普通业务 API | 仅查询/写入自己的 ownerId | 原端点响应 |
+| 当前线程未绑定 actor | Application API 失败关闭 | `IllegalStateException`，不得使用 user 0 |
 | 会话 Cookie 缺失/无效 | 显示登录页，不挂载业务路由 | 等待用户输入 |
 | 会话 Cookie 重验成功 | 挂载业务路由 | 恢复登录态 |
 | 重验网络错误/超时/5xx | 保留 Cookie和查询隔离 | 显示重试/重新登录 |
@@ -94,6 +111,8 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 ## 5. Good / Base / Bad Cases
 
 - Good：登录请求验证 Key 后签发 HttpOnly 持久会话 Cookie；刷新、关闭或重启浏览器后先重新验证 Cookie，成功才恢复业务界面。
+- Good：兼容 Key 映射到数据库中的真实启用管理员；管理员访问 `/api/funds` 时仍只看到自己拥有的基金。
+- Good：组合快照任务枚举启用用户，并在独立 actor scope 中逐用户执行；嵌套 scope 结束后恢复外层 actor。
 - Good：生产存在唯一旧 V7 Missing，repair 标记 `DELETED` 后 V1-V18 严格校验通过。
 - Good：新 backend 先完成健康检查，候选 frontend 只在内部网络完成 API 反代验证，失败时按发布前备份回滚。
 - Good：候选前端原始 HTTP 探活在容器内保持请求写端打开，宿主完整读取响应后再判断成功，Nginx 反代慢于静态页时仍返回 200。
@@ -113,11 +132,16 @@ FlywayMigrationStrategy FlywayMigrationConfig.flywayMigrationStrategy();
 - Bad：只用静态 Nginx 或直接后端验证 BusyBox `nc`；这无法复现 Nginx 等待上游时因客户端 EOF 产生的 `499`。
 - Bad：只在脚本启动时检查当前时刻，镜像拉取或备份变慢后仍可能跨入 cron 窗口。
 - Bad：先 `mv .deployed-state`、下一行才切换 trap，两个命令之间的信号会走错回滚阶段。
+- Bad：把 `userId=0`、`null ownerId` 或“当前线程无身份”解释为管理员可见全局数据。
+- Bad：Application Handler 或模块 API 直接读取 `HttpServletRequest`、`RequestContextHolder` 或 `SecurityContext`。
 
 ## 6. Tests Required
 
-- `AdminApiKeyFilterTest`：普通 API 的正确、缺失、错误、未配置 Key，编码/矩阵绕过路径及 Actuator 放行。
-- `AdminApiKeyIntegrationTest`：真实 Spring Web 过滤链验证普通 API 与 `/api/auth/verify` 的 401/200，以及 Actuator 放行。
+- `AuthenticationFilterTest`：真实 actor 绑定、普通用户拒绝管理入口、缺失凭据 401，以及 Actuator 放行。
+- `AuthenticationIntegrationTest`：真实 Spring Web 过滤链验证兼容 Key 映射真实管理员、普通 API 与 `/api/auth/verify`、持久 Cookie 和 Actuator 放行。
+- `UserAdministrationCommandHandlerTest`：非管理员拒绝管理命令，且禁止停用或降级最后一个启用管理员。
+- `ThreadLocalActorContextTest`：嵌套 scope 恢复外层 actor、scope 关闭后清理、`userId=0` 拒绝。
+- `MultiUserIsolationIntegrationTest`：ADMIN/USER 的普通入口均按 ownerId 隔离，共享产品行情不突破用户数据边界。
 - `frontend/src/auth/SiteAuthGate.test.jsx` / `api/client.test.js` / `siteAuthStorage.test.js` / `hooks.test.js`：一次性 Header 登录、Cookie 启动重验、暂时故障重试、401 退出、认证代次隔离、跨标签页退出、五个管理 action 路由和未知 action 拒绝。
 - `LegacyV7FlywayRepairServiceTest`：开关关闭、幂等、额外 missing、failed、元数据漂移及越权 repair 结果。
 - `LegacyV7FlywayRepairIntegrationTest`：真实 PostgreSQL 独立 schema 中插入旧 V7 history，并保留至少一个合法 pending migration；repair 后 V7 为 `DELETED`、pending 成功应用且严格 validate 成功。
@@ -151,8 +175,11 @@ TAG=latest docker compose up -d
 ### Correct
 
 ```java
-if (configuredKey.isBlank()) reject(503, ADMIN_AUTH_NOT_CONFIGURED);
-if (!MessageDigest.isEqual(expected, supplied)) reject(401, ADMIN_UNAUTHORIZED);
+if (suppliedKey != null && !legacyKey.isConfigured()) reject(503, ADMIN_AUTH_NOT_CONFIGURED);
+User admin = users.findFirstEnabledByRole(ADMIN).orElseThrow(this::unauthorized);
+try (var ignored = actorContext.open(CurrentActor.user(admin.id(), ADMIN))) {
+    filterChain.doFilter(request, response);
+}
 ```
 
 ```javascript

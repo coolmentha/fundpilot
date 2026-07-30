@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.entity;
 
-import com.fundpilot.backend.common.AbstractEntity;
+import com.fundpilot.backend.platform.persistence.AbstractEntity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;

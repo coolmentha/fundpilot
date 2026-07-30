@@ -10,8 +10,8 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
-import com.fundpilot.backend.market.client.FundEstimateSnapshot;
-import com.fundpilot.backend.market.service.MarketRealtimeCache;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -258,6 +258,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistHoldingFundWithCode(String code, String name) {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode(code);
         fund.setFundName(name);
         fund.setStatus(FundStatus.HOLDING);
@@ -266,6 +267,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistPendingFund() {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("159825");
         fund.setFundName("半导体ETF");
         fund.setStatus(FundStatus.PENDING_HOLDING);

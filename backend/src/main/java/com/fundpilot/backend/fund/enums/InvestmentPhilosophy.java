@@ -1,6 +1,6 @@
 package com.fundpilot.backend.fund.enums;
 
-import com.fundpilot.backend.common.EnumValue;
+import com.fundpilot.backend.sharedkernel.enums.EnumValue;
 
 public enum InvestmentPhilosophy implements EnumValue {
     ACTIVE("主动管理"),

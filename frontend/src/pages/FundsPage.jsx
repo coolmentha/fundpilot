@@ -1,10 +1,10 @@
 import {useCallback, useEffect, useState} from 'react';
-import {Alert, AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography} from 'antd';
+import {Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography} from 'antd';
 import {AppstoreOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import dayjs from 'dayjs';
 import {Link, useSearchParams} from 'react-router-dom';
-import {useArchiveFund, useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund} from '../api/hooks.js';
+import {useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund, useVoidPortfolioFund} from '../api/hooks.js';
 import {date, datetime, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import {estimateStatusText} from '../querySafety.js';
@@ -32,13 +32,16 @@ export default function FundsPage() {
         refetch: refetchDcaBudget,
     } = useDcaBudgetSummary();
     const saveFund = useSaveFund();
-    const archiveFund = useArchiveFund();
+    const voidPortfolioFund = useVoidPortfolioFund();
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form] = Form.useForm();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeGroup, setActiveGroup] = useState(getStoredFundGroup);
     const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+    const [voidingFund, setVoidingFund] = useState(null);
+    const [voidReason, setVoidReason] = useState('');
+    const [voidConfirmed, setVoidConfirmed] = useState(false);
     const [params, setParams] = useSearchParams();
     const initialHoldingShares = Form.useWatch('initialHoldingShares', form);
     const positionWarningEnabled = Form.useWatch('positionWarningEnabled', form);
@@ -47,7 +50,7 @@ export default function FundsPage() {
         || (fundGroups || []).some((group) => String(group.id) === activeGroup) ? activeGroup : ALL_GROUPS_KEY;
     const displayRows = filterFundsByGroup(rows, effectiveActiveGroup);
 
-    // 字典搜索(仅新建时用;编辑时基金身份已固定)
+    // 产品目录搜索(仅新建时用;编辑时基金身份已固定)
     const {data: searchResults, isFetching: searching} = useFundSearch(searchQuery);
     const options = (searchResults || []).map((r) => ({
         value: r.fundCode,
@@ -58,8 +61,10 @@ export default function FundsPage() {
                     <span>{r.fundName}</span>
                 </Space>
                 <Space size={4}>
-                    {r.fundSubType && <Tag>{labels[r.fundSubType] || r.fundSubType}</Tag>}
-                    {r.fundCategory && <Tag color="blue">{labels[r.fundCategory] || r.fundCategory}</Tag>}
+                    {r.productType && <Tag>{labels[r.productType] || r.productType}</Tag>}
+                    {r.defaultDisciplineCategory && <Tag color="blue">
+                        {labels[r.defaultDisciplineCategory] || r.defaultDisciplineCategory}
+                    </Tag>}
                 </Space>
             </Space>
         ),
@@ -100,7 +105,7 @@ export default function FundsPage() {
         return () => window.clearTimeout(timer);
     }, [funds, openEdit, params, setParams]);
 
-    // 搜索框选中候选:一次性回填 code/name/类型/子类/跟踪指数
+    // 搜索框选中候选:产品类型映射旧建仓字段,目录分类只作为纪律默认建议。
     const onSelectCandidate = (value, option) => {
         const c = option?.candidate;
         if (!c) {
@@ -109,8 +114,8 @@ export default function FundsPage() {
         form.setFieldsValue({
             fundCode: c.fundCode,
             fundName: c.fundName,
-            fundCategory: c.fundCategory,
-            fundSubType: c.fundSubType,
+            fundCategory: c.defaultDisciplineCategory,
+            fundSubType: c.productType,
             benchmarkIndexCode: c.benchmarkIndexCode || '',
         });
         setSearchQuery('');
@@ -135,9 +140,20 @@ export default function FundsPage() {
         }
     };
 
-    const archive = async (fund) => {
-        await archiveFund.mutateAsync(fund.id);
-        message.success(`已归档 ${fund.fundName}`);
+    const openVoid = (fund) => {
+        setVoidingFund(fund);
+        setVoidReason('');
+        setVoidConfirmed(false);
+    };
+
+    const voidFund = async () => {
+        if (!voidingFund?.portfolioFundId || !voidReason.trim() || !voidConfirmed) return;
+        await voidPortfolioFund.mutateAsync({
+            portfolioFundId: voidingFund.portfolioFundId,
+            reason: voidReason.trim(),
+        });
+        message.success(`已作废 ${voidingFund.fundName}`);
+        setVoidingFund(null);
     };
 
     const columns = [
@@ -201,13 +217,9 @@ export default function FundsPage() {
             title: '操作', width: 168, render: (_, row) => (
                 <Space size="small" wrap>
                     <Link to={`/funds/${row.id}`}>详情</Link>
-                    <Link to={`/signals?fundId=${row.id}`}>信号</Link>
+                    <Link to={`/advice?fundId=${row.id}`}>建议</Link>
                     <a onClick={() => openEdit(row)}>编辑</a>
-                    <Popconfirm title={`归档 ${row.fundName}?`} description="软删除基金及其全部关联数据,可联系管理员恢复。"
-                                okText="归档" okButtonProps={{danger: true}} cancelText="取消"
-                                onConfirm={() => archive(row)}>
-                        <a className="danger-link"><DeleteOutlined/> 归档</a>
-                    </Popconfirm>
+                    <a className="danger-link" onClick={() => openVoid(row)}><DeleteOutlined/> 作废</a>
                 </Space>
             ),
         },
@@ -336,6 +348,22 @@ export default function FundsPage() {
             </Modal>
             <FundGroupManagerModal open={groupManagerOpen} groups={fundGroups}
                                    onCancel={() => setGroupManagerOpen(false)}/>
+            <Modal title={`作废 ${voidingFund?.fundName || ''}`} open={!!voidingFund}
+                   onCancel={() => setVoidingFund(null)} onOk={voidFund} okText="确认作废"
+                   okButtonProps={{danger: true, disabled: !voidReason.trim() || !voidConfirmed}}
+                   confirmLoading={voidPortfolioFund.isPending} destroyOnHidden>
+                <Space direction="vertical" size={16} className="full-width">
+                    <Alert type="warning" showIcon message="作废不可恢复"
+                           description="该记录将不再参与持仓、收益、纪律和计划计算，底层审计记录仍会保留。"/>
+                    <Input.TextArea value={voidReason} rows={3} maxLength={500} showCount
+                                    placeholder="填写作废原因"
+                                    onChange={(event) => setVoidReason(event.target.value)}/>
+                    <Checkbox checked={voidConfirmed}
+                              onChange={(event) => setVoidConfirmed(event.target.checked)}>
+                        我确认该组合基金从未构成有效投资事实，并理解作废后不可恢复
+                    </Checkbox>
+                </Space>
+            </Modal>
         </Space>
     );
 }

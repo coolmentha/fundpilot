@@ -1,4 +1,4 @@
-package com.fundpilot.backend.config;
+package com.fundpilot.backend.platform.scheduling;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;

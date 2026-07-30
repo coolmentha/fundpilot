@@ -87,9 +87,32 @@ flowchart LR
 - 分组排序由用户统一保存；删除分组只解除基金关联，不删除或归档基金。
 - 现有基金升级后默认无分组，仍可在“全部”中查看。
 
-## 归档
+## 作废与清仓
 
-归档是记录可见性操作，与 `FundStatus` 正交。任意持仓状态都可以归档；基金及关联交易、信号、策略和行情记录通过软删除从默认查询中隐藏，物理数据仍保留。
+作废用于纠正基金代码、产品身份等录入错误，不是普通的可见性操作：
+
+- 只有用户明确确认后才能将组合基金从 `TRACKED` 置为 `VOIDED`。
+- `VOIDED` 不可恢复，也不能通过再次买入重新启用；需要时应基于正确基金产品重新创建组合基金。
+- 作废记录、操作者、时间、原因及原始业务证据必须保留，不能物理删除。
+- 被作废组合基金的交易、收益、纪律、计划和行情关联完全排除在业务计算之外。
+- 作废不能用于隐藏一次真实亏损，也不能替代正常卖出；存在真实有效交易时，是否允许作废必须由迁移切片中的校验规则显式保护。
+
+清仓由有效交易把 CONFIRMED 净份额降为零产生：
+
+- 清仓后的组合基金不出现在当前持仓列表，进入已清仓历史。
+- 历史交易和已实现收益继续计入组合累计收益。
+- 清仓不改变记录有效性，后续买入可重新进入 `HOLDING` 并开始新的持仓周期。
+- 单只清仓基金没有当前未实现盈亏，但其历史收益不能从组合累计收益中消失。
+
+### 验收场景
+
+| 场景 | 结果 |
+| --- | --- |
+| 用户输错基金代码且尚未形成有效业务事实，确认作废 | 状态变为 `VOIDED`，默认查询与全部计算排除，审计证据保留 |
+| 用户尝试恢复已作废组合基金 | 拒绝；应使用正确基金产品重新创建 |
+| 用户通过有效卖出把份额降为零 | 状态变为 `CLEARED`，退出当前持仓，进入已清仓历史 |
+| 已清仓基金存在历史已实现收益 | 继续计入组合累计收益 |
+| 用户再次买入已清仓基金 | 重新进入 `HOLDING`，建立新的持仓周期，历史交易不丢失 |
 
 ## 失败与错误
 
@@ -107,6 +130,6 @@ flowchart LR
 
 ## 实现与验证入口
 
-- 实现：[FundService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundService.java)、[FundPositionService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundPositionService.java)、[FundArchiveService](../../backend/src/main/java/com/fundpilot/backend/fund/service/FundArchiveService.java)
-- 测试：[FundServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceTest.java)、[FundServiceAutoFetchTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceAutoFetchTest.java)、[FundPositionServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundPositionServiceTest.java)
+- 当前实现：[PortfolioFund](../../backend/src/main/java/com/fundpilot/backend/portfolio/domain/portfoliofund/PortfolioFund.java)、[PortfolioFundCommandHandler](../../backend/src/main/java/com/fundpilot/backend/portfolio/application/command/fundtracking/PortfolioFundCommandHandler.java)、[PortfolioCorrectionCommandHandler](../../backend/src/main/java/com/fundpilot/backend/accounting/application/command/portfoliocorrection/PortfolioCorrectionCommandHandler.java)、[FundGroupingController](../../backend/src/main/java/com/fundpilot/backend/portfolio/adapter/web/fundgrouping/FundGroupingController.java)。旧级联归档入口已删除；作废仅改变 PortfolioFund 有效性并保留其他模块审计记录。
+- 测试：[PortfolioFundTest](../../backend/src/test/java/com/fundpilot/backend/portfolio/domain/portfoliofund/PortfolioFundTest.java)、[PortfolioCorrectionIntegrationTest](../../backend/src/test/java/com/fundpilot/backend/accounting/adapter/web/portfoliocorrection/PortfolioCorrectionIntegrationTest.java)、[FundGroupingIntegrationTest](../../backend/src/test/java/com/fundpilot/backend/portfolio/adapter/web/fundgrouping/FundGroupingIntegrationTest.java)、[FundServiceTest](../../backend/src/test/java/com/fundpilot/backend/fund/service/FundServiceTest.java)
 - 相关决策：[ADR-0001](../adr/0001-derive-peak-navs-instead-of-storing.md)、[ADR-0012](../adr/0012-existing-position-onboarding.md)、[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

@@ -1,4 +1,4 @@
-package com.fundpilot.backend.exception;
+package com.fundpilot.backend.platform.web.error;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * issue #4 验收:通过 {@link GlobalExceptionHandler @RestControllerAdvice} 把业务异常
- * 统一转成 {@link com.fundpilot.backend.common.ApiResponse#error} 响应。用 {@code @WebMvcTest}
+ * 统一转成 {@link com.fundpilot.backend.platform.web.ApiResponse#error} 响应。用 {@code @WebMvcTest}
  * 切片,只装配 MVC 层 + handler + 测试 Controller,不连数据库。
  *
  * <p><b>为什么用嵌套 {@link SpringBootConfiguration}</b>:{@code @WebMvcTest} 默认回退到主应用类

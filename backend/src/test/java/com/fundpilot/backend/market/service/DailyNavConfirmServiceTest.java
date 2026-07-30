@@ -1,12 +1,14 @@
-package com.fundpilot.backend.market.service;
+package com.fundpilot.backend.marketdata.application.command.navpublishing;
 
-import com.fundpilot.backend.common.ChinaTradingDate;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import com.fundpilot.backend.fund.entity.FundEntity;
 import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
-import com.fundpilot.backend.market.client.FundNavSnapshot;
-import com.fundpilot.backend.market.client.MarketDataSource;
+import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
+import com.fundpilot.backend.marketdata.application.command.indicatorrefresh.MarketIndicatorRefreshCommandHandler;
+import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -27,19 +29,28 @@ import static org.mockito.Mockito.when;
  * issue #39 验收:当晚净值确认拉取。
  * <p>20-23 点每 5 分钟直接拉净值历史，按远端日期晚于本地最新日期增量落库。
  */
-class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
+class DailyNavPublishingCommandHandlerTest extends AbstractIntegrationTest {
 
     @MockitoBean
-    MarketDataSource marketDataSource;
+    PublishedNavSourceGateway navSource;
+
+    @MockitoBean
+    MarketIndicatorRefreshCommandHandler indicatorRefresh;
 
     @Autowired
-    DailyNavConfirmService dailyNavConfirmService;
+    DailyNavPublishingCommandHandler navPublishing;
 
     @Autowired
     FundRepository fundRepository;
 
     @Autowired
     FundNavHistoryRepository fundNavHistoryRepository;
+
+    @Autowired
+    FundProductApi productCatalogApi;
+
+    @Autowired
+    PortfolioFundApi portfolioFundApi;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
@@ -57,11 +68,11 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
         persistNav(fund, yesterday, "1.0000");
-        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
-                new FundNavSnapshot(yesterday, new BigDecimal("1.0000"), new BigDecimal("1.0000")),
-                new FundNavSnapshot(today, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
+        when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
+                new PublishedNavSourceGateway.NavSnapshot(yesterday, new BigDecimal("1.0000"), new BigDecimal("1.0000")),
+                new PublishedNavSourceGateway.NavSnapshot(today, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
 
-        dailyNavConfirmService.confirmTodayNav();
+        navPublishing.publishToday();
 
         // 今日累计净值已落库
         List<FundNavHistoryEntity> navs = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
@@ -78,9 +89,9 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         // 已落库今日净值(已确认)
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         persistNav(fund, today, "1.0200");
-        dailyNavConfirmService.confirmTodayNav();
+        navPublishing.publishToday();
 
-        verify(marketDataSource, never()).fetchNavHistory(fundCode);
+        verify(navSource, never()).fetchHistory(fundCode);
         assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
     }
 
@@ -92,10 +103,10 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         Instant twoDaysAgo = today.minus(2, java.time.temporal.ChronoUnit.DAYS);
         Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
         persistNav(fund, twoDaysAgo, "1.0000");
-        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
-                new FundNavSnapshot(yesterday, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
+        when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
+                new PublishedNavSourceGateway.NavSnapshot(yesterday, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
 
-        dailyNavConfirmService.confirmTodayNav();
+        navPublishing.publishToday();
 
         assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
                 .extracting(FundNavHistoryEntity::getNavDate).contains(yesterday);
@@ -107,11 +118,11 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         FundEntity fund = persistFund(fundCode);
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         Instant previousTradingDay = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
-        when(marketDataSource.fetchNavHistory(fundCode)).thenReturn(List.of(
-                new FundNavSnapshot(previousTradingDay, new BigDecimal("1.0100"),
+        when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
+                new PublishedNavSourceGateway.NavSnapshot(previousTradingDay, new BigDecimal("1.0100"),
                         new BigDecimal("1.0100"))));
 
-        dailyNavConfirmService.confirmNavForDate(previousTradingDay);
+        navPublishing.publishForDate(previousTradingDay);
 
         assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
                 .extracting(FundNavHistoryEntity::getNavDate)
@@ -119,10 +130,16 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
     }
 
     private FundEntity persistFund(String code) {
+        FundProductApi.ProductReference product = productCatalogApi.ensure(
+                new FundProductApi.EnsureProduct(code, "测试基金", null, null));
         FundEntity fund = new FundEntity();
+        fund.setProductId(product.id());
         fund.setFundCode(code);
         fund.setFundName("测试基金");
-        return fundRepository.save(fund);
+        FundEntity saved = fundRepository.save(fund);
+        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(saved.getId(), testActorId(),
+                product.id(), true, new BigDecimal("0.30")));
+        return saved;
     }
 
     private void persistNav(FundEntity fund, Instant date, String nav) {
@@ -131,10 +148,13 @@ class DailyNavConfirmServiceTest extends AbstractIntegrationTest {
         entity.setNavDate(date);
         entity.setNav(new BigDecimal(nav));
         entity.setAccumulatedNav(new BigDecimal(nav));
-        fundNavHistoryRepository.save(entity);
+        FundNavHistoryEntity saved = fundNavHistoryRepository.save(entity);
+        jdbcTemplate.update("UPDATE fund_nav_history SET fund_product_id = ? WHERE id = ?",
+                fund.getProductId(), saved.getId());
     }
 
     private String uniqueCode() {
-        return "T" + System.nanoTime();
+        String value = Long.toString(System.nanoTime());
+        return "T" + value.substring(Math.max(0, value.length() - 12));
     }
 }

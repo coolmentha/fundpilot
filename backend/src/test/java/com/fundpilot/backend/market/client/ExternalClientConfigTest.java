@@ -1,6 +1,6 @@
-package com.fundpilot.backend.market.client;
+package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 
-import com.fundpilot.backend.market.service.MarketDataMetrics;
+import com.fundpilot.backend.platform.observability.MarketDataMetrics;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

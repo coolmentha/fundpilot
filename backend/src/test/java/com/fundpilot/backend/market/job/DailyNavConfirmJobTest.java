@@ -1,7 +1,7 @@
-package com.fundpilot.backend.market.job;
+package com.fundpilot.backend.marketdata.adapter.scheduler.navpublishing;
 
-import com.fundpilot.backend.fund.service.support.TradingCalendarService;
-import com.fundpilot.backend.market.service.DailyNavConfirmService;
+import com.fundpilot.backend.marketdata.application.command.navpublishing.DailyNavPublishingCommandHandler;
+import com.fundpilot.backend.marketdata.application.query.tradingcalendar.TradingCalendarQueryHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -16,11 +16,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class DailyNavConfirmJobTest {
+class DailyNavPublishingJobTest {
 
     @Test
     void confirmTodayNav_cron明确使用上海时区() throws Exception {
-        Method method = DailyNavConfirmJob.class.getMethod("confirmTodayNav");
+        Method method = DailyNavPublishingJob.class.getMethod("publishToday");
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
 
         assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");
@@ -29,19 +29,19 @@ class DailyNavConfirmJobTest {
 
     @Test
     void catchUpPreviousTradingDayNav_每十分钟补拉上一交易日() throws Exception {
-        DailyNavConfirmService confirmService = mock(DailyNavConfirmService.class);
-        TradingCalendarService calendarService = mock(TradingCalendarService.class);
+        DailyNavPublishingCommandHandler navPublishing = mock(DailyNavPublishingCommandHandler.class);
+        TradingCalendarQueryHandler calendar = mock(TradingCalendarQueryHandler.class);
         Instant now = Instant.parse("2026-07-15T01:00:00Z");
         Instant today = Instant.parse("2026-07-15T00:00:00Z");
         Instant previousTradingDay = Instant.parse("2026-07-14T00:00:00Z");
-        when(calendarService.latestTradingDayBefore(today)).thenReturn(Optional.of(previousTradingDay));
-        DailyNavConfirmJob job = new DailyNavConfirmJob(
-                confirmService, calendarService, Clock.fixed(now, ZoneOffset.UTC));
+        when(calendar.latestBefore(today)).thenReturn(Optional.of(previousTradingDay));
+        DailyNavPublishingJob job = new DailyNavPublishingJob(
+                navPublishing, calendar, Clock.fixed(now, ZoneOffset.UTC));
 
-        job.catchUpPreviousTradingDayNav();
+        job.catchUpPreviousTradingDay();
 
-        verify(confirmService).confirmNavForDate(previousTradingDay);
-        Method method = DailyNavConfirmJob.class.getMethod("catchUpPreviousTradingDayNav");
+        verify(navPublishing).publishForDate(previousTradingDay);
+        Method method = DailyNavPublishingJob.class.getMethod("catchUpPreviousTradingDay");
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
         assertThat(scheduled.cron()).isEqualTo("0 */10 0-9 * * *");
         assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");

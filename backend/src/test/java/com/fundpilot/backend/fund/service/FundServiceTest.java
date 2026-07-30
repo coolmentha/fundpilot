@@ -1,7 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
-import com.fundpilot.backend.exception.BusinessException;
-import com.fundpilot.backend.exception.ErrorCode;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
 import com.fundpilot.backend.fund.controller.FundView;
 import com.fundpilot.backend.fund.entity.FundEntity;
@@ -9,6 +9,9 @@ import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundSubType;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
+import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.portfolio.adapter.api.fundgrouping.PortfolioGroupingApi;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +33,9 @@ class FundServiceTest extends AbstractIntegrationTest {
 
     @Autowired FundService fundService;
     @Autowired EntityManager entityManager;
+    @Autowired FundProductApi productCatalogApi;
+    @Autowired PortfolioFundApi portfolioFundApi;
+    @Autowired PortfolioGroupingApi portfolioGroupingApi;
 
     @Test
     void create_正常创建() {
@@ -43,6 +49,7 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
         assertThat(view.positionWarningEnabled()).isTrue();
         assertThat(view.positionWarningRatio()).isEqualByComparingTo("0.30");
+        assertThat(view.portfolioFundId()).isPositive();
     }
 
     @Test
@@ -64,7 +71,10 @@ class FundServiceTest extends AbstractIntegrationTest {
 
         FundView view = fundService.create(request);
 
-        assertThat(view.groups()).extracting("name").containsExactly("核心", "宽基");
+        assertThat(portfolioGroupingApi.memberships(testActorId()))
+                .filteredOn(group -> group.portfolioFundId() == view.portfolioFundId())
+                .extracting(PortfolioGroupingApi.GroupMembership::groupName)
+                .containsExactly("核心", "宽基");
     }
 
     @Test
@@ -120,10 +130,18 @@ class FundServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund(FundCategory category) {
         FundEntity fund = new FundEntity();
+        fund.setOwnerId(testActorId());
         fund.setFundCode("510300");
         fund.setFundName("沪深300ETF");
         fund.setFundCategory(category);
+        var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
+                fund.getFundCode(), fund.getFundName(), null, null));
+        fund.setProductId(product.id());
         entityManager.persist(fund);
+        entityManager.flush();
+        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
+                fund.getId(), testActorId(), product.id(),
+                fund.isPositionWarningEnabled(), fund.getPositionWarningRatio()));
         return fund;
     }
 }

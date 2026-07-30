@@ -16,7 +16,7 @@ vi.mock('../api/hooks.js', () => ({
     useDcaBudgetSummary: () => ({data: null, isLoading: false, isError: false, refetch: vi.fn()}),
     useFundSearch: () => ({data: [], isFetching: false}),
     useSaveFund: () => ({mutateAsync: vi.fn(), isPending: false}),
-    useArchiveFund: () => ({mutateAsync: vi.fn()}),
+    useVoidPortfolioFund: () => ({mutateAsync: vi.fn(), isPending: false}),
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
