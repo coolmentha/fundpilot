@@ -65,53 +65,51 @@ FROM normalized
 GROUP BY fund_code, field_name
 HAVING count(DISTINCT field_value) > 1;
 
-WITH codes AS (
-    SELECT trim(fund_code) AS fund_code
-    FROM fund_dict WHERE deleted_date IS NULL AND fund_code IS NOT NULL AND trim(fund_code) <> ''
+WITH dictionary_latest AS (
+    SELECT DISTINCT ON (trim(fund_code))
+           trim(fund_code) AS fund_code, fund_name, raw_name, fund_sub_type,
+           fund_category
+    FROM fund_dict
+    WHERE deleted_date IS NULL AND fund_code IS NOT NULL AND trim(fund_code) <> ''
+    ORDER BY trim(fund_code), updated_date DESC NULLS LAST, id DESC
+), dictionary_benchmark AS (
+    SELECT DISTINCT ON (trim(fund_code))
+           trim(fund_code) AS fund_code, benchmark_index_code
+    FROM fund_dict
+    WHERE deleted_date IS NULL AND fund_code IS NOT NULL AND trim(fund_code) <> ''
+      AND benchmark_index_code IS NOT NULL AND trim(benchmark_index_code) <> ''
+    ORDER BY trim(fund_code), updated_date DESC NULLS LAST, id DESC
+), fund_latest AS (
+    SELECT DISTINCT ON (trim(fund_code))
+           trim(fund_code) AS fund_code, fund_name, fund_sub_type, investment_target,
+           benchmark_index_code, fund_category
+    FROM fund
+    WHERE fund_code IS NOT NULL AND trim(fund_code) <> ''
+    ORDER BY trim(fund_code), (deleted_date IS NULL) DESC, updated_date DESC NULLS LAST, id DESC
+), fund_benchmark AS (
+    SELECT DISTINCT ON (trim(fund_code))
+           trim(fund_code) AS fund_code, benchmark_index_code
+    FROM fund
+    WHERE fund_code IS NOT NULL AND trim(fund_code) <> ''
+      AND benchmark_index_code IS NOT NULL AND trim(benchmark_index_code) <> ''
+    ORDER BY trim(fund_code), (deleted_date IS NULL) DESC, updated_date DESC NULLS LAST, id DESC
+), codes AS (
+    SELECT fund_code FROM dictionary_latest
     UNION
-    SELECT trim(fund_code) AS fund_code
-    FROM fund WHERE fund_code IS NOT NULL AND trim(fund_code) <> ''
+    SELECT fund_code FROM fund_latest
 ), selected AS (
     SELECT c.fund_code,
-           COALESCE(
-               (SELECT d.fund_name FROM fund_dict d
-                WHERE d.deleted_date IS NULL AND trim(d.fund_code) = c.fund_code
-                ORDER BY d.updated_date DESC NULLS LAST, d.id DESC LIMIT 1),
-               (SELECT f.fund_name FROM fund f WHERE trim(f.fund_code) = c.fund_code
-                ORDER BY (f.deleted_date IS NULL) DESC, f.updated_date DESC NULLS LAST, f.id DESC LIMIT 1),
-               c.fund_code) AS fund_name,
-           (SELECT d.raw_name FROM fund_dict d
-            WHERE d.deleted_date IS NULL AND trim(d.fund_code) = c.fund_code
-            ORDER BY d.updated_date DESC NULLS LAST, d.id DESC LIMIT 1) AS raw_name,
-           COALESCE(
-               (SELECT d.fund_sub_type FROM fund_dict d
-                WHERE d.deleted_date IS NULL AND trim(d.fund_code) = c.fund_code
-                ORDER BY d.updated_date DESC NULLS LAST, d.id DESC LIMIT 1),
-               (SELECT f.fund_sub_type FROM fund f WHERE trim(f.fund_code) = c.fund_code
-                ORDER BY (f.deleted_date IS NULL) DESC, f.updated_date DESC NULLS LAST, f.id DESC LIMIT 1))
-               AS product_type,
-           (SELECT f.investment_target FROM fund f
-            WHERE trim(f.fund_code) = c.fund_code AND f.investment_target IS NOT NULL
-            ORDER BY (f.deleted_date IS NULL) DESC, f.updated_date DESC NULLS LAST, f.id DESC LIMIT 1)
-               AS investment_target,
-           COALESCE(
-               (SELECT d.benchmark_index_code FROM fund_dict d
-                WHERE d.deleted_date IS NULL AND trim(d.fund_code) = c.fund_code
-                  AND d.benchmark_index_code IS NOT NULL AND trim(d.benchmark_index_code) <> ''
-                ORDER BY d.updated_date DESC NULLS LAST, d.id DESC LIMIT 1),
-               (SELECT f.benchmark_index_code FROM fund f
-                WHERE trim(f.fund_code) = c.fund_code
-                  AND f.benchmark_index_code IS NOT NULL AND trim(f.benchmark_index_code) <> ''
-                ORDER BY (f.deleted_date IS NULL) DESC, f.updated_date DESC NULLS LAST, f.id DESC LIMIT 1))
-               AS benchmark_index_code,
-           COALESCE(
-               (SELECT d.fund_category FROM fund_dict d
-                WHERE d.deleted_date IS NULL AND trim(d.fund_code) = c.fund_code
-                ORDER BY d.updated_date DESC NULLS LAST, d.id DESC LIMIT 1),
-               (SELECT f.fund_category FROM fund f WHERE trim(f.fund_code) = c.fund_code
-                ORDER BY (f.deleted_date IS NULL) DESC, f.updated_date DESC NULLS LAST, f.id DESC LIMIT 1))
-               AS default_discipline_category
+           COALESCE(d.fund_name, f.fund_name, c.fund_code) AS fund_name,
+           d.raw_name,
+           COALESCE(d.fund_sub_type, f.fund_sub_type) AS product_type,
+           f.investment_target,
+           COALESCE(db.benchmark_index_code, fb.benchmark_index_code) AS benchmark_index_code,
+           COALESCE(d.fund_category, f.fund_category) AS default_discipline_category
     FROM codes c
+    LEFT JOIN dictionary_latest d ON d.fund_code = c.fund_code
+    LEFT JOIN dictionary_benchmark db ON db.fund_code = c.fund_code
+    LEFT JOIN fund_latest f ON f.fund_code = c.fund_code
+    LEFT JOIN fund_benchmark fb ON fb.fund_code = c.fund_code
 )
 INSERT INTO fund_product (
     fund_code, fund_name, raw_name, product_type, investment_target,
