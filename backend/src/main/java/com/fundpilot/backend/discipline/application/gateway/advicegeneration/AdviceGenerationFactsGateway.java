@@ -18,7 +18,7 @@ public interface AdviceGenerationFactsGateway {
                  BigDecimal matureRedeemableShares) {
     }
 
-    record MarketSnapshot(BigDecimal currentNav, boolean priceAboveYearLine,
+    record MarketSnapshot(BigDecimal currentNav, Boolean priceAboveYearLine,
                           boolean yearLineRising, String weeklyMacdState, String volumeState,
                           BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
     }

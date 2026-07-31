@@ -50,7 +50,7 @@ class MarketIndicatorRepositoryImpl implements MarketIndicatorRepository {
     private static MarketIndicator map(ResultSet rs) throws SQLException {
         return new MarketIndicator(rs.getLong("fund_product_id"), rs.getString("fund_code"),
                 rs.getDate("snapshot_date").toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant(),
-                rs.getBigDecimal("current_nav"), rs.getBoolean("price_above_year_line"),
+                rs.getBigDecimal("current_nav"), rs.getObject("price_above_year_line", Boolean.class),
                 rs.getBoolean("year_line_rising"), rs.getString("weekly_macd_state"),
                 rs.getString("volume_state"), rs.getBigDecimal("weekly_drop_percent"),
                 rs.getBoolean("is_sixty_day_high"));

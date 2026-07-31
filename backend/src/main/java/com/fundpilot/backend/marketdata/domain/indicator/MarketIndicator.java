@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record MarketIndicator(long fundProductId, String fundCode, Instant snapshotDate,
-                              BigDecimal currentNav, boolean priceAboveYearLine,
+                              BigDecimal currentNav, Boolean priceAboveYearLine,
                               boolean yearLineRising, String weeklyMacdState,
                               String volumeState, BigDecimal weeklyDropPercent,
                               boolean sixtyDayHigh) {

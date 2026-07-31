@@ -177,7 +177,7 @@ public class TransactionLedgerCommandHandler {
         mutate(() -> transaction.reviseInput(amount, shares, effectiveTradeDate));
         LedgerTransaction saved = transactions.save(transaction);
         if (conversion != null) {
-            mutate(() -> conversion.inLeg().reviseInput(null, null, effectiveTradeDate));
+            mutate(() -> conversion.inLeg().reviseTradeDate(effectiveTradeDate));
             transactions.save(conversion.inLeg());
         }
         return LedgerResult.from(saved);
@@ -268,9 +268,8 @@ public class TransactionLedgerCommandHandler {
      */
     private LedgerTransaction pendingInLegPlaceholder(long portfolioFundId, long ownerId,
                                                       Instant tradeDate) {
-        return transactions.save(LedgerTransaction.rehydrate(0L, portfolioFundId, ownerId,
-                TransactionSource.TRANSFER_IN, TransactionStatus.PENDING, null, null, null, null, null,
-                tradeDate, null, null, clock.instant(), null, null, null, null, null));
+        return transactions.save(LedgerTransaction.placeConversionInLegPlaceholder(
+                portfolioFundId, ownerId, tradeDate));
     }
 
     private void publishCreated(LedgerTransaction saved, Instant occurredAt) {

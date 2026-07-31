@@ -22,6 +22,15 @@ class AdvicePolicyTest {
     }
 
     @Test
+    void 年线数据不足时不误判逻辑破位清仓() {
+        var result = new AdvicePolicy().evaluate(strategy(), facts("ACTIVE", "OPEN", "1", "100",
+                null, "GREEN_EXPANDING", "NORMAL", "1", "1", "100"), 10, true);
+
+        assertThat(result.action()).isEqualTo(AdviceAction.NONE);
+        assertThat(result.reason()).isEqualTo("NO_SELL_TRIGGER");
+    }
+
+    @Test
     void 移动止盈先建立峰值再按回撤与限额计算份额() {
         DisciplineStrategy strategy = strategy();
         AdvicePolicy policy = new AdvicePolicy();
@@ -47,7 +56,7 @@ class AdvicePolicyTest {
     }
 
     private static AdvicePolicy.Facts facts(String type, String status, String cost, String shares,
-                                             boolean aboveYearLine, String macd, String volume,
+                                             Boolean aboveYearLine, String macd, String volume,
                                              String unitNav, String accumulatedNav, String matureShares) {
         return new AdvicePolicy.Facts(type, status, new BigDecimal(cost), new BigDecimal(shares),
                 new AdvicePolicy.Market(aboveYearLine, macd, volume), new BigDecimal(unitNav),

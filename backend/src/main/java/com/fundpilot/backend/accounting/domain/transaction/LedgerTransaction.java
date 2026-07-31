@@ -95,6 +95,18 @@ public final class LedgerTransaction {
                 signalLogId, dcaPlanId, disciplineAdviceId, investmentPlanId);
     }
 
+    /**
+     * 转换转入腿占位行：创建时金额与份额均为空（由转出腿确认后回填），ID 待落库后回填，
+     * 因此不校验输入也不校验 id，与 {@link #placePending} 的输入校验路径区分。
+     */
+    public static LedgerTransaction placeConversionInLegPlaceholder(long portfolioFundId, long ownerId,
+                                                                    Instant tradeDate) {
+        return new LedgerTransaction(null, portfolioFundId, ownerId, TransactionSource.TRANSFER_IN,
+                TransactionStatus.PENDING, null, null, null, null, null,
+                Objects.requireNonNull(tradeDate, "交易发生时间不能为空"), null, null, null, null,
+                null, null, null, null);
+    }
+
     /** 录入一笔调整流水，创建即确认，不计净值与费用。 */
     public static LedgerTransaction recordAdjustment(long portfolioFundId, long ownerId,
                                                      TransactionSource source, BigDecimal shares,
@@ -179,6 +191,13 @@ public final class LedgerTransaction {
         } else {
             this.shares = ShareScale.normalize(newShares);
         }
+        this.tradeDate = newTradeDate;
+    }
+
+    /** 仅同步交易日，不触碰业务输入；转换对转入腿金额由转出腿确认后回填，修改时没有金额也合法。 */
+    public void reviseTradeDate(Instant newTradeDate) {
+        requirePending("修改");
+        Objects.requireNonNull(newTradeDate, "交易发生时间不能为空");
         this.tradeDate = newTradeDate;
     }
 

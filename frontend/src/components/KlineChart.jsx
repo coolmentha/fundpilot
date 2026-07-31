@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import {init, dispose} from 'klinecharts';
 import {Segmented, Empty} from 'antd';
 import {useFundKline} from '../api/hooks.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 /**
  * 基金 K 线/走势图组件(klinecharts v9.8.12)。
@@ -36,14 +37,15 @@ export default function KlineChart({portfolioFundId, fundSubType}) {
     /** MA override 进行中标记:供 window error handler 判断是否静默 klinecharts draw 竞态。 */
     const maOverridingRef = useRef(false);
 
-    const {data: kline, isLoading} = useFundKline(portfolioFundId, period);
-    const chartType = kline?.chartType || 'kline';
+    const {data: kline, isLoading, isError, refetch} = useFundKline(portfolioFundId, period);
+    const chartType = kline?.chartType;
     const isIndexLike = ['ETF', 'INDEX', 'INDEX_ENHANCED'].includes(fundSubType);
-    const showToolbar = isIndexLike && chartType === 'kline';
+    const hasData = !!chartType && (kline.bars || []).length > 0;
+    const showToolbar = isIndexLike && chartType === 'kline' && hasData;
 
-    // 1. 创建/销毁 chart(chartType 变化时重建)
+    // 1. 创建/销毁 chart(chartType 变化时重建)。数据缺失(加载/失败)时不 init,避免空白图表容器。
     useEffect(() => {
-        if (!containerRef.current) return;
+        if (!containerRef.current || !chartType) return;
         // locale='zh-CN':浮窗 legend title 自动中文化(时间/开/高/低/收/成交量)+ 日期中文格式。
         // 技术指标(MA/MACD/DIF/DEA/VOL)不在 locale key 内,i18n 不翻译,保留英文。
         const chart = init(containerRef.current, {locale: 'zh-CN'});
@@ -181,7 +183,8 @@ export default function KlineChart({portfolioFundId, fundSubType}) {
             )}
             <div ref={containerRef} className="kline-container" style={{height}}/>
             {isLoading && !kline && <div className="kline-loading muted">加载中...</div>}
-            {!isLoading && kline && (kline.bars || []).length === 0 && <Empty description="暂无 K 线数据"/>}
+            {isError && <QueryErrorState onRetry={refetch} description="K 线数据加载失败"/>}
+            {!isLoading && !isError && kline && (kline.bars || []).length === 0 && <Empty description="暂无 K 线数据"/>}
         </div>
     );
 }

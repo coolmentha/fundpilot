@@ -57,7 +57,8 @@ public final class AdvicePolicy {
     }
 
     private static boolean logicBroken(Facts facts) {
-        if (facts.market().priceAboveYearLine()
+        Boolean priceAboveYearLine = facts.market().priceAboveYearLine();
+        if (priceAboveYearLine == null || priceAboveYearLine
                 || !"GREEN_EXPANDING".equals(facts.market().weeklyMacdState())) {
             return false;
         }
@@ -82,7 +83,7 @@ public final class AdvicePolicy {
                         java.time.Instant businessDate) {
     }
 
-    public record Market(boolean priceAboveYearLine, String weeklyMacdState, String volumeState) {
+    public record Market(Boolean priceAboveYearLine, String weeklyMacdState, String volumeState) {
     }
 
     public record Result(AdviceAction action, BigDecimal suggestedValue, String suggestedMeasureUnit,

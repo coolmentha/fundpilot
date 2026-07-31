@@ -14,7 +14,7 @@ public class MarketIndicatorCommandHandler {
     private final MarketIndicatorRepository indicators;
     @Transactional public Result upsert(Long legacyFundId, long fundProductId, String fundCode,
                                         Instant snapshotDate, BigDecimal currentNav,
-                                        boolean priceAboveYearLine, boolean yearLineRising,
+                                        Boolean priceAboveYearLine, boolean yearLineRising,
                                         String weeklyMacdState, String volumeState,
                                         BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         MarketIndicator saved = indicators.upsert(legacyFundId, new MarketIndicator(fundProductId,
@@ -23,7 +23,7 @@ public class MarketIndicatorCommandHandler {
         return Result.from(saved);
     }
     public record Result(long fundProductId, String fundCode, Instant snapshotDate,
-                         BigDecimal currentNav, boolean priceAboveYearLine,
+                         BigDecimal currentNav, Boolean priceAboveYearLine,
                          boolean yearLineRising, String weeklyMacdState, String volumeState,
                          BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         static Result from(MarketIndicator i) { return new Result(i.fundProductId(), i.fundCode(), i.snapshotDate(), i.currentNav(), i.priceAboveYearLine(), i.yearLineRising(), i.weeklyMacdState(), i.volumeState(), i.weeklyDropPercent(), i.sixtyDayHigh()); }

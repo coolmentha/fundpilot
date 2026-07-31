@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor; import org.springframework.stereotype.Rep
     @Override public Optional<DisciplineStrategy> findEffectiveByPortfolioFundId(long id) { return strategies.findByPortfolioFundIdAndStatus(id, "EFFECTIVE").map(this::toDomain); }
     @Override public List<DisciplineStrategy> findEffective() { return strategies.findByStatus("EFFECTIVE").stream().map(this::toDomain).toList(); }
     @Override public List<DisciplineStrategy> findByPortfolioFundId(long id) { return strategies.findByPortfolioFundId(id).stream().map(this::toDomain).toList(); }
+    @Override public Optional<DisciplineStrategy> findByTriggeredAdviceId(long adviceId) { return strategies.findByTriggeredAdviceId(adviceId).map(this::toDomain); }
     @Override public DisciplineStrategy save(DisciplineStrategy value) {
         DisciplineStrategyJpaEntity entity = value.id() == null ? new DisciplineStrategyJpaEntity() : strategies.findById(value.id()).orElseThrow();
         entity.setPortfolioFundId(value.portfolioFundId()); entity.setOwnerId(value.ownerId()); entity.setStatus(value.status());

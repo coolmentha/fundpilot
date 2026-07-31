@@ -17,7 +17,7 @@ public class MarketIndicatorQueryHandler {
         return indicators.find(productId, date).map(Result::from);
     }
     public record Result(long fundProductId, String fundCode, Instant snapshotDate,
-                         BigDecimal currentNav, boolean priceAboveYearLine,
+                         BigDecimal currentNav, Boolean priceAboveYearLine,
                          boolean yearLineRising, String weeklyMacdState, String volumeState,
                          BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         static Result from(MarketIndicator i) { return new Result(i.fundProductId(), i.fundCode(), i.snapshotDate(), i.currentNav(), i.priceAboveYearLine(), i.yearLineRising(), i.weeklyMacdState(), i.volumeState(), i.weeklyDropPercent(), i.sixtyDayHigh()); }

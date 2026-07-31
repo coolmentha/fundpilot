@@ -41,7 +41,7 @@ public class InvestmentPlanForecastQueryHandler {
             occupied.add(new Key(occurrence.planId(), BusinessDay.toDateLabel(occurrence.tradeDate())));
         }
         Map<Long, List<Instant>> datesByPlan = new HashMap<>();
-        Instant previous = null;
+        Instant previous = calendar.latestBefore(monthStart).orElse(null);
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayPendingExecution = now.atZone(BusinessDay.ZONE).toLocalTime().isBefore(EXECUTION_TIME);
         for (Instant day : calendar.tradingDaysBetween(monthStart, monthEnd)) {

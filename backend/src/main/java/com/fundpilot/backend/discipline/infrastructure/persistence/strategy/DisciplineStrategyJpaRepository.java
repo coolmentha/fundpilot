@@ -4,4 +4,5 @@ interface DisciplineStrategyJpaRepository extends JpaRepository<DisciplineStrate
     Optional<DisciplineStrategyJpaEntity> findByPortfolioFundIdAndStatus(Long portfolioFundId, String status);
     List<DisciplineStrategyJpaEntity> findByPortfolioFundId(Long portfolioFundId);
     List<DisciplineStrategyJpaEntity> findByStatus(String status);
+    Optional<DisciplineStrategyJpaEntity> findByTriggeredAdviceId(Long triggeredAdviceId);
 }

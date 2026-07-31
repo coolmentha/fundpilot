@@ -42,13 +42,52 @@ class MarketIndicatorRefreshCommandHandlerDateTest {
                 "测试基金", null, null));
 
         ArgumentCaptor<Instant> date = ArgumentCaptor.forClass(Instant.class);
-        verify(indicators).upsert(eq(1L), eq(11L), eq("510300"), date.capture(), any(), anyBoolean(),
+        verify(indicators).upsert(eq(1L), eq(11L), eq("510300"), date.capture(), any(), any(),
                 anyBoolean(), any(), any(), any(), anyBoolean());
         assertThat(date.getValue()).isEqualTo(Instant.parse("2026-07-07T00:00:00Z"));
+    }
+
+    @Test
+    void refreshOne_增量刷新基于已落库完整K线序列计算成交量状态() {
+        var navSource = mock(PublishedNavSourceGateway.class);
+        var klineSource = mock(PublishedIndexKlineSourceGateway.class);
+        var klineQueries = mock(IndexKlineQueryHandler.class);
+        var indicators = mock(MarketIndicatorCommandHandler.class);
+        var klineCommands = mock(IndexKlineCommandHandler.class);
+        Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
+        MarketIndicatorRefreshCommandHandler handler = new MarketIndicatorRefreshCommandHandler(
+                mock(TrackedNavProductGateway.class), navSource, klineSource,
+                mock(MarketIndicatorRefreshEventGateway.class), mock(NavPublishingCommandHandler.class),
+                klineCommands, klineQueries, indicators, clock);
+        when(navSource.fetchHistory("510300")).thenReturn(List.of(
+                nav("2026-07-03T00:00:00Z", "1.00"), nav("2026-07-06T00:00:00Z", "1.01")));
+        when(klineQueries.exists("000300")).thenReturn(true);
+        when(klineSource.fetch(any(), any())).thenReturn(new PublishedIndexKlineSourceGateway.IndexKline(
+                List.of(bar("2026-07-03T00:00:00Z"), bar("2026-07-06T00:00:00Z"))));
+        List<IndexKlineQueryHandler.Bar> stored = new java.util.ArrayList<>();
+        for (int index = 0; index < 25; index++) {
+            Instant date = Instant.parse("2026-06-01T00:00:00Z").plus(java.time.Duration.ofDays(index));
+            stored.add(new IndexKlineQueryHandler.Bar(date, new BigDecimal("1"), new BigDecimal("2"),
+                    new BigDecimal("1"), new BigDecimal("2"), 100L));
+        }
+        when(klineQueries.findAll("000300")).thenReturn(stored);
+
+        handler.refreshOne(new MarketIndicatorRefreshCommandHandler.RefreshTarget(1L, 11L, "510300",
+                "测试基金", "000300", null));
+
+        ArgumentCaptor<String> volumeState = ArgumentCaptor.forClass(String.class);
+        verify(indicators).upsert(eq(1L), eq(11L), eq("510300"), any(), any(), any(), anyBoolean(),
+                any(), volumeState.capture(), any(), anyBoolean());
+        assertThat(volumeState.getValue()).isEqualTo("NORMAL");
     }
 
     private static PublishedNavSourceGateway.NavSnapshot nav(String date, String value) {
         BigDecimal nav = new BigDecimal(value);
         return new PublishedNavSourceGateway.NavSnapshot(Instant.parse(date), nav, nav);
+    }
+
+    private static PublishedIndexKlineSourceGateway.Bar bar(String date) {
+        return new PublishedIndexKlineSourceGateway.Bar(Instant.parse(date), new BigDecimal("1"),
+                new BigDecimal("2"), new BigDecimal("1"), new BigDecimal("2"), 100L);
     }
 }

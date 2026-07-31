@@ -33,7 +33,7 @@ public class MarketIndicatorTodayQueryHandler {
     }
 
     public record Snapshot(String fundCode, Instant snapshotDate, BigDecimal currentNav,
-                           boolean priceAboveYearLine, boolean yearLineRising, String weeklyMacdState,
+                           Boolean priceAboveYearLine, boolean yearLineRising, String weeklyMacdState,
                            String volumeState, BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         static Snapshot from(MarketIndicatorQueryHandler.Result value) {
             return new Snapshot(value.fundCode(), value.snapshotDate(), value.currentNav(),

@@ -125,7 +125,6 @@ public class MarketIndicatorRefreshCommandHandler {
                 String limit = klineQueries.exists(indexCode) ? INCREMENTAL_KLINE_LIMIT : FULL_KLINE_LIMIT;
                 kline = klineCache.computeIfAbsent(indexCode,
                         key -> klineSource.fetch(toSecid(key), limit));
-                volumeState = volumeState(kline);
             } catch (RuntimeException ex) {
                 log.warn("产品 {} 指数 K 线拉取失败，volumeState 留空: {}", target.fundProductId(), ex.getMessage());
             }
@@ -138,9 +137,10 @@ public class MarketIndicatorRefreshCommandHandler {
                     new IndexKlineCommandHandler.Bar(bar.tradeDate(), bar.open(), bar.high(), bar.low(),
                             bar.close(), bar.volume())).toList());
         }
+        volumeState = volumeStateFromStored(indexCode);
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());
         indicators.upsert(target.legacyFundId(), target.fundProductId(), target.fundCode(), today,
-                latest.accumulatedNav(), yearLine.map(YearLine::above).orElse(false),
+                latest.accumulatedNav(), yearLine.map(YearLine::above).orElse(null),
                 yearLine.map(YearLine::rising).orElse(false), macd.orElse(null), volumeState.orElse(null),
                 weeklyDrop.orElse(null), sixtyDayHigh.orElse(false));
     }
@@ -222,17 +222,31 @@ public class MarketIndicatorRefreshCommandHandler {
         return result;
     }
 
-    private static Optional<String> volumeState(PublishedIndexKlineSourceGateway.IndexKline kline) {
-        if (kline.bars().size() < VOLUME_WINDOW) return Optional.empty();
-        List<PublishedIndexKlineSourceGateway.Bar> bars = kline.bars();
+    /** 基于已落库完整 K 线序列计算成交量状态，避免增量刷新 10 根窗口不足被覆盖为 null。 */
+    private Optional<String> volumeStateFromStored(String indexCode) {
+        if (indexCode == null || indexCode.isBlank()) return Optional.empty();
+        try {
+            List<IndexKlineQueryHandler.Bar> stored = klineQueries.findAll(indexCode);
+            return volumeState(stored.stream().map(bar -> new BarInput(bar.open(), bar.close(),
+                    bar.volume())).toList());
+        } catch (RuntimeException ex) {
+            log.warn("指数 {} 本地 K 线读取失败，volumeState 留空: {}", indexCode, ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> volumeState(List<BarInput> bars) {
+        if (bars.size() < VOLUME_WINDOW) return Optional.empty();
         double average = bars.subList(bars.size() - VOLUME_WINDOW, bars.size()).stream()
-                .mapToLong(PublishedIndexKlineSourceGateway.Bar::volume).average().orElseThrow();
+                .mapToLong(BarInput::volume).average().orElseThrow();
         var latest = bars.getLast();
         if (latest.volume() >= average * 1.5 && latest.close().compareTo(latest.open()) < 0) {
             return Optional.of("HIGH_DROP");
         }
         return Optional.of(latest.volume() < average * 0.5 ? "LOW_STABLE" : "NORMAL");
     }
+
+    private record BarInput(java.math.BigDecimal open, java.math.BigDecimal close, long volume) {}
 
     public record RefreshTarget(Long legacyFundId, long fundProductId, String fundCode, String fundName,
                                 String benchmarkIndexCode,

@@ -5,5 +5,6 @@ public interface DisciplineStrategyRepository {
     Optional<DisciplineStrategy> findEffectiveByPortfolioFundId(long portfolioFundId);
     List<DisciplineStrategy> findEffective();
     List<DisciplineStrategy> findByPortfolioFundId(long portfolioFundId);
+    Optional<DisciplineStrategy> findByTriggeredAdviceId(long adviceId);
     DisciplineStrategy save(DisciplineStrategy strategy);
 }

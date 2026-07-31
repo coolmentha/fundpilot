@@ -129,6 +129,18 @@ public final class DisciplineStrategy {
         takeProfitPhase = "TRIGGERED";
     }
 
+    /** 止盈卖出确认后进入冷静期；非 TRIGGERED 态幂等忽略。 */
+    public void enterCooldown(Instant now) {
+        if (!"TRIGGERED".equals(takeProfitPhase)) {
+            return;
+        }
+        takeProfitPhase = "COOLDOWN";
+        cooldownStartedAt = Objects.requireNonNull(now, "冷静期开始时间不能为空");
+        cycleStartedAt = null;
+        cyclePeakNav = null;
+        triggeredAdviceId = null;
+    }
+
     public void supersedeTriggered() {
         if (!"TRIGGERED".equals(takeProfitPhase)) {
             return;

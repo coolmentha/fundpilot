@@ -27,7 +27,7 @@ public class FundMarketIndicatorController {
     }
 
     public record MarketIndicatorSnapshotView(Long fundId, String fundCode, Instant snapshotDate,
-                                              BigDecimal currentNav, boolean priceAboveYearLine,
+                                              BigDecimal currentNav, Boolean priceAboveYearLine,
                                               boolean yearLineRising, String weeklyMacdState, String volumeState,
                                               BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         static MarketIndicatorSnapshotView from(long fundId, MarketIndicatorTodayQueryHandler.Snapshot value) {
