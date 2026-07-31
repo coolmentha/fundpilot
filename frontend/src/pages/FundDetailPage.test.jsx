@@ -7,7 +7,8 @@ vi.mock('../api/hooks.js', () => ({
     useFund: () => ({
         data: {
             id: 1, fundCode: '000001', fundName: '测试基金', fundCategory: 'INDEX', fundSubType: 'INDEX', status: 'HOLDING',
-            holdingShares: 100, holdingAmount: 100, totalPnl: 0, valuationSource: 'CONFIRMED_NAV',
+            holdingShares: 100, holdingAmount: 80, totalPnl: -20, dailyPnl: 1.5, dailyChangePct: 0.02,
+            valuationSource: 'CONFIRMED_NAV',
             valuationDate: '2026-07-24T00:00:00Z', valuationNav: 1, positionWarningEnabled: true,
         },
         isLoading: false, isError: false, refetch: vi.fn(),
@@ -67,6 +68,13 @@ describe('FundDetailPage', () => {
         expect(container.textContent).toContain('持有不超过 7 天 1.50%');
         expect(container.textContent).toContain('持有超过 7 天 0.00%');
         expect(container.textContent).toContain('销售服务费（年化）');
+        expect(container.textContent).toContain('总盈亏');
+        expect(container.textContent).toContain('-¥20.00');
+        expect(container.textContent).toContain('(-20.00%)');
+        expect(container.textContent).toContain('今日盈亏');
+        expect(container.textContent).toContain('+¥1.50');
+        expect(container.textContent).toContain('(+2.00%)');
+        expect(container.textContent).not.toContain('今日涨跌');
         expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
             '/confirm?fundId=1', '/advice?fundId=1', '/funds?editId=1',
         ]));

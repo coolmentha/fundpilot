@@ -34,6 +34,13 @@ export default function FundDetailPage() {
     const pendingTransactionCount = pendingTransactions?.filter((transaction) => transaction.fundId === id).length ?? 0;
     const pendingSignalCount = pendingSignals?.filter((signal) => signal.fundId === id).length ?? 0;
     const redemptionRates = redemptionLadderText(feeRates?.redemptionLadder);
+    const holdingAmount = Number(fund.holdingAmount);
+    const totalPnl = Number(fund.totalPnl);
+    const totalPnlRate = fund.holdingAmount == null || fund.totalPnl == null
+        || !Number.isFinite(holdingAmount) || !Number.isFinite(totalPnl)
+        || holdingAmount - totalPnl <= 0
+        ? null
+        : totalPnl / (holdingAmount - totalPnl);
     const items = [
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id} portfolioFundId={fund.portfolioFundId}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab portfolioFundId={fund.portfolioFundId}/>},
@@ -66,22 +73,15 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="类型"><StatusTag value={fund.fundCategory}/></Descriptions.Item>
                 <Descriptions.Item label="子类">{text(fund.fundSubType)}</Descriptions.Item>
                 <Descriptions.Item label="状态"><StatusTag value={fund.status}/></Descriptions.Item>
-                <Descriptions.Item label="成本单价">
-                    <span className="num-cell">
-                        {fund.costPerShare === null || fund.costPerShare === undefined ? '-' : money(fund.costPerShare)}
-                    </span>
-                </Descriptions.Item>
-                <Descriptions.Item label="今日涨跌">
-                    {estimateStatusText(fund.estimateStatus)
-                        ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
-                        : <span style={{color: pnlColor(fund.dailyChangePct)}}>
-                            {signedPercent(fund.dailyChangePct)}
-                            {fund.isEstimated && <span className="estimate-tag">估</span>}
-                        </span>}
-                </Descriptions.Item>
                 <Descriptions.Item label="持仓市值">
                     <span className="num-cell">
                         {fund.holdingAmount === null || fund.holdingAmount === undefined ? '-' : money(fund.holdingAmount)}
+                    </span>
+                </Descriptions.Item>
+                <Descriptions.Item label="总盈亏">
+                    <span style={{color: pnlColor(fund.totalPnl)}}>
+                        {signedMoney(fund.totalPnl)}{' '}
+                        <span className="num-cell">({signedPercent(totalPnlRate)})</span>
                     </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="持仓份额">
@@ -97,10 +97,16 @@ export default function FundDetailPage() {
                 <Descriptions.Item label="今日盈亏">
                     {estimateStatusText(fund.estimateStatus)
                         ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
-                        : <span style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</span>}
+                        : <span style={{color: pnlColor(fund.dailyPnl)}}>
+                            {signedMoney(fund.dailyPnl)}{' '}
+                            <span className="num-cell">({signedPercent(fund.dailyChangePct)})</span>
+                            {fund.isEstimated && <span className="estimate-tag">估</span>}
+                        </span>}
                 </Descriptions.Item>
-                <Descriptions.Item label="总盈亏">
-                    <span style={{color: pnlColor(fund.totalPnl)}}>{signedMoney(fund.totalPnl)}</span>
+                <Descriptions.Item label="成本单价">
+                    <span className="num-cell">
+                        {fund.costPerShare === null || fund.costPerShare === undefined ? '-' : money(fund.costPerShare)}
+                    </span>
                 </Descriptions.Item>
                 <Descriptions.Item label="收益计算依据">
                     {fund.valuationSource === 'INTRADAY_ESTIMATE'
