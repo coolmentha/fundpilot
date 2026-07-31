@@ -50,6 +50,51 @@ List<SignalLogEntity> SignalLogRepository.findByFundEntity_IdAndSignalDateGreate
 `GET /api/dca-plans` 返回全部计划及基金信息，并附当前月剩余次数、金额和预计执行日期。
 `DELETE /api/dca-plans/{id}` 仅软删除 DRAFT 计划。
 
+## 逻辑止损全仓回应
+
+### 1. Scope / Trigger
+
+`POST /api/discipline/advice/{adviceId}/accept` 接受 `SELL + LOGIC_BROKEN` 建议时，必须在服务端阻止部分卖出绕过前端禁用态。
+
+### 2. Signatures
+
+```java
+BigDecimal AdviceTransactionGateway.confirmedHoldingShares(long ownerId, long portfolioFundId);
+ResponseResult AdviceResponseCommandHandler.accept(long ownerId, long adviceId, BigDecimal amount, BigDecimal shares, Instant tradeDate);
+```
+
+### 3. Contracts
+
+Advice 的 `reason == "LOGIC_BROKEN"` 时，`shares` 必须等于 Accounting 返回的当前 `confirmedShares`；`TRAILING_STOP` 仍允许正数部分份额。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+| --- | --- |
+| 逻辑止损且份额不等于确认持仓 | `VALUE_NOT_ALLOWED`，不创建交易 |
+| 逻辑止损且份额等于确认持仓 | 创建 `PENDING DECREASE` |
+| 其他卖出且份额为正 | 按原部分卖出语义创建交易 |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 确认持仓 100，逻辑止损提交 100。
+- Base: 移动止盈提交小于确认持仓的正数份额。
+- Bad: 确认持仓 100，逻辑止损提交 50。
+
+### 6. Tests Required
+
+`AdviceResponseCommandHandlerTest` 必须断言非全仓返回 `VALUE_NOT_ALLOWED` 且不调用 `createPending`，并断言合法全仓可创建交易。
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: only trusts the disabled frontend field.
+createPending(requestedShares);
+
+// Correct: compare the request with Accounting's confirmed position.
+if (requestedShares.compareTo(confirmedShares) != 0) throw VALUE_NOT_ALLOWED;
+```
+
 数据库 `fund_transaction.trade_date TIMESTAMPTZ` 保存业务发生时间；`created_date` 继续由 Spring 审计维护。V16 用 `created_date` 回填存量行，
 并建立 `(fund_id, trade_date DESC) WHERE deleted_date IS NULL` 索引。
 V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将 `fund.max_position_ratio` 重命名为

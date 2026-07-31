@@ -11,5 +11,5 @@ public class AdviceResponseFailure extends RuntimeException {
 
     public Code code() { return code; }
 
-    public enum Code { ADVICE_NOT_FOUND, ADVICE_IGNORED, ADVICE_NOT_ACTIONABLE, VALUE_REQUIRED, ALREADY_RESPONDED }
+    public enum Code { ADVICE_NOT_FOUND, ADVICE_IGNORED, ADVICE_NOT_ACTIONABLE, VALUE_REQUIRED, VALUE_NOT_ALLOWED, ALREADY_RESPONDED }
 }

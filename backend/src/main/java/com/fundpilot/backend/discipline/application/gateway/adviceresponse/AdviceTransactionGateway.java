@@ -7,6 +7,8 @@ import java.time.Instant;
 public interface AdviceTransactionGateway {
     PendingTransaction createPending(CreatePending request);
 
+    BigDecimal confirmedHoldingShares(long ownerId, long portfolioFundId);
+
     boolean hasTransaction(long adviceId);
 
     record CreatePending(long ownerId, long portfolioFundId, Source source, BigDecimal amount,
