@@ -1,7 +1,9 @@
 package com.fundpilot.backend.discipline.infrastructure.gateway.adviceresponse;
 
+import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.accounting.adapter.api.transaction.TransactionApi;
 import com.fundpilot.backend.discipline.application.gateway.adviceresponse.AdviceTransactionGateway;
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -9,7 +11,15 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class AdviceTransactionGatewayImpl implements AdviceTransactionGateway {
+    private final PositionApi positions;
     private final TransactionApi transactions;
+
+    @Override
+    public BigDecimal confirmedHoldingShares(long ownerId, long portfolioFundId) {
+        return positions.findOwned(ownerId, portfolioFundId)
+                .map(PositionApi.Position::confirmedShares)
+                .orElse(BigDecimal.ZERO);
+    }
 
     @Override
     public PendingTransaction createPending(CreatePending request) {

@@ -37,6 +37,12 @@ public class AdviceResponseCommandHandler {
         if (source == AdviceTransactionGateway.Source.DECREASE && invalid(shares)) {
             throw failure(AdviceResponseFailure.Code.VALUE_REQUIRED, "卖出建议需填正数份额");
         }
+        if (source == AdviceTransactionGateway.Source.DECREASE && "LOGIC_BROKEN".equals(advice.reason())) {
+            BigDecimal confirmedShares = transactions.confirmedHoldingShares(ownerId, advice.portfolioFundId());
+            if (shares.compareTo(confirmedShares) != 0) {
+                throw failure(AdviceResponseFailure.Code.VALUE_NOT_ALLOWED, "逻辑止损必须全仓卖出");
+            }
+        }
         try {
             var transaction = transactions.createPending(new AdviceTransactionGateway.CreatePending(ownerId,
                     advice.portfolioFundId(), source, amount, shares,
