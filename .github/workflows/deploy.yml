@@ -14,8 +14,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Git tag 不绑定分支；仅当 tag 指向 main 上的提交时才允许发布。
+  verify-tag-on-main:
+    name: Verify tag points to main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Refuse tags not on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::release tag $GITHUB_REF_NAME does not point to a commit on main; deploy aborted"
+            exit 1
+          fi
+
   build-backend:
     name: Build backend image
+    needs: verify-tag-on-main
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -65,6 +82,7 @@ jobs:
 
   build-frontend:
     name: Build frontend image
+    needs: verify-tag-on-main
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
