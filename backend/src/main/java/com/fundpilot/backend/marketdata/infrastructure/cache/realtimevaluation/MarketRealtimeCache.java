@@ -127,7 +127,7 @@ public class MarketRealtimeCache {
 
     public List<IndexRealtimeSnapshot> getIndices(List<String> indexCodes) {
         Map<String, IndexRealtimeSnapshot> byCode = indexCache.stream()
-                .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity()));
+                .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(), (first, ignored) -> first));
         return indexCodes.stream().map(byCode::get).filter(java.util.Objects::nonNull).toList();
     }
 
@@ -248,23 +248,32 @@ public class MarketRealtimeCache {
             String raw = push2Client.fetchIndexRealtimeRaw(String.join(",", requestOrder));
             Map<String, IndexRealtimeSnapshot> snapshotsBySecid = EastmoneyJsParser
                     .parseIndexRealtime(raw, requestOrder).stream()
-                    .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity()));
-            indexCache = watchedSecids.stream()
-                    .map(snapshotsBySecid::get)
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
+                    .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(),
+                            (first, ignored) -> first));
+            // 上游空 diff 时跳过 indexCache 覆盖与持久化,保留旧缓存(与「刷新失败保留旧缓存」设计一致)
+            boolean indicesUpdated = false;
+            if (!snapshotsBySecid.isEmpty()) {
+                indexCache = watchedSecids.stream()
+                        .map(snapshotsBySecid::get)
+                        .filter(java.util.Objects::nonNull)
+                        .toList();
+                indicesUpdated = true;
+            }
 
             MarketBreadthSnapshot breadth = EastmoneyJsParser.parseMarketBreadth(raw, MARKET_BREADTH_SECIDS);
             MarketLimitCounts limits = fetchMarketLimitCounts();
-            if (breadth != null && limits != null) {
+            boolean breadthUpdated = breadth != null && limits != null;
+            if (breadthUpdated) {
                 breadthCache = new MarketBreadthSnapshot(
                         breadth.risingCount(), breadth.fallingCount(),
                         limits.limitUpCount(), limits.limitDownCount());
             }
-            if (snapshotsBySecid.isEmpty() && (breadth == null || limits == null)) {
+            if (snapshotsBySecid.isEmpty() && !breadthUpdated) {
                 result = "empty";
             }
-            persist();
+            if (indicesUpdated || breadthUpdated) {
+                persist();
+            }
         } catch (RuntimeException e) {
             result = metricResult(e);
             log.warn("指数实时行情与市场宽度刷新失败,保留旧缓存: {}", e.getMessage());
@@ -278,11 +287,13 @@ public class MarketRealtimeCache {
         String result = "success";
         try {
             String raw = push2Client.fetchSectorListRaw("f3");
-            sectorCache = EastmoneyJsParser.parseSectorList(raw);
-            if (sectorCache.isEmpty()) {
+            List<SectorSnapshot> parsed = EastmoneyJsParser.parseSectorList(raw);
+            if (parsed.isEmpty()) {
                 result = "empty";
+            } else {
+                sectorCache = parsed;
+                persist();
             }
-            persist();
         } catch (RuntimeException e) {
             result = metricResult(e);
             log.warn("行业板块刷新失败,保留旧缓存: {}", e.getMessage());

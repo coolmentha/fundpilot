@@ -75,7 +75,7 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
 
     @Query(value = "select coalesce(sum(t.amount), 0) from fund_transaction t "
             + "join portfolio_fund p on p.id = t.portfolio_fund_id "
-            + "where p.owner_id = :ownerId and p.status = 'TRACKED' and t.source = 'INVEST' "
+            + "where p.owner_id = :ownerId and p.validity = 'TRACKED' and t.source = 'INVEST' "
             + "and t.status <> 'CANCELLED' and t.trade_date >= :start and t.trade_date < :end "
             + "and t.deleted_date is null", nativeQuery = true)
     java.math.BigDecimal sumInvestedAmount(@Param("ownerId") Long ownerId, @Param("start") Instant start,

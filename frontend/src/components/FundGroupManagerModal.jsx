@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {App, Button, Input, Modal, Popconfirm} from 'antd';
 import {DeleteOutlined, HolderOutlined, PlusOutlined} from '@ant-design/icons';
 import {DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors} from '@dnd-kit/core';
@@ -14,6 +14,14 @@ function FundGroupManagerContent({groups, onCancel}) {
     const saveGroups = useSaveFundGroups();
     const nextKey = useRef(0);
     const [draft, setDraft] = useState(() => (groups || []).map((group) => ({...group, key: String(group.id)})));
+    // 打开时分组数据尚未加载完成(undefined)会以空列表建草稿,数据到达后需重建一次,
+    // 否则保存空列表会删除全部分组;仅同步一次,避免覆盖用户正在编辑的草稿
+    const hasSyncedGroups = useRef(false);
+    useEffect(() => {
+        if (hasSyncedGroups.current || !groups) return;
+        setDraft(groups.map((group) => ({...group, key: String(group.id)})));
+        hasSyncedGroups.current = true;
+    }, [groups]);
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 6}}),
         useSensor(KeyboardSensor, {coordinateGetter: sortableKeyboardCoordinates}),

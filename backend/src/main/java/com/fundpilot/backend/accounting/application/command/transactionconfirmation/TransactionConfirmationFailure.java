@@ -23,6 +23,7 @@ public class TransactionConfirmationFailure extends RuntimeException {
         TRANSACTION_INPUT_REQUIRED,
         INSUFFICIENT_HOLDING_SHARES,
         INSUFFICIENT_LOTS,
-        PORTFOLIO_FUND_NOT_TRADABLE
+        PORTFOLIO_FUND_NOT_TRADABLE,
+        AMOUNT_TOO_SMALL
     }
 }

@@ -196,18 +196,30 @@ public final class EastmoneyJsParser {
             if (!diff.isArray() || diff.isEmpty()) {
                 return List.of();
             }
-            // f12(如 "000001") → secid(如 "1.000001") 的反查表:按后缀匹配 secidOrder
-            java.util.Map<String, String> codeToSecid = new java.util.HashMap<>();
+            // f12(如 "000001") → secid(如 "1.000001") 的反查表。
+            // f13(市场前缀,如 "1"/"0") 能区分沪深同后缀代码(如 1.000001 上证指数 vs 0.000001 平安银行),
+            // 优先按完整 "市场.代码" 匹配;上游缺 f13 的旧响应按代码后缀退化匹配(同后缀冲突由调用方去重)。
+            java.util.Map<String, String> secidByFullCode = new java.util.HashMap<>();
+            java.util.Map<String, String> secidBySuffix = new java.util.HashMap<>();
             for (String secid : secidOrder) {
+                secidByFullCode.put(secid, secid);
                 int dot = secid.indexOf('.');
                 if (dot > 0 && dot < secid.length() - 1) {
-                    codeToSecid.put(secid.substring(dot + 1), secid);
+                    secidBySuffix.put(secid.substring(dot + 1), secid);
                 }
             }
             List<IndexRealtimeSnapshot> result = new ArrayList<>(diff.size());
             for (com.fasterxml.jackson.databind.JsonNode node : diff) {
                 String code = textOrNull(node, "f12");
-                String secid = code == null ? null : codeToSecid.getOrDefault(code, code);
+                String market = textOrNull(node, "f13");
+                String secid;
+                if (code == null) {
+                    secid = null;
+                } else if (market != null) {
+                    secid = secidByFullCode.getOrDefault(market + "." + code, code);
+                } else {
+                    secid = secidBySuffix.getOrDefault(code, code);
+                }
                 BigDecimal price = scaledDecimal(node, "f2", 100);
                 // f3 涨跌幅:东方财富返百分比值×100(如 37 表 0.37%),÷10000 还原成小数(0.0037)
                 // 契约(IndexRealtimeSnapshot.changePct)要求小数,前端 signedPercent 再 ×100 显示。

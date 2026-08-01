@@ -49,6 +49,38 @@ class EastmoneyJsParserRealtimeTest {
     }
 
     @Test
+    void parseIndexRealtime_同代码后缀不同市场_按f13市场前缀区分secid() {
+        String raw = """
+                {"data":{"diff":[
+                  {"f2":404364,"f3":37,"f4":1474,"f6":100,"f12":"000001","f13":"1","f14":"上证指数"},
+                  {"f2":123400,"f3":5,"f4":20,"f6":200,"f12":"000001","f13":"0","f14":"平安银行"}
+                ]}}
+                """;
+        List<String> secids = List.of("1.000001", "0.000001");
+
+        List<IndexRealtimeSnapshot> result = EastmoneyJsParser.parseIndexRealtime(raw, secids);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(IndexRealtimeSnapshot::secid)
+                .containsExactly("1.000001", "0.000001");
+        assertThat(result).extracting(IndexRealtimeSnapshot::name)
+                .containsExactly("上证指数", "平安银行");
+    }
+
+    @Test
+    void parseIndexRealtime_缺f13_退化为代码后缀匹配() {
+        String raw = """
+                {"data":{"diff":[{"f2":404364,"f3":37,"f4":1474,"f6":100,"f12":"000001","f14":"上证指数"}]}}
+                """;
+
+        List<IndexRealtimeSnapshot> result = EastmoneyJsParser.parseIndexRealtime(
+                raw, List.of("1.000001", "1.000300"));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).secid()).isEqualTo("1.000001");
+    }
+
+    @Test
     void parseMarketBreadth_沪深京数据完整_汇总涨跌家数() {
         String raw = """
                 {"data":{"diff":[

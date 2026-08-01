@@ -5,6 +5,7 @@ import com.fundpilot.backend.discipline.domain.advice.Advice;
 import com.fundpilot.backend.discipline.domain.advice.AdviceAction;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
+import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdviceResponseCommandHandler {
     private final AdviceRepository adviceRepository;
+    private final DisciplineStrategyRepository strategies;
     private final AdviceTransactionGateway transactions;
     private final Clock clock;
 
@@ -63,6 +65,17 @@ public class AdviceResponseCommandHandler {
             throw failure(AdviceResponseFailure.Code.ADVICE_NOT_ACTIONABLE, exception.getMessage());
         }
         adviceRepository.save(advice);
+        resetTriggeredStrategy(adviceId);
+    }
+
+    /** 忽略的是当前 TRIGGERED 止盈建议时,把策略复位回 ARMED,否则后续不再生成卖出建议。 */
+    private void resetTriggeredStrategy(long adviceId) {
+        strategies.findByTriggeredAdviceId(adviceId)
+                .filter(strategy -> "TRIGGERED".equals(strategy.takeProfitPhase()))
+                .ifPresent(strategy -> {
+                    strategy.supersedeTriggered();
+                    strategies.save(strategy);
+                });
     }
 
     private Advice owned(long ownerId, long adviceId) {

@@ -400,6 +400,91 @@ class MarketRealtimeCacheTest {
         assertThat(cache.hasEstimateFetchFailed("000009")).isFalse();
     }
 
+    @Test
+    void refreshRealtimeWithoutEstimates_上游空diff_保留旧指数缓存且不持久化空列表() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of("1.000001"));
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"data":{"diff":[
+                          {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f13":"1","f14":"上证指数"}
+                        ]}}
+                        """)
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
+                redisStore, indexFlashClient);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001");
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001");
+        verify(redisStore, times(1)).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_同后缀多市场重复行_不因duplicateKey整批失败() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of("1.000001"));
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn("""
+                {"data":{"diff":[
+                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f14":"上证指数"},
+                  {"f2":123400,"f3":5,"f4":20,"f6":200,"f12":"000001","f14":"平安银行"}
+                ]}}
+                """);
+        when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class), indexFlashClient);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001");
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_板块空diff_保留旧板块缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}")
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
+        when(push2Client.fetchSectorListRaw("f3"))
+                .thenReturn("""
+                        {"data":{"diff":[{"f3":100,"f6":1000.0,"f12":"BK0001","f14":"测试板块","f62":200.0}]}}
+                        """)
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
+                redisStore, indexFlashClient);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getSectors()).extracting("sectorCode").containsExactly("BK0001");
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getSectors()).extracting("sectorCode").containsExactly("BK0001");
+        verify(redisStore, times(1)).save(org.mockito.ArgumentMatchers.any());
+    }
+
     private static TrackedNavProductGateway.TrackedProduct fund(String code, FundStatus ignoredStatus) {
         return new TrackedNavProductGateway.TrackedProduct(null, 1L, code, null, null, null);
     }

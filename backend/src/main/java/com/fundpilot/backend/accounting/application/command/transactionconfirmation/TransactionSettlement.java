@@ -30,6 +30,11 @@ final class TransactionSettlement {
         BigDecimal feeAmount = transaction.amount().multiply(subscriptionRate, MATH);
         BigDecimal netAmount = transaction.amount().subtract(feeAmount);
         BigDecimal shares = ShareScale.normalize(netAmount.divide(navValue, MATH));
+        if (shares.signum() <= 0) {
+            throw new TransactionConfirmationFailure(TransactionConfirmationFailure.Code.AMOUNT_TOO_SMALL,
+                    "买入金额过低: 净额 " + netAmount.toPlainString()
+                            + " 按净值 " + navValue.toPlainString() + " 折算份额不足 0.01 份");
+        }
 
         LedgerTransaction.Settlement settlement = new LedgerTransaction.Settlement(navValue,
                 transaction.amount(), shares, feeAmount,

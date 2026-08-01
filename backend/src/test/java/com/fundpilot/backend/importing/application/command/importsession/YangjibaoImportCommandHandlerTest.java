@@ -138,6 +138,22 @@ class YangjibaoImportCommandHandlerTest {
         assertThatThrownBy(() -> handler.state(id)).isInstanceOf(YangjibaoImportFailure.class);
     }
 
+    @Test
+    void stateAfterCompleted_不再轮询二维码且不删除会话() {
+        connectedHolding();
+        when(holdings.find(1L, "017093")).thenReturn(Optional.empty());
+        String id = handler.create().sessionId(); handler.state(id); var item = handler.preview(id).getFirst();
+        handler.startImport(id, List.of(new YangjibaoImportCommandHandler.Selection(item.itemId(), null)));
+        assertThat(handler.importStatus(id).status())
+                .isEqualTo(YangjibaoImportCommandHandler.ImportStatus.COMPLETED);
+
+        var view = handler.state(id);
+
+        assertThat(view.status()).isEqualTo("COMPLETED");
+        verify(source, times(1)).qrState("qr");
+        assertThatThrownBy(() -> handler.preview(id)).isInstanceOf(YangjibaoImportFailure.class);
+    }
+
     private void connectedHolding() {
         when(source.createQrCode()).thenReturn(new YangjibaoSourceGateway.QrCode("qr", "https://qr"));
         when(source.qrState("qr")).thenReturn(new YangjibaoSourceGateway.QrState("2", "token"));

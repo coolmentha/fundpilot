@@ -36,7 +36,9 @@ public class YangjibaoImportCommandHandler {
     public SessionView state(String id) {
         Session session = require(id);
         synchronized (session) {
-            if (session.token == null) {
+            // 已进入导入流程(job 非空,含 COMPLETED)后不再轮询上游二维码:token 已被置空,
+            // 重新轮询可能因远端失效 expire() 删除会话,导致导入结果与重试能力丢失
+            if (session.token == null && session.job == null) {
                 var remote = remote(() -> source.qrState(session.qrId));
                 if ("2".equals(remote.state()) && remote.token() != null) {
                     session.token = remote.token();
