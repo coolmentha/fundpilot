@@ -1,7 +1,12 @@
 package com.fundpilot.backend.marketdata.infrastructure.gateway.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,8 +24,10 @@ import tools.jackson.databind.json.JsonMapper;
 @Slf4j
 public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCacheGateway {
     private static final String KEY = "fundpilot:market-realtime:v1";
+    private static final DateTimeFormatter ESTIMATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final JsonMapper MAPPER = JsonMapper.builder().findAndAddModules().build();
     private final StringRedisTemplate redis;
+    private final Clock clock;
 
     @Override
     public Map<String, Valuation> findByFundCodes(Collection<String> fundCodes) {
@@ -34,6 +41,9 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
             for (String code : fundCodes) {
                 JsonNode estimate = estimates.path(code);
                 String status = statuses.path(code).asText("NOT_ATTEMPTED");
+                if ("AVAILABLE".equals(status) && !isToday(text(estimate, "estimateTime"))) {
+                    status = "STALE";
+                }
                 BigDecimal change = estimate.path("estimatedChangePct").isNumber()
                         ? estimate.path("estimatedChangePct").decimalValue() : null;
                 result.put(code, new Valuation(code, change, text(estimate, "estimateTime"),
@@ -56,7 +66,8 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
             JsonNode estimate = root.path("estimates").path(fundCode);
             JsonNode chart = root.path("intradayCharts").path(fundCode);
             if (estimate.isMissingNode() || !"AVAILABLE".equals(root.path("estimateStatuses").path(fundCode)
-                    .asText("NOT_ATTEMPTED")) || chart.isMissingNode()) return Optional.empty();
+                    .asText("NOT_ATTEMPTED")) || !isToday(text(estimate, "estimateTime"))
+                    || chart.isMissingNode()) return Optional.empty();
             java.util.List<Point> points = new java.util.ArrayList<>();
             for (JsonNode point : chart.path("points")) {
                 if (point.path("time").isTextual() && point.path("nav").isNumber()) {
@@ -71,6 +82,20 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
         } catch (Exception exception) {
             log.warn("读取基金分时缓存失败: fundCode={}", fundCode, exception);
             return Optional.empty();
+        }
+    }
+
+    /** 估值时间是否属于今日(北京自然日)；Redis 中昨日 AVAILABLE 不得再当今日数据返回。 */
+    private boolean isToday(String estimateTime) {
+        if (estimateTime == null) {
+            return false;
+        }
+        try {
+            LocalDateTime estimateTimeLabel = LocalDateTime.parse(estimateTime, ESTIMATE_TIME_FORMATTER);
+            return ChinaTradingDate.toUtcDate(estimateTimeLabel.atZone(ChinaTradingDate.ZONE).toInstant())
+                    .equals(ChinaTradingDate.toUtcDate(clock.instant()));
+        } catch (DateTimeParseException e) {
+            return false;
         }
     }
 

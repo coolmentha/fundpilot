@@ -52,4 +52,57 @@ class InvestmentPlanTest {
         assertThat(plan.status()).isEqualTo(InvestmentPlanStatus.DRAFT);
         assertThat(plan.executableOn(Instant.parse("2026-07-29T00:00:00Z"), false)).isFalse();
     }
+
+    @Test
+    void 月定投计划日跨月顺延_月末连续休市后跨月首日补执行() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 28, InvestmentPlanStatus.EFFECTIVE);
+
+        assertThat(plan.executableOn(Instant.parse("2026-03-02T00:00:00Z"), false,
+                Instant.parse("2026-02-27T00:00:00Z"))).isTrue();
+        assertThat(plan.executableOn(Instant.parse("2026-03-03T00:00:00Z"), true,
+                Instant.parse("2026-03-02T00:00:00Z"))).isFalse();
+    }
+
+    @Test
+    void 月定投跨月首日之前仍有交易日_不补执行() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 28, InvestmentPlanStatus.EFFECTIVE);
+
+        assertThat(plan.executableOn(Instant.parse("2026-03-02T00:00:00Z"), false,
+                Instant.parse("2026-02-28T00:00:00Z"))).isFalse();
+    }
+
+    @Test
+    void 跨月补跑不追溯创建之前的月份() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 28, InvestmentPlanStatus.EFFECTIVE,
+                Instant.parse("2026-03-02T02:00:00Z"));
+
+        assertThat(plan.executableOn(Instant.parse("2026-03-02T00:00:00Z"), false,
+                Instant.parse("2026-02-27T00:00:00Z"))).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-03-28T00:00:00Z"), false,
+                Instant.parse("2026-03-27T00:00:00Z"))).isTrue();
+    }
+
+    @Test
+    void 新建月定投创建日已过计划日_当月不执行() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 1, InvestmentPlanStatus.EFFECTIVE,
+                Instant.parse("2026-08-15T02:00:00Z"));
+
+        assertThat(plan.executableOn(Instant.parse("2026-08-15T00:00:00Z"), false)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-08-20T00:00:00Z"), false)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-09-01T00:00:00Z"), false)).isTrue();
+    }
+
+    @Test
+    void 新建月定投创建日未过计划日_计划日当天可执行() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 20, InvestmentPlanStatus.EFFECTIVE,
+                Instant.parse("2026-08-15T02:00:00Z"));
+
+        assertThat(plan.executableOn(Instant.parse("2026-08-15T00:00:00Z"), false)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-08-20T00:00:00Z"), false)).isTrue();
+    }
 }

@@ -431,6 +431,42 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
+    void refreshRealtimeWithoutEstimates_部分指数缺失_保留旧快照不剔除() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of("1.000001", "0.399001"));
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"data":{"diff":[
+                          {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f13":"1","f14":"上证指数"},
+                          {"f2":12000,"f3":8,"f4":20,"f6":500,"f12":"399001","f13":"0","f14":"深证成指"}
+                        ]}}
+                        """)
+                .thenReturn("""
+                        {"data":{"diff":[
+                          {"f2":351000,"f3":11,"f4":310,"f6":2100,"f12":"000001","f13":"1","f14":"上证指数"}
+                        ]}}
+                        """);
+        when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
+                redisStore, indexFlashClient);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001", "0.399001");
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001", "0.399001");
+        assertThat(cache.getIndices()).extracting(IndexRealtimeSnapshot::secid)
+                .containsExactly("1.000001", "0.399001");
+    }
+
+    @Test
     void refreshRealtimeWithoutEstimates_同后缀多市场重复行_不因duplicateKey整批失败() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);

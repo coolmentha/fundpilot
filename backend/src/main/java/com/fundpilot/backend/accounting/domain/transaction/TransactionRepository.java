@@ -52,6 +52,9 @@ public interface TransactionRepository {
     /** 建议回应幂等：同一 Discipline 建议至多生成一笔账目。 */
     boolean existsByDisciplineAdviceId(long disciplineAdviceId);
 
+    /** 由 Discipline 建议生成的账目（回应该建议后按创建时间取最新）。 */
+    List<LedgerTransaction> findByDisciplineAdviceId(long disciplineAdviceId);
+
     record HoldingShares(long portfolioFundId, java.math.BigDecimal holdingShares) {
     }
     record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, java.math.BigDecimal amount,

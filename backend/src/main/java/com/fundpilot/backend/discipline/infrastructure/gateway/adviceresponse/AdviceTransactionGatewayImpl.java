@@ -39,4 +39,10 @@ public class AdviceTransactionGatewayImpl implements AdviceTransactionGateway {
     public boolean hasTransaction(long adviceId) {
         return transactions.hasTransactionForAdvice(adviceId);
     }
+
+    @Override
+    public java.util.Optional<RelatedTransaction> relatedTransaction(long adviceId) {
+        return transactions.findByAdvice(adviceId)
+                .map(value -> new RelatedTransaction(value.transactionId(), value.status()));
+    }
 }

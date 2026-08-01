@@ -75,7 +75,7 @@ class PortfolioFundRepositoryImpl implements PortfolioFundRepository {
                 INSERT INTO fund (version, created_date, updated_date, owner_id, product_id,
                                   fund_code, fund_name, status, position_warning_enabled,
                                   position_warning_ratio)
-                SELECT 0, now(), now(), ?, id, fund_code, fund_name, 'WATCHING', true, 0.30
+                SELECT 0, now(), now(), ?, id, fund_code, fund_name, 'PENDING_HOLDING', true, 0.30
                 FROM fund_product WHERE id = ? AND deleted_date IS NULL
                 RETURNING id
                 """, Long.class, ownerId, fundProductId);

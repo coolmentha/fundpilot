@@ -54,7 +54,8 @@ public class PositionCommandHandler {
         List<LedgerTransaction> confirmed =
                 transactions.findByPortfolioFundAndStatus(portfolioFundId, TransactionStatus.CONFIRMED);
         BigDecimal netShares = LedgerReplay.netShares(confirmed);
-        position.applyPurchase(netShares, acquiredShares, effectiveAmount);
+        position.applyPurchase(netShares, acquiredShares, effectiveAmount,
+                LedgerReplay.untrackedShares(confirmed));
         Optional<PositionTransition> transition = position.reconcile(!confirmed.isEmpty(), netShares,
                 LedgerReplay.latestInflowAt(confirmed, clock.instant()));
         Position saved = positions.save(position);

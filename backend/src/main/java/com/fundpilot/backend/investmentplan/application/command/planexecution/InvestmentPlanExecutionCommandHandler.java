@@ -25,7 +25,8 @@ public class InvestmentPlanExecutionCommandHandler {
         Instant businessDate = BusinessDay.toDateLabel(now);
         if (plan == null || !calendar.isTradingDay(businessDate)) return false;
         boolean alreadyExecutedThisMonth = hasAnyOccurrenceThisMonth(plan, businessDate);
-        if (!plan.executableOn(businessDate, alreadyExecutedThisMonth)) return false;
+        Instant latestTradingDayBefore = calendar.latestBefore(businessDate).orElse(null);
+        if (!plan.executableOn(businessDate, alreadyExecutedThisMonth, latestTradingDayBefore)) return false;
         try {
             transactions.createPending(plan.ownerId(), plan.portfolioFundId(), plan.amount(), businessDate, plan.id());
             return true;
