@@ -100,16 +100,17 @@ public class PortfolioReturnQueryHandler {
         BigDecimal holding = funds.stream().map(FundReturnResult::holdingAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         List<FundReturnResult> covered = funds.stream().filter(fund -> fund.dailyPnl() != null).toList();
-        BigDecimal dailyPnl = covered.isEmpty() && !funds.isEmpty() ? null : covered.stream()
+        BigDecimal dailyPnl = covered.size() != funds.size() ? null : covered.stream()
                 .map(FundReturnResult::dailyPnl).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal dailyBase = covered.stream().filter(fund -> fund.dailyChangePct() != null
+        BigDecimal dailyBase = covered.size() != funds.size() ? null : covered.stream().filter(fund -> fund.dailyChangePct() != null
                         && BigDecimal.ONE.add(fund.dailyChangePct(), MATH).signum() != 0)
                 .map(fund -> fund.holdingAmount().divide(BigDecimal.ONE.add(fund.dailyChangePct(), MATH), MATH))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal totalPnl = funds.stream().map(FundReturnResult::unrealizedPnl).filter(Objects::nonNull)
+        BigDecimal totalPnl = funds.stream().anyMatch(fund -> fund.unrealizedPnl() == null) ? null
+                : funds.stream().map(FundReturnResult::unrealizedPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PortfolioSummaryResult(holding, dailyPnl,
-                dailyBase.signum() == 0 || dailyPnl == null ? null : dailyPnl.divide(dailyBase, MATH), totalPnl,
+                dailyBase == null || dailyBase.signum() == 0 || dailyPnl == null ? null : dailyPnl.divide(dailyBase, MATH), totalPnl,
                 funds.size(), covered.size(), countPositive(funds, FundReturnResult::dailyChangePct),
                 countNegative(funds, FundReturnResult::dailyChangePct),
                 countPositive(funds, FundReturnResult::unrealizedPnl),
@@ -135,8 +136,7 @@ public class PortfolioReturnQueryHandler {
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayNavConfirmed = latest != null && !latest.navDate().isBefore(today);
         boolean confirmedNavSelected = qdii
-                ? latest != null && previous != null && latest.firstSeenAt() != null
-                && BusinessDay.toDateLabel(latest.firstSeenAt()).equals(today)
+                ? latest != null && previous != null
                 : todayNavConfirmed;
         String estimateStatus = confirmedNavSelected ? "AVAILABLE" : qdii ? "STALE" : !supported ? "UNAVAILABLE"
                 : valuation == null ? "NOT_ATTEMPTED" : valuation.status();

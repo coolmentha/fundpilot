@@ -3,7 +3,6 @@ package com.fundpilot.backend.fund.service.support;
 import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundSubType;
 
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -78,10 +77,13 @@ public final class FundCategoryClassifier {
         if (fundName == null || fundName.isBlank()) {
             return FundCategory.BROAD_BASE;
         }
-        // 宽基指数词命中(复用 BenchmarkIndexTable 的 6 个核心指数)
-        Optional<String> indexCode = BenchmarkIndexTable.lookup(fundName);
-        if (indexCode.isPresent()) {
+        // 宽基指数词命中(BenchmarkIndexTable 的 6 个核心宽基指数)→ BROAD_BASE
+        if (BenchmarkIndexTable.isBroadBase(fundName)) {
             return FundCategory.BROAD_BASE;
+        }
+        // 行业主题指数词命中(半导体/光伏/白酒 等,issue #144)→ SECTOR
+        if (BenchmarkIndexTable.lookup(fundName).isPresent()) {
+            return FundCategory.SECTOR;
         }
         // 行业词命中
         for (String kw : SECTOR_KEYWORDS) {

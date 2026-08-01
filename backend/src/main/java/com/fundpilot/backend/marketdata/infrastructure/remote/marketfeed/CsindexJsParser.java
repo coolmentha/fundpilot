@@ -23,7 +23,8 @@ import java.util.List;
  * ]}
  * }</pre>
  * <p>tradeDate 是 yyyyMMdd 字符串,转 UTC 0 点 Instant(对齐 InstantDateConverter 约定)。
- * tradingVol 单位是股,直接用作 volume(图表成交量只需序列内一致)。
+ * tradingVol 单位是股;统一换算成手(÷100,issue #151),与东方财富/同花顺一致,
+ * 避免同一张 index_kline 表混用单位导致 volumeState 量能信号失真。
  * <p>空 data(如 399xxx 深交所指数不在中证公司编制范围)抛 {@link IllegalStateException},
  * 让 {@link MarketDataSourceChain} 降级到东方财富。
  * <p>防御性跳过周末 bar:csindex 正常只返交易日,但 startDate 恰逢节假日时首条会复刻下一交易日的 OHLC
@@ -69,7 +70,7 @@ public final class CsindexJsParser {
                     row.path("close").decimalValue(),
                     row.path("high").decimalValue(),
                     row.path("low").decimalValue(),
-                    row.path("tradingVol").asLong(0L)
+                    row.path("tradingVol").asLong(0L) / 100L
             ));
         }
         if (bars.isEmpty()) {

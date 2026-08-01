@@ -4,6 +4,7 @@ import com.fundpilot.backend.marketdata.application.gateway.portfoliofund.OwnedF
 import com.fundpilot.backend.marketdata.application.query.indicator.MarketIndicatorQueryHandler;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -22,14 +23,14 @@ public class MarketIndicatorTodayQueryHandler {
         long productId = products.findOwned(legacyFundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + legacyFundId))
                 .fundProductId();
-        return indicators.find(productId, clock.instant()).map(Snapshot::from);
+        return indicators.find(productId, ChinaTradingDate.toUtcDate(clock.instant())).map(Snapshot::from);
     }
 
     public Optional<Snapshot> findForPortfolioFund(long portfolioFundId) {
         long productId = products.findOwnedByPortfolioFundId(portfolioFundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + portfolioFundId))
                 .fundProductId();
-        return indicators.find(productId, clock.instant()).map(Snapshot::from);
+        return indicators.find(productId, ChinaTradingDate.toUtcDate(clock.instant())).map(Snapshot::from);
     }
 
     public record Snapshot(String fundCode, Instant snapshotDate, BigDecimal currentNav,

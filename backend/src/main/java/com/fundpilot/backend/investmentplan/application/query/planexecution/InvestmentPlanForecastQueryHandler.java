@@ -36,22 +36,23 @@ public class InvestmentPlanForecastQueryHandler {
                 .toList();
         if (activePlans.isEmpty()) return Map.of();
 
+        Map<Long, List<Instant>> datesByPlan = new HashMap<>();
         Set<Key> occupied = new HashSet<>();
+        Set<Long> occupiedPlanIds = new HashSet<>();
         for (var occurrence : transactions.occurrences(ownerId, monthStart, monthEnd)) {
             occupied.add(new Key(occurrence.planId(), BusinessDay.toDateLabel(occurrence.tradeDate())));
+            occupiedPlanIds.add(occurrence.planId());
         }
-        Map<Long, List<Instant>> datesByPlan = new HashMap<>();
-        Instant previous = calendar.latestBefore(monthStart).orElse(null);
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayPendingExecution = now.atZone(BusinessDay.ZONE).toLocalTime().isBefore(EXECUTION_TIME);
         for (Instant day : calendar.tradingDaysBetween(monthStart, monthEnd)) {
             for (InvestmentPlan plan : activePlans) {
                 if ((day.isAfter(today) || (day.equals(today) && todayPendingExecution))
-                        && plan.executableOn(day, previous) && !occupied.contains(new Key(plan.id(), day))) {
+                        && plan.executableOn(day, occupiedPlanIds.contains(plan.id()))
+                        && !occupied.contains(new Key(plan.id(), day))) {
                     datesByPlan.computeIfAbsent(plan.id(), ignored -> new java.util.ArrayList<>()).add(day);
                 }
             }
-            previous = day;
         }
         datesByPlan.replaceAll((ignored, dates) -> List.copyOf(dates));
         return Map.copyOf(datesByPlan);

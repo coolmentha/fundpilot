@@ -61,6 +61,11 @@ public final class FundProduct {
         investmentTarget = identifiedTarget;
     }
 
+    /** 用户手动补填/修正业绩比较基准(issue #146),同步到产品以统一建仓与批刷新口径。 */
+    public void updateBenchmarkIndexCode(String benchmarkIndexCode) {
+        this.benchmarkIndexCode = normalize(benchmarkIndexCode);
+    }
+
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(field + "不能为空");
         return value.trim();

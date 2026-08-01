@@ -24,6 +24,24 @@ class PublishedNavRepositoryIntegrationTest extends AbstractIntegrationTest {
     private FundProductApi products;
 
     @Test
+    void saveAll_conflictsOnSameProductUtcDateAreSkippedWithoutError() {
+        long productId = createProduct("conflict");
+        PublishedNav original = nav(productId, "conflict", 1);
+
+        List<PublishedNav> first = navs.saveAll(List.of(original));
+        List<PublishedNav> second = navs.saveAll(List.of(
+                nav(productId, "conflict", 1),
+                nav(productId, "conflict", 2)));
+
+        assertThat(first).hasSize(1);
+        assertThat(second).extracting(PublishedNav::navDate)
+                .containsExactly(BASE_TIME.plus(2, ChronoUnit.DAYS));
+        assertThat(navs.findLatestTwoByProductIds(Set.of(productId)))
+                .extracting(PublishedNav::navDate)
+                .containsExactly(BASE_TIME.plus(2, ChronoUnit.DAYS), BASE_TIME.plus(1, ChronoUnit.DAYS));
+    }
+
+    @Test
     void latestTwoByProductIds_returnsTwoNewestNavsPerProductInDescendingOrder() {
         long firstProductId = createProduct("first");
         long secondProductId = createProduct("second");

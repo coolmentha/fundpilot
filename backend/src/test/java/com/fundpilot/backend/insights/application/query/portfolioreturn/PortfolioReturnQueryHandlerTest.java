@@ -91,13 +91,13 @@ class PortfolioReturnQueryHandlerTest {
     }
 
     @Test
-    void qdiiUsesFirstSeenDateAndDoesNotReuseHistoricalDailyReturn() {
+    void qdiiWithTwoConfirmedNavsDisplaysActualDailyReturnEvenWhenFirstSeenNotToday() {
         ReturnCompositionGateway facts = openFundFacts("QDII", Instant.parse("2026-07-28T15:59:00Z"));
 
         var fund = handler(facts).currentFunds(7L).getFirst();
 
-        assertThat(fund.dailyChangePct()).isZero();
-        assertThat(fund.dailyPnl()).isZero();
+        assertThat(fund.dailyChangePct()).isEqualByComparingTo("0.2");
+        assertThat(fund.dailyPnl()).isEqualByComparingTo("20");
         assertThat(fund.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
         assertThat(fund.holdingAmount()).isEqualByComparingTo("120");
     }
@@ -114,6 +114,41 @@ class PortfolioReturnQueryHandlerTest {
         assertThat(summary.dailyCoveredFundCount()).isEqualTo(1);
         assertThat(summary.risingFundCount()).isEqualTo(1);
         assertThat(summary.profitableFundCount()).isEqualTo(1);
+    }
+
+    @Test
+    void summary_withPartialUnreadyFundReturnsNullNotPartialSum() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true, new BigDecimal("0.3")),
+                new ReturnCompositionGateway.PortfolioFund(13L, 102L, 32L, true, true, new BigDecimal("0.3"))));
+        when(facts.findPositions(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100")),
+                new ReturnCompositionGateway.Position(13L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100"))));
+        when(facts.findReturnFacts(7L)).thenReturn(List.of());
+        when(facts.findProducts(Set.of(31L, 32L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "就绪基金", "ETF", "STOCK", "000300",
+                        "BROAD_BASE"),
+                new ReturnCompositionGateway.Product(32L, "000002", "未就绪基金", "ETF", "STOCK", "000300",
+                        "BROAD_BASE")));
+        when(facts.findLatestTwoNavs(Set.of(31L, 32L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-29T00:00:00Z"),
+                        new BigDecimal("1.2"), new BigDecimal("1.2"), Instant.parse("2026-07-29T01:00:00Z")),
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-28T00:00:00Z"),
+                        BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-28T01:00:00Z"))));
+        when(facts.findRealtimeValuations(Set.of("000001", "000002"))).thenReturn(List.of());
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L, 13L))).thenReturn(List.of());
+
+        var summary = handler(facts).summary(7L);
+
+        assertThat(summary.dailyPnlTotal()).isNull();
+        assertThat(summary.dailyChangePct()).isNull();
+        assertThat(summary.totalPnlTotal()).isNull();
+        assertThat(summary.holdingFundCount()).isEqualTo(2);
+        assertThat(summary.dailyCoveredFundCount()).isEqualTo(1);
     }
 
     private static ReturnCompositionGateway openFundFacts(String investmentTarget, Instant firstSeenAt) {

@@ -81,7 +81,16 @@ public final class InvestmentPlan {
         this.enabled = enabled;
     }
 
-    public boolean executableOn(Instant instant, Instant previousTradingDay) {
+    /**
+     * 该计划今日是否应执行。
+     *
+     * <p>月定投(issue #150)：补执行不依赖「前序交易日严格早于计划日」推断，而由调用方传入
+     * 真实的「本自然月计划日是否已有交易」。计划日当天 Job 未跑时，次日起仍可安全补跑一次
+     * (幂等由账目层的「同一计划同一交易日」检查兜底)，且该自然月内不重复执行。
+     *
+     * @param alreadyExecutedThisMonth 本自然月内该计划是否已有任意状态交易(仅 MONTHLY 使用)
+     */
+    public boolean executableOn(Instant instant, boolean alreadyExecutedThisMonth) {
         if (!enabled || status != InvestmentPlanStatus.EFFECTIVE) {
             return false;
         }
@@ -90,14 +99,11 @@ public final class InvestmentPlan {
             case DAILY -> true;
             case WEEKLY -> date.getDayOfWeek().getValue() == dayOfWeek;
             case MONTHLY -> {
-                var scheduled = date.getDayOfMonth() >= dayOfMonth
-                        ? date.withDayOfMonth(dayOfMonth)
-                        : date.minusMonths(1).withDayOfMonth(dayOfMonth);
-                Instant scheduledLabel = scheduled.atStartOfDay(BusinessDay.ZONE)
+                Instant scheduledLabel = date.withDayOfMonth(dayOfMonth)
+                        .atStartOfDay(BusinessDay.ZONE)
                         .withZoneSameLocal(java.time.ZoneOffset.UTC).toInstant();
                 yield !BusinessDay.toDateLabel(instant).isBefore(scheduledLabel)
-                        && (previousTradingDay == null
-                        || BusinessDay.toDateLabel(previousTradingDay).isBefore(scheduledLabel));
+                        && !alreadyExecutedThisMonth;
             }
         };
     }

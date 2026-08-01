@@ -15,6 +15,7 @@ import com.fundpilot.backend.accounting.domain.transaction.ConversionPair;
 import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
+import com.fundpilot.backend.platform.transaction.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.sharedkernel.BusinessDay;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class TransactionConfirmationCommandHandler {
     private final SettlementNavGateway navs;
     private final PositionCommandHandler positions;
     private final LedgerEventGateway events;
+    private final RequiresNewTransactionExecutor batchTransactions;
     private final Clock clock;
 
     /** 手动确认一笔流水；转换交易两条腿联动确认。返回本次确认的流水 ID。 */
@@ -97,7 +99,11 @@ public class TransactionConfirmationCommandHandler {
         return cancelled.stream().map(LedgerTransaction::id).toList();
     }
 
-    /** 净值公布后批量确认某组合基金的 PENDING 流水；当日无净值时静默跳过。 */
+    /**
+     * 净值公布后批量确认某组合基金的 PENDING 流水；当日无净值时静默跳过。
+     * <p>逐笔隔离(issue #145)：任一笔坏流水(如卖出超持仓、缺必填字段)只跳过该笔，
+     * 不阻断同基金其余正常流水的确认。
+     */
     @Transactional
     public int confirmPendingFor(long portfolioFundId, Instant fallbackDate) {
         List<LedgerTransaction> pendings =
@@ -105,15 +111,25 @@ public class TransactionConfirmationCommandHandler {
         return confirmWhereNavAvailable(pendings, fallbackDate);
     }
 
-    /** 新净值发布后，确认同一产品下净值已齐备的待确认流水。 */
-    @Transactional
+    /**
+     * 新净值发布后，确认同一产品下净值已齐备的待确认流水。
+     * <p>每只组合基金在独立事务中确认(issue #145)：一只基金的坏流水不影响其他基金。
+     */
     public int confirmPendingForProduct(long fundProductId, Instant navDate) {
         return portfolioFundsWithPendingTransactions().stream()
                 .filter(portfolioFundId -> portfolioFunds.find(portfolioFundId)
                         .map(portfolioFund -> portfolioFund.tradable()
                                 && portfolioFund.fundProductId() == fundProductId)
                         .orElse(false))
-                .mapToInt(portfolioFundId -> confirmPendingFor(portfolioFundId, navDate))
+                .mapToInt(portfolioFundId -> {
+                    try {
+                        return batchTransactions.execute(() -> confirmPendingFor(portfolioFundId, navDate));
+                    } catch (RuntimeException exception) {
+                        log.warn("产品 {} 净值确认失败 portfolio_fund={}，跳过该基金: {}",
+                                fundProductId, portfolioFundId, exception.getMessage());
+                        return 0;
+                    }
+                })
                 .sum();
     }
 
@@ -135,21 +151,29 @@ public class TransactionConfirmationCommandHandler {
             if (!isTradable(transaction)) {
                 continue;
             }
-            Instant dayLabel = BusinessDay.toDateLabel(transaction.effectiveTradeDate(fallbackDate));
-            ConversionPair conversion = resolveConversion(transaction);
-            List<Long> results = new ArrayList<>();
-            if (conversion != null) {
-                confirmed += tryConfirmConversion(conversion, dayLabel, results);
-                continue;
+            try {
+                confirmed += confirmOneWhereNavAvailable(transaction, fallbackDate);
+            } catch (TransactionConfirmationFailure failure) {
+                log.warn("批量确认跳过坏流水 tx_id={} code={}: {}", transaction.id(),
+                        failure.code(), failure.getMessage());
             }
-            Optional<BigDecimal> nav = navOn(transaction, dayLabel);
-            if (nav.isEmpty() || !transaction.hasRequiredInput()) {
-                continue;
-            }
-            confirmOne(transaction, nav.get(), results);
-            confirmed += results.size();
         }
         return confirmed;
+    }
+
+    private int confirmOneWhereNavAvailable(LedgerTransaction transaction, Instant fallbackDate) {
+        Instant dayLabel = BusinessDay.toDateLabel(transaction.effectiveTradeDate(fallbackDate));
+        ConversionPair conversion = resolveConversion(transaction);
+        if (conversion != null) {
+            return tryConfirmConversion(conversion, dayLabel, new ArrayList<>());
+        }
+        Optional<BigDecimal> nav = navOn(transaction, dayLabel);
+        if (nav.isEmpty() || !transaction.hasRequiredInput()) {
+            return 0;
+        }
+        List<Long> results = new ArrayList<>();
+        confirmOne(transaction, nav.get(), results);
+        return results.size();
     }
 
     private int tryConfirmConversion(ConversionPair conversion, Instant dayLabel, List<Long> confirmed) {

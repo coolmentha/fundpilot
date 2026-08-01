@@ -55,6 +55,15 @@ public class ProductCatalogCommandHandler {
         return ProductResult.from(products.save(product));
     }
 
+    @Transactional
+    public ProductResult updateBenchmark(long productId, String benchmarkIndexCode) {
+        FundProduct product = products.findById(productId).orElseThrow(() ->
+                new ProductCatalogFailure(ProductCatalogFailure.Code.PRODUCT_INPUT_INVALID,
+                        "基金产品不存在: " + productId));
+        product.updateBenchmarkIndexCode(benchmarkIndexCode);
+        return ProductResult.from(products.save(product));
+    }
+
     private String normalizeCode(String fundCode) {
         if (fundCode == null || fundCode.isBlank()) {
             throw new ProductCatalogFailure(ProductCatalogFailure.Code.PRODUCT_INPUT_INVALID,

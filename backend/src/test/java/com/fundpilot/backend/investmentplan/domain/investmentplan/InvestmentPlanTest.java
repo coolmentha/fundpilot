@@ -12,10 +12,18 @@ class InvestmentPlanTest {
         InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
                 InvestmentPlanFrequency.MONTHLY, null, 2, InvestmentPlanStatus.EFFECTIVE);
 
-        assertThat(plan.executableOn(Instant.parse("2026-08-03T00:00:00Z"),
-                Instant.parse("2026-07-31T00:00:00Z"))).isTrue();
-        assertThat(plan.executableOn(Instant.parse("2026-08-04T00:00:00Z"),
-                Instant.parse("2026-08-03T00:00:00Z"))).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-08-03T00:00:00Z"), false)).isTrue();
+        assertThat(plan.executableOn(Instant.parse("2026-08-04T00:00:00Z"), true)).isFalse();
+    }
+
+    @Test
+    void 月计划计划日当天Job未跑次日起仍可补跑一次() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 2, InvestmentPlanStatus.EFFECTIVE);
+
+        assertThat(plan.executableOn(Instant.parse("2026-08-03T00:00:00Z"), false)).isTrue();
+        assertThat(plan.executableOn(Instant.parse("2026-08-04T00:00:00Z"), false)).isTrue();
+        assertThat(plan.executableOn(Instant.parse("2026-08-05T00:00:00Z"), true)).isFalse();
     }
 
     @Test
@@ -42,6 +50,6 @@ class InvestmentPlanTest {
         assertThat(plan.id()).isEqualTo(7L);
         assertThat(plan.enabled()).isFalse();
         assertThat(plan.status()).isEqualTo(InvestmentPlanStatus.DRAFT);
-        assertThat(plan.executableOn(Instant.parse("2026-07-29T00:00:00Z"), null)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-07-29T00:00:00Z"), false)).isFalse();
     }
 }

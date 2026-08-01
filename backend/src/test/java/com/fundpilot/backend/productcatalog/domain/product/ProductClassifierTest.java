@@ -24,6 +24,23 @@ class ProductClassifierTest {
     }
 
     @Test
+    void sectorIndexProductSuggestsSectorDiscipline() {
+        var result = ProductClassifier.classify("华夏国证半导体芯片ETF");
+
+        assertThat(result.productType()).isEqualTo(ProductType.ETF);
+        assertThat(result.benchmarkIndexCode()).isEqualTo("931865.CSI");
+        assertThat(result.defaultDisciplineCategory()).isEqualTo(DefaultDisciplineCategory.SECTOR);
+    }
+
+    @Test
+    void sectorIndexProductWithoutBenchmarkKeywordSuggestsSectorDiscipline() {
+        var result = ProductClassifier.classify("汇添富中证主要消费ETF");
+
+        assertThat(result.productType()).isEqualTo(ProductType.ETF);
+        assertThat(result.defaultDisciplineCategory()).isEqualTo(DefaultDisciplineCategory.SECTOR);
+    }
+
+    @Test
     void investmentTargetCanOnlyBeIdentifiedOnce() {
         FundProduct product = FundProduct.create("019736", "QDII基金", null,
                 ProductType.ACTIVE, null, null, DefaultDisciplineCategory.ACTIVE);

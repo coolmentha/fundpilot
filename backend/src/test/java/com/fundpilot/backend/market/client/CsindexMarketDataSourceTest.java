@@ -73,7 +73,7 @@ class CsindexMarketDataSourceTest {
         // 4 日 K 跨两周(01-05/06/07 同周,01-12 下周)→ 2 根周 K
         assertThat(weekly.bars()).hasSize(2);
         assertThat(weekly.bars().get(0).date().toString()).isEqualTo("2026-01-07T00:00:00Z");
-        assertThat(weekly.bars().get(0).volume()).isEqualTo(6000L);
+        assertThat(weekly.bars().get(0).volume()).isEqualTo(60L); // 6000 股 ÷100 = 60 手
     }
 
     @Test

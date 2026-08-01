@@ -34,10 +34,10 @@ class CsindexJsParserTest {
         assertThat(first.close()).isEqualByComparingTo("5451.43");
         assertThat(first.high()).isEqualByComparingTo("5454.83");
         assertThat(first.low()).isEqualByComparingTo("5337.3");
-        // 科学计数法 2.029886206E9 → 2029886206
-        assertThat(first.volume()).isEqualTo(2029886206L);
+        // 科学计数法 2.029886206E9 股 → ÷100 换算成手 = 20298862
+        assertThat(first.volume()).isEqualTo(20298862L);
 
-        assertThat(kline.bars().get(1).volume()).isEqualTo(2340700179L);
+        assertThat(kline.bars().get(1).volume()).isEqualTo(23407001L);
     }
 
     @Test

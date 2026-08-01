@@ -37,6 +37,11 @@ public class FundProductApi {
         return new ProductReference(result.id(), result.fundCode());
     }
 
+    /** 用户手动补填/修正基金业绩比较基准,同步到产品(issue #146)。 */
+    public void updateBenchmark(long productId, String benchmarkIndexCode) {
+        commands.updateBenchmark(productId, benchmarkIndexCode);
+    }
+
     private static Product from(ProductSearchQueryHandler.ProductResult product) {
         return new Product(product.id(), product.fundCode(), product.fundName(),
                 product.productType() == null ? null : ProductType.valueOf(product.productType().name()),

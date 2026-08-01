@@ -108,15 +108,15 @@ public class FundService {
         fund.setInvestmentTarget(inferInvestmentTarget(request.fundName()));
         fund.setProductId(ensureProduct(fund).id());
 
-        // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填)
-        FundTypeClassification fallback = request.fundSubType() == null && request.fundCategory() == null
-                ? FundTypeClassifier.classify(request.fundName()) : null;
-        fund.setFundSubType(request.fundSubType() != null ? request.fundSubType()
-                : (fallback != null ? fallback.fundSubType() : null));
-        fund.setFundCategory(request.fundCategory() != null ? request.fundCategory()
-                : (fallback != null ? fallback.fundCategory() : null));
+        // 类型字段:请求带入优先,缺省时按 fundName 兜底识别(尽力填);各字段独立兜底(issue #149)
+        FundTypeClassification fallback = FundTypeClassifier.classify(request.fundName());
+        fund.setFundSubType(request.fundSubType() != null ? request.fundSubType() : fallback.fundSubType());
+        fund.setFundCategory(request.fundCategory() != null ? request.fundCategory() : fallback.fundCategory());
         fund.setBenchmarkIndexCode(request.benchmarkIndexCode() != null ? request.benchmarkIndexCode()
-                : (fallback != null ? fallback.benchmarkIndexCode() : null));
+                : fallback.benchmarkIndexCode());
+        if (fund.getBenchmarkIndexCode() != null) {
+            productCatalogApi.updateBenchmark(fund.getProductId(), fund.getBenchmarkIndexCode());
+        }
         fund.setPositionWarningEnabled(request.positionWarningEnabled() == null || request.positionWarningEnabled());
         fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
         validateFundCategory(fund.getFundCategory());
@@ -190,6 +190,9 @@ public class FundService {
             fund.setPositionWarningRatio(normalizePositionWarningRatio(request.positionWarningRatio()));
         }
         fund.setProductId(ensureProduct(fund).id());
+        if (request.benchmarkIndexCode() != null) {
+            productCatalogApi.updateBenchmark(fund.getProductId(), request.benchmarkIndexCode());
+        }
         FundEntity saved = fundRepository.save(fund);
         var portfolioFund = requirePortfolioFund(saved);
         portfolioFund = portfolioFundApi.configureWarning(new PortfolioFundApi.ConfigurePositionWarning(

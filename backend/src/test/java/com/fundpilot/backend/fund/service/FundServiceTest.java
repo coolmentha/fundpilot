@@ -78,14 +78,27 @@ class FundServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void create_类型为空_抛异常() {
-        // fundSubType 非 null 跳过兜底识别,使 fundCategory 保持 null
+    void create_单字段缺失_按名称兜底识别该字段() {
+        // fundSubType 非 null,fundCategory 为 null → 不再因仅缺一项跳过兜底,而是按名称识别(issue #149)
         FundCreateRequest request = new FundCreateRequest(
                 "510300", "沪深300ETF", null, FundSubType.ETF, null);
 
-        assertThatThrownBy(() -> fundService.create(request))
-                .isInstanceOf(BusinessException.class)
-                .extracting("code").isEqualTo(ErrorCode.FUND_CATEGORY_REQUIRED.name());
+        FundView view = fundService.create(request);
+
+        assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
+        assertThat(view.fundSubType()).isEqualTo(FundSubType.ETF);
+    }
+
+    @Test
+    void create_类型全空_按名称兜底识别() {
+        FundCreateRequest request = new FundCreateRequest(
+                "510300", "易方达沪深300ETF", null, null, null);
+
+        FundView view = fundService.create(request);
+
+        assertThat(view.fundCategory()).isEqualTo(FundCategory.BROAD_BASE);
+        assertThat(view.fundSubType()).isEqualTo(FundSubType.ETF);
+        assertThat(view.benchmarkIndexCode()).isEqualTo("000300.SH");
     }
 
     @Test
@@ -126,6 +139,23 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> fundService.update(fund.getId(), request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code").isEqualTo(ErrorCode.POSITION_WARNING_RATIO_INVALID.name());
+    }
+
+    @Test
+    void update_手动补基准_同步到产品() {
+        FundEntity fund = persistFund(FundCategory.SECTOR);
+        entityManager.flush();
+        FundCreateRequest request = new FundCreateRequest(
+                null, null, null, null, "931865.CSI");
+
+        fundService.update(fund.getId(), request);
+
+        entityManager.flush();
+        entityManager.clear();
+        FundEntity reloaded = entityManager.find(FundEntity.class, fund.getId());
+        assertThat(reloaded.getBenchmarkIndexCode()).isEqualTo("931865.CSI");
+        var product = productCatalogApi.findById(reloaded.getProductId()).orElseThrow();
+        assertThat(product.benchmarkIndexCode()).isEqualTo("931865.CSI");
     }
 
     private FundEntity persistFund(FundCategory category) {

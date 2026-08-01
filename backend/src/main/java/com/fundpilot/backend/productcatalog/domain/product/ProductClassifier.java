@@ -8,6 +8,9 @@ import java.util.Set;
 public final class ProductClassifier {
     public static final String ACTIVE_DEFAULT_BENCHMARK = "000300.SH";
     private static final Map<String, String> BENCHMARKS = benchmarks();
+    /** 宽基指数关键词(命中判 BROAD_BASE;行业主题关键词判 SECTOR,issue #144)。 */
+    private static final Set<String> BROAD_BASE = Set.of(
+            "中证1000", "中证500", "沪深300", "科创50", "上证50", "创业板");
     private static final Set<String> SECTORS = Set.of(
             "半导体", "芯片", "医药", "医疗", "生物", "创新药", "中药", "新能源", "光伏",
             "锂电", "电池", "新能源车", "汽车", "消费", "食品", "白酒", "饮料", "家电",
@@ -31,11 +34,12 @@ public final class ProductClassifier {
         if (type == ProductType.ACTIVE) {
             category = MIXED.stream().anyMatch(name::contains)
                     ? DefaultDisciplineCategory.MIXED : DefaultDisciplineCategory.ACTIVE;
-        } else if (benchmark.isPresent()) {
+        } else if (BROAD_BASE.stream().anyMatch(name::contains)) {
             category = DefaultDisciplineCategory.BROAD_BASE;
+        } else if (benchmark.isPresent() || SECTORS.stream().anyMatch(name::contains)) {
+            category = DefaultDisciplineCategory.SECTOR;
         } else {
-            category = SECTORS.stream().anyMatch(name::contains)
-                    ? DefaultDisciplineCategory.SECTOR : DefaultDisciplineCategory.BROAD_BASE;
+            category = DefaultDisciplineCategory.BROAD_BASE;
         }
         return new ProductClassification(type, category,
                 benchmark.orElse(type == ProductType.ACTIVE ? ACTIVE_DEFAULT_BENCHMARK : null));
