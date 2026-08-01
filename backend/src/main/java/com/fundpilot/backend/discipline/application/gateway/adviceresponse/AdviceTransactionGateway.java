@@ -11,11 +11,17 @@ public interface AdviceTransactionGateway {
 
     boolean hasTransaction(long adviceId);
 
+    /** 回应该建议后生成的账目（若有），供建议视图展示交易跳转。 */
+    java.util.Optional<RelatedTransaction> relatedTransaction(long adviceId);
+
     record CreatePending(long ownerId, long portfolioFundId, Source source, BigDecimal amount,
                          BigDecimal shares, Instant tradeDate, long adviceId) {
     }
 
     record PendingTransaction(long transactionId) {
+    }
+
+    record RelatedTransaction(long transactionId, String status) {
     }
 
     enum Source { INCREASE, DECREASE }

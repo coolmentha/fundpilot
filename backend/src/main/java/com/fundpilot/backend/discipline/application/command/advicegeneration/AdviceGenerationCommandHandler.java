@@ -72,6 +72,7 @@ public class AdviceGenerationCommandHandler {
         if ("LOGIC_BROKEN".equals(result.reason()) && strategy.triggeredAdviceId() != null) {
             advice.findByIdForUpdate(strategy.triggeredAdviceId())
                     .filter(current -> current.responseStatus() == AdviceResponseStatus.PENDING)
+                    .filter(current -> !businessDate.equals(current.signalDate()))
                     .ifPresent(current -> {
                         current.ignore(businessDate);
                         advice.save(current);

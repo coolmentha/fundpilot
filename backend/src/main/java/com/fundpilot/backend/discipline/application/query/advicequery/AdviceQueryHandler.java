@@ -39,6 +39,16 @@ public class AdviceQueryHandler {
         portfolioFunds.requireTrackedByPortfolioFundId(ownerId, portfolioFundId);
         return advice.findByPortfolioFundAndSignalDateBetween(portfolioFundId, from, to).stream().map(value -> from(value, null)).toList();
     }
-    private static Result from(Advice value, Long legacyFundId) { return new Result(value.id(), legacyFundId, value.portfolioFundId(), value.action().name(), value.responseStatus().name(), value.signalDate(), value.triggerTier(), value.coefficient(), value.suggestedValue(), value.suggestedMeasureUnit(), value.reason(), value.warnings()); }
-    public record Result(long id, Long legacyFundId, long portfolioFundId, String action, String responseStatus, Instant signalDate, Integer triggerTier, BigDecimal coefficient, BigDecimal suggestedValue, String suggestedMeasureUnit, String reason, String warnings) {}
+    private Result from(Advice value, Long legacyFundId) {
+        var related = transactions.relatedTransaction(value.id()).orElse(null);
+        return new Result(value.id(), legacyFundId, value.portfolioFundId(), value.action().name(),
+                value.responseStatus().name(), value.signalDate(), value.triggerTier(), value.coefficient(),
+                value.suggestedValue(), value.suggestedMeasureUnit(), value.reason(), value.warnings(),
+                related == null ? null : related.transactionId(),
+                related == null ? null : related.status());
+    }
+    public record Result(long id, Long legacyFundId, long portfolioFundId, String action, String responseStatus,
+                         Instant signalDate, Integer triggerTier, BigDecimal coefficient, BigDecimal suggestedValue,
+                         String suggestedMeasureUnit, String reason, String warnings, Long relatedTransactionId,
+                         String relatedTransactionStatus) {}
 }

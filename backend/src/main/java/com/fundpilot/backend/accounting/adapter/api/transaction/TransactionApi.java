@@ -52,6 +52,11 @@ public class TransactionApi {
         return queries.hasTransactionForAdvice(adviceId);
     }
 
+    public java.util.Optional<AdviceRelatedTransaction> findByAdvice(long adviceId) {
+        return queries.findByAdvice(adviceId)
+                .map(value -> new AdviceRelatedTransaction(value.transactionId(), value.status()));
+    }
+
     public Transaction recordManual(RecordManual request) {
         try {
             return from(ledger.recordManual(request.ownerId(), request.portfolioFundId(),
@@ -145,6 +150,7 @@ public class TransactionApi {
                               Long disciplineAdviceId, Long investmentPlanId) {}
     public record PendingTransaction(Transaction transaction, BigDecimal expectedNav, BigDecimal expectedShares,
                                      String confirmationState, String confirmationReason) {}
+    public record AdviceRelatedTransaction(long transactionId, String status) {}
     public record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, BigDecimal amount,
                                            String status) {}
     public enum Source { INCREASE, DECREASE, TRANSFER_IN, TRANSFER_OUT, INVEST, ADJUST_IN, ADJUST_OUT }

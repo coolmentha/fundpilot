@@ -250,11 +250,15 @@ public class MarketRealtimeCache {
                     .parseIndexRealtime(raw, requestOrder).stream()
                     .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(),
                             (first, ignored) -> first));
-            // 上游空 diff 时跳过 indexCache 覆盖与持久化,保留旧缓存(与「刷新失败保留旧缓存」设计一致)
+            // 逐指数合并：缺失的 secid 保留旧快照(与「刷新失败保留旧缓存」降级一致)，
+            // 只有整体缺失才整体保留旧缓存
             boolean indicesUpdated = false;
             if (!snapshotsBySecid.isEmpty()) {
+                Map<String, IndexRealtimeSnapshot> previousBySecid = indexCache.stream()
+                        .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(),
+                                (first, ignored) -> first));
                 indexCache = watchedSecids.stream()
-                        .map(snapshotsBySecid::get)
+                        .map(secid -> snapshotsBySecid.getOrDefault(secid, previousBySecid.get(secid)))
                         .filter(java.util.Objects::nonNull)
                         .toList();
                 indicesUpdated = true;

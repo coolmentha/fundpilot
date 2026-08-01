@@ -227,19 +227,19 @@ export function invalidateDcaBudgetSummary(queryClient) {
 }
 
 // ===== 信号 =====
-export function useSignalsToday(portfolioFundId) {
+export function useSignalsToday(fundId) {
     return useQuery({
-        queryKey: ['signals-today', portfolioFundId],
-        queryFn: () => get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}/latest`),
-        enabled: !!portfolioFundId,
+        queryKey: ['signals-today', fundId],
+        queryFn: () => get(`/api/discipline/advice/funds/${fundId}/latest`),
+        enabled: !!fundId,
         ...realtimeQueryOptions,
     });
 }
-export function useSignalsRange(portfolioFundId, from, to) {
+export function useSignalsRange(fundId, from, to) {
     return useQuery({
-        queryKey: ['signals-range', portfolioFundId, from, to],
-        queryFn: () => get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}?from=${from}&to=${to}`),
-        enabled: !!portfolioFundId && !!from && !!to,
+        queryKey: ['signals-range', fundId, from, to],
+        queryFn: () => get(`/api/discipline/advice/funds/${fundId}?from=${from}&to=${to}`),
+        enabled: !!fundId && !!from && !!to,
     });
 }
 export function usePendingSignals() {

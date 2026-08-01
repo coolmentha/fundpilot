@@ -44,7 +44,7 @@ export default function FundDetailPage() {
     const items = [
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab fundId={id} portfolioFundId={fund.portfolioFundId}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab portfolioFundId={fund.portfolioFundId}/>},
-        {key: 'advice', label: '纪律建议', children: <SignalTab portfolioFundId={fund.portfolioFundId}/>},
+        {key: 'advice', label: '纪律建议', children: <SignalTab fundId={id}/>},
         {key: 'market', label: '行情指标', children: <MarketTab portfolioFundId={fund.portfolioFundId} fundSubType={fund.fundSubType}/>},
         {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}/>},
     ];

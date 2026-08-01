@@ -45,6 +45,10 @@ public class FundEntity extends AbstractEntity {
     @Column(length = 32)
     private FundCategory fundCategory;
 
+    /**
+     * 废弃列：新核算体系下持仓状态由 Accounting 的 position.status 派生（HOLDING/CLEARED 映射），
+     * 本列除死代码外不再写入或消费，仅保留默认值便于旧查询兼容。
+     */
     @Enumerated(EnumType.STRING)
     @Column(length = 32)
     private FundStatus status = FundStatus.PENDING_HOLDING;

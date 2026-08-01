@@ -11,11 +11,12 @@ public final class FundProduct {
     private ProductType productType;
     private InvestmentTarget investmentTarget;
     private String benchmarkIndexCode;
+    private boolean benchmarkCustomized;
     private DefaultDisciplineCategory defaultDisciplineCategory;
 
     private FundProduct(Long id, String fundCode, String fundName, String rawName,
                         ProductType productType, InvestmentTarget investmentTarget,
-                        String benchmarkIndexCode,
+                        String benchmarkIndexCode, boolean benchmarkCustomized,
                         DefaultDisciplineCategory defaultDisciplineCategory) {
         this.id = id;
         this.fundCode = requireText(fundCode, "基金代码");
@@ -24,6 +25,7 @@ public final class FundProduct {
         this.productType = productType;
         this.investmentTarget = investmentTarget;
         this.benchmarkIndexCode = normalize(benchmarkIndexCode);
+        this.benchmarkCustomized = benchmarkCustomized;
         this.defaultDisciplineCategory = defaultDisciplineCategory;
     }
 
@@ -32,15 +34,15 @@ public final class FundProduct {
                                      String benchmarkIndexCode,
                                      DefaultDisciplineCategory defaultDisciplineCategory) {
         return new FundProduct(null, fundCode, fundName, rawName, productType, investmentTarget,
-                benchmarkIndexCode, defaultDisciplineCategory);
+                benchmarkIndexCode, false, defaultDisciplineCategory);
     }
 
     public static FundProduct rehydrate(Long id, String fundCode, String fundName, String rawName,
                                         ProductType productType, InvestmentTarget investmentTarget,
-                                        String benchmarkIndexCode,
+                                        String benchmarkIndexCode, boolean benchmarkCustomized,
                                         DefaultDisciplineCategory defaultDisciplineCategory) {
         return new FundProduct(Objects.requireNonNull(id), fundCode, fundName, rawName, productType,
-                investmentTarget, benchmarkIndexCode, defaultDisciplineCategory);
+                investmentTarget, benchmarkIndexCode, benchmarkCustomized, defaultDisciplineCategory);
     }
 
     public void refreshCatalogFacts(String fundName, String rawName, ProductType productType,
@@ -49,7 +51,9 @@ public final class FundProduct {
         this.fundName = requireText(fundName, "基金名称");
         this.rawName = normalize(rawName);
         this.productType = productType;
-        this.benchmarkIndexCode = normalize(benchmarkIndexCode);
+        if (!benchmarkCustomized) {
+            this.benchmarkIndexCode = normalize(benchmarkIndexCode);
+        }
         this.defaultDisciplineCategory = defaultDisciplineCategory;
     }
 
@@ -61,9 +65,10 @@ public final class FundProduct {
         investmentTarget = identifiedTarget;
     }
 
-    /** 用户手动补填/修正业绩比较基准(issue #146),同步到产品以统一建仓与批刷新口径。 */
+    /** 用户手动补填/修正业绩比较基准(issue #146),同步到产品以统一建仓与批刷新口径；置标记防止目录同步回退。 */
     public void updateBenchmarkIndexCode(String benchmarkIndexCode) {
         this.benchmarkIndexCode = normalize(benchmarkIndexCode);
+        this.benchmarkCustomized = true;
     }
 
     private static String requireText(String value, String field) {
@@ -82,5 +87,6 @@ public final class FundProduct {
     public ProductType productType() { return productType; }
     public InvestmentTarget investmentTarget() { return investmentTarget; }
     public String benchmarkIndexCode() { return benchmarkIndexCode; }
+    public boolean benchmarkCustomized() { return benchmarkCustomized; }
     public DefaultDisciplineCategory defaultDisciplineCategory() { return defaultDisciplineCategory; }
 }

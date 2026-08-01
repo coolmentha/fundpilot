@@ -62,12 +62,13 @@ public class AdviceQueryController {
 
     public record View(long id, Long fundId, long portfolioFundId, String action, String responseStatus, Instant signalDate,
                        Integer triggerTier, BigDecimal coefficient, Measure suggestedMeasure, String reason,
-                       String warnings) {
+                       String warnings, Long relatedTransactionId, String relatedTransactionStatus) {
         static View from(AdviceQueryHandler.Result value) {
             Measure measure = value.suggestedValue() == null ? null
                     : new Measure(value.suggestedValue(), value.suggestedMeasureUnit());
             return new View(value.id(), value.legacyFundId(), value.portfolioFundId(), value.action(), value.responseStatus(), value.signalDate(),
-                    value.triggerTier(), value.coefficient(), measure, value.reason(), value.warnings());
+                    value.triggerTier(), value.coefficient(), measure, value.reason(), value.warnings(),
+                    value.relatedTransactionId(), value.relatedTransactionStatus());
         }
     }
     public record Measure(BigDecimal value, String measureUnit) {}

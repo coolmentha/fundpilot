@@ -106,6 +106,16 @@ public class TransactionQueryHandler {
         return transactions.existsByDisciplineAdviceId(adviceId);
     }
 
+    /** 由 Discipline 建议生成的账目；回应建议后取最新一条。 */
+    @Transactional(readOnly = true)
+    public java.util.Optional<AdviceRelatedTransaction> findByAdvice(long adviceId) {
+        return transactions.findByDisciplineAdviceId(adviceId).stream()
+                .findFirst()
+                .map(transaction -> new AdviceRelatedTransaction(transaction.id(), transaction.status().name()));
+    }
+
+    public record AdviceRelatedTransaction(long transactionId, String status) {}
+
     public record InvestmentPlanOccurrence(long investmentPlanId, java.time.Instant tradeDate,
                                             java.math.BigDecimal amount, String status) {}
 

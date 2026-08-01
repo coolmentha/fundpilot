@@ -39,6 +39,7 @@ class FundProductJpaEntity {
     @Enumerated(EnumType.STRING) @Column(name = "product_type", length = 32) private ProductType productType;
     @Enumerated(EnumType.STRING) @Column(name = "investment_target", length = 32) private InvestmentTarget investmentTarget;
     @Column(name = "benchmark_index_code", length = 64) private String benchmarkIndexCode;
+    @Column(name = "benchmark_customized", nullable = false) private boolean benchmarkCustomized;
     @Enumerated(EnumType.STRING)
     @Column(name = "default_discipline_category", length = 32)
     private DefaultDisciplineCategory defaultDisciplineCategory;

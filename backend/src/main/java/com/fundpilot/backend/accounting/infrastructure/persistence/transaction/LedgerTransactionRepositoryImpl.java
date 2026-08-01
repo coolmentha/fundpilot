@@ -136,6 +136,11 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
         return transactions.existsByDisciplineAdviceId(disciplineAdviceId);
     }
 
+    @Override
+    public List<LedgerTransaction> findByDisciplineAdviceId(long disciplineAdviceId) {
+        return toDomain(transactions.findByDisciplineAdviceId(disciplineAdviceId));
+    }
+
     private LedgerTransaction toDomain(LedgerTransactionJpaEntity entity) {
         return LedgerTransactionPersistenceMapper.toDomain(entity, ownerId(entity.getPortfolioFundId()));
     }

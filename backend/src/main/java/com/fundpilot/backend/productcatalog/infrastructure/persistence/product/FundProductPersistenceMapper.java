@@ -8,7 +8,8 @@ final class FundProductPersistenceMapper {
     static FundProduct toDomain(FundProductJpaEntity entity) {
         return FundProduct.rehydrate(entity.getId(), entity.getFundCode(), entity.getFundName(),
                 entity.getRawName(), entity.getProductType(), entity.getInvestmentTarget(),
-                entity.getBenchmarkIndexCode(), entity.getDefaultDisciplineCategory());
+                entity.getBenchmarkIndexCode(), entity.isBenchmarkCustomized(),
+                entity.getDefaultDisciplineCategory());
     }
 
     static FundProductJpaEntity toEntity(FundProduct product) {
@@ -24,6 +25,7 @@ final class FundProductPersistenceMapper {
         entity.setProductType(product.productType());
         entity.setInvestmentTarget(product.investmentTarget());
         entity.setBenchmarkIndexCode(product.benchmarkIndexCode());
+        entity.setBenchmarkCustomized(product.benchmarkCustomized());
         entity.setDefaultDisciplineCategory(product.defaultDisciplineCategory());
     }
 }

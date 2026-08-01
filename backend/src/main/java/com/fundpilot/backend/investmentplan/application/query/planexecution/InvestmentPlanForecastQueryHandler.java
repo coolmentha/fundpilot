@@ -45,14 +45,22 @@ public class InvestmentPlanForecastQueryHandler {
         }
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayPendingExecution = now.atZone(BusinessDay.ZONE).toLocalTime().isBefore(EXECUTION_TIME);
+        Set<Long> scheduledThisMonth = new HashSet<>();
+        Instant previousTradingDay = calendar.latestBefore(monthStart).orElse(null);
         for (Instant day : calendar.tradingDaysBetween(monthStart, monthEnd)) {
             for (InvestmentPlan plan : activePlans) {
+                boolean alreadyExecuted = occupiedPlanIds.contains(plan.id())
+                        || scheduledThisMonth.contains(plan.id());
                 if ((day.isAfter(today) || (day.equals(today) && todayPendingExecution))
-                        && plan.executableOn(day, occupiedPlanIds.contains(plan.id()))
+                        && plan.executableOn(day, alreadyExecuted, previousTradingDay)
                         && !occupied.contains(new Key(plan.id(), day))) {
                     datesByPlan.computeIfAbsent(plan.id(), ignored -> new java.util.ArrayList<>()).add(day);
+                    if (plan.frequency() == com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency.MONTHLY) {
+                        scheduledThisMonth.add(plan.id());
+                    }
                 }
             }
+            previousTradingDay = day;
         }
         datesByPlan.replaceAll((ignored, dates) -> List.copyOf(dates));
         return Map.copyOf(datesByPlan);

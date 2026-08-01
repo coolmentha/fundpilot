@@ -91,6 +91,23 @@ public final class InvestmentPlan {
      * @param alreadyExecutedThisMonth 本自然月内该计划是否已有任意状态交易(仅 MONTHLY 使用)
      */
     public boolean executableOn(Instant instant, boolean alreadyExecutedThisMonth) {
+        return executableOn(instant, alreadyExecutedThisMonth, null);
+    }
+
+    /**
+     * 该计划今日是否应执行。
+     *
+     * <p>月定投(issue #150/#158)：本月计划日已到或已过时按「是否已执行」判定；今日早于本月
+     * 计划日时，若上一月计划日(issue #158 跨月顺延：月末连续休市)之后到昨天均非交易日，则
+     * 今日补执行上一月计划日(由 {@code latestTradingDayBefore} 判定)。
+     *
+     * <p>新建计划(issue #159)：创建月内创建日已过计划日时，首笔执行顺延到下月计划日，避免
+     * 创建当天意外买入。
+     *
+     * @param alreadyExecutedThisMonth  本自然月内该计划是否已有任意状态交易(仅 MONTHLY 使用)
+     * @param latestTradingDayBefore    today 之前最近的交易日(仅 MONTHLY 跨月补跑使用；可空)
+     */
+    public boolean executableOn(Instant instant, boolean alreadyExecutedThisMonth, Instant latestTradingDayBefore) {
         if (!enabled || status != InvestmentPlanStatus.EFFECTIVE) {
             return false;
         }
@@ -99,13 +116,37 @@ public final class InvestmentPlan {
             case DAILY -> true;
             case WEEKLY -> date.getDayOfWeek().getValue() == dayOfWeek;
             case MONTHLY -> {
+                if (createdAfterPlanDayThisMonth(date)) {
+                    yield false;
+                }
                 Instant scheduledLabel = date.withDayOfMonth(dayOfMonth)
                         .atStartOfDay(BusinessDay.ZONE)
                         .withZoneSameLocal(java.time.ZoneOffset.UTC).toInstant();
-                yield !BusinessDay.toDateLabel(instant).isBefore(scheduledLabel)
+                if (!BusinessDay.toDateLabel(instant).isBefore(scheduledLabel)) {
+                    yield !alreadyExecutedThisMonth;
+                }
+                Instant previousMonthPlanLabel = date.minusMonths(1).withDayOfMonth(dayOfMonth)
+                        .atStartOfDay(BusinessDay.ZONE)
+                        .withZoneSameLocal(java.time.ZoneOffset.UTC).toInstant();
+                boolean existedBeforePreviousPlanDay = createdDate == null
+                        || !BusinessDay.toDateLabel(createdDate).isAfter(previousMonthPlanLabel);
+                yield existedBeforePreviousPlanDay
+                        && latestTradingDayBefore != null
+                        && latestTradingDayBefore.isBefore(previousMonthPlanLabel)
                         && !alreadyExecutedThisMonth;
             }
         };
+    }
+
+    /** 创建月内创建日已过计划日时，本月不再执行(首笔顺延到下月)。 */
+    private boolean createdAfterPlanDayThisMonth(java.time.LocalDate today) {
+        if (createdDate == null) {
+            return false;
+        }
+        var created = BusinessDay.toDateLabel(createdDate).atZone(BusinessDay.ZONE).toLocalDate();
+        return created.getYear() == today.getYear()
+                && created.getMonthValue() == today.getMonthValue()
+                && created.getDayOfMonth() > dayOfMonth;
     }
 
     public void disableForVoidedPortfolioFund() {
