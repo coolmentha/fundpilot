@@ -59,12 +59,14 @@ public final class InvestmentPlan {
 
     public void update(boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
                        Integer dayOfWeek, Integer dayOfMonth) {
+        BigDecimal validatedAmount = requireAmount(amount);
+        InvestmentPlanFrequency validatedFrequency = Objects.requireNonNull(frequency, "定投频率不能为空");
+        validateSchedule(validatedFrequency, dayOfWeek, dayOfMonth);
         this.enabled = enabled;
-        this.amount = requireAmount(amount);
-        this.frequency = Objects.requireNonNull(frequency, "定投频率不能为空");
-        this.dayOfWeek = dayOfWeek;
-        this.dayOfMonth = dayOfMonth;
-        validateSchedule();
+        this.amount = validatedAmount;
+        this.frequency = validatedFrequency;
+        this.dayOfWeek = validatedFrequency == InvestmentPlanFrequency.DAILY ? null : dayOfWeek;
+        this.dayOfMonth = validatedFrequency == InvestmentPlanFrequency.MONTHLY ? dayOfMonth : null;
     }
 
     public void activate() {
@@ -155,6 +157,7 @@ public final class InvestmentPlan {
     }
 
     private void validateSchedule() {
+        validateSchedule(frequency, dayOfWeek, dayOfMonth);
         switch (frequency) {
             case DAILY -> {
                 dayOfWeek = null;
@@ -171,6 +174,25 @@ public final class InvestmentPlan {
                     throw new IllegalArgumentException("月定投日必须在 1 至 28 日之间");
                 }
                 dayOfWeek = null;
+            }
+        }
+    }
+
+    private static void validateSchedule(InvestmentPlanFrequency frequency, Integer dayOfWeek,
+                                          Integer dayOfMonth) {
+        switch (frequency) {
+            case DAILY -> {
+                // Daily plans do not require a day selector.
+            }
+            case WEEKLY -> {
+                if (dayOfWeek == null || dayOfWeek < 1 || dayOfWeek > 5) {
+                    throw new IllegalArgumentException("周定投日必须为周一至周五");
+                }
+            }
+            case MONTHLY -> {
+                if (dayOfMonth == null || dayOfMonth < 1 || dayOfMonth > 28) {
+                    throw new IllegalArgumentException("月定投日必须在 1 至 28 日之间");
+                }
             }
         }
     }

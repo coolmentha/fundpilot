@@ -31,6 +31,10 @@ DcaBudgetSummaryView DcaBudgetSummaryService.currentMonth();
 void DcaPlanService.delete(Long planId);
 Map<Long, List<Instant>> DcaPlanForecastService.currentMonthExecutionDates(List<FundDcaPlanEntity> plans);
 List<FundDcaPlanEntity> FundDcaPlanRepository.findAllWithFund();
+List<InvestmentPlan> InvestmentPlanVisibleQueryHandler.findByOwner(long ownerId);
+List<PlanPortfolioFundGateway.PortfolioFund> PlanPortfolioFundGateway.findTrackedByOwner(long ownerId);
+Optional<OwnedFundProductGateway.Product> OwnedFundProductGateway.findOwned(long legacyFundId);
+Optional<OwnedFundProductGateway.Product> OwnedFundProductGateway.findOwnedByPortfolioFundId(long portfolioFundId);
 boolean DcaScheduleService.isFutureExecutionDay(FundDcaPlanEntity plan, Instant candidate, Instant now);
 List<FundNavHistoryEntity> FundNavHistoryRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(
     Long fundId, Instant startInclusive, Instant endExclusive);
@@ -147,7 +151,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - `monthlyDcaBudget` 是可选展示预算，不是余额或买入额度；预算为空时仍返回已定投、未来计划和预计定投，但剩余/超额为空。
 - 本月已定投统计北京时间自然月内所有非 CANCELLED 的 INVEST，包含手动/自动和 PENDING/CONFIRMED。
 - 本月剩余预计只含 EFFECTIVE 且 enabled 的计划；当天仅在 14:55 前算未来，同一计划已有任意状态交易的实际执行日不得重复计入，月计划跨月顺延按实际月份归属。
-- 预算摘要和全局计划列表必须共用 `DcaPlanForecastService`，并从 `FundDcaPlanRepository.findAllWithFund()` 取得同一可见计划集合；关联基金已软删除的历史计划不得进入摘要。计划列表的剩余金额合计必须等于摘要 `futureAmount`。
+- 预算摘要和全局计划列表必须共用 `InvestmentPlanVisibleQueryHandler.findByOwner(ownerId)` 取得同一可见计划集合；该集合只保留 `PlanPortfolioFundGateway.findTrackedByOwner(ownerId)` 返回的 TRACKED 组合基金计划。关联组合基金已作废的历史计划不得进入默认列表或预算摘要，计划列表的剩余金额合计必须等于摘要 `futureAmount`。
 - EFFECTIVE 与 DRAFT 计划都允许修改参数；修改只影响尚未生成的未来交易，不改写历史 PENDING/CONFIRMED/CANCELLED。
 - 只有 DRAFT 计划允许软删除；EFFECTIVE 无论 enabled 为 true 或 false 都返回 `DCA_PLAN_DELETE_REQUIRES_DRAFT`。删除不得删除、取消或改写历史/待确认交易，`FundTransactionEntity.dcaPlanId` 保持原值。
 - `positionWarningEnabled/positionWarningRatio` 只比较当前 CONFIRMED 持仓市值占全部当前持仓市值的比例；关闭后仍可展示比例，不告警。任一已持仓基金当前市值未知时，所有比例都保持未知，禁止按可用子集重算。
@@ -171,6 +175,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 | 单独修改转换转入腿 | 原转换双腿不变 | `ILLEGAL_STATE_TRANSITION` |
 | 手动交易 `tradeDate` 晚于当前时间 | 拒绝创建 | `MANUAL_TRANSACTION_FIELD_REQUIRED` |
 | 定投金额非正、频率为空、周计划日不在 1..5、月计划日不在 1..28 | 拒绝创建/更新/激活 | `DCA_PLAN_INVALID` |
+| 定投/策略/建议入口关联组合基金为 VOIDED | 拒绝操作并返回 HTTP 400 | `ILLEGAL_STATE_TRANSITION` |
 | EFFECTIVE 或 DRAFT 计划参数合法 | 原计划原状态更新，只影响未来未生成交易 | 无 |
 | 删除 DRAFT 计划 | 软删除计划，默认查询不可见，交易保留 | 无 |
 | 删除 EFFECTIVE 计划 | 拒绝删除，须先停用 | `DCA_PLAN_DELETE_REQUIRES_DRAFT` |
@@ -216,6 +221,7 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - Good：14:54 的当日计划计入未来金额，14:55 后由实际 INVEST 交易进入已定投；同一日期不重复相加。
 - Good：全局计划列表逐计划剩余金额之和等于预算摘要 `futureAmount`，CANCELLED 日期在两处都不重复预测。
 - Good：关联基金已软删除但计划仍为 EFFECTIVE/enabled 时，fetch join 同时将该计划排除在管理列表和预算摘要之外。
+- Good：关联组合基金为 VOIDED 时，历史计划仍保留数据库记录，但默认列表和预算摘要都排除该计划。
 - Good：直接修改 EFFECTIVE 计划金额后，历史交易金额不变，后续尚未生成日期使用新金额。
 - Good：删除 DRAFT 后计划列表不再展示，但历史 CONFIRMED/PENDING/CANCELLED 交易仍保留原 `dcaPlanId`。
 - Base：历史 A 已确认、B 待确认，只用 A 已有净额确认 B。
@@ -286,6 +292,7 @@ dailyNavConfirmService.confirmTodayNav(); // 次日上午仍按今天校验，�
 fundDcaPlanRepository.delete(plan); // 未校验 DRAFT，运行中计划可被直接删除
 tx.setShares(request.shares()); // 页面只显示两位，账本却继续保存隐藏尾差
 transactionRepository.findById(id); // 编辑未加锁，可覆盖并发确认结果
+throw new Rejected("作废组合基金不能管理定投计划"); // 裸 RuntimeException 会进入 INTERNAL_ERROR/500
 ```
 
 ### Correct
@@ -299,19 +306,20 @@ fundPositionService.reconcileStatus(fundId); // 只在确认/撤销后按事实�
 repository.insertTradingDayIfAbsent(date); // INSERT ... ON CONFLICT DO NOTHING
 eventPublisher.publishEvent(new FundNavUpdatedEvent(fundId)); // AFTER_COMMIT 再推进交易
 repository.existsByDcaPlanIdAndTradeDateBetween(id, start, end); // 任意状态均防重
-fundDcaPlanRepository.findAllWithFund(); // 摘要与管理页共享关联基金可见的计划集合
+investmentPlanVisibleQueryHandler.findByOwner(ownerId); // 摘要与管理页共享TRACKED组合基金可见计划
 navRepository.findByFundEntity_IdAndNavDateGreaterThanEqualAndNavDateLessThan(id, start, end); // [start, end)
 requiresNewTransactionExecutor.execute(() -> processFund(fundId)); // 每只基金独立提交/回滚
 fundRepository.findByIdForUpdate(fundId);
 validateAgainstConfirmedHolding(fundId, tx.getShares());
 dcaBudgetSummaryService.currentMonth(); // 预算只由只读摘要和 UI 消费
-dcaPlanForecastService.currentMonthExecutionDates(plans); // 摘要和全局计划列表共用逐计划预测
+investmentPlanForecastQueryHandler.currentMonthExecutionDates(ownerId, plans); // 摘要和全局计划列表共用逐计划预测
 tradingCalendarService.latestTradingDayBefore(today)
         .ifPresent(dailyNavConfirmService::confirmNavForDate); // 跨夜补拉显式目标交易日
 if (plan.getStatus() != DRAFT) throw DCA_PLAN_DELETE_REQUIRES_DRAFT;
 fundDcaPlanRepository.delete(plan); // @SQLDelete 软删，历史交易不动
 BigDecimal shares = ShareScale.normalize(request.shares());
 transactionRepository.findByIdForUpdate(id); // 锁内再次检查 PENDING 后修改
+throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION, "作废组合基金不能管理定投计划"); // 业务拒绝统一返回 400
 ```
 
 ## Scenario: Fund NAV Date Normalization

@@ -15,12 +15,13 @@ public class InvestmentPlanQueryHandler {
     private final InvestmentPlanRepository plans;
     private final PlanPortfolioFundGateway portfolioFunds;
     private final InvestmentPlanForecastQueryHandler forecasts;
+    private final InvestmentPlanVisibleQueryHandler visiblePlans;
     @Transactional(readOnly = true)
     public List<Long> effectiveEnabledIds() { return plans.findEffectiveEnabled().stream().map(plan -> plan.id()).toList(); }
 
     @Transactional(readOnly = true)
     public List<InvestmentPlanCommandHandler.PlanResult> list(long ownerId) {
-        var ownedPlans = plans.findByOwnerId(ownerId);
+        var ownedPlans = visiblePlans.findByOwner(ownerId);
         var executionDates = forecasts.currentMonthExecutionDates(ownerId, ownedPlans);
         return ownedPlans.stream().map(plan -> InvestmentPlanCommandHandler.from(plan)
                 .withForecast(executionDates.getOrDefault(plan.id(), List.of()))).toList();
