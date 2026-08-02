@@ -13,11 +13,10 @@ public class InvestmentPlanLifecycleCommandHandler {
 
     @Transactional
     public void portfolioFundVoided(long portfolioFundId) {
+        // 无论计划是否暂停(enabled=false)都退休为 DRAFT,避免作废基金上的 EFFECTIVE 计划残留卡死
         plans.findByPortfolioFundId(portfolioFundId).forEach(plan -> {
-            if (plan.enabled()) {
-                plan.disableForVoidedPortfolioFund();
-                plans.save(plan);
-            }
+            plan.disableForVoidedPortfolioFund();
+            plans.save(plan);
         });
     }
 }

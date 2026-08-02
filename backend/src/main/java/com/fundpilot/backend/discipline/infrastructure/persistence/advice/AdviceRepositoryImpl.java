@@ -33,6 +33,18 @@ class AdviceRepositoryImpl implements AdviceRepository {
     }
 
     @Override
+    public Optional<Advice> findLatestSellAdviceByPortfolioFund(long portfolioFundId) {
+        return advice.findFirstByPortfolioFundIdAndSignalTypeAndResponseStatusInOrderBySignalDateDesc(portfolioFundId,
+                        (short) AdviceAction.SELL.ordinal(), java.util.List.of("PENDING", "RESPONDED"))
+                .map(AdviceRepositoryImpl::toDomain);
+    }
+
+    @Override
+    public Optional<Advice> findByPortfolioFundAndSignalDate(long portfolioFundId, Instant signalDate) {
+        return advice.findByPortfolioFundIdAndSignalDate(portfolioFundId, signalDate).map(AdviceRepositoryImpl::toDomain);
+    }
+
+    @Override
     public Advice save(Advice value) {
         DisciplineAdviceJpaEntity entity = advice.findById(value.id())
                 .orElseThrow(() -> new IllegalStateException("建议不存在: " + value.id()));

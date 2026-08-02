@@ -14,6 +14,8 @@ interface DisciplineAdviceJpaRepository extends JpaRepository<DisciplineAdviceJp
     @Query("select advice from DisciplineAdviceJpaEntity advice where advice.id = :id")
     Optional<DisciplineAdviceJpaEntity> findByIdForUpdate(@Param("id") Long id);
     Optional<DisciplineAdviceJpaEntity> findByPortfolioFundIdAndSignalDate(Long portfolioFundId, Instant signalDate);
+    Optional<DisciplineAdviceJpaEntity> findFirstByPortfolioFundIdAndSignalTypeAndResponseStatusInOrderBySignalDateDesc(
+            Long portfolioFundId, Short signalType, java.util.Collection<String> responseStatuses);
     List<DisciplineAdviceJpaEntity> findByOwnerIdAndResponseStatusOrderBySignalDateDesc(Long ownerId, String responseStatus);
     List<DisciplineAdviceJpaEntity> findByPortfolioFundIdAndSignalDateGreaterThanEqualAndSignalDateLessThanOrderBySignalDateDesc(Long portfolioFundId, Instant fromInclusive, Instant toExclusive);
     Optional<DisciplineAdviceJpaEntity> findFirstByPortfolioFundIdOrderBySignalDateDesc(Long portfolioFundId);

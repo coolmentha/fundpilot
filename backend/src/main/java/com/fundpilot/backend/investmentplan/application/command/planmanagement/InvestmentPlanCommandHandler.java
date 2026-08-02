@@ -5,6 +5,8 @@ import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -69,21 +71,27 @@ public class InvestmentPlanCommandHandler {
     public void delete(long ownerId, long planId) {
         InvestmentPlan plan = owned(ownerId, planId);
         if (plan.status() != InvestmentPlanStatus.DRAFT) {
-            throw new Rejected("请先停用定投计划再删除");
+            throw new BusinessException(ErrorCode.DCA_PLAN_DELETE_REQUIRES_DRAFT, "请先停用定投计划再删除");
         }
         plans.delete(plan);
     }
 
     private InvestmentPlan owned(long ownerId, long planId) {
-        InvestmentPlan plan = plans.findById(planId).orElseThrow(() -> new Rejected("定投计划不存在"));
-        if (plan.ownerId() != ownerId) throw new Rejected("无权访问定投计划");
+        InvestmentPlan plan = plans.findById(planId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.DCA_PLAN_NOT_FOUND, "定投计划不存在"));
+        if (plan.ownerId() != ownerId) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_NOT_FOUND, "定投计划不存在");
+        }
         portfolioFunds.requireTracked(ownerId, plan.portfolioFundId());
         return plan;
     }
 
     private static InvestmentPlanFrequency frequency(String value) {
-        try { return InvestmentPlanFrequency.valueOf(value); }
-        catch (RuntimeException exception) { throw new Rejected("不支持的定投频率"); }
+        try {
+            return InvestmentPlanFrequency.valueOf(value);
+        } catch (RuntimeException exception) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "不支持的定投频率");
+        }
     }
 
     public static PlanResult from(InvestmentPlan plan) {
@@ -101,5 +109,4 @@ public class InvestmentPlanCommandHandler {
                     status, createdDate, List.copyOf(executionDates));
         }
     }
-    public static final class Rejected extends RuntimeException { public Rejected(String message) { super(message); } }
 }

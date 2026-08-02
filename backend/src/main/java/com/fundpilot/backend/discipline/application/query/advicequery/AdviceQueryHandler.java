@@ -5,7 +5,9 @@ import com.fundpilot.backend.discipline.application.gateway.adviceresponse.Advic
 import com.fundpilot.backend.discipline.domain.advice.AdviceAction;
 import com.fundpilot.backend.discipline.domain.advice.Advice;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdviceQueryHandler {
     private final AdviceRepository advice; private final GeneratedAdvicePortfolioGateway portfolioFunds;
     private final AdviceTransactionGateway transactions;
+    private final Clock clock;
     @Transactional(readOnly = true) public List<Result> pending(long ownerId) {
         var funds = portfolioFunds.findTrackedByOwner(ownerId);
         return advice.findPendingByOwner(ownerId).stream().filter(value -> value.action() != AdviceAction.NONE)
@@ -23,13 +26,19 @@ public class AdviceQueryHandler {
                 .filter(fund -> fund.id() == value.portfolioFundId())
                 .map(fund -> from(value, fund.legacyFundId()))).toList();
     }
+
+    /** 今日建议:仅返回 signalDate 为北京时间今日的建议，非交易日/尚未生成时返回 null(issue #185)。 */
     @Transactional(readOnly = true) public Result latest(long ownerId, long legacyFundId) {
         long fundId = portfolioFunds.requireTracked(ownerId, legacyFundId).id();
-        return advice.findLatestByPortfolioFund(fundId).map(value -> from(value, legacyFundId)).orElse(null);
+        return today(ownerId, fundId).map(value -> from(value, legacyFundId)).orElse(null);
     }
     @Transactional(readOnly = true) public Result latestByPortfolioFund(long ownerId, long portfolioFundId) {
         portfolioFunds.requireTrackedByPortfolioFundId(ownerId, portfolioFundId);
-        return advice.findLatestByPortfolioFund(portfolioFundId).map(value -> from(value, null)).orElse(null);
+        return today(ownerId, portfolioFundId).map(value -> from(value, null)).orElse(null);
+    }
+
+    private java.util.Optional<Advice> today(long ownerId, long fundId) {
+        return advice.findByPortfolioFundAndSignalDate(fundId, ChinaTradingDate.toUtcDate(clock.instant()));
     }
     @Transactional(readOnly = true) public List<Result> range(long ownerId, long legacyFundId, Instant from, Instant to) {
         long fundId = portfolioFunds.requireTracked(ownerId, legacyFundId).id();

@@ -105,4 +105,15 @@ class InvestmentPlanTest {
         assertThat(plan.executableOn(Instant.parse("2026-08-15T00:00:00Z"), false)).isFalse();
         assertThat(plan.executableOn(Instant.parse("2026-08-20T00:00:00Z"), false)).isTrue();
     }
+
+    @Test
+    void 新建月定投创建日等于计划日_当月不执行() {
+        InvestmentPlan plan = InvestmentPlan.rehydrate(7L, 17L, 11L, 3L, true, new BigDecimal("100"),
+                InvestmentPlanFrequency.MONTHLY, null, 15, InvestmentPlanStatus.EFFECTIVE,
+                Instant.parse("2026-08-15T02:00:00Z"));
+
+        assertThat(plan.executableOn(Instant.parse("2026-08-15T00:00:00Z"), false)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-08-20T00:00:00Z"), false)).isFalse();
+        assertThat(plan.executableOn(Instant.parse("2026-09-15T00:00:00Z"), false)).isTrue();
+    }
 }

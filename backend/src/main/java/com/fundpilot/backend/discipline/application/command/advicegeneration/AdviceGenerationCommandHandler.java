@@ -2,8 +2,10 @@ package com.fundpilot.backend.discipline.application.command.advicegeneration;
 
 import com.fundpilot.backend.discipline.application.gateway.advicegeneration.GeneratedAdvicePortfolioGateway;
 import com.fundpilot.backend.discipline.application.gateway.advicegeneration.AdviceGenerationFactsGateway;
-import com.fundpilot.backend.discipline.domain.advice.AdvicePolicy;
+import com.fundpilot.backend.discipline.application.gateway.adviceresponse.AdviceTransactionGateway;
+import com.fundpilot.backend.discipline.domain.advice.Advice;
 import com.fundpilot.backend.discipline.domain.advice.AdviceAction;
+import com.fundpilot.backend.discipline.domain.advice.AdvicePolicy;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
@@ -11,6 +13,7 @@ import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyReposi
 import com.fundpilot.backend.platform.transaction.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.time.Instant;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +27,8 @@ public class AdviceGenerationCommandHandler {
     private final AdviceRepository advice;
     private final DisciplineStrategyRepository strategies;
     private final AdviceGenerationFactsGateway facts;
-    private final RequiresNewTransactionExecutor transactions;
+    private final AdviceTransactionGateway transactions;
+    private final RequiresNewTransactionExecutor transactionExecutor;
 
     public void generateDaily(Instant occurredAt) {
         Instant businessDate = ChinaTradingDate.toUtcDate(occurredAt);
@@ -34,7 +38,7 @@ public class AdviceGenerationCommandHandler {
         }
         for (DisciplineStrategy strategy : strategies.findEffective()) {
             try {
-                transactions.execute(() -> {
+                transactionExecutor.execute(() -> {
                     generate(strategy.id(), businessDate);
                     return null;
                 });
@@ -69,16 +73,12 @@ public class AdviceGenerationCommandHandler {
                 value.currentUnitNav(), value.currentAccumulatedNav(), value.matureRedeemableShares(), businessDate),
                 daysSinceLastBuy, cooldownFinished);
 
-        if ("LOGIC_BROKEN".equals(result.reason()) && strategy.triggeredAdviceId() != null) {
-            advice.findByIdForUpdate(strategy.triggeredAdviceId())
-                    .filter(current -> current.responseStatus() == AdviceResponseStatus.PENDING)
-                    .filter(current -> !businessDate.equals(current.signalDate()))
-                    .ifPresent(current -> {
-                        current.ignore(businessDate);
-                        advice.save(current);
-                    });
-            strategy.supersedeTriggered();
-        } else if ("TRIGGERED".equals(strategy.takeProfitPhase()) && result.action() == AdviceAction.NONE) {
+        if (result.action() == AdviceAction.SELL) {
+            // 已有在途卖出建议时抑制或替换，保证"同一基金最多一笔在途卖出"的一次性语义
+            if (!supersedeOrBlock(strategy, result, businessDate)) {
+                return;
+            }
+        } else if ("TRIGGERED".equals(strategy.takeProfitPhase())) {
             strategies.save(strategy);
             return;
         }
@@ -90,5 +90,41 @@ public class AdviceGenerationCommandHandler {
             strategy.markTriggered(saved.id());
         }
         strategies.save(strategy);
+    }
+
+    /**
+     * 在途卖出抑制(issue #183)：同基金已有未决(PENDING 未回应)或已采纳未确认(RESPONDED 且交易未确认)的
+     * 卖出建议时，不再重复生成新卖出建议，避免多条 PENDING 卖出堆积与双卖。
+     * <p>例外一：新命中为 LOGIC_BROKEN 且旧建议仍 PENDING 时，按"逻辑止损优先级"忽略旧建议后继续生成
+     * (与 TRAILING_STOP 的 markTriggered 抑制对称)；同日重算不忽略(由 replaceGenerated 覆盖)。
+     * <p>例外二：同日重算覆盖——已有建议就是今天生成的，允许重算覆盖(对已 RESPONDED 行 replaceGenerated 本身会跳过)。
+     *
+     * @return true 表示可继续生成新建议，false 表示已抑制(调用方直接返回)
+     */
+    private boolean supersedeOrBlock(DisciplineStrategy strategy, AdvicePolicy.Result result, Instant businessDate) {
+        Optional<Advice> current = advice.findLatestSellAdviceByPortfolioFund(strategy.portfolioFundId());
+        if (current.isEmpty()) {
+            return true;
+        }
+        Advice value = current.get();
+        boolean sameDay = businessDate.equals(value.signalDate());
+        boolean unresponded = value.responseStatus() == AdviceResponseStatus.PENDING;
+        boolean acceptedInFlight = value.responseStatus() == AdviceResponseStatus.RESPONDED
+                && transactions.relatedTransaction(value.id())
+                .map(related -> !"CONFIRMED".equals(related.status())).orElse(false);
+
+        if (unresponded && "LOGIC_BROKEN".equals(result.reason())) {
+            if (!sameDay) {
+                value.ignore(businessDate);
+                advice.save(value);
+            }
+            strategy.supersedeTriggered();
+            return true;
+        }
+        if ((unresponded || acceptedInFlight) && !sameDay) {
+            strategies.save(strategy);
+            return false;
+        }
+        return true;
     }
 }

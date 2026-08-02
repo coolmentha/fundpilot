@@ -142,9 +142,9 @@ _Avoid_: 并行推进（B 选项，集成返工风险）；分层交付（C 选�
 ## 行情数据源
 
 **行情源（MarketData Source）**:
-东方财富/天天基金为主源，同花顺为真实降级源；指数 K 线优先中证指数公司。本期接入真实实现，不走半自动灌入。三条数据线：基金净值历史（`pingzhongdata.js` 的
-`Data_netWorthTrend` / `Data_ACWorthTrend`）、基金字典（`fundcode_search.js` 全量约 2 万条）、指数 K 线（
-`push2his.eastmoney.com`，用于量能指标）。东方财富变量赋值响应只做受限结构提取后交 Jackson，不执行远端 JS；净值/字典空结果继续降级到同花顺。全部手工 Feign client 使用 1s 连接、3s 读取超时，不自动重试；东方财富限流最多等待 1s。
+同花顺为净值/字典主源，东方财富/天天基金为真实降级源（issue #186 对齐实现：链序 `[csindex, ths, eastmoney]`，同花顺优先取净值是刻意决定，见提交 427f6bf）；指数 K 线优先中证指数公司。本期接入真实实现，不走半自动灌入。三条数据线：基金净值历史（同花顺 `dwjz_`/`ljjz_` 两次请求，东财 `pingzhongdata.js` 的
+`Data_netWorthTrend` / `Data_ACWorthTrend` 单请求兜底）、基金字典（东财 `fundcode_search.js` 全量约 2 万条兜底）、指数 K 线（
+`push2his.eastmoney.com`，用于量能指标）。东方财富变量赋值响应只做受限结构提取后交 Jackson，不执行远端 JS；全部手工 Feign client 使用 1s 连接、3s 读取超时，不自动重试；东方财富限流最多等待 1s。
 _Avoid_: "本期半自动灌入"的旧定位（已升级为真实接入）
 
 **基金子类型（fundSubType）**:
@@ -208,11 +208,11 @@ _Avoid_: 用 fundgz 作为净值发布门卫；把外部请求放在数据库事
 **指数 K 线数据源(中证指数公司 csindex.com.cn)**:
 借鉴 akshare `stock_zh_index_hist_csindex`,指数日 K 主源改为中证指数公司官方接口
 `www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=...&endDate=...`(返回 OHLCV JSON,不封 IP、不要求 Referer)。
-`CsindexMarketDataSource` 置于 `MarketDataSourceChain` 链首 [csindex, eastmoney, ths]:CSI 主题指数(930xxx,如 930713 中证人工智能)
-与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。csindex 或 eastmoney 失败/空结果后由同花顺 `d.10jqka.com.cn/v6/line/.../last.js` 兜底最近日线。
+`CsindexMarketDataSource` 置于 `MarketDataSourceChain` 链首 [csindex, ths, eastmoney](issue #186 对齐实现):CSI 主题指数(930xxx,如 930713 中证人工智能)
+与中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中,绕开被 VPS IP 限流的 push2his。csindex 或同花顺失败/空结果后由东财兜底最近日线。
 csindex 仅提供日 K,周/月 K 在源内聚合(`CsindexJsParser.aggregate`,语义同 KlineService)。secid "2.930713"/"1.000300" 剥前缀取裸代码调 csindex。
-深交所指数(399xxx)csindex 返空 data → 抛异常让链回退 eastmoney。csindex 不支持基金净值/字典,抛 `UnsupportedOperationException`,
-`MarketDataSourceChain.tryEach` 对该异常静默跳过(不污染日志),直接回退 eastmoney。详见 ADR-0017。
+深交所指数(399xxx)csindex 返空 data → 抛异常让链回退同花顺。csindex 不支持基金净值/字典,抛 `UnsupportedOperationException`,
+`MarketDataSourceChain.tryEach` 对该异常静默跳过(不污染日志),直接回退同花顺。详见 ADR-0017。
 _Avoid_: 指数 K 线仍走 push2his(VPS IP 被限流,http 000 永久失败,缓存无法填充陷入死循环);把 csindex 用于基金净值(它只发指数)
 
 _Avoid_: 图表直连 push2his(触发 IP 限流);在缓存空时直接降级净值(应先实时拉兜底);后端算指标(klinecharts 内置,前端只喂 OHLCV)

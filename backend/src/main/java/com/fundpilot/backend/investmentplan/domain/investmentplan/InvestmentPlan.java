@@ -138,7 +138,7 @@ public final class InvestmentPlan {
         };
     }
 
-    /** 创建月内创建日已过计划日时，本月不再执行(首笔顺延到下月)。 */
+    /** 创建月内创建日已到或已过计划日时，本月不再执行(首笔顺延到下月)，避免创建当天意外买入(issue #159)。 */
     private boolean createdAfterPlanDayThisMonth(java.time.LocalDate today) {
         if (createdDate == null) {
             return false;
@@ -146,7 +146,7 @@ public final class InvestmentPlan {
         var created = BusinessDay.toDateLabel(createdDate).atZone(BusinessDay.ZONE).toLocalDate();
         return created.getYear() == today.getYear()
                 && created.getMonthValue() == today.getMonthValue()
-                && created.getDayOfMonth() > dayOfMonth;
+                && created.getDayOfMonth() >= dayOfMonth;
     }
 
     public void disableForVoidedPortfolioFund() {

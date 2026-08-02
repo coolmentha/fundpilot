@@ -237,18 +237,27 @@ export const errorTitles = {
     SIGNAL_ALREADY_IGNORED: '信号已忽略',
     SIGNAL_EXPIRED: '信号已过期',
     SIGNAL_FUND_MISMATCH: '信号与基金不匹配',
-    NO_VALID_BACKTEST: '无有效回测',
+    // 纪律建议回应(模块级 AdviceResponseFailure.Code)
+    ALREADY_RESPONDED: '建议已回应',
+    ADVICE_IGNORED: '建议已忽略',
+    ADVICE_NOT_ACTIONABLE: '建议当前不可操作',
+    ADVICE_NOT_FOUND: '建议不存在',
+    VALUE_REQUIRED: '缺少必要数值',
+    VALUE_NOT_ALLOWED: '数值不被允许',
     ILLEGAL_STATE_TRANSITION: '状态切换非法',
     INSUFFICIENT_HOLDING_SHARES: '持仓份额不足',
     INSUFFICIENT_LOTS: '可用持仓批次不足',
     FUND_HAS_PENDING_TRANSACTIONS: '基金存在待确认交易',
-    // 寻优
-    OPTIMIZATION_NO_VALID_PARAMS: '寻优未达标',
     // 数据源
     NAV_HISTORY_EMPTY: '净值历史为空',
     MARKET_DATA_ALL_SOURCES_FAILED: '行情数据源全部失败',
+    YANGJIBAO_API_FAILED: '养鸡宝接口调用失败',
+    YANGJIBAO_SESSION_NOT_FOUND: '养鸡宝会话不存在',
+    YANGJIBAO_SESSION_INVALID: '养鸡宝会话失效，请重新导入',
+    YANGJIBAO_IMPORT_INVALID: '养鸡宝导入数据不合法',
     // 全站 API 鉴权
     ADMIN_UNAUTHORIZED: '访问凭据无效',
+    ADMIN_FORBIDDEN: '无权执行该操作',
     ADMIN_AUTH_NOT_CONFIGURED: '访问鉴权未配置',
     // 兜底
     INTERNAL_ERROR: '服务异常',
