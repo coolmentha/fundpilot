@@ -2,6 +2,7 @@ package com.fundpilot.backend.investmentplan.application.command.planexecution;
 
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTradingCalendarGateway;
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTransactionGateway;
+import com.fundpilot.backend.investmentplan.application.gateway.planmanagement.PlanPortfolioFundGateway;
 import com.fundpilot.backend.investmentplan.application.query.planexecution.InvestmentPlanForecastQueryHandler;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanRepository;
@@ -18,12 +19,16 @@ public class InvestmentPlanExecutionCommandHandler {
     private final InvestmentPlanRepository plans;
     private final PlanTradingCalendarGateway calendar;
     private final PlanTransactionGateway transactions;
+    private final PlanPortfolioFundGateway portfolioFunds;
 
     @Transactional
     public boolean execute(long planId, Instant now) {
         var plan = plans.findById(planId).orElse(null);
         Instant businessDate = BusinessDay.toDateLabel(now);
         if (plan == null || !calendar.isTradingDay(businessDate)) return false;
+        if (portfolioFunds.findTrackedForExecution(plan.ownerId(), plan.portfolioFundId()).isEmpty()) {
+            return false;
+        }
         boolean alreadyExecutedThisMonth = hasAnyOccurrenceThisMonth(plan, businessDate);
         Instant latestTradingDayBefore = calendar.latestBefore(businessDate).orElse(null);
         if (!plan.executableOn(businessDate, alreadyExecutedThisMonth, latestTradingDayBefore)) return false;

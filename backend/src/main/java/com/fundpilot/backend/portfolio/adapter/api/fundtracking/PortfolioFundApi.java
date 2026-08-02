@@ -51,6 +51,10 @@ public class PortfolioFundApi {
         return queries.findById(portfolioFundId).map(PortfolioFundApi::from);
     }
 
+    public Optional<PortfolioFund> findForUpdate(long portfolioFundId) {
+        return queries.findForUpdate(portfolioFundId).map(PortfolioFundApi::from);
+    }
+
     public Optional<PortfolioFund> findByLegacyFundId(long legacyFundId) {
         return queries.findByLegacyFundId(legacyFundId).map(PortfolioFundApi::from);
     }

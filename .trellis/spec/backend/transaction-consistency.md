@@ -33,6 +33,10 @@ Map<Long, List<Instant>> DcaPlanForecastService.currentMonthExecutionDates(List<
 List<FundDcaPlanEntity> FundDcaPlanRepository.findAllWithFund();
 List<InvestmentPlan> InvestmentPlanVisibleQueryHandler.findByOwner(long ownerId);
 List<PlanPortfolioFundGateway.PortfolioFund> PlanPortfolioFundGateway.findTrackedByOwner(long ownerId);
+Optional<PlanPortfolioFundGateway.PortfolioFund> PlanPortfolioFundGateway.findTrackedForExecution(
+    long ownerId, long portfolioFundId);
+Optional<PortfolioFund> PortfolioFundRepository.findByIdForUpdate(long portfolioFundId);
+Optional<TradedPortfolioFund> TradedPortfolioFundGateway.findForUpdate(long portfolioFundId);
 Optional<OwnedFundProductGateway.Product> OwnedFundProductGateway.findOwned(long legacyFundId);
 Optional<OwnedFundProductGateway.Product> OwnedFundProductGateway.findOwnedByPortfolioFundId(long portfolioFundId);
 boolean DcaScheduleService.isFutureExecutionDay(FundDcaPlanEntity plan, Instant candidate, Instant now);
@@ -145,6 +149,9 @@ V22 删除 `user_config.total_capital`，新增可空 `monthly_dca_budget`；将
 - onboarding 用户成本从重建前基金总成本扣除普通 lot 成本后反推，不得用旧交易净值覆盖。
 - 同一定投计划同一北京时间自然日由部分唯一索引最终兜底，Job 使用 `ON CONFLICT DO NOTHING` 原子生成。
 - DCA Job 只负责交易日门控、基金遍历和失败隔离；每只基金必须调用独立 Spring Bean 的 `@Transactional` Service，禁止同 Bean 自调用事务方法。
+- 定投执行创建 `PENDING` 流水前，必须在同一 `@Transactional` 用例中通过
+  `PlanPortfolioFundGateway.findTrackedForExecution(ownerId, portfolioFundId)` 锁定组合基金行，
+  并按锁后状态确认归属用户且仍为 `TRACKED`；锁后无效时返回未执行，不读取月内 occurrence，也不创建流水。
 - 行情抓取、信号生成、夜间净值确认等按基金遍历的定时批处理，每只基金必须通过 `RequiresNewTransactionExecutor` 或等价的代理 Bean 在独立事务中执行；单只失败只回滚当前基金并继续后续基金。
 - 卖出存在 lot 缺口时，只有按 CONFIRMED 账本 FIFO 重放后确有剩余 `ADJUST_IN` 未跟踪份额，缺口才按零赎回费降级；普通买入存在但 open lot 全空属于账本损坏。
 - 所有 SELL 确认入口在消费 lot 前必须先悲观锁定基金行，再基于 CONFIRMED 交易汇总校验事实持仓；不得依赖请求前页面持仓、缓存持仓或仅校验 lot 总数。

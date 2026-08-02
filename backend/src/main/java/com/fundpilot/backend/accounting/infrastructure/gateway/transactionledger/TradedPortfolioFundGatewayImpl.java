@@ -19,6 +19,11 @@ public class TradedPortfolioFundGatewayImpl implements TradedPortfolioFundGatewa
     }
 
     @Override
+    public Optional<TradedPortfolioFund> findForUpdate(long portfolioFundId) {
+        return portfolioFunds.findForUpdate(portfolioFundId).map(TradedPortfolioFundGatewayImpl::from);
+    }
+
+    @Override
     public Optional<TradedPortfolioFund> findOwned(long ownerId, long portfolioFundId) {
         return portfolioFunds.findOwned(ownerId, portfolioFundId).map(TradedPortfolioFundGatewayImpl::from);
     }

@@ -56,6 +56,8 @@ public class TransactionConfirmationCommandHandler {
     /** 手动确认一笔流水；转换交易两条腿联动确认。返回本次确认的流水 ID。 */
     @Transactional
     public List<Long> confirm(long ownerId, long transactionId) {
+        LedgerTransaction requested = requireOwnedSnapshot(ownerId, transactionId);
+        lockConfirmationFunds(requested);
         LedgerTransaction transaction = requireOwned(ownerId, transactionId);
         requirePending(transaction);
 
@@ -106,6 +108,10 @@ public class TransactionConfirmationCommandHandler {
      */
     @Transactional
     public int confirmPendingFor(long portfolioFundId, Instant fallbackDate) {
+        if (portfolioFunds.findForUpdate(portfolioFundId)
+                .filter(TradedPortfolioFundGateway.TradedPortfolioFund::tradable).isEmpty()) {
+            return 0;
+        }
         List<LedgerTransaction> pendings =
                 transactions.findByPortfolioFundAndStatus(portfolioFundId, TransactionStatus.PENDING);
         return confirmWhereNavAvailable(pendings, fallbackDate);
@@ -368,6 +374,36 @@ public class TransactionConfirmationCommandHandler {
         return portfolioFunds.find(transaction.portfolioFundId())
                 .map(TradedPortfolioFundGateway.TradedPortfolioFund::tradable)
                 .orElse(false);
+    }
+
+    /** 所有确认入口先按稳定顺序锁组合基金，避免并发确认看到同一份旧事实持仓。 */
+    private void lockConfirmationFunds(LedgerTransaction transaction) {
+        LedgerTransaction related = relatedOf(transaction);
+        LinkedHashSet<Long> portfolioFundIds = new LinkedHashSet<>();
+        portfolioFundIds.add(transaction.portfolioFundId());
+        if (ConversionPair.resolve(transaction, related) != null) {
+            portfolioFundIds.add(related.portfolioFundId());
+        }
+        portfolioFundIds.stream().sorted().forEach(this::requireTradableForUpdate);
+    }
+
+    private void requireTradableForUpdate(long portfolioFundId) {
+        portfolioFunds.findForUpdate(portfolioFundId)
+                .filter(TradedPortfolioFundGateway.TradedPortfolioFund::tradable)
+                .orElseThrow(() -> failure(
+                        TransactionConfirmationFailure.Code.PORTFOLIO_FUND_NOT_TRADABLE,
+                        "组合基金不存在或已作废，不可记账: " + portfolioFundId));
+    }
+
+    private LedgerTransaction requireOwnedSnapshot(long ownerId, long transactionId) {
+        LedgerTransaction transaction = transactions.findById(transactionId)
+                .orElseThrow(() -> failure(TransactionConfirmationFailure.Code.TRANSACTION_NOT_FOUND,
+                        "交易 #" + transactionId + " 不存在"));
+        if (transaction.ownerId() != ownerId) {
+            throw failure(TransactionConfirmationFailure.Code.TRANSACTION_NOT_FOUND,
+                    "交易 #" + transactionId + " 不存在");
+        }
+        return transaction;
     }
 
     private LedgerTransaction requireOwned(long ownerId, long transactionId) {

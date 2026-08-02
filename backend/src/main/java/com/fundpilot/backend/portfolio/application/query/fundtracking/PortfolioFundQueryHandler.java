@@ -40,6 +40,11 @@ public class PortfolioFundQueryHandler {
         return portfolioFunds.findById(portfolioFundId).map(PortfolioFundResult::from);
     }
 
+    @Transactional
+    public Optional<PortfolioFundResult> findForUpdate(long portfolioFundId) {
+        return portfolioFunds.findByIdForUpdate(portfolioFundId).map(PortfolioFundResult::from);
+    }
+
     @Transactional(readOnly = true)
     public Optional<PortfolioFundResult> findByLegacyFundId(long legacyFundId) {
         return portfolioFunds.findByLegacyFundId(legacyFundId).map(PortfolioFundResult::from);

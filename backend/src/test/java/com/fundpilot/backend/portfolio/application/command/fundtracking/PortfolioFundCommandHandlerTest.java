@@ -108,6 +108,11 @@ class PortfolioFundCommandHandlerTest {
         }
 
         @Override
+        public Optional<PortfolioFund> findByIdForUpdate(long id) {
+            return findById(id);
+        }
+
+        @Override
         public Optional<PortfolioFund> findTrackedByOwnerIdAndFundProductId(long ownerId,
                                                                             long fundProductId) {
             return portfolioFunds.stream()

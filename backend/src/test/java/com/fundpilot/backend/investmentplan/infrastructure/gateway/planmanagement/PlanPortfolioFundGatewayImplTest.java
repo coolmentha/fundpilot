@@ -3,6 +3,7 @@ package com.fundpilot.backend.investmentplan.infrastructure.gateway.planmanageme
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fundpilot.backend.investmentplan.application.gateway.planmanagement.PlanPortfolioFundGateway;
@@ -40,6 +41,17 @@ class PlanPortfolioFundGatewayImplTest {
 
         assertThat(result).extracting(PlanPortfolioFundGateway.PortfolioFund::id)
                 .containsExactly(7L);
+    }
+
+    @Test
+    void 执行前锁定组合基金并返回tracked基金() {
+        PortfolioFundApi funds = mock(PortfolioFundApi.class);
+        when(funds.findForUpdate(7L)).thenReturn(Optional.of(trackedFund()));
+
+        var result = new PlanPortfolioFundGatewayImpl(funds).findTrackedForExecution(3L, 7L);
+
+        assertThat(result).contains(new PlanPortfolioFundGateway.PortfolioFund(7L, 41L));
+        verify(funds).findForUpdate(7L);
     }
 
     private static void assertVoided(Runnable action) {

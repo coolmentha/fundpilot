@@ -141,7 +141,7 @@ public class PortfolioReturnQueryHandler {
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayNavConfirmed = latest != null && !latest.navDate().isBefore(today);
         boolean confirmedNavSelected = qdii
-                ? latest != null && previous != null
+                ? latest != null && previous != null && isLatestNavFirstSeenToday(latest, now)
                 : todayNavConfirmed;
         String estimateStatus = confirmedNavSelected ? "AVAILABLE" : qdii ? "STALE" : !supported ? "UNAVAILABLE"
                 : valuation == null ? "NOT_ATTEMPTED" : valuation.status();
@@ -191,6 +191,12 @@ public class PortfolioReturnQueryHandler {
         if (name == null) return false;
         String normalized = name.toUpperCase(java.util.Locale.ROOT);
         return normalized.contains("货币") || normalized.contains("REIT") || normalized.contains("不动产投资信托");
+    }
+
+    /** QDII 只在最新净值首次被平台发现的北京时间当天结算一次收益。 */
+    private static boolean isLatestNavFirstSeenToday(ReturnCompositionGateway.Nav latest, Instant now) {
+        return latest.firstSeenAt() != null
+                && BusinessDay.toDateLabel(latest.firstSeenAt()).equals(BusinessDay.toDateLabel(now));
     }
 
     private static BigDecimal change(ReturnCompositionGateway.Nav latest, ReturnCompositionGateway.Nav previous) {

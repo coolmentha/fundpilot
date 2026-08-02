@@ -10,6 +10,9 @@ public interface TradedPortfolioFundGateway {
 
     Optional<TradedPortfolioFund> find(long portfolioFundId);
 
+    /** 在当前事务内悲观锁定组合基金后读取其记账事实。 */
+    Optional<TradedPortfolioFund> findForUpdate(long portfolioFundId);
+
     Optional<TradedPortfolioFund> findOwned(long ownerId, long portfolioFundId);
 
     /** 扩展期按 legacy fund id 定位，供尚未迁移的入口复用。 */

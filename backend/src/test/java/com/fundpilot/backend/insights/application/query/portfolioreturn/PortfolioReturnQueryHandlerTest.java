@@ -91,13 +91,13 @@ class PortfolioReturnQueryHandlerTest {
     }
 
     @Test
-    void qdiiWithTwoConfirmedNavsDisplaysActualDailyReturnEvenWhenFirstSeenNotToday() {
+    void qdiiWithTwoConfirmedNavsReturnsZeroWhenFirstSeenNotToday() {
         ReturnCompositionGateway facts = openFundFacts("QDII", Instant.parse("2026-07-28T15:59:00Z"));
 
         var fund = handler(facts).currentFunds(7L).getFirst();
 
-        assertThat(fund.dailyChangePct()).isEqualByComparingTo("0.2");
-        assertThat(fund.dailyPnl()).isEqualByComparingTo("20");
+        assertThat(fund.dailyChangePct()).isZero();
+        assertThat(fund.dailyPnl()).isZero();
         assertThat(fund.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
         assertThat(fund.holdingAmount()).isEqualByComparingTo("120");
     }

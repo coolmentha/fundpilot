@@ -23,6 +23,11 @@ class PortfolioFundRepositoryImpl implements PortfolioFundRepository {
     }
 
     @Override
+    public Optional<PortfolioFund> findByIdForUpdate(long id) {
+        return repository.findByIdForUpdate(id).map(PortfolioFundPersistenceMapper::toDomain);
+    }
+
+    @Override
     public Optional<PortfolioFund> findTrackedByOwnerIdAndFundProductId(long ownerId,
                                                                         long fundProductId) {
         return repository.findByOwnerIdAndFundProductIdAndValidity(

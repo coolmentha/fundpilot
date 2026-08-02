@@ -5,6 +5,7 @@ import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,13 @@ public class PlanPortfolioFundGatewayImpl implements PlanPortfolioFundGateway {
                 .filter(fund -> fund.validity() == PortfolioFundApi.Validity.TRACKED)
                 .map(fund -> new PortfolioFund(fund.id(), fund.legacyFundId()))
                 .toList();
+    }
+
+    @Override public Optional<PortfolioFund> findTrackedForExecution(long ownerId, long portfolioFundId) {
+        return portfolioFunds.findForUpdate(portfolioFundId)
+                .filter(fund -> fund.ownerId() == ownerId)
+                .filter(fund -> fund.validity() == PortfolioFundApi.Validity.TRACKED)
+                .map(fund -> new PortfolioFund(fund.id(), fund.legacyFundId()));
     }
 
     private PortfolioFund requireTracked(PortfolioFundApi.PortfolioFund fund) {
