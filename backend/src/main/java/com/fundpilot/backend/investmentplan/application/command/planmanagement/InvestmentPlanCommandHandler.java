@@ -29,18 +29,28 @@ public class InvestmentPlanCommandHandler {
     @Transactional
     public PlanResult createForPortfolioFund(long ownerId, long portfolioFundId, PlanInput input) {
         portfolioFunds.requireTracked(ownerId, portfolioFundId);
-        plans.findEffectiveByPortfolioFundId(portfolioFundId).ifPresent(plan -> {
-            plan.retire();
-            plans.save(plan);
+        InvestmentPlan plan;
+        try {
+            plan = InvestmentPlan.create(portfolioFundId, ownerId, input.enabled(), input.amount(),
+                    frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth());
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, exception.getMessage());
+        }
+        plans.findEffectiveByPortfolioFundId(portfolioFundId).ifPresent(existing -> {
+            existing.retire();
+            plans.save(existing);
         });
-        return from(plans.save(InvestmentPlan.create(portfolioFundId, ownerId, input.enabled(), input.amount(),
-                frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth())));
+        return from(plans.save(plan));
     }
 
     @Transactional
     public PlanResult update(long ownerId, long planId, PlanInput input) {
         InvestmentPlan plan = owned(ownerId, planId);
-        plan.update(input.enabled(), input.amount(), frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth());
+        try {
+            plan.update(input.enabled(), input.amount(), frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth());
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, exception.getMessage());
+        }
         return from(plans.save(plan));
     }
 
@@ -56,14 +66,22 @@ public class InvestmentPlanCommandHandler {
     @Transactional
     public PlanResult retire(long ownerId, long planId) {
         InvestmentPlan plan = owned(ownerId, planId);
-        plan.retire();
+        try {
+            plan.retire();
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION, exception.getMessage());
+        }
         return from(plans.save(plan));
     }
 
     @Transactional
     public PlanResult setEnabled(long ownerId, long planId, boolean enabled) {
         InvestmentPlan plan = owned(ownerId, planId);
-        plan.setEnabled(enabled);
+        try {
+            plan.setEnabled(enabled);
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.ILLEGAL_STATE_TRANSITION, exception.getMessage());
+        }
         return from(plans.save(plan));
     }
 

@@ -18,13 +18,17 @@ class OwnedFundProductGatewayImpl implements OwnedFundProductGateway {
 
     @Override
     public Optional<Product> findOwned(long legacyFundId) {
-        return portfolioFunds.findOwnedByLegacyFundId(actor.userId(), legacyFundId).flatMap(portfolio ->
-                product(portfolio));
+        return trackedProduct(portfolioFunds.findOwnedByLegacyFundId(actor.userId(), legacyFundId));
     }
 
     @Override
     public Optional<Product> findOwnedByPortfolioFundId(long portfolioFundId) {
-        return portfolioFunds.findOwned(actor.userId(), portfolioFundId).flatMap(this::product);
+        return trackedProduct(portfolioFunds.findOwned(actor.userId(), portfolioFundId));
+    }
+
+    private Optional<Product> trackedProduct(Optional<PortfolioFundApi.PortfolioFund> portfolio) {
+        return portfolio.filter(value -> value.validity() == PortfolioFundApi.Validity.TRACKED)
+                .flatMap(this::product);
     }
 
     private Optional<Product> product(PortfolioFundApi.PortfolioFund portfolio) {
