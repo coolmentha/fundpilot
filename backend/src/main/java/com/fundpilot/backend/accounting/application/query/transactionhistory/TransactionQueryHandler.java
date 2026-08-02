@@ -103,7 +103,7 @@ public class TransactionQueryHandler {
 
     @Transactional(readOnly = true)
     public boolean hasTransactionForAdvice(long adviceId) {
-        return transactions.existsByDisciplineAdviceId(adviceId);
+        return transactions.existsByDisciplineAdviceIdAndStatusNot(adviceId, TransactionStatus.CANCELLED);
     }
 
     /** 由 Discipline 建议生成的账目；回应建议后取最新一条。 */

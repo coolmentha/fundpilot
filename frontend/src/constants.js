@@ -60,6 +60,7 @@ export const labels = {
     DIVERGENCE_BOTTOM: '底背离',
     GREEN_SHRINKING: '绿柱缩小',
     RED_SHRINKING: '红柱缩小',
+    RED_EXPANDING: '红柱扩大',
     GREEN_EXPANDING: '绿柱扩大',
     // VolumeState
     LOW_STABLE: '地量企稳',

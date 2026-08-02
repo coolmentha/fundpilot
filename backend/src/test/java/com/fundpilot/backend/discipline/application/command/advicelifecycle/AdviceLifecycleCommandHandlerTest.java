@@ -49,6 +49,21 @@ class AdviceLifecycleCommandHandlerTest {
         assertThat(strategy.takeProfitPhase()).isEqualTo("ARMED");
     }
 
+    @Test
+    void cancelled_撤单释放TRIGGERED策略回到ARMED() {
+        AdviceRepository advice = mock(AdviceRepository.class);
+        DisciplineStrategyRepository strategies = mock(DisciplineStrategyRepository.class);
+        DisciplineStrategy strategy = triggeredStrategy(73L);
+        when(strategies.findByTriggeredAdviceId(73L)).thenReturn(Optional.of(strategy));
+
+        new AdviceLifecycleCommandHandler(advice, strategies, Clock.fixed(NOW, ZoneOffset.UTC))
+                .cancelled(73L);
+
+        assertThat(strategy.takeProfitPhase()).isEqualTo("ARMED");
+        assertThat(strategy.triggeredAdviceId()).isNull();
+        verify(strategies).save(strategy);
+    }
+
     private static DisciplineStrategy triggeredStrategy(long adviceId) {
         DisciplineStrategy strategy = DisciplineStrategy.create(10L, 1L, new DisciplineStrategy.Input(
                 new BigDecimal("0.10"), new BigDecimal("0.08"), new BigDecimal("0.10"),

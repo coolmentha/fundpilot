@@ -33,5 +33,9 @@ public class AdviceLifecycleCommandHandler {
             value.markPending();
             advice.save(value);
         });
+        strategies.findByTriggeredAdviceId(adviceId).ifPresent(strategy -> {
+            strategy.supersedeTriggered();
+            strategies.save(strategy);
+        });
     }
 }

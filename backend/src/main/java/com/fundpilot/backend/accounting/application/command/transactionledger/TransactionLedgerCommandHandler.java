@@ -4,6 +4,7 @@ import com.fundpilot.backend.accounting.application.command.positiontracking.Pos
 import com.fundpilot.backend.accounting.application.event.transaction.TransactionCreated;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.LedgerEventGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradedPortfolioFundGateway;
+import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradingDayGateway;
 import com.fundpilot.backend.accounting.domain.ledgerreplay.LedgerReplay;
 import com.fundpilot.backend.accounting.domain.lot.FifoRedemption;
 import com.fundpilot.backend.accounting.domain.lot.Lot;
@@ -40,6 +41,7 @@ public class TransactionLedgerCommandHandler {
     private final TransactionRepository transactions;
     private final LotRepository lots;
     private final TradedPortfolioFundGateway portfolioFunds;
+    private final TradingDayGateway tradingDays;
     private final PositionCommandHandler positions;
     private final LedgerEventGateway events;
     private final Clock clock;
@@ -84,17 +86,19 @@ public class TransactionLedgerCommandHandler {
             throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED,
                     "交易发生时间不能晚于当前时间");
         }
+        Instant normalizedTradeDate = tradingDays.latestTradingDayOnOrBefore(effectiveTradeDate)
+                .orElse(effectiveTradeDate);
 
         if (source.isAdjustment()) {
-            return recordAdjustment(ownerId, portfolioFundId, source, shares, effectiveTradeDate, now);
+            return recordAdjustment(ownerId, portfolioFundId, source, shares, normalizedTradeDate, now);
         }
         if (source == TransactionSource.TRANSFER_OUT && targetPortfolioFundId != null) {
             return recordConversion(ownerId, portfolioFundId, targetPortfolioFundId, shares,
-                    effectiveTradeDate, now);
+                    normalizedTradeDate, now);
         }
 
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, source, amount, shares, effectiveTradeDate, null, null));
+                ownerId, source, amount, shares, normalizedTradeDate, null, null));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, now);
         return LedgerResult.from(saved);
@@ -119,12 +123,16 @@ public class TransactionLedgerCommandHandler {
                                               BigDecimal amount, BigDecimal shares, Instant tradeDate,
                                               long disciplineAdviceId, String signalReason) {
         requireTradable(ownerId, portfolioFundId);
-        if (transactions.existsByDisciplineAdviceId(disciplineAdviceId)) {
+        if (transactions.existsByDisciplineAdviceIdAndStatusNot(
+                disciplineAdviceId, TransactionStatus.CANCELLED)) {
             throw failure(TransactionLedgerFailure.Code.ADVICE_ALREADY_RESPONDED,
                     "建议 #" + disciplineAdviceId + " 已创建账目");
         }
+        Instant effectiveTradeDate = tradeDate != null ? tradeDate : clock.instant();
+        Instant normalizedTradeDate = tradingDays.latestTradingDayOnOrBefore(effectiveTradeDate)
+                .orElse(effectiveTradeDate);
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, TransactionSource.valueOf(source.name()), amount, shares, tradeDate, null, null,
+                ownerId, TransactionSource.valueOf(source.name()), amount, shares, normalizedTradeDate, null, null,
                 disciplineAdviceId, signalReason));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, clock.instant());
@@ -173,11 +181,13 @@ public class TransactionLedgerCommandHandler {
             throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED,
                     "交易发生时间不能为空或晚于当前时间");
         }
+        Instant normalizedTradeDate = tradingDays.latestTradingDayOnOrBefore(effectiveTradeDate)
+                .orElse(effectiveTradeDate);
 
-        mutate(() -> transaction.reviseInput(amount, shares, effectiveTradeDate));
+        mutate(() -> transaction.reviseInput(amount, shares, normalizedTradeDate));
         LedgerTransaction saved = transactions.save(transaction);
         if (conversion != null) {
-            mutate(() -> conversion.inLeg().reviseTradeDate(effectiveTradeDate));
+            mutate(() -> conversion.inLeg().reviseTradeDate(normalizedTradeDate));
             transactions.save(conversion.inLeg());
         }
         return LedgerResult.from(saved);

@@ -30,6 +30,7 @@ export default function ConfirmPage() {
     const fundIdParam = params.get('fundId');
     const fundId = fundIdParam ? Number(fundIdParam) : null;
     const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
+    const isQdii = (row) => funds?.find((fund) => fund.id === row.fundId)?.investmentTarget === 'QDII';
     const visibleTransactions = fundId ? (transactions || []).filter((transaction) => transaction.fundId === fundId) : transactions || [];
 
     const confirm = async (id) => {
@@ -59,7 +60,7 @@ export default function ConfirmPage() {
             <Space direction="vertical" size={0}>
                 <span>{row.confirmationReason || '等待交易日净值入库'}</span>
                 {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
-                {row.qdii && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
+                {isQdii(row) && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
                 {row.signalLogId && <Link to={`/advice?fundId=${row.fundId}`}>来源建议 #{row.signalLogId}</Link>}
                 {row.signalReason && labels[row.signalReason] && <Text type="secondary">

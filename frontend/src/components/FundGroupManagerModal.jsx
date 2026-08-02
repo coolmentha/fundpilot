@@ -33,6 +33,9 @@ function FundGroupManagerContent({groups, onCancel}) {
     const removeGroup = (key) => setDraft((items) => items.filter((item) => item.key !== key));
     const renameGroup = (key, name) => setDraft((items) => items.map((item) => item.key === key ? {...item, name} : item));
     const submit = async () => {
+        if (!hasSyncedGroups.current || !groups) {
+            return message.error('分组数据尚未加载完成，请稍后再试');
+        }
         const names = draft.map((item) => item.name.trim());
         if (names.some((name) => !name || name.length > 20)) {
             return message.error('分组名称长度必须为 1-20 个字符');

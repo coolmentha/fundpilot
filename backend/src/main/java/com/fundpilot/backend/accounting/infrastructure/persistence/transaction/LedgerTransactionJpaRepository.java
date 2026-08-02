@@ -81,7 +81,7 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
     java.math.BigDecimal sumInvestedAmount(@Param("ownerId") Long ownerId, @Param("start") Instant start,
                                            @Param("end") Instant end);
 
-    boolean existsByDisciplineAdviceId(Long disciplineAdviceId);
+    boolean existsByDisciplineAdviceIdAndStatusNot(Long disciplineAdviceId, String status);
 
     @Query("select t from LedgerTransactionJpaEntity t where t.disciplineAdviceId = :disciplineAdviceId "
             + "order by t.createdDate desc")
