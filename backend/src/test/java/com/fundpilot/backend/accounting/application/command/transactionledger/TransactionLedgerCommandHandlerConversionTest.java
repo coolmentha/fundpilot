@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fundpilot.backend.accounting.application.command.positiontracking.PositionCommandHandler;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.LedgerEventGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradedPortfolioFundGateway;
+import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradingDayGateway;
 import com.fundpilot.backend.accounting.domain.lot.LotRepository;
 import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
@@ -92,7 +93,7 @@ class TransactionLedgerCommandHandlerConversionTest {
     private static TransactionLedgerCommandHandler handler(TransactionRepository transactions,
                                                            TradedPortfolioFundGateway portfolioFunds) {
         return new TransactionLedgerCommandHandler(transactions, mock(LotRepository.class), portfolioFunds,
-                mock(PositionCommandHandler.class), mock(LedgerEventGateway.class),
+                mock(TradingDayGateway.class), mock(PositionCommandHandler.class), mock(LedgerEventGateway.class),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

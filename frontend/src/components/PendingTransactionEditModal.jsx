@@ -1,7 +1,10 @@
 import {App, Button, DatePicker, Form, InputNumber, Modal, Space} from 'antd';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
 import {useUpdateTransaction} from '../api/hooks.js';
 import {BUY_SOURCES, pendingTransactionBody} from '../transactionEditing.js';
+
+dayjs.extend(utc);
 
 export default function PendingTransactionEditModal({transaction, holdingShares, onClose}) {
     const {message} = App.useApp();
@@ -22,7 +25,7 @@ export default function PendingTransactionEditModal({transaction, holdingShares,
             <Form form={form} layout="vertical" initialValues={{
                 amount: transaction.amount,
                 shares: transaction.shares,
-                tradeDate: dayjs(transaction.tradeDate),
+                tradeDate: dayjs(transaction.tradeDate).utcOffset(8),
             }}>
                 <Form.Item label="交易发生日" name="tradeDate"
                            rules={[{required: true, message: '请选择交易发生日'}]}>

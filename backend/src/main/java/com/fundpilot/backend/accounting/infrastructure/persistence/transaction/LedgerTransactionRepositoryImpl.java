@@ -132,8 +132,8 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
-    public boolean existsByDisciplineAdviceId(long disciplineAdviceId) {
-        return transactions.existsByDisciplineAdviceId(disciplineAdviceId);
+    public boolean existsByDisciplineAdviceIdAndStatusNot(long disciplineAdviceId, TransactionStatus status) {
+        return transactions.existsByDisciplineAdviceIdAndStatusNot(disciplineAdviceId, status.name());
     }
 
     @Override

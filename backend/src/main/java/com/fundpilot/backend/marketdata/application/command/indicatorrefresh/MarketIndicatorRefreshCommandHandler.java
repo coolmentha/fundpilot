@@ -209,8 +209,8 @@ public class MarketIndicatorRefreshCommandHandler {
         double[] dea = ema(dif, 9);
         double current = 2 * (dif[dif.length - 1] - dea[dea.length - 1]);
         double previous = 2 * (dif[dif.length - 2] - dea[dea.length - 2]);
-        return Optional.of(current > 0 ? "RED_SHRINKING" : Math.abs(current) > Math.abs(previous)
-                ? "GREEN_EXPANDING" : "GREEN_SHRINKING");
+        return Optional.of(current > 0 ? current > previous ? "RED_EXPANDING" : "RED_SHRINKING"
+                : Math.abs(current) > Math.abs(previous) ? "GREEN_EXPANDING" : "GREEN_SHRINKING");
     }
 
     private static double[] ema(double[] values, int period) {

@@ -93,7 +93,7 @@ public class PortfolioReturnController {
                     value.totalReturn(), value.returnRate(), value.realizedComplete(), value.valuationDate(),
                     value.groups().stream().map(group -> new FundGroupView(group.id(), group.name())).toList(),
                     value.holdingShares(), value.costPerShare(), value.dailyChangePct(), value.dailyPnl(),
-                    value.totalReturn(), value.estimated(), value.estimateFetchFailed(), value.estimateStatus(),
+                    value.unrealizedPnl(), value.estimated(), value.estimateFetchFailed(), value.estimateStatus(),
                     value.valuationNav(), value.valuationSource(), value.valuationFirstSeenAt(),
                     value.estimateTime(), value.baseNavDate(), value.openedAt());
         }
