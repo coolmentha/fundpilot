@@ -48,7 +48,7 @@ class TransactionLedgerCommandHandlerAdviceTest {
         when(transactions.existsByDisciplineAdviceId(71L)).thenReturn(true);
 
         assertThatThrownBy(() -> handler.placePendingForAdvice(3L, 11L, TransactionLedgerCommandHandler.Source.INCREASE,
-                new BigDecimal("100"), null, Instant.EPOCH, 71L))
+                new BigDecimal("100"), null, Instant.EPOCH, 71L, "LOGIC_BROKEN"))
                 .isInstanceOf(TransactionLedgerFailure.class)
                 .extracting(error -> ((TransactionLedgerFailure) error).code())
                 .isEqualTo(TransactionLedgerFailure.Code.ADVICE_ALREADY_RESPONDED);

@@ -48,7 +48,7 @@ public class AdviceResponseCommandHandler {
         try {
             var transaction = transactions.createPending(new AdviceTransactionGateway.CreatePending(ownerId,
                     advice.portfolioFundId(), source, amount, shares,
-                    tradeDate != null ? tradeDate : clock.instant(), advice.id()));
+                    tradeDate != null ? tradeDate : clock.instant(), advice.id(), advice.reason()));
             return new ResponseResult(advice.id(), transaction.transactionId());
         } catch (AdviceTransactionGateway.Rejected exception) {
             throw failure(exception.alreadyResponded() ? AdviceResponseFailure.Code.ALREADY_RESPONDED

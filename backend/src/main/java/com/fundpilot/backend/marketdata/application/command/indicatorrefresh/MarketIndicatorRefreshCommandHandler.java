@@ -53,7 +53,7 @@ public class MarketIndicatorRefreshCommandHandler {
 
     public void refreshBatch(int batchNumber) {
         refresh(products.findAll().stream().filter(product -> product.legacyFundId() != null
-                && Math.abs(product.legacyFundId().hashCode()) % TOTAL_BATCHES == batchNumber).toList());
+                && Math.floorMod(product.legacyFundId().hashCode(), TOTAL_BATCHES) == batchNumber).toList());
     }
 
     public void refreshAll() {

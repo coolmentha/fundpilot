@@ -113,11 +113,11 @@ public class TransactionLedgerCommandHandler {
         return LedgerResult.from(saved);
     }
 
-    /** Discipline 建议回应创建待确认账目，建议 ID 是跨模块幂等键。 */
+    /** Discipline 建议回应创建待确认账目，建议 ID 是跨模块幂等键，来源原因冗余展示。 */
     @Transactional
     public LedgerResult placePendingForAdvice(long ownerId, long portfolioFundId, Source source,
                                               BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                              long disciplineAdviceId) {
+                                              long disciplineAdviceId, String signalReason) {
         requireTradable(ownerId, portfolioFundId);
         if (transactions.existsByDisciplineAdviceId(disciplineAdviceId)) {
             throw failure(TransactionLedgerFailure.Code.ADVICE_ALREADY_RESPONDED,
@@ -125,7 +125,7 @@ public class TransactionLedgerCommandHandler {
         }
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
                 ownerId, TransactionSource.valueOf(source.name()), amount, shares, tradeDate, null, null,
-                disciplineAdviceId));
+                disciplineAdviceId, signalReason));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, clock.instant());
         return LedgerResult.from(saved);

@@ -15,7 +15,7 @@ public interface AdviceTransactionGateway {
     java.util.Optional<RelatedTransaction> relatedTransaction(long adviceId);
 
     record CreatePending(long ownerId, long portfolioFundId, Source source, BigDecimal amount,
-                         BigDecimal shares, Instant tradeDate, long adviceId) {
+                         BigDecimal shares, Instant tradeDate, long adviceId, String signalReason) {
     }
 
     record PendingTransaction(long transactionId) {

@@ -59,18 +59,22 @@ public class PortfolioReturnQueryHandler {
         BigDecimal redeemed = rows.stream().map(FundReturnResult::externalRedeemedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal fees = rows.stream().map(FundReturnResult::feeAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal holding = rows.stream().map(FundReturnResult::holdingAmount).filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
         boolean realizedComplete = rows.stream().allMatch(FundReturnResult::realizedComplete);
         boolean unrealizedComplete = rows.stream().filter(FundReturnResult::open)
                 .allMatch(row -> row.unrealizedPnl() != null);
+        // 任一持仓基金持仓市值未知(如估值拉取失败)时,合计保持未知,不得按已知子集拼凑
+        boolean holdingComplete = rows.stream().filter(FundReturnResult::open)
+                .allMatch(row -> row.holdingAmount() != null);
         BigDecimal realized = realizedComplete ? rows.stream().map(FundReturnResult::realizedPnl)
                 .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
         BigDecimal unrealized = unrealizedComplete ? rows.stream().map(FundReturnResult::unrealizedPnl)
                 .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
-        BigDecimal totalReturn = holding.add(redeemed).subtract(invested);
+        BigDecimal holding = holdingComplete ? rows.stream().map(FundReturnResult::holdingAmount)
+                .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
+        BigDecimal totalReturn = holding == null ? null : holding.add(redeemed).subtract(invested);
         return new PortfolioReturnResult(invested, redeemed, fees, holding, realized, unrealized, totalReturn,
-                invested.signum() > 0 ? totalReturn.divide(invested, MATH) : null, realizedComplete, rows);
+                totalReturn != null && invested.signum() > 0 ? totalReturn.divide(invested, MATH) : null,
+                realizedComplete, rows);
     }
 
     @Transactional(readOnly = true)
@@ -97,8 +101,9 @@ public class PortfolioReturnQueryHandler {
     @Transactional(readOnly = true)
     public PortfolioSummaryResult summary(long ownerId) {
         List<FundReturnResult> funds = currentFunds(ownerId).stream().filter(FundReturnResult::open).toList();
-        BigDecimal holding = funds.stream().map(FundReturnResult::holdingAmount).filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        boolean holdingComplete = funds.stream().allMatch(fund -> fund.holdingAmount() != null);
+        BigDecimal holding = holdingComplete ? funds.stream().map(FundReturnResult::holdingAmount)
+                .filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
         List<FundReturnResult> covered = funds.stream().filter(fund -> fund.dailyPnl() != null).toList();
         BigDecimal dailyPnl = covered.size() != funds.size() ? null : covered.stream()
                 .map(FundReturnResult::dailyPnl).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -147,9 +152,12 @@ public class PortfolioReturnQueryHandler {
                 ? BigDecimal.ZERO : null;
         boolean estimated = !confirmedNavSelected && !qdii && valuation != null
                 && valuation.estimatedChangePct() != null;
-        BigDecimal positionNav = latest == null ? null : estimated && dailyChange != null
+        // 估值拉取失败(TIMEOUT/PARSE_ERROR)时持仓市值与总盈亏为未知,不得拿上一期已公布净值冒充当前值
+        boolean estimateFailed = "TIMEOUT".equals(estimateStatus) || "PARSE_ERROR".equals(estimateStatus);
+        BigDecimal positionNav = latest == null || estimateFailed ? null : estimated && dailyChange != null
                 ? latest.unitNav().multiply(BigDecimal.ONE.add(dailyChange, MATH), MATH) : latest.unitNav();
-        BigDecimal holding = open && positionNav != null ? shares.multiply(positionNav, MATH) : BigDecimal.ZERO;
+        BigDecimal holding = !open ? BigDecimal.ZERO
+                : positionNav == null ? null : shares.multiply(positionNav, MATH);
         BigDecimal unrealized = open && positionNav != null && position.costPerShare() != null
                 ? holding.subtract(shares.multiply(position.costPerShare(), MATH)) : open ? null : BigDecimal.ZERO;
         BigDecimal dailyBase = estimated || !confirmedNavSelected ? latest == null ? null : latest.unitNav()
@@ -159,7 +167,8 @@ public class PortfolioReturnQueryHandler {
         ReturnCompositionGateway.ReturnFact value = returns == null
                 ? new ReturnCompositionGateway.ReturnFact(fund.id(), BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, true) : returns;
-        BigDecimal total = holding.add(value.redeemedAmount()).subtract(value.investedAmount());
+        BigDecimal total = holding == null ? null
+                : holding.add(value.redeemedAmount()).subtract(value.investedAmount());
         return new FundReturnResult(fund.id(), fund.legacyFundId(), product == null ? null : product.fundCode(),
                 product == null ? null : product.fundName(), position == null ? "EMPTY" : position.status(),
                 product == null ? null : product.productType(), product == null ? null : product.investmentTarget(),
@@ -167,7 +176,7 @@ public class PortfolioReturnQueryHandler {
                 fund.positionWarningRatio(),
                 value.investedAmount(), value.redeemedAmount(), value.externalInvestedAmount(),
                 value.externalRedeemedAmount(), value.feeAmount(), holding, value.realizedPnl(), unrealized, total,
-                value.investedAmount().signum() > 0 ? total.divide(value.investedAmount(), MATH) : null,
+                value.investedAmount().signum() > 0 && total != null ? total.divide(value.investedAmount(), MATH) : null,
                 value.realizedComplete(), latest == null ? null : latest.navDate(), open, groups,
                 shares.signum() == 0 ? null : shares, position == null ? null : position.costPerShare(),
                 dailyChange, dailyPnl, estimated, "TIMEOUT".equals(estimateStatus)

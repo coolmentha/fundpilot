@@ -83,6 +83,10 @@ class AdviceResponseCommandHandlerTest {
         var result = handler.accept(3L, 71L, null, new BigDecimal("100"), null);
 
         assertThat(result.transactionId()).isEqualTo(101L);
+        ArgumentCaptor<AdviceTransactionGateway.CreatePending> request =
+                ArgumentCaptor.forClass(AdviceTransactionGateway.CreatePending.class);
+        verify(transactions).createPending(request.capture());
+        assertThat(request.getValue().signalReason()).isEqualTo("LOGIC_BROKEN");
     }
 
     @Test

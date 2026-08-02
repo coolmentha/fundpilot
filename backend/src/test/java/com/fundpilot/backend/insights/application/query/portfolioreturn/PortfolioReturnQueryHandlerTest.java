@@ -151,6 +151,67 @@ class PortfolioReturnQueryHandlerTest {
         assertThat(summary.dailyCoveredFundCount()).isEqualTo(1);
     }
 
+    @Test
+    void estimateFailureLeavesHoldingAndTotalPnlUnknownInsteadOfStaleNavFallback() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true, new BigDecimal("0.3"))));
+        when(facts.findPositions(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100"))));
+        when(facts.findReturnFacts(7L)).thenReturn(List.of());
+        when(facts.findProducts(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "示例基金", "ETF", "STOCK", "000300",
+                        "BROAD_BASE")));
+        when(facts.findLatestTwoNavs(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-28T00:00:00Z"),
+                        new BigDecimal("1.2"), new BigDecimal("1.2"), Instant.parse("2026-07-28T01:00:00Z"))));
+        when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of(
+                new ReturnCompositionGateway.RealtimeValuation("000001", null, null, null, "TIMEOUT")));
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
+
+        var result = handler(facts).findByOwner(7L);
+
+        var fund = result.funds().getFirst();
+        assertThat(fund.holdingAmount()).isNull();
+        assertThat(fund.unrealizedPnl()).isNull();
+        assertThat(fund.totalReturn()).isNull();
+        assertThat(fund.estimateFetchFailed()).isTrue();
+        assertThat(result.holdingAmount()).isNull();
+        assertThat(result.unrealizedPnl()).isNull();
+        assertThat(result.totalReturn()).isNull();
+        assertThat(result.returnRate()).isNull();
+    }
+
+    @Test
+    void estimateNotAttemptedKeepsLatestConfirmedNavAsPositionBaseline() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true, new BigDecimal("0.3"))));
+        when(facts.findPositions(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100"))));
+        when(facts.findReturnFacts(7L)).thenReturn(List.of());
+        when(facts.findProducts(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "示例基金", "ETF", "STOCK", "000300",
+                        "BROAD_BASE")));
+        when(facts.findLatestTwoNavs(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-28T00:00:00Z"),
+                        new BigDecimal("1.2"), new BigDecimal("1.2"), Instant.parse("2026-07-28T01:00:00Z")),
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-27T00:00:00Z"),
+                        BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-27T01:00:00Z"))));
+        when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
+
+        var fund = handler(facts).currentFunds(7L).getFirst();
+
+        assertThat(fund.holdingAmount()).isEqualByComparingTo("120");
+        assertThat(fund.estimateFetchFailed()).isFalse();
+        assertThat(fund.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
+    }
+
     private static ReturnCompositionGateway openFundFacts(String investmentTarget, Instant firstSeenAt) {
         ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
         when(facts.findPortfolioFunds(7L)).thenReturn(List.of(

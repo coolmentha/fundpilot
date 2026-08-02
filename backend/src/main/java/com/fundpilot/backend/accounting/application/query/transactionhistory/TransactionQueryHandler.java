@@ -137,7 +137,7 @@ public class TransactionQueryHandler {
                 : null;
         return new PendingResult(TransactionLedgerCommandHandler.LedgerResult.from(transaction),
                 portfolioFund.legacyFundId(), expectedNav,
-                expectedShares, state.name(), state.reason);
+                expectedShares, state.name(), state.reason, transaction.signalReason());
     }
 
     private ConfirmationState confirmationState(LedgerTransaction transaction, BigDecimal expectedNav) {
@@ -159,7 +159,8 @@ public class TransactionQueryHandler {
 
     public record PendingResult(TransactionLedgerCommandHandler.LedgerResult transaction, Long legacyFundId,
                                 BigDecimal expectedNav,
-                                BigDecimal expectedShares, String confirmationState, String confirmationReason) {
+                                BigDecimal expectedShares, String confirmationState, String confirmationReason,
+                                String signalReason) {
     }
 
     private enum ConfirmationState {

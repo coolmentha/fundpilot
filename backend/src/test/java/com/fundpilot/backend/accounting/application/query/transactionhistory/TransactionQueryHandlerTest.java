@@ -75,6 +75,22 @@ class TransactionQueryHandlerTest {
         assertThat(handler().findPendingByOwner(7L)).isEmpty();
     }
 
+    @Test
+    void 待确认卖出展示冗余存储的建议来源原因() {
+        LedgerTransaction transaction = LedgerTransaction.rehydrate(5L, 10L, 7L, TransactionSource.DECREASE,
+                TransactionStatus.PENDING, null, new BigDecimal("10"), null, null, null,
+                Instant.parse("2026-07-17T00:00:00Z"), null, null, Instant.EPOCH,
+                null, null, null, 99L, null, "LOGIC_BROKEN");
+        when(portfolioFunds.findTradableByOwner(7L)).thenReturn(List.of(tradable(10L)));
+        when(transactions.findByStatusOrderByTradeDateDesc(TransactionStatus.PENDING)).thenReturn(List.of(transaction));
+        when(navs.unitNavOn(any(Long.class), any())).thenReturn(Optional.of(BigDecimal.ONE));
+
+        var result = handler().findPendingByOwner(7L);
+
+        assertThat(result).singleElement().extracting(TransactionQueryHandler.PendingResult::signalReason)
+                .isEqualTo("LOGIC_BROKEN");
+    }
+
     private TransactionQueryHandler handler() {
         return new TransactionQueryHandler(transactions, portfolioFunds, navs, fees, CLOCK);
     }

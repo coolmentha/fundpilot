@@ -47,7 +47,7 @@ public class TransactionController {
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long portfolioFundId) {
         return Response.ok(queries.findByPortfolioFund(ownerId, portfolioFundId).stream()
-                .map(result -> TransactionView.from(result, null, null, null, null, null)).toList());
+                .map(result -> TransactionView.from(result, null, null, null, null, null, null)).toList());
     }
 
     @PostMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
@@ -115,22 +115,23 @@ public class TransactionController {
                                   String confirmationState, String confirmationReason,
                                   boolean qdii, String signalReason) {
         static TransactionView from(TransactionQueryHandler.TransactionViewResult result) {
-            return from(result.transaction(), result.legacyFundId(), null, null, null, null);
+            return from(result.transaction(), result.legacyFundId(), null, null, null, null, null);
         }
 
         static TransactionView from(TransactionQueryHandler.PendingResult result) {
             return from(result.transaction(), result.legacyFundId(), result.expectedNav(), result.expectedShares(),
-                    result.confirmationState(), result.confirmationReason());
+                    result.confirmationState(), result.confirmationReason(), result.signalReason());
         }
 
         private static TransactionView from(TransactionLedgerCommandHandler.LedgerResult result, Long legacyFundId,
                                             BigDecimal expectedNav, BigDecimal expectedShares,
-                                            String confirmationState, String confirmationReason) {
+                                            String confirmationState, String confirmationReason,
+                                            String signalReason) {
             return new TransactionView(result.transactionId(), legacyFundId, result.portfolioFundId(), result.amount(), result.shares(),
                     result.nav(), result.fee(), result.feeRate(), result.status(), result.source(),
                     result.confirmTime(), result.cancelTime(), result.signalLogId(), result.relatedTransactionId(),
                     result.tradeDate(), result.createdDate(), expectedNav, expectedShares, confirmationState,
-                    confirmationReason, false, null);
+                    confirmationReason, false, signalReason);
         }
     }
 

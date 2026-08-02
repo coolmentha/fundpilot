@@ -152,7 +152,11 @@ public class TransactionConfirmationCommandHandler {
                 continue;
             }
             try {
-                confirmed += confirmOneWhereNavAvailable(transaction, fallbackDate);
+                // 悲观锁定后重读状态,避免与手动确认/撤单并发时乐观锁失败整批跳过
+                confirmed += transactions.findByIdForUpdate(transaction.id())
+                        .filter(candidate -> candidate.status() == TransactionStatus.PENDING)
+                        .map(candidate -> confirmOneWhereNavAvailable(candidate, fallbackDate))
+                        .orElse(0);
             } catch (TransactionConfirmationFailure failure) {
                 log.warn("批量确认跳过坏流水 tx_id={} code={}: {}", transaction.id(),
                         failure.code(), failure.getMessage());

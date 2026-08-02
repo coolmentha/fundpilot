@@ -8,7 +8,7 @@ import {
     useFunds,
     usePendingTransactions,
 } from '../api/hooks.js';
-import {datetime, money} from '../constants.js';
+import {datetime, labels, money} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
@@ -62,8 +62,8 @@ export default function ConfirmPage() {
                 {row.qdii && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
                 {row.signalLogId && <Link to={`/advice?fundId=${row.fundId}`}>来源建议 #{row.signalLogId}</Link>}
-                {row.signalReason && <Text type="secondary">
-                    {row.signalReason === 'LOGIC_BROKEN' ? '逻辑破坏止损：建议清仓' : '移动止盈：收割部分浮盈'}
+                {row.signalReason && labels[row.signalReason] && <Text type="secondary">
+                    {labels[row.signalReason]}
                 </Text>}
             </Space>
         )},

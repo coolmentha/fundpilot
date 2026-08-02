@@ -27,7 +27,7 @@ public class AdviceTransactionGatewayImpl implements AdviceTransactionGateway {
             var transaction = transactions.placePendingForAdvice(new TransactionApi.PlacePendingForAdvice(
                     request.ownerId(), request.portfolioFundId(),
                     TransactionApi.Source.valueOf(request.source().name()), request.amount(), request.shares(),
-                    request.tradeDate(), request.adviceId()));
+                    request.tradeDate(), request.adviceId(), request.signalReason()));
             return new PendingTransaction(transaction.id());
         } catch (TransactionApi.Failure failure) {
             throw new Rejected(failure.code() == TransactionApi.Code.ADVICE_ALREADY_RESPONDED,

@@ -91,7 +91,7 @@ public class TransactionApi {
         try {
             return from(ledger.placePendingForAdvice(request.ownerId(), request.portfolioFundId(),
                     TransactionLedgerCommandHandler.Source.valueOf(request.source().name()), request.amount(), request.shares(),
-                    request.tradeDate(), request.disciplineAdviceId()));
+                    request.tradeDate(), request.disciplineAdviceId(), request.signalReason()));
         } catch (TransactionLedgerFailure failure) {
             throw Failure.from(failure);
         }
@@ -139,7 +139,7 @@ public class TransactionApi {
                                 Instant tradeDate) {}
     public record PlacePendingForAdvice(long ownerId, long portfolioFundId, Source source,
                                         BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                        long disciplineAdviceId) {}
+                                        long disciplineAdviceId, String signalReason) {}
     public record PlacePendingForInvestmentPlan(long ownerId, long portfolioFundId,
                                                 BigDecimal amount, Instant tradeDate,
                                                 long investmentPlanId) {}

@@ -3,6 +3,7 @@ import {Alert, AutoComplete, Button, Card, Checkbox, DatePicker, Form, Input, In
 import {AppstoreOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined} from '@ant-design/icons';
 import {App} from 'antd';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
 import {Link, useSearchParams} from 'react-router-dom';
 import {useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund, useVoidPortfolioFund} from '../api/hooks.js';
 import {date, datetime, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
@@ -15,6 +16,7 @@ import FundGroupManagerModal from '../components/FundGroupManagerModal.jsx';
 import {ALL_GROUPS_KEY, filterFundsByGroup, getStoredFundGroup, storeFundGroup} from '../fundGroups.js';
 
 const {Title} = Typography;
+dayjs.extend(utc);
 
 // 新建表单初始值:基金身份由搜索框选中后带入。已有持仓字段默认空。
 const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
@@ -124,11 +126,11 @@ export default function FundsPage() {
     const submit = async () => {
         try {
             const values = await form.validateFields();
-            // openedAt:DatePicker 返回 dayjs,提交前转 ISO 字符串(后端 Instant 解析);未选则不传(后端用 now)
+            // openedAt:DatePicker 返回 dayjs,按北京时区零点转 ISO 提交(后端 Instant 解析);未选则不传(后端用 now)
             const {positionWarningRatioPct, ...requestValues} = values;
             const normalized = {...requestValues, positionWarningRatio: positionWarningRatioPct / 100};
             const body = values.openedAt
-                ? {...normalized, openedAt: values.openedAt.startOf('day').toISOString()}
+                ? {...normalized, openedAt: `${dayjs(values.openedAt).utcOffset(8).format('YYYY-MM-DD')}T00:00:00+08:00`}
                 : {...normalized, openedAt: null};
             await saveFund.mutateAsync({id: editing?.id, body});
             message.success(editing ? '基金已更新' : '基金已新建');

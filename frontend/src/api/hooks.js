@@ -360,9 +360,12 @@ export function useCreateManualTransaction(portfolioFundId) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (body) => post(`/api/portfolio-funds/${portfolioFundId}/transactions`, body),
-        onSuccess: () => {
-            // 转换模式会在另一只基金建转入腿,需刷新全部基金摘要;非转换也刷新当前基金流水
+        onSuccess: (_data, body) => {
+            // 转换模式会在另一只基金建转入腿,需刷新目标基金流水与全部基金摘要;非转换也刷新当前基金流水
             qc.invalidateQueries({queryKey: ['fund-transactions', portfolioFundId]});
+            if (body?.targetPortfolioFundId) {
+                qc.invalidateQueries({queryKey: ['fund-transactions', body.targetPortfolioFundId]});
+            }
             qc.invalidateQueries({queryKey: ['funds']});
             invalidateDcaBudgetSummary(qc);
         },
