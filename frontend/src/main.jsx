@@ -124,7 +124,7 @@ function Root() {
                 colorTextQuaternary: isDark ? '#475569' : '#9CA3AF',
                 borderRadius: 8,
                 fontFamily: "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
-                fontFamilyCode: "'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                fontFamilyCode: "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif",
             },
             components: {
                 Layout: {

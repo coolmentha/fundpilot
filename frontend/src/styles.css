@@ -1,6 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap');
 
 :root {
+    --font-ui: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     --color-primary: #F59E0B;
     --color-accent: #8B5CF6;
     --color-bg: #0F172A;
@@ -47,7 +48,7 @@ body {
     margin: 0;
     background: var(--color-bg);
     color: var(--color-text);
-    font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    font-family: var(--font-ui);
 }
 
 /* ===== 布局骨架 ===== */
@@ -73,14 +74,14 @@ body {
     height: 64px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 20px;
+    gap: 9px;
+    padding: 0 18px;
     color: var(--color-text);
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(139, 92, 246, 0.12));
+    background: var(--color-sider);
     border-bottom: 1px solid var(--color-border);
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
 }
 
 .brand-dot {
@@ -88,7 +89,7 @@ body {
     height: 10px;
     border-radius: 2px;
     background: var(--color-primary);
-    box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+    box-shadow: none;
 }
 
 .app-header {
@@ -97,7 +98,7 @@ body {
     gap: 12px;
     height: 64px;
     line-height: normal;
-    padding: 0 24px;
+    padding: 0 28px;
     background: var(--color-header);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--color-border);
@@ -138,7 +139,7 @@ body {
     gap: 10px;
     margin-bottom: 24px;
     color: var(--color-text);
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-weight: 700;
 }
 
@@ -155,26 +156,54 @@ body {
 
 .app-header .page-title {
     margin: 0;
-    font-family: 'Fira Code', monospace;
-    font-size: 15px;
+    font-family: var(--font-ui);
+    font-size: 16px;
     font-weight: 600;
     line-height: 1.25;
 }
 
 .app-header .page-subtitle {
     color: var(--color-muted);
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.25;
 }
 
 .app-content {
     width: 100%;
     min-width: 0;
+    max-width: 1680px;
+    margin: 0 auto;
     padding: 24px;
 }
 
 .app-content > * {
     min-width: 0;
+}
+
+.app-sider .ant-menu-item-group-title {
+    padding: 20px 18px 6px;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.app-sider .ant-menu-item {
+    margin-inline: 8px;
+    width: calc(100% - 16px);
+}
+
+.ant-card {
+    box-shadow: var(--shadow-sm);
+}
+
+.ant-card .ant-card-head {
+    min-height: 52px;
+}
+
+.ant-card .ant-card-head-title {
+    font-size: 16px;
+    font-weight: 600;
 }
 
 .full-width { width: 100%; }
@@ -251,7 +280,7 @@ body {
     display: block;
     margin-bottom: 6px;
     color: var(--color-primary);
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 600;
 }
@@ -298,7 +327,7 @@ body {
 .help-destination-icon {
     flex: 0 0 auto;
     color: var(--color-primary);
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 18px;
     font-weight: 700;
 }
@@ -342,7 +371,7 @@ body {
     color: var(--color-bg);
     background: var(--workflow-color);
     border-radius: 4px;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 13px;
     font-weight: 700;
 }
@@ -417,7 +446,7 @@ body {
     color: var(--workflow-color);
     border: 1px solid var(--workflow-color);
     border-radius: 50%;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 10px;
     font-weight: 700;
 }
@@ -506,7 +535,7 @@ body {
 .kpi-card.kpi-blue { --kpi-accent: var(--color-info); }
 
 .kpi-card .ant-statistic-content {
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-size: 24px;
 }
 
@@ -556,7 +585,7 @@ body {
 .dca-budget-total,
 .dca-budget-stats strong,
 .position-warning-cell strong {
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-variant-numeric: tabular-nums;
 }
 
@@ -656,19 +685,19 @@ body {
 .ant-card:hover { box-shadow: var(--shadow-md); }
 
 .ant-table-thead > tr > th {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-weight: 600;
 }
 
 /* 数字列用等宽，防止跳动 */
 .num-cell {
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-variant-numeric: tabular-nums;
 }
 
 /* 盈亏双行单元格(涨跌幅 + 盈亏额),紧凑等宽 */
 .pnl-cell {
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-variant-numeric: tabular-nums;
     line-height: 1.4;
 }
@@ -721,11 +750,11 @@ button:focus-visible,
 .ant-input:focus-visible,
 .ant-input-number:focus-within,
 .ant-select-focused .ant-select-selector {
-    outline: 2px solid rgba(245, 158, 11, 0.5);
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
     outline-offset: 2px;
 }
 
-a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2px; border-radius: 2px; }
+a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent); outline-offset: 2px; border-radius: 2px; }
 
 .ant-btn, .ant-card, .ant-input, .ant-input-number, .ant-select-selector, .ant-table-row {
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, color 0.18s ease;
@@ -806,7 +835,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 /* 描述里的金额/数字用等宽字体,深色背景下对比清晰(便于看清如 5250.00) */
 .app-error-notice .ant-notification-notice-description {
-    font-family: var(--font-mono, 'Fira Code', ui-monospace, monospace);
+    font-family: var(--font-ui);
     color: var(--color-text);
 }
 
@@ -836,18 +865,14 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .market-dashboard {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 20px;
     width: 100%;
     min-width: 0;
 }
 
 .dashboard-section {
     min-width: 0;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 14px 16px;
-    box-shadow: var(--shadow-sm);
+    padding: 0;
 }
 
 .section-header {
@@ -856,12 +881,12 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    margin: 4px 0 10px;
 }
 
 .section-title {
     margin: 0;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--color-text);
 }
@@ -879,8 +904,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .portfolio-overview-card {
     min-width: 0;
-    padding: 14px 16px;
-    background: var(--color-surface-2);
+    padding: 16px;
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-left: 3px solid var(--overview-accent, var(--color-border));
     border-radius: 6px;
@@ -916,7 +941,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 
 .overview-value {
     margin-top: 6px;
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-size: 24px;
     font-weight: 700;
     line-height: 1.15;
@@ -966,7 +991,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .market-breadth-stat.down { color: var(--color-success); }
 
 .market-breadth-stat strong {
-    font-family: 'Fira Code', ui-monospace, monospace;
+    font-family: var(--font-ui);
     font-size: 18px;
     font-variant-numeric: tabular-nums;
 }
@@ -1035,7 +1060,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .index-price {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 20px;
     font-weight: 600;
     color: var(--color-text);
@@ -1047,7 +1072,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     align-items: center;
     gap: 6px;
     margin-top: 4px;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 13px;
     font-weight: 500;
 }
@@ -1159,8 +1184,8 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 60px;
-    padding: 12px 16px;
+    min-height: 64px;
+    padding: 14px 16px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 6px;
@@ -1189,7 +1214,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .bottom-card {
-    background: var(--color-surface-2);
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     padding: 12px 16px;
@@ -1237,7 +1262,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .sector-pct, .sector-flow {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     text-align: right;
     font-size: 12px;
 }
@@ -1262,7 +1287,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     padding: 10px 12px;
     border: 1px solid var(--color-border);
     border-radius: 8px;
-    background: var(--color-subtle);
+    background: var(--color-surface-2);
 }
 
 .flow-summary-label {
@@ -1275,7 +1300,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 19px;
     font-weight: 700;
 }
@@ -1312,7 +1337,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .flow-leader-value {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -1359,7 +1384,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .flow-value {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
@@ -1563,7 +1588,7 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 .yangjibao-fund { display: flex; min-width: 0; flex-direction: column; }
 .yangjibao-fund strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .yangjibao-progress { display: grid; width: min(100%, 620px); min-height: 400px; justify-items: center; align-content: center; gap: 14px; margin: 0 auto; text-align: center; }
-.yangjibao-progress > strong { font-family: 'Fira Code', monospace; font-size: 30px; }
+.yangjibao-progress > strong { font-family: var(--font-ui); font-size: 30px; font-variant-numeric: tabular-nums; }
 .yangjibao-progress > div { display: flex; justify-content: center; gap: 24px; color: var(--color-muted); }
 .yangjibao-progress > .ant-progress { width: 100%; }
 .yangjibao-results { display: grid; gap: 14px; }
@@ -1643,8 +1668,59 @@ a:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.5); outline-offset: 2p
 }
 
 .dca-plan-remaining strong {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-ui);
     font-size: 13px;
+}
+
+/* ===== 基金详情 ===== */
+.fund-detail .ant-card-head {
+    min-height: 64px;
+}
+
+.fund-detail .ant-card-head-title {
+    min-width: 0;
+}
+
+.fund-detail-summary {
+    padding: 16px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.fund-detail-summary .ant-descriptions-view {
+    overflow: hidden;
+}
+
+.fund-detail-summary .ant-descriptions-item-label {
+    padding-bottom: 4px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.fund-detail-summary .ant-descriptions-item-content {
+    padding-bottom: 14px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.fund-detail-summary .ant-descriptions-row:last-child .ant-descriptions-item-content,
+.fund-detail-summary .ant-descriptions-row:last-child .ant-descriptions-item-label {
+    padding-bottom: 0;
+}
+
+.fund-detail > .ant-card-body > .ant-tabs {
+    margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+    .app-header { padding: 0 16px; }
+    .app-header .page-title { font-size: 15px; }
+    .app-header .page-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .market-dashboard { gap: 16px; }
+    .fund-detail-summary { padding: 12px; }
+    .fund-detail-summary .ant-descriptions-item-content { padding-bottom: 12px; }
 }
 
 .dca-plan-dates {

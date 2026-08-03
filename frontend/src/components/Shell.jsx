@@ -120,7 +120,7 @@ export default function Shell() {
             <Sider width={220} theme={themeMode} className="app-sider">
                 <div className="brand">
                     <span className="brand-dot"/>
-                    Fund Pilot
+                    FundPilot
                 </div>
                 <Menu theme={themeMode} mode="inline" selectedKeys={[selected]}
                       items={siderItems} onClick={({key}) => go(key)}/>
