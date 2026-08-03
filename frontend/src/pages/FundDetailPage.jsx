@@ -50,7 +50,7 @@ export default function FundDetailPage() {
     ];
 
     return (
-        <Card title={
+        <Card className="fund-detail" title={
             <Space>
                 <Link to="/funds"><Button type="text" icon={<ArrowLeftOutlined/>}/></Link>
                 <Title level={4} style={{margin: 0}}>{fund.fundName}</Title>
@@ -69,7 +69,7 @@ export default function FundDetailPage() {
                            )}
                        </Space>}/>
             )}
-            <Descriptions column={{xs: 1, sm: 2, md: 3}} size="small" style={{marginBottom: 16}}>
+            <Descriptions className="fund-detail-summary" column={{xs: 1, sm: 2, md: 3}} size="small" style={{marginBottom: 16}}>
                 <Descriptions.Item label="类型"><StatusTag value={fund.fundCategory}/></Descriptions.Item>
                 <Descriptions.Item label="子类">{text(fund.fundSubType)}</Descriptions.Item>
                 <Descriptions.Item label="状态"><StatusTag value={fund.status}/></Descriptions.Item>
@@ -84,6 +84,15 @@ export default function FundDetailPage() {
                         <span className="num-cell">({signedPercent(totalPnlRate)})</span>
                     </span>
                 </Descriptions.Item>
+                <Descriptions.Item label="今日盈亏">
+                    {estimateStatusText(fund.estimateStatus)
+                        ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
+                        : <span style={{color: pnlColor(fund.dailyPnl)}}>
+                            {signedMoney(fund.dailyPnl)}{' '}
+                            <span className="num-cell">({signedPercent(fund.dailyChangePct)})</span>
+                            {fund.isEstimated && <span className="estimate-tag">估</span>}
+                        </span>}
+                </Descriptions.Item>
                 <Descriptions.Item label="持仓份额">
                     <span className="num-cell">
                         {fund.holdingShares === null || fund.holdingShares === undefined
@@ -93,15 +102,6 @@ export default function FundDetailPage() {
                                 maximumFractionDigits: 2,
                             })}
                     </span>
-                </Descriptions.Item>
-                <Descriptions.Item label="今日盈亏">
-                    {estimateStatusText(fund.estimateStatus)
-                        ? <span className={fund.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(fund.estimateStatus)}</span>
-                        : <span style={{color: pnlColor(fund.dailyPnl)}}>
-                            {signedMoney(fund.dailyPnl)}{' '}
-                            <span className="num-cell">({signedPercent(fund.dailyChangePct)})</span>
-                            {fund.isEstimated && <span className="estimate-tag">估</span>}
-                        </span>}
                 </Descriptions.Item>
                 <Descriptions.Item label="成本单价">
                     <span className="num-cell">
