@@ -38,7 +38,7 @@ export default function AdminPage() {
                 </Text>
                 <Space direction="vertical" size="middle" className="full-width">
                     <Card size="small" title="系统监控" extra={
-                        <Button href="/grafana/d/spring-boot-overview/spring-boot-overview"
+                        <Button href="/grafana/dashboards"
                                 target="_blank" icon={<DashboardOutlined/>}>打开 Grafana</Button>
                     }>
                         <Text type="secondary">在 Grafana 查看服务指标、任务运行状态和日志。</Text>
