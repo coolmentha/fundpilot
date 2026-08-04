@@ -138,3 +138,38 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 修复基金详情分时完整交易时段并发布
+
+**Date**: 2026-08-04
+**Task**: 修复基金详情分时完整交易时段并发布
+**Branch**: `main`
+
+### Summary
+
+透传同花顺交易时段，补齐前端完整交易分钟轴并保留午休空档与未来空槽；修复移动端 klinecharts 可视窗口。PR #204 合并至 main，v0.11.7 部署 run 30914667862 成功，线上移动端与桌面端确认 09:30-15:00，Grafana 入口保持有效。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9fdc678` | (see git log) |
+| `d192546` | (see git log) |
+| `a17f2df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
