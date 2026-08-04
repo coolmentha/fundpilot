@@ -117,7 +117,7 @@ class PortfolioReturnQueryHandlerTest {
     }
 
     @Test
-    void summary_withPartialUnreadyFundReturnsNullNotPartialSum() {
+    void summary_withPartialUnreadyFundReturnsPartialDailySum() {
         ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
         when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
                 new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true, new BigDecimal("0.3")),
@@ -144,8 +144,9 @@ class PortfolioReturnQueryHandlerTest {
 
         var summary = handler(facts).summary(7L);
 
-        assertThat(summary.dailyPnlTotal()).isNull();
-        assertThat(summary.dailyChangePct()).isNull();
+        assertThat(summary.holdingAmountTotal()).isNull();
+        assertThat(summary.dailyPnlTotal()).isEqualByComparingTo("20.0");
+        assertThat(summary.dailyChangePct()).isEqualByComparingTo("0.2");
         assertThat(summary.totalPnlTotal()).isNull();
         assertThat(summary.holdingFundCount()).isEqualTo(2);
         assertThat(summary.dailyCoveredFundCount()).isEqualTo(1);

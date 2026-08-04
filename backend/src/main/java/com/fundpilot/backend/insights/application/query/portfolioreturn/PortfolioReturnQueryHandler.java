@@ -105,9 +105,9 @@ public class PortfolioReturnQueryHandler {
         BigDecimal holding = holdingComplete ? funds.stream().map(FundReturnResult::holdingAmount)
                 .filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
         List<FundReturnResult> covered = funds.stream().filter(fund -> fund.dailyPnl() != null).toList();
-        BigDecimal dailyPnl = covered.size() != funds.size() ? null : covered.stream()
+        BigDecimal dailyPnl = covered.isEmpty() && !funds.isEmpty() ? null : covered.stream()
                 .map(FundReturnResult::dailyPnl).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal dailyBase = covered.size() != funds.size() ? null : covered.stream().filter(fund -> fund.dailyChangePct() != null
+        BigDecimal dailyBase = covered.stream().filter(fund -> fund.dailyChangePct() != null
                         && BigDecimal.ONE.add(fund.dailyChangePct(), MATH).signum() != 0)
                 .map(fund -> fund.holdingAmount().divide(BigDecimal.ONE.add(fund.dailyChangePct(), MATH), MATH))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -115,7 +115,7 @@ public class PortfolioReturnQueryHandler {
                 : funds.stream().map(FundReturnResult::unrealizedPnl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new PortfolioSummaryResult(holding, dailyPnl,
-                dailyBase == null || dailyBase.signum() == 0 || dailyPnl == null ? null : dailyPnl.divide(dailyBase, MATH), totalPnl,
+                dailyBase.signum() == 0 || dailyPnl == null ? null : dailyPnl.divide(dailyBase, MATH), totalPnl,
                 funds.size(), covered.size(), countPositive(funds, FundReturnResult::dailyChangePct),
                 countNegative(funds, FundReturnResult::dailyChangePct),
                 countPositive(funds, FundReturnResult::unrealizedPnl),
