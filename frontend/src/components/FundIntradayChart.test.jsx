@@ -40,7 +40,7 @@ describe('FundIntradayChart', () => {
         expect(chart.setScrollEnabled).toHaveBeenLastCalledWith(false);
         expect(chart.setZoomEnabled).toHaveBeenLastCalledWith(false);
         expect(chart.applyNewData).toHaveBeenLastCalledWith(expect.arrayContaining([
-            expect.objectContaining({close: 1}), expect.objectContaining({close: 1.001}), expect.objectContaining({close: 1.002}),
+            expect.objectContaining({close: 1}), expect.objectContaining({close: 1.002, value: 1.002}),
         ]));
 
         const navOption = [...container.querySelectorAll('label')].find((label) => label.textContent.includes('净值'));
@@ -51,5 +51,32 @@ describe('FundIntradayChart', () => {
         expect(chart.applyNewData).toHaveBeenLastCalledWith([
             expect.objectContaining({close: 1.001}), expect.objectContaining({close: 1.002}),
         ]);
+    });
+
+    it('按交易段补齐收盘时间，午休不占槽位，未来槽位保持空白', async () => {
+        useFundIntraday.mockReturnValue({data: {
+            estimateDate: '2026-07-24', baseNav: '1.0000',
+            tradingSessions: [{start: '09:30', end: '11:30'}, {start: '13:00', end: '15:00'}],
+            points: [
+                {time: '09:30', nav: '1.0010'},
+                {time: '11:30', nav: '1.0020'},
+                {time: '13:00', nav: '1.0030'},
+                {time: '13:01', nav: '1.0040'},
+            ],
+        }, isLoading: false});
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+
+        await act(async () => root.render(<FundIntradayChart portfolioFundId={1}/>));
+
+        const data = chart.applyNewData.mock.lastCall[0];
+        const timestamp = (time) => new Date(`2026-07-24T${time}:00+08:00`).getTime();
+        expect(data).toHaveLength(242);
+        expect(data[0]).toMatchObject({timestamp: timestamp('09:30'), close: 1, value: 1.001});
+        expect(data[120].timestamp).toBe(timestamp('11:30'));
+        expect(data[121].timestamp).toBe(timestamp('13:00'));
+        expect(data[122]).toMatchObject({timestamp: timestamp('13:01'), close: 1.004, value: 1.004});
+        expect(data.at(-1)).toEqual({timestamp: timestamp('15:00')});
     });
 });

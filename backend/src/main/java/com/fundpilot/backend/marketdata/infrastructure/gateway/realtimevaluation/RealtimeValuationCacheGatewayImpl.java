@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,11 +75,18 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
                     points.add(new Point(point.path("time").asText(), point.path("nav").decimalValue()));
                 }
             }
+            List<TradingSession> tradingSessions = new ArrayList<>();
+            for (JsonNode session : chart.path("tradingSessions")) {
+                if (session.path("start").isTextual() && session.path("end").isTextual()) {
+                    tradingSessions.add(new TradingSession(session.path("start").asText(),
+                            session.path("end").asText()));
+                }
+            }
             if (points.size() < 2 || !chart.path("estimateDate").isTextual() || !chart.path("baseNav").isNumber()) {
                 return Optional.empty();
             }
             return Optional.of(new Intraday(chart.path("estimateDate").asText(),
-                    chart.path("baseNav").decimalValue(), List.copyOf(points)));
+                    chart.path("baseNav").decimalValue(), List.copyOf(points), List.copyOf(tradingSessions)));
         } catch (Exception exception) {
             log.warn("读取基金分时缓存失败: fundCode={}", fundCode, exception);
             return Optional.empty();

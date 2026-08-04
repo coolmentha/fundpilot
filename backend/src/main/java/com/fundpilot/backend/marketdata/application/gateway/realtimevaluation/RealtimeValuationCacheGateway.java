@@ -11,6 +11,12 @@ public interface RealtimeValuationCacheGateway {
 
     record Valuation(String fundCode, BigDecimal estimatedChangePct, String estimateTime,
                      String baseNavDate, String status) {}
-    record Intraday(String estimateDate, BigDecimal baseNav, java.util.List<Point> points) {}
+    record Intraday(String estimateDate, BigDecimal baseNav, java.util.List<Point> points,
+                    java.util.List<TradingSession> tradingSessions) {
+        public Intraday(String estimateDate, BigDecimal baseNav, java.util.List<Point> points) {
+            this(estimateDate, baseNav, points, java.util.List.of());
+        }
+    }
     record Point(String time, BigDecimal nav) {}
+    record TradingSession(String start, String end) {}
 }

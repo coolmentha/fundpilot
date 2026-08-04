@@ -25,12 +25,15 @@ public class FundIntradayController {
                 .map(FundIntradayView::from).orElse(null));
     }
 
-    public record FundIntradayView(String estimateDate, BigDecimal baseNav, List<Point> points) {
+    public record FundIntradayView(String estimateDate, BigDecimal baseNav, List<Point> points,
+                                   List<TradingSession> tradingSessions) {
         static FundIntradayView from(RealtimeValuationQueryHandler.IntradayResult value) {
             return new FundIntradayView(value.estimateDate(), value.baseNav(), value.points().stream()
-                    .map(point -> new Point(point.time(), point.nav())).toList());
+                    .map(point -> new Point(point.time(), point.nav())).toList(), value.tradingSessions().stream()
+                    .map(session -> new TradingSession(session.start(), session.end())).toList());
         }
     }
 
     public record Point(String time, BigDecimal nav) {}
+    public record TradingSession(String start, String end) {}
 }

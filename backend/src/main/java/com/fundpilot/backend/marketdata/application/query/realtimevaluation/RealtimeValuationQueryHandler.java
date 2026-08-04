@@ -22,19 +22,26 @@ public class RealtimeValuationQueryHandler {
 
     public Optional<IntradayResult> findIntraday(long legacyFundId) {
         return products.findOwned(legacyFundId).flatMap(product -> cache.findIntraday(product.fundCode()))
-                .map(value -> new IntradayResult(value.estimateDate(), value.baseNav(), value.points().stream()
-                        .map(point -> new IntradayPoint(point.time(), point.nav())).toList()));
+                .map(RealtimeValuationQueryHandler::toIntradayResult);
     }
 
     public Optional<IntradayResult> findIntradayForPortfolioFund(long portfolioFundId) {
         return products.findOwnedByPortfolioFundId(portfolioFundId)
                 .flatMap(product -> cache.findIntraday(product.fundCode()))
-                .map(value -> new IntradayResult(value.estimateDate(), value.baseNav(), value.points().stream()
-                        .map(point -> new IntradayPoint(point.time(), point.nav())).toList()));
+                .map(RealtimeValuationQueryHandler::toIntradayResult);
+    }
+
+    private static IntradayResult toIntradayResult(RealtimeValuationCacheGateway.Intraday value) {
+        return new IntradayResult(value.estimateDate(), value.baseNav(), value.points().stream()
+                .map(point -> new IntradayPoint(point.time(), point.nav())).toList(),
+                value.tradingSessions().stream()
+                        .map(session -> new IntradaySession(session.start(), session.end())).toList());
     }
 
     public record ValuationResult(String fundCode, java.math.BigDecimal estimatedChangePct,
                                   String estimateTime, String baseNavDate, String status) {}
-    public record IntradayResult(String estimateDate, java.math.BigDecimal baseNav, List<IntradayPoint> points) {}
+    public record IntradayResult(String estimateDate, java.math.BigDecimal baseNav, List<IntradayPoint> points,
+                                 List<IntradaySession> tradingSessions) {}
     public record IntradayPoint(String time, java.math.BigDecimal nav) {}
+    public record IntradaySession(String start, String end) {}
 }

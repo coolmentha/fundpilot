@@ -1,5 +1,7 @@
 package com.fundpilot.backend.marketdata.infrastructure.gateway.realtimevaluation;
 
+import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -71,6 +73,7 @@ class RealtimeValuationCacheGatewayImplTest {
                 {"estimates":{"000001":{"estimatedChangePct":0.0123,"estimateTime":"2026-07-29 12:00"}},\
                 "estimateStatuses":{"000001":"AVAILABLE"},
                 "intradayCharts":{"000001":{"estimateDate":"2026-07-29","baseNav":1.0000,
+                "tradingSessions":[{"start":"09:30","end":"11:30"},{"start":"13:00","end":"15:00"}],
                 "points":[{"time":"09:30","nav":1.0010},{"time":"09:31","nav":1.0020}]}}}
                 """);
 
@@ -79,6 +82,28 @@ class RealtimeValuationCacheGatewayImplTest {
         assertThat(result).isPresent();
         assertThat(result.orElseThrow().points()).extracting(value -> value.time())
                 .containsExactly("09:30", "09:31");
+        assertThat(result.orElseThrow().tradingSessions()).containsExactly(
+                new RealtimeValuationCacheGateway.TradingSession("09:30", "11:30"),
+                new RealtimeValuationCacheGateway.TradingSession("13:00", "15:00"));
+    }
+
+    @Test
+    void 旧Redis分时图缺少交易时段仍可读取() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.get("fundpilot:market-realtime:v1")).thenReturn("""
+                {"estimates":{"000001":{"estimatedChangePct":0.0123,"estimateTime":"2026-07-29 12:00"}},
+                "estimateStatuses":{"000001":"AVAILABLE"},
+                "intradayCharts":{"000001":{"estimateDate":"2026-07-29","baseNav":1.0000,
+                "points":[{"time":"09:30","nav":1.0010},{"time":"09:31","nav":1.0020}]}}}
+                """);
+
+        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK).findIntraday("000001");
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().tradingSessions()).isEmpty();
     }
 
     @Test
