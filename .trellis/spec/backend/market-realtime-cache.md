@@ -403,6 +403,7 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 - 同花顺分钟估值响应一次解析出估值快照与分钟点；东方财富 fundgz 仅作为原有单点估值后备。
 - `tradingSessions` 透传同花顺的 `HH:mm` 交易段；前端按每段的起止分钟展开时间轴，午休不生成槽位，不得硬编码单一市场时段。
 - 已到达分钟只使用真实净值；尚未到达的槽位只保留 `timestamp`，不得写入 `close`、`value` 或估算价格。
+- klinecharts v9 默认 `barSpace=8`，移动端会只显示末尾约 25 个分钟槽；有交易段时必须使用 `barSpace=1`、清除右侧偏移，并让可滚动绘图区至少容纳槽位数加右轴宽度，才能让开盘时间进入初始可视范围。
 - 仅当估值状态为 `AVAILABLE` 且分钟点不少于两个时，写入内存副本和 Redis `Snapshot.intradayCharts`。
 - 用户请求只读缓存；前端交易时段每 30 秒轮询后端，不得请求同花顺。
 
@@ -422,7 +423,7 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 - **Good**:同花顺 243 个北京时间当日点进入缓存，详情页展示“今日分时”。
 - **Good**:盘中仅有 09:30 到当前点时，时间轴仍延伸到 15:00，未来区域无曲线。
 - **Base**:盘前只返回一个点，今日涨跌可用但分时页显示空态。
-- **Bad**:前端收到东方财富单点后自行绘制直线，伪造分钟走势。
+- **Bad**:前端只提交完整分钟数组但沿用 klinecharts 默认 `barSpace`，移动端仍从收盘前十几分钟开始显示。
 
 ### 6. Tests Required
 
