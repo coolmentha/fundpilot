@@ -1,6 +1,7 @@
 package com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundIntradayChart;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
@@ -39,7 +40,11 @@ class MarketRealtimeRedisStoreTest {
                 new MoneyFlowSnapshot(new BigDecimal("300"), Instant.parse("2026-07-20T06:00:00Z")),
                 Map.of("510300", new FundEstimateSnapshot(new BigDecimal("0.0123"),
                         "2026-07-20 14:00", "2026-07-19")),
-                Map.of("510300", EstimateStatus.AVAILABLE));
+                Map.of("510300", EstimateStatus.AVAILABLE),
+                Map.of("510300", new FundIntradayChart("2026-07-20", "2026-07-19", new BigDecimal("1.0000"),
+                        List.of(new FundIntradayChart.Point("09:30", new BigDecimal("1.0010"))),
+                        List.of(new FundIntradayChart.TradingSession("09:30", "11:30"),
+                                new FundIntradayChart.TradingSession("13:00", "15:00")))));
 
         store.save(expected);
 

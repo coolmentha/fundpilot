@@ -22,6 +22,18 @@ class ThsJsParserTest {
     }
 
     @Test
+    void parseFundIntradayChart_保留同花顺交易时段() {
+        String raw = "vm_fd_016664='2026-07-17;0930-1130,1300-1500|2026-07-20~2.9763~"
+                + "0930,3.05294,2.9763,0;1300,3.08000,2.9763,0;';";
+
+        var result = ThsJsParser.parseFundIntradayChart(raw);
+
+        assertThat(result.tradingSessions()).containsExactly(
+                new FundIntradayChart.TradingSession("09:30", "11:30"),
+                new FundIntradayChart.TradingSession("13:00", "15:00"));
+    }
+
+    @Test
     void parseFundDict_解析_jsonp_对象字典() {
         String raw = """
                 g({"data":{"info":{"count":2},"data":{

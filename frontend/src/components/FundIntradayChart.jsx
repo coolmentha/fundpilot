@@ -3,6 +3,27 @@ import {Empty, Segmented} from 'antd';
 import {dispose, init} from 'klinecharts';
 import {useFundIntraday} from '../api/hooks.js';
 
+function minuteOf(time) {
+    const match = /^(\d{2}):([0-5]\d)$/.exec(time || '');
+    if (!match || Number(match[1]) > 23) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatMinute(minute) {
+    return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+}
+
+function expandTradingSessions(sessions) {
+    const times = [];
+    for (const session of sessions) {
+        const start = minuteOf(session.start);
+        const end = minuteOf(session.end);
+        if (start === null || end === null || start >= end) continue;
+        for (let minute = start; minute <= end; minute += 1) times.push(formatMinute(minute));
+    }
+    return times;
+}
+
 /** 基金详情当日分时图；数据只来自后端分钟线缓存。 */
 export default function FundIntradayChart({portfolioFundId}) {
     const containerRef = useRef(null);
@@ -18,7 +39,11 @@ export default function FundIntradayChart({portfolioFundId}) {
         const chart = init(containerRef.current, {locale: 'zh-CN'});
         chartRef.current = chart;
         chart.setStyles({
-            candle: {type: 'area', bar: {upColor: '#EF4444', downColor: '#22C55E'}},
+            candle: {
+                type: 'area',
+                bar: {upColor: '#EF4444', downColor: '#22C55E'},
+                priceMark: {last: {show: false}},
+            },
             grid: {horizontal: {color: 'rgba(51,65,85,0.4)'}, vertical: {color: 'rgba(51,65,85,0.4)'}},
             yAxis: {position: 'right', tickText: {color: '#94A3B8'}},
             xAxis: {tickText: {color: '#94A3B8'}},
@@ -36,14 +61,25 @@ export default function FundIntradayChart({portfolioFundId}) {
         const points = intraday?.points || [];
         if (!chartRef.current || points.length < 2) return;
         chartRef.current.resize();
-        const data = points.map((point) => ({
-            timestamp: new Date(`${intraday.estimateDate}T${point.time}:00+08:00`).getTime(),
-            open: Number(point.nav), high: Number(point.nav), low: Number(point.nav), close: Number(point.nav),
-        }));
-        // klinecharts 的百分比纵轴以首个可见点为 0%；插入并固定基准净值确保其对应后端 baseNav。
+        const sessions = Array.isArray(intraday.tradingSessions) ? intraday.tradingSessions : [];
+        const sessionTimes = expandTradingSessions(sessions);
+        const times = sessionTimes.length > 0 ? sessionTimes : points.map((point) => point.time);
+        const navByTime = new Map(points.map((point) => [point.time, Number(point.nav)]));
+        const data = times.map((time) => {
+            const nav = navByTime.get(time);
+            if (!Number.isFinite(nav)) {
+                return {timestamp: new Date(`${intraday.estimateDate}T${time}:00+08:00`).getTime()};
+            }
+            return {
+                timestamp: new Date(`${intraday.estimateDate}T${time}:00+08:00`).getTime(),
+                open: nav, high: nav, low: nav, close: nav, value: nav,
+            };
+        });
+        // klinecharts 的百分比纵轴以首个可见点为 0%；首个开盘槽固定后，area 使用真实净值。
         if (usePercentAxis) {
-            data.unshift({timestamp: data[0].timestamp - 60_000, open: baseNav, high: baseNav, low: baseNav, close: baseNav});
+            data[0] = {...data[0], open: baseNav, high: baseNav, low: baseNav, close: baseNav};
         }
+        chartRef.current.setStyles({candle: {area: {value: usePercentAxis ? 'value' : 'close'}}});
         chartRef.current.setStyles({yAxis: {type: usePercentAxis ? 'percentage' : 'normal'}});
         chartRef.current.setScrollEnabled(!usePercentAxis);
         chartRef.current.setZoomEnabled(!usePercentAxis);

@@ -48,7 +48,10 @@ public final class ThsJsParser {
         }
         try {
             String[] sides = payload.split("\\|", 2);
-            String baseNavDate = sides[0].split(";", 2)[0];
+            String[] header = sides[0].split(";", 2);
+            String baseNavDate = header[0];
+            List<FundIntradayChart.TradingSession> tradingSessions = header.length == 2
+                    ? parseTradingSessions(header[1]) : List.of();
             String[] estimate = sides[1].split("~", 3);
             BigDecimal baseNav = new BigDecimal(estimate[1]);
             List<FundIntradayChart.Point> points = new ArrayList<>();
@@ -62,10 +65,42 @@ public final class ThsJsParser {
             if (points.isEmpty()) {
                 return null;
             }
-            return new FundIntradayChart(estimate[0], baseNavDate, baseNav, List.copyOf(points));
+            return new FundIntradayChart(estimate[0], baseNavDate, baseNav, List.copyOf(points), tradingSessions);
         } catch (RuntimeException e) {
             throw new IllegalStateException("同花顺盘中估值解析失败", e);
         }
+    }
+
+    private static List<FundIntradayChart.TradingSession> parseTradingSessions(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<FundIntradayChart.TradingSession> result = new ArrayList<>();
+        for (String value : raw.split(",")) {
+            String[] bounds = value.trim().split("-", 2);
+            if (bounds.length != 2) {
+                continue;
+            }
+            Integer start = parseMinute(bounds[0]);
+            Integer end = parseMinute(bounds[1]);
+            if (start != null && end != null && start < end) {
+                result.add(new FundIntradayChart.TradingSession(formatMinute(start), formatMinute(end)));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static Integer parseMinute(String value) {
+        if (value == null || !value.matches("\\d{4}")) {
+            return null;
+        }
+        int hour = Integer.parseInt(value.substring(0, 2));
+        int minute = Integer.parseInt(value.substring(2));
+        return hour <= 23 && minute <= 59 ? hour * 60 + minute : null;
+    }
+
+    private static String formatMinute(int minute) {
+        return "%02d:%02d".formatted(minute / 60, minute % 60);
     }
 
     /**

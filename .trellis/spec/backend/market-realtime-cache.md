@@ -391,14 +391,18 @@ if (breadth != null) {
 
 ```text
 GET /api/funds/{fundId}/intraday -> FundIntradayView | null
+GET /api/portfolio-funds/{portfolioFundId}/intraday -> FundIntradayView | null
 MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 ```
 
-`FundIntradayView` 返回 `estimateDate`、`baseNav` 和按 `HH:mm` 升序的 `points[{time, nav}]`。
+`FundIntradayView` 返回 `estimateDate`、`baseNav`、按 `HH:mm` 升序的
+`points[{time, nav}]` 和数据源声明的 `tradingSessions[{start, end}]`。
 
 ### 3. Contracts
 
 - 同花顺分钟估值响应一次解析出估值快照与分钟点；东方财富 fundgz 仅作为原有单点估值后备。
+- `tradingSessions` 透传同花顺的 `HH:mm` 交易段；前端按每段的起止分钟展开时间轴，午休不生成槽位，不得硬编码单一市场时段。
+- 已到达分钟只使用真实净值；尚未到达的槽位只保留 `timestamp`，不得写入 `close`、`value` 或估算价格。
 - 仅当估值状态为 `AVAILABLE` 且分钟点不少于两个时，写入内存副本和 Redis `Snapshot.intradayCharts`。
 - 用户请求只读缓存；前端交易时段每 30 秒轮询后端，不得请求同花顺。
 
@@ -410,10 +414,13 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 | 同花顺有效点 < 2 | 保留单点估值语义，分时图为空 |
 | 同花顺失败、过期或解析失败 | 清除旧分时缓存，分时图为空 |
 | 东方财富后备成功 | 保留既有估值，分时图为空 |
+| `tradingSessions` 为 `0930-1130,1300-1500` | 时间轴覆盖 09:30 到 15:00，午休区间无槽位 |
+| 当前时间早于某分钟槽 | 保留时间刻度但价格为空，不绘制未来曲线 |
 
 ### 5. Good/Base/Bad Cases
 
 - **Good**:同花顺 243 个北京时间当日点进入缓存，详情页展示“今日分时”。
+- **Good**:盘中仅有 09:30 到当前点时，时间轴仍延伸到 15:00，未来区域无曲线。
 - **Base**:盘前只返回一个点，今日涨跌可用但分时页显示空态。
 - **Bad**:前端收到东方财富单点后自行绘制直线，伪造分钟走势。
 
@@ -421,6 +428,8 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 
 - `FundEstimateServiceTest` 断言同花顺结果携带完整分钟点且不调用东方财富。
 - `MarketRealtimeCacheTest` 断言两点曲线可读、无曲线结果清除旧缓存。
+- `ThsJsParserTest`、Redis 网关和 HTTP View 测试断言交易段从 `0930-1130,1300-1500` 透传，旧 Redis 缺字段仍可读。
+- 前端组件测试断言午休不生成槽位、未来槽只有时间戳、百分比末点按 `baseNav` 计算。
 - 前端 Tab 测试断言默认分时并可切换 K 线 / 走势图。
 
 ### 7. Wrong vs Correct
@@ -433,4 +442,9 @@ return fundEstimateService.fetchEstimate(code);
 ```java
 // Correct: 只暴露后台刷新时写入的同花顺分钟线缓存。
 return FundIntradayView.from(marketRealtimeCache.getIntraday(fundId));
+```
+
+```javascript
+// Correct: 未来分钟保留轴位置，但不伪造价格。
+return {timestamp};
 ```
