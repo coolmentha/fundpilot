@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {Empty, Segmented} from 'antd';
 import {dispose, init} from 'klinecharts';
 import {useFundIntraday} from '../api/hooks.js';
@@ -33,6 +33,11 @@ export default function FundIntradayChart({portfolioFundId}) {
     const pointCount = intraday?.points?.length ?? 0;
     const baseNav = Number(intraday?.baseNav);
     const usePercentAxis = metric === 'percent' && Number.isFinite(baseNav) && baseNav > 0;
+    const tradingSessions = intraday?.tradingSessions;
+    const sessionTimes = useMemo(() => expandTradingSessions(
+        Array.isArray(tradingSessions) ? tradingSessions : [],
+    ), [tradingSessions]);
+    const chartWidth = sessionTimes.length > 0 ? `max(100%, ${sessionTimes.length + 48}px)` : '100%';
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
@@ -61,8 +66,6 @@ export default function FundIntradayChart({portfolioFundId}) {
         const points = intraday?.points || [];
         if (!chartRef.current || points.length < 2) return;
         chartRef.current.resize();
-        const sessions = Array.isArray(intraday.tradingSessions) ? intraday.tradingSessions : [];
-        const sessionTimes = expandTradingSessions(sessions);
         const times = sessionTimes.length > 0 ? sessionTimes : points.map((point) => point.time);
         const navByTime = new Map(points.map((point) => [point.time, Number(point.nav)]));
         const data = times.map((time) => {
@@ -85,7 +88,11 @@ export default function FundIntradayChart({portfolioFundId}) {
         chartRef.current.setZoomEnabled(!usePercentAxis);
         chartRef.current.setPriceVolumePrecision(usePercentAxis ? 2 : 4, 0);
         chartRef.current.applyNewData(data);
-    }, [intraday, usePercentAxis, baseNav]);
+        if (sessionTimes.length > 0) {
+            chartRef.current.setBarSpace(1);
+            chartRef.current.setOffsetRightDistance(0);
+        }
+    }, [intraday, usePercentAxis, baseNav, sessionTimes]);
 
     const empty = !isLoading && pointCount < 2;
     return <>
@@ -95,7 +102,10 @@ export default function FundIntradayChart({portfolioFundId}) {
                 {label: '净值', value: 'nav'},
             ]}/>
         </div>}
-        <div ref={containerRef} className="intraday-chart-container" style={empty ? {display: 'none'} : undefined}/>
+        <div className="intraday-chart-scroll">
+            <div ref={containerRef} className="intraday-chart-container"
+                 style={empty ? {display: 'none'} : {width: chartWidth}}/>
+        </div>
         {empty && <Empty description="暂无当日分时数据"/>}
     </>;
 }
