@@ -206,3 +206,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 统一基金图表并发布 v0.11.10
+
+**Date**: 2026-08-05
+**Task**: 统一基金图表并发布 v0.11.10
+**Branch**: `main`
+
+### Summary
+
+基金详情页分时图和 K 线统一切换为 ECharts，分时百分比轴动态对称并将 0% 固定居中；新增图表测试和共享计算工具，移除 klinecharts。npm test、lint、build 及 GitHub CI 全部通过。PR #207 合并后从 main 合并提交创建并推送 v0.11.10，Deploy run 30987985630 完成镜像构建、VPS 健康检查和旧应用镜像清理。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f607245` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
