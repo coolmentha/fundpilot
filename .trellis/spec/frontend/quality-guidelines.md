@@ -15,6 +15,18 @@ Applies to JavaScript and JSX under `frontend/src`.
 - Top-level route pages are loaded with `React.lazy` under one `React.Suspense` boundary. Keep the shared shell eager so navigation and authentication layout stay stable.
 - Theme-aware custom styles use the `--color-*` variables in `src/styles.css`; Ant Design theme tokens stay centralized in `src/main.jsx`. Do not add hard-coded dark backgrounds to page components.
 
+## Chart Rendering Contract
+
+- Fund market charts use the shared ECharts lifecycle helpers in the chart components; every initialized instance must register resize handling and be disposed on unmount or chart-type replacement.
+- `FundIntradayChart` consumes the existing `baseNav`, `points`, and `tradingSessions` payload. Future category slots remain `null`, lunch breaks do not become categories, and percentage mode sets explicit symmetric bounds around zero instead of relying on a library default percentage axis.
+- K-line data is passed to a candlestick series as `[open, close, low, high]`. MA, VOL, and MACD/DIF/DEA are derived in one frontend calculation module so toolbar and tooltip values use the same result.
+- Chart options must use theme-aware colors and keep the existing loading, error, empty-data, and NAV fallback states. Do not add direct external market-data requests from chart components.
+
+### Chart Tests
+
+- Component tests inspect `setOption` output rather than chart-library internals. Cover symmetric positive/negative bounds, all-positive values, future `null` slots, skipped lunch categories, candlestick ordering, indicator switching, NAV fallback, and instance disposal.
+- Pure indicator helpers cover normal, warm-up, zero, and invalid-value boundaries.
+
 ## Forbidden Patterns
 
 ```javascript
