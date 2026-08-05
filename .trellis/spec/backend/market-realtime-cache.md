@@ -403,7 +403,7 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 - 同花顺分钟估值响应一次解析出估值快照与分钟点；东方财富 fundgz 仅作为原有单点估值后备。
 - `tradingSessions` 透传同花顺的 `HH:mm` 交易段；前端按每段的起止分钟展开时间轴，午休不生成槽位，不得硬编码单一市场时段。
 - 已到达分钟只使用真实净值；尚未到达的槽位只保留 `timestamp`，不得写入 `close`、`value` 或估算价格。
-- klinecharts v9 默认 `barSpace=8`，移动端会只显示末尾约 25 个分钟槽；有交易段时必须使用 `barSpace=1`、清除右侧偏移，并让可滚动绘图区至少容纳槽位数加右轴宽度，才能让开盘时间进入初始可视范围。
+- klinecharts v9 默认 `barSpace=8`，移动端会只显示末尾约 25 个分钟槽；有交易段时必须清除右侧偏移，并按主绘图区宽度减右轴预留宽度后除以槽位数动态计算 `barSpace`，最小值为 1。绘图区至少容纳槽位数加右轴宽度，移动端才可滚动到完整交易段，桌面端也不会把曲线挤在左侧。
 - 仅当估值状态为 `AVAILABLE` 且分钟点不少于两个时，写入内存副本和 Redis `Snapshot.intradayCharts`。
 - 用户请求只读缓存；前端交易时段每 30 秒轮询后端，不得请求同花顺。
 
@@ -424,13 +424,14 @@ MarketRealtimeCache.getIntraday(Long fundId) -> FundIntradayChart | null
 - **Good**:盘中仅有 09:30 到当前点时，时间轴仍延伸到 15:00，未来区域无曲线。
 - **Base**:盘前只返回一个点，今日涨跌可用但分时页显示空态。
 - **Bad**:前端只提交完整分钟数组但沿用 klinecharts 默认 `barSpace`，移动端仍从收盘前十几分钟开始显示。
+- **Bad**:有交易段时无条件固定 `barSpace=1`，移动端虽然能容纳全部槽位，桌面端却把整天曲线压缩在左侧。
 
 ### 6. Tests Required
 
 - `FundEstimateServiceTest` 断言同花顺结果携带完整分钟点且不调用东方财富。
 - `MarketRealtimeCacheTest` 断言两点曲线可读、无曲线结果清除旧缓存。
 - `ThsJsParserTest`、Redis 网关和 HTTP View 测试断言交易段从 `0930-1130,1300-1500` 透传，旧 Redis 缺字段仍可读。
-- 前端组件测试断言午休不生成槽位、未来槽只有时间戳、百分比末点按 `baseNav` 计算。
+- 前端组件测试断言午休不生成槽位、未来槽只有时间戳、百分比末点按 `baseNav` 计算，并在不同绘图区宽度和 `resize` 后断言动态 `barSpace`。
 - 前端 Tab 测试断言默认分时并可切换 K 线 / 走势图。
 
 ### 7. Wrong vs Correct

@@ -3,7 +3,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createRoot} from 'react-dom/client';
 
 const {chart, useFundIntraday} = vi.hoisted(() => ({
-    chart: {resize: vi.fn(), setStyles: vi.fn(), setScrollEnabled: vi.fn(), setZoomEnabled: vi.fn(), setBarSpace: vi.fn(), setOffsetRightDistance: vi.fn(), setPriceVolumePrecision: vi.fn(), applyNewData: vi.fn()},
+    chart: {resize: vi.fn(), getSize: vi.fn(() => ({width: 1000})), setStyles: vi.fn(), setScrollEnabled: vi.fn(), setZoomEnabled: vi.fn(), setBarSpace: vi.fn(), setOffsetRightDistance: vi.fn(), setPriceVolumePrecision: vi.fn(), applyNewData: vi.fn()},
     useFundIntraday: vi.fn(),
 }));
 
@@ -78,8 +78,12 @@ describe('FundIntradayChart', () => {
         expect(data[121].timestamp).toBe(timestamp('13:00'));
         expect(data[122]).toMatchObject({timestamp: timestamp('13:01'), close: 1.004, value: 1.004});
         expect(data.at(-1)).toEqual({timestamp: timestamp('15:00')});
-        expect(chart.setBarSpace).toHaveBeenLastCalledWith(1);
+        expect(chart.setBarSpace).toHaveBeenLastCalledWith((1000 - 48) / 242);
         expect(chart.setOffsetRightDistance).toHaveBeenLastCalledWith(0);
         expect(container.querySelector('.intraday-chart-container').style.width).toBe('max(100%, 290px)');
+
+        chart.getSize.mockReturnValue({width: 1500});
+        await act(async () => window.dispatchEvent(new Event('resize')));
+        expect(chart.setBarSpace).toHaveBeenLastCalledWith((1500 - 48) / 242);
     });
 });

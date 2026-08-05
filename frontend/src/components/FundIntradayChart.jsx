@@ -3,6 +3,8 @@ import {Empty, Segmented} from 'antd';
 import {dispose, init} from 'klinecharts';
 import {useFundIntraday} from '../api/hooks.js';
 
+const INTRADAY_AXIS_WIDTH = 48;
+
 function minuteOf(time) {
     const match = /^(\d{2}):([0-5]\d)$/.exec(time || '');
     if (!match || Number(match[1]) > 23) return null;
@@ -24,6 +26,13 @@ function expandTradingSessions(sessions) {
     return times;
 }
 
+function fitIntradayBars(chart, slotCount) {
+    if (slotCount < 1) return;
+    const chartWidth = Number(chart.getSize()?.width) || 0;
+    chart.setBarSpace(Math.max(1, (chartWidth - INTRADAY_AXIS_WIDTH) / slotCount));
+    chart.setOffsetRightDistance(0);
+}
+
 /** 基金详情当日分时图；数据只来自后端分钟线缓存。 */
 export default function FundIntradayChart({portfolioFundId}) {
     const containerRef = useRef(null);
@@ -37,7 +46,13 @@ export default function FundIntradayChart({portfolioFundId}) {
     const sessionTimes = useMemo(() => expandTradingSessions(
         Array.isArray(tradingSessions) ? tradingSessions : [],
     ), [tradingSessions]);
-    const chartWidth = sessionTimes.length > 0 ? `max(100%, ${sessionTimes.length + 48}px)` : '100%';
+    const sessionCountRef = useRef(0);
+    const chartWidth = sessionTimes.length > 0
+        ? `max(100%, ${sessionTimes.length + INTRADAY_AXIS_WIDTH}px)` : '100%';
+
+    useEffect(() => {
+        sessionCountRef.current = sessionTimes.length;
+    }, [sessionTimes.length]);
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
@@ -53,7 +68,10 @@ export default function FundIntradayChart({portfolioFundId}) {
             yAxis: {position: 'right', tickText: {color: '#94A3B8'}},
             xAxis: {tickText: {color: '#94A3B8'}},
         });
-        const resize = () => chart.resize();
+        const resize = () => {
+            chart.resize();
+            fitIntradayBars(chart, sessionCountRef.current);
+        };
         window.addEventListener('resize', resize);
         return () => {
             window.removeEventListener('resize', resize);
@@ -88,10 +106,7 @@ export default function FundIntradayChart({portfolioFundId}) {
         chartRef.current.setZoomEnabled(!usePercentAxis);
         chartRef.current.setPriceVolumePrecision(usePercentAxis ? 2 : 4, 0);
         chartRef.current.applyNewData(data);
-        if (sessionTimes.length > 0) {
-            chartRef.current.setBarSpace(1);
-            chartRef.current.setOffsetRightDistance(0);
-        }
+        fitIntradayBars(chartRef.current, sessionTimes.length);
     }, [intraday, usePercentAxis, baseNav, sessionTimes]);
 
     const empty = !isLoading && pointCount < 2;
