@@ -206,3 +206,64 @@ smoke_candidate_frontend_on_internal_network
 commit_digest_state
 start_public_frontend
 ```
+
+## Scenario: Deployment application image cleanup
+
+### 1. Scope / Trigger
+
+- 触发：正式 frontend 公网健康检查通过且 `.deployed-state` 已原子提交后。
+- 范围：仅清理 `ghcr.io/coolmentha/fundpilot-backend` 和
+  `ghcr.io/coolmentha/fundpilot-frontend` 的旧本地镜像，不处理其他栈或 GHCR 历史版本。
+
+### 2. Signatures
+
+```sh
+cleanup_application_images()
+docker image inspect <current-backend-digest> <current-frontend-digest>
+docker image ls --all --no-trunc --filter "reference=<application-repository>"
+docker image rm <old-image-id>
+```
+
+### 3. Contracts
+
+- 当前 backend/frontend digest 的 image ID 必须从本机 Docker 读取并保留。
+- 只尝试删除两个应用仓库中不等于当前 ID 的镜像；仍被容器引用的镜像由 Docker 拒绝删除。
+- 每个 Docker 外部命令必须通过 `run_before_total_deadline`，失败输出 warning，但不得改变已经提交发布的成功结果。
+- 旧镜像仍可从 GHCR digest 重新拉取，回滚不依赖旧镜像一直驻留 VPS。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 行为 | 发布结果 |
+|---|---|---|
+| 当前镜像 ID 读取失败 | 终止清理并输出 warning | 已提交发布保持成功 |
+| 旧镜像删除成功 | 继续处理下一个镜像 | 成功 |
+| 旧镜像仍被容器引用或删除失败 | 输出包含 image ID 的 warning | 已提交发布保持成功 |
+| Docker 命令达到 deadline | 由 `timeout` 终止，输出 warning | 已提交发布保持成功 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：公网探活和状态提交完成后保留当前两个 digest，再删除其他本地应用镜像。
+- Base：旧镜像被停止容器引用，删除失败但部署成功，后续由容器生命周期处理。
+- Bad：健康检查或回滚完成前删除上一版本镜像，导致当前发布无法恢复。
+
+### 6. Tests Required
+
+- 从 workflow YAML 提取 SSH script 后运行 `bash -n`。
+- 用模拟 Docker 输出验证当前 ID 不删除、旧 ID 会尝试删除、删除失败不改变外层成功结果。
+- 运行 YAML 解析和 `git diff --check`。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```sh
+docker image prune -af
+```
+
+#### Correct
+
+```sh
+inspect_current_ids
+list_only_fundpilot_application_images
+remove_non_current_ids_with_timeout
+```
