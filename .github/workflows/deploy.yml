@@ -457,6 +457,34 @@ jobs:
               return 1
             }
 
+            cleanup_application_images() {
+              cleanup_failed=0
+              current_image_ids=$(
+                run_before_total_deadline 30 docker image inspect \
+                  "$BACKEND_IMAGE" "$FRONTEND_IMAGE" --format '{{.Id}}' | sort -u
+              ) || return 1
+
+              for repository in \
+                ghcr.io/coolmentha/fundpilot-backend \
+                ghcr.io/coolmentha/fundpilot-frontend; do
+                image_ids=$(
+                  run_before_total_deadline 30 docker image ls --all --no-trunc \
+                    --filter "reference=$repository" --format '{{.ID}}'
+                ) || return 1
+                while IFS= read -r image_id; do
+                  [ -n "$image_id" ] || continue
+                  if printf '%s\n' "$current_image_ids" | grep -Fqx "$image_id"; then
+                    continue
+                  fi
+                  if ! run_before_total_deadline 30 docker image rm "$image_id" >/dev/null; then
+                    echo "warning: could not remove old application image $image_id" >&2
+                    cleanup_failed=1
+                  fi
+                done <<< "$image_ids"
+              done
+              return "$cleanup_failed"
+            }
+
             rollback() {
               status=$?
               trap - ERR HUP INT TERM
@@ -617,6 +645,10 @@ jobs:
             rm -f "$PREVIOUS_ENV_FILE" || true
             rm -f "$PREVIOUS_STATE_FILE" || true
             find "$BACKUP_DIR" -maxdepth 1 -type f -name 'pre-v*.dump' -mtime +30 -delete || true
+            # ponytail: only current app images are protected; older images can be re-pulled by digest for rollback.
+            if ! cleanup_application_images; then
+              echo "warning: old application image cleanup failed; deployment remains successful" >&2
+            fi
             stop_maintenance_watchdog
             trap - ERR HUP INT TERM
             echo "deployed $RELEASE_TAG ($IMAGE_TAG)"
