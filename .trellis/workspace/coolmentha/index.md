@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
-- **Last Active**: 2026-08-04
+- **Total Sessions**: 6
+- **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~175 | Active |
+| `journal-1.md` | ~208 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-08-05 | 部署后清理旧镜像并发布 v0.11.9 | `d35a36c` | `main` |
 | 5 | 2026-08-04 | 修复基金详情分时完整交易时段并发布 | `9fdc678`, `d192546`, `a17f2df` | `main` |
 | 4 | 2026-07-24 | 接入大盘涨停跌停数据 | `32af452` | `feature/market-limit-counts` |
 | 3 | 2026-07-24 | 分时图指标切换 | `05188ca` | `feature/fund-intraday-metric-toggle` |

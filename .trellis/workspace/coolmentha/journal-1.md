@@ -173,3 +173,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 部署后清理旧镜像并发布 v0.11.9
+
+**Date**: 2026-08-05
+**Task**: 部署后清理旧镜像并发布 v0.11.9
+**Branch**: `main`
+
+### Summary
+
+为生产 deploy workflow 增加定向清理旧 FundPilot backend/frontend 镜像；保留当前 digest，清理失败只告警。通过 shell/YAML/逻辑验证后，经 PR #206 合入 main，发布 v0.11.9，Deploy run 30975497299 成功。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d35a36c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
