@@ -20,6 +20,7 @@ Applies to JavaScript and JSX under `frontend/src`.
 - Fund market charts use the shared ECharts lifecycle helpers in the chart components; every initialized instance must register resize handling and be disposed on unmount or chart-type replacement.
 - `FundIntradayChart` consumes the existing `baseNav`, `points`, and `tradingSessions` payload. Future category slots remain `null`, lunch breaks do not become categories, and percentage mode sets explicit symmetric bounds around zero instead of relying on a library default percentage axis.
 - K-line data is passed to a candlestick series as `[open, close, low, high]`. MA, VOL, and MACD/DIF/DEA are derived in one frontend calculation module so toolbar and tooltip values use the same result.
+- K-line data remains fully available, but the initial viewport shows a period-specific recent window (daily 120 bars, weekly 104 bars, monthly 60 bars); users can still zoom to older data.
 - Chart options must use theme-aware colors and keep the existing loading, error, empty-data, and NAV fallback states. Do not add direct external market-data requests from chart components.
 
 ### Chart Tests
