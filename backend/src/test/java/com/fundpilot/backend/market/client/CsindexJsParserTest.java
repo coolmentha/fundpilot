@@ -66,6 +66,35 @@ class CsindexJsParserTest {
     }
 
     @Test
+    void parseIndexKline_跳过_OHLC_非正行_保留有效成交量() {
+        String withInvalidOhlc = """
+                {"data":[
+                  {"tradeDate":"20260105","open":0,"high":0,"low":0,"close":5337.3,"tradingVol":100},
+                  {"tradeDate":"20260106","open":5337.3,"high":5454.83,"low":5337.3,"close":5451.43,"tradingVol":200}
+                ]}
+                """;
+
+        IndexKline kline = CsindexJsParser.parseIndexKline(withInvalidOhlc, "930713");
+
+        assertThat(kline.bars()).hasSize(1);
+        assertThat(kline.bars().get(0).date()).isEqualTo(Instant.parse("2026-01-06T00:00:00Z"));
+        assertThat(kline.bars().get(0).volume()).isEqualTo(2L);
+    }
+
+    @Test
+    void parseIndexKline_全部_OHLC_非法_抛异常触发降级() {
+        String invalid = """
+                {"data":[
+                  {"tradeDate":"20260105","open":0,"high":0,"low":0,"close":0,"tradingVol":100}
+                ]}
+                """;
+
+        assertThatThrownBy(() -> CsindexJsParser.parseIndexKline(invalid, "930713"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("930713");
+    }
+
+    @Test
     void aggregate_周K_按周一分组_open首_high_max_low_min_close末_vol_sum_date末日() {
         // 2026-01-05(周一)/06/07 同周;2026-01-12(周一)下周
         IndexKline daily = new IndexKline(java.util.List.of(

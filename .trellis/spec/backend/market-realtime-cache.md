@@ -450,3 +450,62 @@ return FundIntradayView.from(marketRealtimeCache.getIntraday(fundId));
 // Correct: 未来分钟保留轴位置，但不伪造价格。
 return {timestamp};
 ```
+
+---
+
+## Scenario: 中证指数 K 线非法 OHLC
+
+### 1. Scope / Trigger
+
+- 触发：中证指数接口返回的历史 K 线可能带有零价格占位行，但成交量仍有值；这些行进入 `index_kline` 会把前端价格轴拉到 0。
+- 适用：所有通过 `CsindexJsParser.parseIndexKline(String rawJson, String indexCode)` 进入行情降级链的中证指数日 K。
+
+### 2. Signatures
+
+```java
+CsindexJsParser.parseIndexKline(String rawJson, String indexCode) -> IndexKline
+IndexKline.Bar(Instant date, BigDecimal open, BigDecimal close,
+               BigDecimal high, BigDecimal low, long volume)
+```
+
+### 3. Contracts
+
+- `open`、`high`、`low`、`close` 必须是 JSON 数值且严格大于 0。
+- 缺失、`null`、非数值或非正 OHLC 的行不得构造 `IndexKline.Bar`。
+- 混合响应只过滤坏行，保留有效行及既有成交量单位换算；不因成交量为 0 单独丢弃价格有效的行。
+- 过滤后无有效行时抛 `IllegalStateException`，由 `MarketDataSourceChain` 继续尝试后备数据源；禁止返回零值 K 线。
+- 落库和前端不重复实现这条数据源校验；`index_kline` 只接收解析后的有效柱线。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 行为 |
+| --- | --- |
+| 四个 OHLC 均为正数 | 构造并返回该 bar |
+| 任一 OHLC 缺失、非数值或小于等于 0 | 跳过该行 |
+| 响应中有合法行和非法行 | 返回合法行，保留合法行成交量 |
+| 所有行被过滤 | 抛 `IllegalStateException`，触发数据源降级 |
+
+### 5. Good/Base/Bad Cases
+
+- **Good**：一行 `open/high/low=0` 与一行合法 OHLC 混合时，只落合法行，价格轴不包含 0。
+- **Base**：合法 OHLC 且成交量为 0 时仍保留该 bar，避免把成交量语义误当价格有效性。
+- **Bad**：直接调用 `row.path("open").decimalValue()` 并 upsert；缺失/零价格会作为有效 K 线污染缓存。
+
+### 6. Tests Required
+
+- `CsindexJsParserTest` 断言混合响应过滤零 OHLC 行、保留日期和成交量换算。
+- `CsindexJsParserTest` 断言全部非法行抛 `IllegalStateException` 并携带指数代码。
+- `MarketDataSourceChainTest` 保持断言解析失败继续降级且全失败抛 `MARKET_DATA_ALL_SOURCES_FAILED`。
+- 发布后对受影响 `index_kline` 做只读非正 OHLC 统计和页面 K 线/成交量验证；生产写库前必须完成备份。
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: 缺失字段或零值也会生成可落库的 Bar。
+new IndexKline.Bar(date, row.path("open").decimalValue(), close, high, low, volume);
+```
+
+```java
+// Correct: 在外部数据解析边界过滤非法价格；全坏响应交给降级链。
+if (!openNode.isNumber() || open.signum() <= 0) continue;
+```
