@@ -29,6 +29,7 @@ import java.util.List;
  * 让 {@link MarketDataSourceChain} 降级到东方财富。
  * <p>防御性跳过周末 bar:csindex 正常只返交易日,但 startDate 恰逢节假日时首条会复刻下一交易日的 OHLC
  * (已实测),按周末过滤可消除该边界伪影。
+ * <p>防御性跳过 OHLC 非正的占位 bar:部分历史响应会返回零价格但仍带有成交量,这类 bar 不能进入缓存。
  */
 public final class CsindexJsParser {
 
@@ -41,7 +42,7 @@ public final class CsindexJsParser {
      * @param rawJson   csindex 响应文本
      * @param indexCode 裸指数代码(仅用于异常信息)
      * @return 按日期升序的日线柱列表
-     * @throws IllegalStateException data 为空或解析失败
+     * @throws IllegalStateException data 为空、解析失败或过滤后无有效日线
      */
     public static IndexKline parseIndexKline(String rawJson, String indexCode) {
         JsonNode root;
@@ -63,18 +64,32 @@ public final class CsindexJsParser {
             if (d.getDayOfWeek() == DayOfWeek.SATURDAY || d.getDayOfWeek() == DayOfWeek.SUNDAY) {
                 continue;
             }
+            JsonNode openNode = row.path("open");
+            JsonNode closeNode = row.path("close");
+            JsonNode highNode = row.path("high");
+            JsonNode lowNode = row.path("low");
+            if (!openNode.isNumber() || !closeNode.isNumber() || !highNode.isNumber() || !lowNode.isNumber()) {
+                continue;
+            }
+            BigDecimal open = openNode.decimalValue();
+            BigDecimal close = closeNode.decimalValue();
+            BigDecimal high = highNode.decimalValue();
+            BigDecimal low = lowNode.decimalValue();
+            if (open.signum() <= 0 || close.signum() <= 0 || high.signum() <= 0 || low.signum() <= 0) {
+                continue;
+            }
             Instant date = d.atStartOfDay(ZoneOffset.UTC).toInstant();
             bars.add(new IndexKline.Bar(
                     date,
-                    row.path("open").decimalValue(),
-                    row.path("close").decimalValue(),
-                    row.path("high").decimalValue(),
-                    row.path("low").decimalValue(),
+                    open,
+                    close,
+                    high,
+                    low,
                     row.path("tradingVol").asLong(0L) / 100L
             ));
         }
         if (bars.isEmpty()) {
-            throw new IllegalStateException("csindex 解析后无有效日线(全周末?): " + indexCode);
+            throw new IllegalStateException("csindex 解析后无有效日线(全周末或非法 OHLC): " + indexCode);
         }
         return new IndexKline(List.copyOf(bars));
     }
