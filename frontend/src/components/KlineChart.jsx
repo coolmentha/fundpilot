@@ -7,6 +7,8 @@ import QueryErrorState from './QueryErrorState.jsx';
 import {disposeChart, initChart, observeChartResize} from './chartUtils.js';
 import {calculateMacd, getChartColors, LINE_COLORS, MA_PERIODS, movingAverage} from './chartMath.js';
 
+const KLINE_VISIBLE_BARS = {daily: 120, weekly: 104, monthly: 60};
+
 function finiteOr(value, fallback) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -114,7 +116,11 @@ function buildKlineTooltip(bars, periods, sub, macd, params) {
     return lines.join('<br/>');
 }
 
-function buildKlineOption(bars, maSelected, sub, colors) {
+function initialKlineStartValue(period, length) {
+    return Math.max(0, length - (KLINE_VISIBLE_BARS[period] || KLINE_VISIBLE_BARS.daily));
+}
+
+function buildKlineOption(bars, period, maSelected, sub, colors) {
     const dates = bars.map((bar) => bar.date);
     const closes = bars.map((bar) => bar.close);
     const periods = [...maSelected].sort((a, b) => a - b);
@@ -137,6 +143,7 @@ function buildKlineOption(bars, maSelected, sub, colors) {
     const series = [{
         name: 'K线',
         type: 'candlestick',
+        large: false,
         data: bars.map((bar) => [bar.open, bar.close, bar.low, bar.high]),
         itemStyle: {
             color: colors.up,
@@ -199,7 +206,13 @@ function buildKlineOption(bars, maSelected, sub, colors) {
         axisPointer: {link: [{xAxisIndex: 'all'}]},
         xAxis: xAxes,
         yAxis: yAxes,
-        dataZoom: [{type: 'inside', xAxisIndex: showSub ? [0, 1] : [0], filterMode: 'none'}],
+        dataZoom: [{
+            type: 'inside',
+            xAxisIndex: showSub ? [0, 1] : [0],
+            filterMode: 'none',
+            startValue: initialKlineStartValue(period, dates.length),
+            endValue: dates.length - 1,
+        }],
         series,
     };
 }
@@ -242,10 +255,10 @@ export default function KlineChart({portfolioFundId, fundSubType}) {
         const colors = getChartColors(themeMode);
         const option = chartType === 'nav'
             ? buildNavOption(bars, colors)
-            : buildKlineOption(bars, maSelected, sub, colors);
+            : buildKlineOption(bars, period, maSelected, sub, colors);
         chart.setOption(option, {notMerge: true});
         chart.resize();
-    }, [bars, chartType, kline, maSelected, sub, themeMode]);
+    }, [bars, chartType, kline, maSelected, period, sub, themeMode]);
 
     const height = chartType === 'kline' ? (sub === 'NONE' ? 420 : 520) : 360;
 
