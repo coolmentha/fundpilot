@@ -46,6 +46,22 @@ public class EastmoneyClientConfig {
         };
     }
 
+    /** ETF 行情请求头，对应 AKShare 的东方财富行情页面来源。 */
+    public static RequestInterceptor etfRequestInterceptor() {
+        return requestTemplate -> {
+            requestTemplate.header("Referer", "https://quote.eastmoney.com/center/gridlist.html#fund_etf");
+            requestTemplate.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        };
+    }
+
+    /** 腾讯证券请求头，按 AKShare 的公开页面来源设置 Referer。 */
+    public static RequestInterceptor tencentRequestInterceptor() {
+        return requestTemplate -> {
+            requestTemplate.header("Referer", "https://gu.qq.com/");
+            requestTemplate.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        };
+    }
+
     /** 默认不重试(让调用方控制降级策略)。 */
     public static Retryer retryer() {
         return Retryer.NEVER_RETRY;
@@ -102,6 +118,33 @@ public class EastmoneyClientConfig {
     }
 
     /**
+     * 注册参考 AKShare 基金估值页面入口的东方财富静态页兼容客户端。
+     * <p>与净值/字典共用 fund.eastmoney.com 域名和东方财富共享限流器。
+     */
+    @Bean
+    public EastmoneyFundEstimatePageClient eastmoneyFundEstimatePageClient(
+            @Value("${eastmoney.base-url:https://fund.eastmoney.com}") String baseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(EastmoneyFundEstimatePageClient.class, baseUrl);
+    }
+
+    /** 注册 AKShare {@code fund_etf_spot_em} 使用的 ETF IOPV 客户端。 */
+    @Bean
+    public EastmoneyEtfSpotClient eastmoneyEtfSpotClient(
+            @Value("${eastmoney.etf-spot-base-url:https://88.push2.eastmoney.com}") String baseUrl) {
+        return Feign.builder()
+                .client(new RateLimitedClient(SHARED_LIMITER))
+                .requestInterceptor(etfRequestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(EastmoneyEtfSpotClient.class, baseUrl);
+    }
+
+    /**
      * 注册 {@link EastmoneyPush2Client} 为 Spring Bean(push2.eastmoney.com 域名,实时行情)。
      * 实时行情(指数/板块/北向资金)在第四个域名 push2(注意非 push2his 历史数据),故独立 target;
      * 共享同一限流桶。
@@ -133,6 +176,17 @@ public class EastmoneyClientConfig {
                 .target(CsindexClient.class, csindexBaseUrl);
     }
 
+    /** 注册 AKShare {@code stock_zh_index_daily_tx} 使用的腾讯指数日线客户端。 */
+    @Bean
+    public TencentIndexClient tencentIndexClient(
+            @Value("${tencent.index-base-url:https://proxy.finance.qq.com}") String tencentBaseUrl) {
+        return Feign.builder()
+                .requestInterceptor(tencentRequestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(TencentIndexClient.class, tencentBaseUrl);
+    }
+
     /**
      * 注册 {@link SinaTradingCalendarClient} 为 Spring Bean(finance.sina.com.cn 域名,交易日历)。
      * <p>新浪交易日历接口返回 KLC 自定义编码文本,由 {@link SinaTradingCalendarParser} 解码。
@@ -152,23 +206,26 @@ public class EastmoneyClientConfig {
     /**
      * 注册 {@link MarketDataSource} 降级链为 Spring Bean,供业务组件注入。
      * <p>降级顺序:中证指数公司(K 线主源,覆盖 CSI + 沪市中证编制指数,绕开 push2his IP 限流)
-     * → 同花顺(净值/字典主源 + 指数 K 线兜底) → 东方财富(净值/字典/K 线降级源);
+     * → 腾讯(交易所指数备用) → 同花顺(净值/字典主源 + 指数 K 线兜底)
+     * → 东方财富(净值/字典/K 线最后降级源);
      * 全失败抛 {@code MARKET_DATA_ALL_SOURCES_FAILED}。
      * <p>csindex 仅实现指数 K 线,净值/字典抛 {@link UnsupportedOperationException},
      * {@code MarketDataSourceChain#tryEach} 记录 unsupported 后继续尝试下一真实来源。
      *
      * @param csindex   中证指数公司数据源(K 线主源)
-     * @param eastmoney 东方财富数据源(净值/字典/K 线降级源)
+     * @param tencent 腾讯指数 K 线备用源(仅 sh/sz 交易所指数)
      * @param ths        同花顺数据源(净值/字典主源,K 线兜底)
+     * @param eastmoney 东方财富数据源(净值/字典/K 线最后降级源)
      * @param metrics    外部数据源调用指标
      */
     @Bean
     @Primary
     public MarketDataSourceChain marketDataSource(CsindexMarketDataSource csindex,
-                                                  EastmoneyMarketDataSource eastmoney,
+                                                  TencentIndexMarketDataSource tencent,
                                                   ThsMarketDataSource ths,
+                                                  EastmoneyMarketDataSource eastmoney,
                                                   MarketDataMetrics metrics) {
-        return new MarketDataSourceChain(java.util.List.of(csindex, ths, eastmoney), metrics);
+        return new MarketDataSourceChain(java.util.List.of(csindex, tencent, ths, eastmoney), metrics);
     }
 
     private EastmoneyClientConfig() {

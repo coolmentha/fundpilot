@@ -19,7 +19,7 @@ push2his 被封则缓存永远空,陷入「封了→拉不到→缓存空→图�
 
 ## 决策
 
-新增 `CsindexMarketDataSource`(实现 `MarketDataSource`),置于 `MarketDataSourceChain` 链首 `[csindex, eastmoney, ths]`。
+新增 `CsindexMarketDataSource`(实现 `MarketDataSource`),置于 `MarketDataSourceChain` 链首；当前链为 `[csindex, tencent, ths, eastmoney]`。
 指数日 K 主源改走 csindex,绕开被限流的 push2his。
 
 - **覆盖范围**:CSI 主题指数(930713 等)+ 中证编制沪市指数(000300 沪深300、000016 上证50、000852 中证1000)由 csindex 命中。
@@ -33,15 +33,16 @@ push2his 被封则缓存永远空,陷入「封了→拉不到→缓存空→图�
 ## Considered Options
 
 - **A. 继续用 push2his + 重试/代理〔否决〕**:v0.4.4 加重试无效——是持久 IP 封锁非瞬时抖动;换出口 IP(住宅代理)增基础设施复杂度。
-- **B. 腾讯/新浪替代〔否决〕**:实测 `web.ifzq.gtimg.cn` 与新浪 `money.finance.sina.com.cn` 仅承载 sh/sz 交易所指数,
-  对 930713.CSI 返空/null(CSI 主题指数非交易所挂牌,腾讯/新浪不收录)。
+- **B. 腾讯/新浪作为中证主源替代〔否决〕**:实测腾讯和新浪仅承载 sh/sz 交易所指数,
+  对 930713.CSI 返空/null(CSI 主题指数非交易所挂牌,腾讯/新浪不收录)。腾讯现作为中证之后的交易所指数备用源接入，
+  不改变中证主题指数的主源决策；新浪响应还需要 AKShare 的 JS 解码，暂不接入。
 - **C. 中证指数公司官方接口〔已采纳〕**:发布方自有数据,口径权威,不封 IP。借鉴 akshare `stock_zh_index_hist_csindex`。
 - **D. eastmoney searchapi 解析 secid〔未采纳〕**:secid 已由 `SecidFormat` 正确生成(`.CSI`→`2.`),非 secid 错误,无需引入搜索解析。
 
 ## Consequences
 
 - **正面**:930713.CSI 等 CSI 主题指数 K 线恢复,缓存可填充(`MarketDataFetchService` refresh → csindex → `upsertIndexKline` → `index_kline`),
-  打破死循环;沪深300/上证50/中证1000 等主流基准也改走 csindex,降低对 push2his 的依赖。
+  打破死循环;沪深300/上证50/中证1000 等主流基准优先走 csindex，交易所指数在 csindex 不可用时还能走腾讯，最后才依赖 push2his。
 - **负面/边界**:csindex 仅日 K(周/月靠源内聚合,非原生);仅中证编制指数，`0.*` 深交所指数直接跳过本源并回退 eastmoney；
   `tradingVol` 单位为股(push2his 为手),图表成交量只需序列内一致,跨源不混用故无碍。
 - **时序**:`MarketDataFetchService.fetchOne` → `marketDataSource.fetchIndexKline`(链首 csindex)→ `upsertIndexKline` 落库 →

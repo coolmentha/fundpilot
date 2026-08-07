@@ -239,3 +239,37 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 完成 K 线初始窗口修复并部署
+
+**Date**: 2026-08-06
+**Task**: 完成 K 线初始窗口修复并部署
+**Branch**: `main`
+
+### Summary
+
+修复日K、周K、月K首次显示范围与ECharts大数据模式问题；PR #209 合并到 main，v0.11.12 已通过 CI、镜像构建、VPS 部署和线上健康检查。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `77bc539` | (see git log) |
+| `cea1864` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

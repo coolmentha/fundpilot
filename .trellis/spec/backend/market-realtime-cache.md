@@ -84,13 +84,17 @@ N 个前端客户端共享同一份缓存。
 - 东方财富客户端共享 20 req/s 令牌桶；该值经本机短压测验证，线上异常时应根据指标下调。
 - 手工 Feign client 统一 `connectTimeout=1s/readTimeout=3s`，`Retryer.NEVER_RETRY`。
 - 东方财富共享限流器单次最多等待 1 秒；超时进入下一个数据源。
-- 净值/字典：东方财富 -> 同花顺；盘中估值：同花顺 -> 东方财富；指数 K 线：中证指数公司 -> 东方财富 -> 同花顺。
+- 净值/字典：东方财富 -> 同花顺；盘中估值：同花顺分钟线 -> AKShare 参考的东方财富静态估值页批量源 -> ETF IOPV 与同花顺最近确认净值配对(仅交易型 ETF) -> 旧 fundgz 兼容回退；指数 K 线：中证指数公司 -> 腾讯 -> 同花顺 -> 东方财富。
 - 深交所 `0.*` 指数不属于中证源覆盖范围，必须直接跳过中证源；不得先请求再靠解析异常降级。
 - 同轮行情刷新按唯一 `benchmarkIndexCode` 拉取并复用指数 K 线；本地无缓存拉 400 根，已有缓存只拉最近 10 根并覆盖重叠日期。
 - 东方财富与同花顺基金净值接口均只提供完整历史序列，源端无法按日期增量；数据库仍只写入本地最新日期之后的数据。
 - `null`、空 Collection、空 `IndexKline.bars` 均记为 `empty` 并继续降级；`UnsupportedOperationException` 记为 `unsupported`。
 - 同花顺净值需要单位/累计两次请求并按日期关联；字典使用 `fund.10jqka.com.cn/data/Net/info/...`；K 线使用 `d.10jqka.com.cn/v6/line/.../last.js`。
 - 同花顺盘中估值使用 `gz-fund.10jqka.com.cn` 分钟线，取最后有效点相对基准净值计算涨跌幅。
+- 本机 AKShare 1.18.12 的 `fund_value_estimation_em` 实际请求 `api.fund.eastmoney.com/FundGuZhi/GetFundGZList`，当前实测 `Data=null`；Java 兼容客户端改参考其基金估值页面入口 `fund.eastmoney.com/fundguzhi{page}.html`，按页解析 `data-gz`，并在进程内缓存批量结果 1 分钟。静态页仅覆盖其实际返回的基金类别；ETF `f441` IOPV 仅在与同花顺最近确认单位净值配对后进入交易型 ETF 估值分支，交易价格和历史净值不直接当作普通基金盘中涨跌幅。
+- AKShare `stock_zh_index_daily_tx` 与 `stock_zh_a_hist_tx` 共用 `proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkline/get`，参数为 `symbol,day,start,end,640,qfq`（股票接口按复权参数变化），响应变量为 `kline_dayqfq`；Java 映射 `1.*`/`0.*` 为 `sh`/`sz`，CSI `2.*` 直接跳过腾讯源。当前业务只消费指数 K 线，因此不额外接入股票历史、分笔和 A+H 交易接口，周/月在本地聚合。
+- AKShare `fund_etf_spot_ths` 返回 ETF 最近已公布单位净值/日增长率，不是分钟估值；`fund_open_fund_daily_em`、`fund_etf_fund_daily_em` 是确认净值；`fund_etf_spot_em` 的 `f441` 是 ETF IOPV，当前由独立分支与同花顺最近确认净值配对计算估算涨跌；`fund_lof_spot_em`/新浪 ETF 接口是场内交易价，不能直接写入普通基金盘中估值缓存。
+- AKShare 的新浪 ETF/LOF 行情和 `stock_zh_index_daily` 仍属于场内交易价或历史行情；新浪指数响应需要其 JS 解码，当前不进入普通基金估值链，也不作为腾讯源的替代实现。
 - 外部请求必须在数据库事务外；只把最终增量落库放进短事务。
 
 ### 东方财富字段缩放契约
@@ -164,14 +168,14 @@ N 个前端客户端共享同一份缓存。
 | 用户未配置 watchedIndices | 返默认列表(上证+沪深300+创业板),不抛错 |
 | 上涨、下跌、涨停、跌停四项完整 | 汇总 `f104/f105` 与同花顺分钟数组末项并更新 `breadthCache` |
 | 任一市场、家数字段、同花顺主页或接口缺失/失败 | 保留旧完整 `breadthCache`;首次无缓存时接口 data=null |
-| 今日净值未落库且有估值缓存 | 返回当日 fundgz 估值并标记 `isEstimated=true` |
+| 今日净值未落库且有估值缓存 | 返回当日有效估值并标记 `isEstimated=true` |
 | 今日净值未落库且状态为 `STALE/NOT_ATTEMPTED` | 今日涨跌为 0，当前市值/总盈亏使用最近确认净值，不计算昨日涨跌 |
 | 今日净值未落库且状态为 `UNAVAILABLE` | 今日涨跌/盈亏返回未知；持仓市值/总盈亏使用最近确认净值 |
 | 今日净值未落库且最近一次估值失败 | `FundView.estimateFetchFailed=true`;持仓市值/总盈亏使用最近确认净值 |
 | 今日净值已落库但估值曾失败 | 使用实际净值,`estimateFetchFailed=false` |
 | 任一持仓今日盈亏未知 | `dailyPnlTotal` 汇总其余可用持仓，`dailyCoveredFundCount` 标明覆盖数；无任何覆盖时返回 null |
 | 持仓基金存在估值失败 | `PortfolioSummaryView.estimateFetchFailedCount` 返回失败持仓数,前端明确显示失败而非普通 `-` |
-| 观察池基金 | 与持仓基金一样进入 fundgz 估值缓存 |
+| 观察池基金 | 与持仓基金一样进入估值缓存 |
 | 第三批行情异常抛出 | 本次不继续生成信号 |
 | 应用启动 | 后台异步预热指数/板块/资金和基金估值；外部接口延迟不阻塞健康检查 |
 | 晚间净值远端日期晚于本地最新日期 | 不要求等于今天，在短事务内增量落库 |

@@ -15,7 +15,7 @@ import java.util.List;
  * <p>降级语义:数据源 A 抛异常 → 尝试 B;B 也抛 → 抛业务异常。
  * 空结果表示当前源无可用数据，继续尝试下一个数据源。
  *
- * @param sources 数据源列表(按优先级排序,如 [东方财富, 同花顺])
+ * @param sources 数据源列表(按优先级排序,当前指数 K 线为 [中证, 腾讯, 同花顺, 东方财富])
  */
 @Slf4j
 public class MarketDataSourceChain implements MarketDataSource {

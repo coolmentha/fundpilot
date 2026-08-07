@@ -47,7 +47,7 @@ class CsindexClientLiveSmokeTest {
 
     @Test
     void fetchIndexPerf_sz399006_throws_to_让链回退() {
-        // 深交所创业板指不在中证编制范围 → 空 data → 抛异常(降级链回退东方财富)
+        // 深交所创业板指不在中证编制范围 → 空 data → 抛异常(降级链继续后续源)
         String raw = client.fetchIndexPerf("399006", "20260601", "20260704");
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
