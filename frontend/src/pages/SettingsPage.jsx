@@ -14,7 +14,7 @@ import {isQueryDataReady} from '../querySafety.js';
 const {Title, Text} = Typography;
 
 /**
- * 常用 A 股指数候选列表(secid → 名称)。用户在设置页多选关注哪些指数,
+ * 常用指数候选列表(secid → 名称)。用户在设置页多选关注哪些指数,
  * 行情工作台顶部指数条按此列表展示。
  */
 // secid 经东方财富 push2 接口逐一核实(f12+f14 返回 name 必须与 label 一致):
@@ -29,6 +29,9 @@ const INDEX_OPTIONS = [
     {value: '1.000905', label: '中证500'},
     {value: '1.000852', label: '中证1000'},
     {value: '1.000016', label: '上证50'},
+    {value: '100.NDX', label: '纳斯达克'},
+    {value: '100.N225', label: '日经225'},
+    {value: '100.KS11', label: '韩国KOSPI'},
 ];
 
 export default function SettingsPage() {
