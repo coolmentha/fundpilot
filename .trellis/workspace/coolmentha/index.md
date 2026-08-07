@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-08-06
+- **Total Sessions**: 9
+- **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~275 | Active |
+| `journal-1.md` | ~309 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-08-07 | 发布国外实时指数 | `1238f18`, `c2c47e8` | `main` |
 | 8 | 2026-08-06 | 完成 K 线初始窗口修复并部署 | `77bc539`, `cea1864` | `main` |
 | 7 | 2026-08-05 | 统一基金图表并发布 v0.11.10 | `f607245` | `main` |
 | 6 | 2026-08-05 | 部署后清理旧镜像并发布 v0.11.9 | `d35a36c` | `main` |

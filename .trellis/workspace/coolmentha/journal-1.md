@@ -273,3 +273,37 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 发布国外实时指数
+
+**Date**: 2026-08-07
+**Task**: 发布国外实时指数
+**Branch**: `main`
+
+### Summary
+
+设置页新增纳斯达克、日经225、韩国KOSPI实时指数候选项；PR #211 已合并，v0.11.14 部署成功；main CI 31165570158 与 Deploy 31165945363 全部通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1238f18` | (see git log) |
+| `c2c47e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
