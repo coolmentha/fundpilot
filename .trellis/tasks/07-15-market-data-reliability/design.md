@@ -16,7 +16,7 @@
 - Feign connect timeout：1 秒。
 - Feign read timeout：3 秒。
 - 东方财富共享限流器单次等待最多 1 秒，令牌不可用时快速失败并进入降级。
-- 净值路径为东方财富后回退同花顺；同花顺净值内部需要单位/累计两次请求。K 线路径为中证指数公司、东方财富、同花顺三个真实来源。最坏调用预算均控制在前端 15 秒内。
+- 净值路径为东方财富后回退同花顺；同花顺净值内部需要单位/累计两次请求。K 线路径为中证指数公司、腾讯、同花顺、东方财富四个真实来源。最坏调用预算均控制在前端 15 秒内。
 - 删除 `EastmoneyMarketDataSource.fetchKlineWithRetry` 的手动重试。
 - Nginx 显式设置 `proxy_connect_timeout 3s`、`proxy_read_timeout 15s`、`proxy_send_timeout 15s`，前端仍以 15 秒为最终取消边界。
 

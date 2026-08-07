@@ -53,7 +53,7 @@ public final class CsindexJsParser {
         }
         JsonNode data = root.path("data");
         if (!data.isArray() || data.isEmpty()) {
-            // 非 CSI 编制范围(如 399xxx 深交所指数)返空 data——抛异常让降级链回退东方财富。
+            // 非 CSI 编制范围(如 399xxx 深交所指数)返空 data——抛异常让降级链继续后续源。
             throw new IllegalStateException("csindex 无此指数或无数据: " + indexCode);
         }
         List<IndexKline.Bar> bars = new ArrayList<>(data.size());

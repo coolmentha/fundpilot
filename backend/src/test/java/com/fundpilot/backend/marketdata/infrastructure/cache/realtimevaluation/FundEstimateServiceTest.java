@@ -1,6 +1,8 @@
 package com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.EastmoneyFundGzClient;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.EastmoneyFundEstimatePageClient;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsFundEstimateClient;
 import com.fundpilot.backend.platform.observability.MarketDataMetrics;
 import feign.Request;
@@ -18,6 +20,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -99,8 +102,74 @@ class FundEstimateServiceTest {
         verify(client, times(2)).fetchGzRaw("000001");
     }
 
+    @Test
+    void 同花顺失败后AKShare静态页批量结果可复用且不访问旧备用源() {
+        EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
+        ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
+        EastmoneyFundEstimatePageClient pageClient = mock(EastmoneyFundEstimatePageClient.class);
+        when(thsClient.fetchEstimateRaw("000001")).thenReturn("vm_fd_000001='broken';");
+        when(pageClient.fetchPageRaw(1)).thenReturn("""
+                <div id="gsdata">2026-07-20 估算数据</div>
+                <div id="dwjzdata">2026-07-17</div>
+                <table id="tContent"><tbody id="tableContent">
+                  <tr><td></td><td>1</td><td>000001</td><td>测试基金</td>
+                    <td data-gz="1.2345">--</td><td data-gz="1.20%">--</td>
+                    <td>---</td><td>---</td><td>---</td><td>1.3000</td><td></td>
+                  </tr>
+                </tbody></table>
+                """);
+        when(pageClient.fetchPageRaw(2)).thenReturn("");
+        FundEstimateService service = service(client, thsClient, pageClient);
+
+        assertThat(service.fetchEstimateResult("000001").snapshot().estimatedChangePct())
+                .isEqualByComparingTo("0.012");
+        assertThat(service.fetchEstimateResult("000001").snapshot().estimateTime())
+                .isEqualTo("2026-07-20 15:00");
+
+        verify(pageClient, times(1)).fetchPageRaw(1);
+        verify(pageClient, times(1)).fetchPageRaw(2);
+        verify(client, never()).fetchGzRaw("000001");
+    }
+
+    @Test
+    void 静态页未命中后ETF_IOPV估值可用且不访问旧备用源() {
+        EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
+        ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
+        EastmoneyFundEstimatePageClient pageClient = mock(EastmoneyFundEstimatePageClient.class);
+        EtfIopvEstimateService etfService = mock(EtfIopvEstimateService.class);
+        FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
+                new java.math.BigDecimal("0.0123"), "2026-07-20 15:00", "2026-07-17");
+        when(thsClient.fetchEstimateRaw("510300")).thenReturn("vm_fd_510300='broken';");
+        when(pageClient.fetchPageRaw(1)).thenReturn("");
+        when(etfService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.available(snapshot));
+
+        FundEstimateService service = service(client, thsClient, pageClient, etfService);
+
+        assertThat(service.fetchEstimateResult("510300").snapshot()).isEqualTo(snapshot);
+        verify(client, never()).fetchGzRaw("510300");
+    }
+
     private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient) {
-        return new FundEstimateService(client, thsClient, new MarketDataMetrics(new SimpleMeterRegistry()),
+        return service(client, thsClient, mock(EastmoneyFundEstimatePageClient.class),
+                unavailableEtfService());
+    }
+
+    private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient,
+                                               EastmoneyFundEstimatePageClient pageClient) {
+        return service(client, thsClient, pageClient, unavailableEtfService());
+    }
+
+    private static EtfIopvEstimateService unavailableEtfService() {
+        EtfIopvEstimateService service = mock(EtfIopvEstimateService.class);
+        when(service.fetchEstimateResult(anyString())).thenReturn(FundEstimateResult.unavailable());
+        return service;
+    }
+
+    private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient,
+                                               EastmoneyFundEstimatePageClient pageClient,
+                                               EtfIopvEstimateService etfService) {
+        return new FundEstimateService(client, pageClient, etfService, thsClient,
+                new MarketDataMetrics(new SimpleMeterRegistry()),
                 Clock.fixed(Instant.parse("2026-07-20T07:00:00Z"), ZoneOffset.UTC));
     }
 }

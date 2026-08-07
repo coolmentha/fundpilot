@@ -79,6 +79,17 @@ public class ThsClientConfig {
                 .target(ThsFundEstimateClient.class, baseUrl);
     }
 
+    /** 注册 AKShare {@code fund_etf_spot_ths} 使用的 ETF 最近确认净值客户端。 */
+    @Bean
+    public ThsEtfSpotClient thsEtfSpotClient(
+            @Value("${ths.etf-spot-base-url:https://fund.10jqka.com.cn}") String baseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(ThsEtfSpotClient.class, baseUrl);
+    }
+
     private ThsClientConfig() {
     }
 }

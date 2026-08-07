@@ -34,6 +34,7 @@ class ExternalClientConfigTest {
     @Test
     void marketDataSource_基金净值优先使用同花顺() throws Exception {
         CsindexMarketDataSource csindex = mock(CsindexMarketDataSource.class);
+        TencentIndexMarketDataSource tencent = mock(TencentIndexMarketDataSource.class);
         ThsMarketDataSource ths = mock(ThsMarketDataSource.class);
         EastmoneyMarketDataSource eastmoney = mock(EastmoneyMarketDataSource.class);
         MarketDataMetrics metrics = mock(MarketDataMetrics.class);
@@ -45,10 +46,33 @@ class ExternalClientConfigTest {
         var constructor = EastmoneyClientConfig.class.getDeclaredConstructor();
         constructor.setAccessible(true);
         MarketDataSource source = constructor.newInstance()
-                .marketDataSource(csindex, eastmoney, ths, metrics);
+                .marketDataSource(csindex, tencent, ths, eastmoney, metrics);
 
         assertThat(source.fetchNavHistory("017093")).isEqualTo(thsNavHistory);
         verify(ths).fetchNavHistory("017093");
+        verify(tencent).fetchNavHistory("017093");
         verifyNoInteractions(eastmoney);
+    }
+
+    @Test
+    void marketDataSource_指数K线按中证_腾讯_同花顺_东方财富降级() throws Exception {
+        CsindexMarketDataSource csindex = mock(CsindexMarketDataSource.class);
+        TencentIndexMarketDataSource tencent = mock(TencentIndexMarketDataSource.class);
+        ThsMarketDataSource ths = mock(ThsMarketDataSource.class);
+        EastmoneyMarketDataSource eastmoney = mock(EastmoneyMarketDataSource.class);
+        MarketDataMetrics metrics = mock(MarketDataMetrics.class);
+        IndexKline expected = new IndexKline(List.of(new IndexKline.Bar(
+                Instant.parse("2026-08-07T00:00:00Z"), BigDecimal.ONE, BigDecimal.TEN,
+                BigDecimal.TEN, BigDecimal.ONE, 100L)));
+        when(tencent.fetchIndexKline("0.399001", "400")).thenReturn(expected);
+
+        var constructor = EastmoneyClientConfig.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        MarketDataSource source = constructor.newInstance()
+                .marketDataSource(csindex, tencent, ths, eastmoney, metrics);
+
+        assertThat(source.fetchIndexKline("0.399001", "400")).isSameAs(expected);
+        verify(tencent).fetchIndexKline("0.399001", "400");
+        verifyNoInteractions(ths, eastmoney);
     }
 }

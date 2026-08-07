@@ -51,6 +51,6 @@ cmd /c mvnw.cmd -q -Plive "-Dtest=EastmoneyClientLiveSmokeTest,CsindexClientLive
 
 - Gate A：解析器测试通过后确认 `EastmoneyJsParser` 不再引用 `org.graalvm`；新浪 KLC 解码器是唯一保留路径。
 - Gate B：净值确认测试证明 fundgz 失败不阻断更新且滞后日期可入库。
-- Gate C：超时测试覆盖东方财富失败后同花顺净值成功，以及三源 K 线最坏链路小于 15 秒。
+- Gate C：超时测试覆盖东方财富失败后同花顺净值成功，以及四源 K 线最坏链路小于 15 秒。
 - Gate D：前端测试证明中性不可用与真实失败文案区分。
 - Gate E：`git diff --check`、完整测试、lint、build 均通过；工作区只包含本任务文件。
