@@ -26,22 +26,26 @@ public class RealtimeValuationRefreshJob {
     private final RealtimeValuationRefreshCommandHandler commands;
     private final TradingCalendarQueryHandler calendar;
     private final Clock clock;
-    private final AtomicBoolean refreshing = new AtomicBoolean(false);
+    private final AtomicBoolean refreshingRealtime = new AtomicBoolean(false);
 
     @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshRealtime() {
-        if (isTradingHours()) runOnce(commands::refreshAll);
+        if (isTradingHours()) runRealtimeOnce(commands::refreshRealtimeWithoutEstimates);
     }
 
     @Scheduled(cron = "*/30 * 9-23 * * MON-FRI", zone = "Asia/Shanghai")
     @Scheduled(cron = "*/30 * 0-5 * * TUE-SAT", zone = "Asia/Shanghai")
     public void refreshFundEstimates() {
-        if (!isTradingHours()) runOnce(commands::refreshFundEstimates);
+        if (isTradingHours()) {
+            commands.refreshFundEstimates();
+        } else {
+            commands.refreshQdiiFundEstimates();
+        }
     }
 
-    private void runOnce(Runnable refresh) {
-        if (!refreshing.compareAndSet(false, true)) {
-            log.info("上一轮实时行情刷新尚未完成，跳过本轮");
+    private void runRealtimeOnce(Runnable refresh) {
+        if (!refreshingRealtime.compareAndSet(false, true)) {
+            log.info("上一轮指数/板块/资金刷新尚未完成，跳过本轮");
             return;
         }
         try {
@@ -49,7 +53,7 @@ public class RealtimeValuationRefreshJob {
         } catch (RuntimeException exception) {
             log.warn("实时行情刷新异常: {}", exception.getMessage());
         } finally {
-            refreshing.set(false);
+            refreshingRealtime.set(false);
         }
     }
 

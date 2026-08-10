@@ -12,5 +12,7 @@ class RealtimeValuationRefreshGatewayImpl implements RealtimeValuationRefreshGat
 
     @Override public void refreshIndices() { cache.refreshIndices(); }
     @Override public void refreshAll() { cache.refreshAll(); }
+    @Override public void refreshRealtimeWithoutEstimates() { cache.refreshRealtimeWithoutEstimates(); }
     @Override public void refreshFundEstimates() { cache.refreshFundEstimates(); }
+    @Override public void refreshQdiiFundEstimates() { cache.refreshQdiiFundEstimates(); }
 }

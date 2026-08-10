@@ -27,11 +27,11 @@ class RealtimeValuationRefreshJobTest {
 
         job.refreshRealtime();
 
-        verify(commands).refreshAll();
+        verify(commands).refreshRealtimeWithoutEstimates();
     }
 
     @Test
-    void 晚间仅刷新基金估值且不查询交易日历() {
+    void 晚间仅刷新QDII估值() {
         var commands = mock(RealtimeValuationRefreshCommandHandler.class);
         var calendar = mock(TradingCalendarQueryHandler.class);
         var job = new RealtimeValuationRefreshJob(commands, calendar,
@@ -39,12 +39,11 @@ class RealtimeValuationRefreshJobTest {
 
         job.refreshFundEstimates();
 
-        verify(commands).refreshFundEstimates();
-        verifyNoInteractions(calendar);
+        verify(commands).refreshQdiiFundEstimates();
     }
 
     @Test
-    void A股交易时段不重复刷新估值() {
+    void A股交易时段刷新全部基金估值() {
         var commands = mock(RealtimeValuationRefreshCommandHandler.class);
         var calendar = mock(TradingCalendarQueryHandler.class);
         when(calendar.isTradingDay(any())).thenReturn(true);
@@ -53,7 +52,8 @@ class RealtimeValuationRefreshJobTest {
 
         job.refreshFundEstimates();
 
-        verify(commands, never()).refreshFundEstimates();
+        verify(commands).refreshFundEstimates();
+        verify(commands, never()).refreshQdiiFundEstimates();
     }
 
     @Test

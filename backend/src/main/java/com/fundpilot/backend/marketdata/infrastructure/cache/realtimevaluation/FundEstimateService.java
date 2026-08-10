@@ -26,6 +26,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -64,6 +66,14 @@ public class FundEstimateService {
     }
 
     public FundEstimateResult fetchEstimateResult(String fundCode) {
+        return fetchEstimateResult(fundCode, Instant.MAX, fundCode == null ? Set.of() : Set.of(fundCode));
+    }
+
+    public FundEstimateResult fetchEstimateResult(String fundCode, Instant deadline) {
+        return fetchEstimateResult(fundCode, deadline, fundCode == null ? Set.of() : Set.of(fundCode));
+    }
+
+    public FundEstimateResult fetchEstimateResult(String fundCode, Instant deadline, Set<String> targetCodes) {
         long startedAt = System.nanoTime();
         if (fundCode == null || fundCode.isBlank()) {
             metrics.record("EastmoneyFundGzClient", "fetchEstimate", "empty", startedAt);
@@ -100,8 +110,15 @@ public class FundEstimateService {
 
         EstimateStatus akshareFailure = EstimateStatus.UNAVAILABLE;
         EstimateStatus etfFailure = EstimateStatus.UNAVAILABLE;
-        AksharePageCache akshareCache = loadAksharePageCache();
-        FundEstimatePageRow akshareRow = akshareCache.rows().get(fundCode);
+        ensureBefore(deadline);
+        AksharePageCache akshareCache = aksharePageCache;
+        FundEstimatePageRow akshareRow = akshareCache.expiresAt().isAfter(clock.instant())
+                ? akshareCache.rows().get(fundCode) : null;
+        if (akshareRow != null) {
+            return FundEstimateResult.available(toSnapshot(akshareRow));
+        }
+        akshareCache = loadAksharePageCache(deadline, targetCodes, fundCode);
+        akshareRow = akshareCache.rows().get(fundCode);
         if (akshareRow != null) {
             return FundEstimateResult.available(toSnapshot(akshareRow));
         }
@@ -109,7 +126,8 @@ public class FundEstimateService {
             akshareFailure = akshareCache.failureStatus();
         }
 
-        FundEstimateResult etfResult = etfIopvEstimateService.fetchEstimateResult(fundCode);
+        ensureBefore(deadline);
+        FundEstimateResult etfResult = etfIopvEstimateService.fetchEstimateResult(fundCode, deadline);
         if (etfResult.status() == EstimateStatus.AVAILABLE) {
             return etfResult;
         }
@@ -117,6 +135,7 @@ public class FundEstimateService {
             etfFailure = etfResult.status();
         }
 
+        ensureBefore(deadline);
         long eastmoneyStartedAt = System.nanoTime();
         try {
             FundEstimateSnapshot snapshot = EastmoneyJsParser.parseFundGz(eastmoneyFundGzClient.fetchGzRaw(fundCode));
@@ -143,51 +162,76 @@ public class FundEstimateService {
         }
     }
 
-    private AksharePageCache loadAksharePageCache() {
+    private AksharePageCache loadAksharePageCache(Instant deadline, Set<String> targetCodes, String currentFundCode) {
         Instant now = clock.instant();
         AksharePageCache cached = aksharePageCache;
-        if (cached.expiresAt().isAfter(now)) {
+        if (cached.complete() && cached.expiresAt().isAfter(now)) {
             return cached;
         }
         synchronized (this) {
             cached = aksharePageCache;
             now = clock.instant();
-            if (cached.expiresAt().isAfter(now)) {
+            if (cached.complete() && cached.expiresAt().isAfter(now)) {
                 return cached;
             }
             long startedAt = System.nanoTime();
             AksharePageCache loaded;
             try {
-                Map<String, FundEstimatePageRow> rows = new HashMap<>();
-                for (int page = 1; page <= AKSHARE_MAX_PAGES; page++) {
+                boolean resume = !cached.complete() && cached.expiresAt().isAfter(now);
+                int firstPage = resume ? cached.nextPage() : 1;
+                Map<String, FundEstimatePageRow> rows = new HashMap<>(
+                        resume ? cached.rows() : Map.of());
+                for (int page = firstPage; page <= AKSHARE_MAX_PAGES; page++) {
+                    if (!clock.instant().isBefore(deadline)) {
+                        loaded = AksharePageCache.partial(rows, page, clock.instant());
+                        aksharePageCache = loaded;
+                        return loaded;
+                    }
                     String raw;
                     try {
                         raw = eastmoneyFundEstimatePageClient.fetchPageRaw(page);
                     } catch (FeignException ex) {
                         if (ex.status() == 404) {
-                            break;
+                            loaded = AksharePageCache.complete(rows, clock.instant());
+                            metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch",
+                                    rows.isEmpty() ? "empty" : "success", startedAt);
+                            aksharePageCache = loaded;
+                            return loaded;
                         }
                         throw ex;
                     }
                     Map<String, FundEstimatePageRow> pageRows = EastmoneyFundEstimatePageParser.parse(raw);
                     if (pageRows.isEmpty()) {
-                        break;
+                        loaded = AksharePageCache.complete(rows, clock.instant());
+                        metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch",
+                                rows.isEmpty() ? "empty" : "success", startedAt);
+                        aksharePageCache = loaded;
+                        return loaded;
                     }
-                    rows.putAll(pageRows);
+                    pageRows.forEach((code, row) -> {
+                        if (targetCodes.contains(code)) {
+                            rows.put(code, row);
+                        }
+                    });
+                    if (rows.containsKey(currentFundCode) || rows.keySet().containsAll(targetCodes)) {
+                        loaded = AksharePageCache.partial(rows, page + 1, clock.instant());
+                        aksharePageCache = loaded;
+                        return loaded;
+                    }
                 }
-                loaded = new AksharePageCache(Map.copyOf(rows), now.plus(AKSHARE_PAGE_CACHE_TTL), null);
+                loaded = AksharePageCache.complete(rows, clock.instant());
                 metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch",
                         rows.isEmpty() ? "empty" : "success", startedAt);
             } catch (RetryableException ex) {
-                loaded = failedPageCache(now, EstimateStatus.TIMEOUT);
+                loaded = failedPageCache(clock.instant(), EstimateStatus.TIMEOUT);
                 metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch", "timeout", startedAt);
                 log.debug("拉取东方财富静态基金估值页超时: {}", ex.getMessage());
             } catch (IllegalStateException ex) {
-                loaded = failedPageCache(now, EstimateStatus.PARSE_ERROR);
+                loaded = failedPageCache(clock.instant(), EstimateStatus.PARSE_ERROR);
                 metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch", "parse_error", startedAt);
                 log.debug("解析东方财富静态基金估值页失败: {}", ex.getMessage());
             } catch (RuntimeException ex) {
-                loaded = failedPageCache(now, EstimateStatus.UNAVAILABLE);
+                loaded = failedPageCache(clock.instant(), EstimateStatus.UNAVAILABLE);
                 metrics.record("EastmoneyFundEstimatePageClient", "fetchEstimateBatch", "failure", startedAt);
                 log.debug("拉取东方财富静态基金估值页失败: {}", ex.getMessage());
             }
@@ -196,8 +240,8 @@ public class FundEstimateService {
         }
     }
 
-    private AksharePageCache failedPageCache(Instant now, EstimateStatus status) {
-        return new AksharePageCache(Map.of(), now.plus(AKSHARE_PAGE_CACHE_TTL), status);
+    private AksharePageCache failedPageCache(Instant completedAt, EstimateStatus status) {
+        return new AksharePageCache(Map.of(), completedAt.plus(AKSHARE_PAGE_CACHE_TTL), status, 0);
     }
 
     private FundEstimateSnapshot toSnapshot(FundEstimatePageRow row) {
@@ -228,11 +272,30 @@ public class FundEstimateService {
         thsRetryAfter.put(fundCode, clock.instant().plus(THS_FAILURE_BACKOFF));
     }
 
+    private void ensureBefore(Instant deadline) {
+        if (!clock.instant().isBefore(deadline)) {
+            throw new CancellationException("基金估值刷新达到本轮截止时间");
+        }
+    }
+
     private record AksharePageCache(Map<String, FundEstimatePageRow> rows, Instant expiresAt,
-                                    EstimateStatus failureStatus) {
+                                    EstimateStatus failureStatus, int nextPage) {
 
         private static AksharePageCache empty() {
-            return new AksharePageCache(Map.of(), Instant.MIN, null);
+            return new AksharePageCache(Map.of(), Instant.MIN, null, 1);
+        }
+
+        private static AksharePageCache partial(Map<String, FundEstimatePageRow> rows, int nextPage,
+                                                Instant completedAt) {
+            return new AksharePageCache(Map.copyOf(rows), completedAt.plus(AKSHARE_PAGE_CACHE_TTL), null, nextPage);
+        }
+
+        private static AksharePageCache complete(Map<String, FundEstimatePageRow> rows, Instant completedAt) {
+            return new AksharePageCache(Map.copyOf(rows), completedAt.plus(AKSHARE_PAGE_CACHE_TTL), null, 0);
+        }
+
+        private boolean complete() {
+            return nextPage == 0;
         }
     }
 }

@@ -37,7 +37,8 @@ public EstimateStatus getEstimateStatus(String code);
 public Map<String, EstimateStatus> getEstimateStatuses(List<String> codes);
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
-public void refreshFundEstimates();                     // 仅刷新基金估值,供境外市场扩展窗口复用
+public void refreshFundEstimates();                     // 刷新全部平台基金估值
+public void refreshQdiiFundEstimates();                 // 仅刷新平台 QDII 估值
 @Async public void onApplicationReady();                // 启动完成后后台预热实时行情
 @Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
 ```
@@ -46,11 +47,11 @@ public void refreshFundEstimates();                     // 仅刷新基金估值
 
 ```java
 @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
-public void refreshRealtime();  // A 股交易日与交易时段内执行 refreshAll()
+public void refreshRealtime();  // A 股交易日与交易时段内刷新指数/市场宽度/板块/资金
 
 @Scheduled(cron = "*/30 * 9-23 * * MON-FRI", zone = "Asia/Shanghai")
 @Scheduled(cron = "*/30 * 0-5 * * TUE-SAT", zone = "Asia/Shanghai")
-public void refreshFundEstimates(); // A 股完整行情运行时跳过,其余窗口只刷新基金估值
+public void refreshFundEstimates(); // A 股交易时段刷新全部平台基金,扩展时段只刷新 QDII
 ```
 
 `FundView` 新增 `estimateStatus: NOT_ATTEMPTED|AVAILABLE|UNAVAILABLE|STALE|TIMEOUT|PARSE_ERROR`；
@@ -76,8 +77,8 @@ public void refreshFundEstimates(); // A 股完整行情运行时跳过,其余�
 刷新成功后写穿 Redis AOF，应用重启先恢复快照；Redis 故障时保留进程内副本并记录 warn。
 N 个前端客户端共享同一份缓存。
 
-调度线程池固定 `spring.task.scheduling.pool.size=2`。`MarketRealtimeRefreshJob` 用 `AtomicBoolean`
-禁止同一任务重入；上一轮未完成时跳过本轮，不排队堆积。
+调度线程池固定 `spring.task.scheduling.pool.size=2`。实时行情与基金估值使用独立单飞保护；
+基金估值每轮固定 25 秒预算，不续期，截止后保存基金和批量分页断点并在下轮继续。
 
 ### 外部调用预算与降级链
 
@@ -125,12 +126,13 @@ N 个前端客户端共享同一份缓存。
 - A 股完整行情时段:9:30-11:30(上午)、13:00-15:00(下午)。
 - 交易日查询参数必须使用 `ChinaTradingDate.toUtcDate(clock.instant())`，即北京时间自然日对应的 UTC 00:00 标签
 - 非交易日:`trading_calendar` 表无记录或 `is_trading_day=false` 时不刷新 A 股完整行情。
-- 基金估值专用窗口:周一至周五 09:00-23:59、周二至周六 00:00-05:59；A 股完整行情运行时跳过估值专用刷新，其他时段只调用 `refreshFundEstimates()`。
+- 基金估值窗口:周一至周五 09:00-23:59、周二至周六 00:00-05:59；A 股交易时段调用 `refreshFundEstimates()`，其他时段调用 `refreshQdiiFundEstimates()`。
 - 基金估值专用刷新不受中国交易日历阻断，境外市场可能在中国节假日正常交易。
 
 ### 基金估值范围契约
 
-- `refreshFundEstimates()` 遍历 `FundRepository.findAll()`，覆盖全部未软删基金。
+- `refreshFundEstimates()` 遍历平台当前跟踪产品并按产品去重；`refreshQdiiFundEstimates()` 只保留 `investmentTarget=QDII`。
+- 东方财富静态估值页与 ETF IOPV 仍按页获取；静态页只保留本轮平台基金代码，命中当前基金或收齐目标代码后立即保存下一页并返回。每页前检查本轮截止时间，未完成批次在 1 分钟内从下一页续刷，过期后从第一页重建；缓存有效期从最后响应完成时开始计算。
 - `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
 - 单只基金结果必须区分 `AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`，不能把空响应和超时压成同一布尔值。
 - 只接受 `estimateTime` 属于北京时间当天的快照；旧日期为 `STALE`，空响应/产品不提供为 `UNAVAILABLE`，时间格式损坏为 `PARSE_ERROR`。

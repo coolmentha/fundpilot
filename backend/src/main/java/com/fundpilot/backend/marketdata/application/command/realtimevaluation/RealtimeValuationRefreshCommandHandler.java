@@ -11,5 +11,7 @@ public class RealtimeValuationRefreshCommandHandler {
 
     public void refreshIndices() { cache.refreshIndices(); }
     public void refreshAll() { cache.refreshAll(); }
+    public void refreshRealtimeWithoutEstimates() { cache.refreshRealtimeWithoutEstimates(); }
     public void refreshFundEstimates() { cache.refreshFundEstimates(); }
+    public void refreshQdiiFundEstimates() { cache.refreshQdiiFundEstimates(); }
 }

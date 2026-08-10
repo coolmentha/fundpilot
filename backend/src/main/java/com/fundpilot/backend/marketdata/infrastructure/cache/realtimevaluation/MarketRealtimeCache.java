@@ -30,11 +30,14 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -63,6 +66,7 @@ public class MarketRealtimeCache {
     private static final Logger log = LoggerFactory.getLogger(MarketRealtimeCache.class);
     private static final DateTimeFormatter ESTIMATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Duration ESTIMATE_FAILURE_BACKOFF = Duration.ofMinutes(5);
+    private static final Duration ESTIMATE_REFRESH_BUDGET = Duration.ofSeconds(25);
     private static final List<String> MARKET_BREADTH_SECIDS = List.of(
             "1.000001", // 上证指数：沪市宽度
             "0.399001", // 深证成指：深市宽度
@@ -87,6 +91,9 @@ public class MarketRealtimeCache {
     private final Map<String, FundIntradayChart> intradayCache = new ConcurrentHashMap<>();
     private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
     private final Map<String, Instant> estimateRetryAfter = new ConcurrentHashMap<>();
+    private final AtomicBoolean refreshingEstimates = new AtomicBoolean(false);
+    private int allEstimateCursor;
+    private int qdiiEstimateCursor;
 
     @PostConstruct
     void restoreFromRedis() {
@@ -361,42 +368,100 @@ public class MarketRealtimeCache {
      * <p>本方法不触发指数、市场宽度、板块或资金请求,供境外市场扩展时段的定时任务复用。
      */
     public void refreshFundEstimates() {
+        refreshFundEstimates(false);
+    }
+
+    public void refreshQdiiFundEstimates() {
+        refreshFundEstimates(true);
+    }
+
+    private void refreshFundEstimates(boolean qdiiOnly) {
+        if (!refreshingEstimates.compareAndSet(false, true)) {
+            log.info("上一轮基金估值刷新尚未完成，跳过本轮");
+            return;
+        }
+        int cursor = qdiiOnly ? qdiiEstimateCursor : allEstimateCursor;
         try {
-            for (TrackedNavProductGateway.TrackedProduct product : products.findAll()) {
-                String fundCode = product.fundCode();
-                if (!supportsStandardNav(product)) {
-                    invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
-                    continue;
-                }
-                if (isEstimateRetryCoolingDown(fundCode)) {
-                    continue;
-                }
+            List<TrackedNavProductGateway.TrackedProduct> tracked = products.findAll().stream()
+                    .filter(product -> !qdiiOnly
+                            || product.investmentTarget() == TrackedNavProductGateway.InvestmentTarget.QDII)
+                    .sorted(Comparator.comparingLong(TrackedNavProductGateway.TrackedProduct::fundProductId))
+                    .toList();
+            if (tracked.isEmpty()) {
+                setEstimateCursor(qdiiOnly, 0);
+                return;
+            }
+            Set<String> targetCodes = tracked.stream().filter(MarketRealtimeCache::supportsStandardNav)
+                    .map(TrackedNavProductGateway.TrackedProduct::fundCode).collect(Collectors.toSet());
+            int start = cursor < tracked.size() ? cursor : 0;
+            int next = start;
+            Instant deadline = clock.instant().plus(ESTIMATE_REFRESH_BUDGET);
+            for (int index = start; index < tracked.size() && clock.instant().isBefore(deadline); index++) {
                 try {
-                    FundEstimateResult result = fundEstimateService.fetchEstimateResult(fundCode);
-                    FundEstimateSnapshot snapshot = result.snapshot();
-                    EstimateStatus status = classifyFreshness(result);
-                    if (status == EstimateStatus.AVAILABLE) {
-                        estimateCache.put(fundCode, snapshot);
-                        if (result.intradayChart() != null && result.intradayChart().points().size() >= 2) {
-                            intradayCache.put(fundCode, result.intradayChart());
-                        } else {
-                            intradayCache.remove(fundCode);
-                        }
-                        estimateStatuses.put(fundCode, EstimateStatus.AVAILABLE);
-                        estimateRetryAfter.remove(fundCode);
-                    } else {
-                        invalidateEstimate(fundCode, status);
-                        recordEstimateFailureBackoff(fundCode, status);
-                    }
-                } catch (RuntimeException e) {
-                    invalidateEstimate(fundCode, EstimateStatus.PARSE_ERROR);
-                    recordEstimateFailureBackoff(fundCode, EstimateStatus.PARSE_ERROR);
-                    log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
+                    refreshFundEstimate(tracked.get(index), deadline, targetCodes);
+                } catch (CancellationException exception) {
+                    persist();
+                    log.info("基金估值刷新达到 25 秒总期限，下轮从第 {} 只继续", index + 1);
+                    setEstimateCursor(qdiiOnly, index);
+                    return;
                 }
+                next = index + 1;
             }
             persist();
+            if (next < tracked.size()) {
+                log.info("基金估值刷新达到 25 秒总期限，下轮从第 {} 只继续", next + 1);
+                setEstimateCursor(qdiiOnly, next);
+                return;
+            }
+            setEstimateCursor(qdiiOnly, 0);
         } catch (RuntimeException e) {
             log.warn("基金估值刷新失败: {}", e.getMessage());
+        } finally {
+            refreshingEstimates.set(false);
+        }
+    }
+
+    private void setEstimateCursor(boolean qdiiOnly, int cursor) {
+        if (qdiiOnly) {
+            qdiiEstimateCursor = cursor;
+        } else {
+            allEstimateCursor = cursor;
+        }
+    }
+
+    private void refreshFundEstimate(TrackedNavProductGateway.TrackedProduct product, Instant deadline,
+                                     Set<String> targetCodes) {
+        String fundCode = product.fundCode();
+        if (!supportsStandardNav(product)) {
+            invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
+            return;
+        }
+        if (isEstimateRetryCoolingDown(fundCode)) {
+            return;
+        }
+        try {
+            FundEstimateResult result = fundEstimateService.fetchEstimateResult(fundCode, deadline, targetCodes);
+            FundEstimateSnapshot snapshot = result.snapshot();
+            EstimateStatus status = classifyFreshness(result);
+            if (status == EstimateStatus.AVAILABLE) {
+                estimateCache.put(fundCode, snapshot);
+                if (result.intradayChart() != null && result.intradayChart().points().size() >= 2) {
+                    intradayCache.put(fundCode, result.intradayChart());
+                } else {
+                    intradayCache.remove(fundCode);
+                }
+                estimateStatuses.put(fundCode, EstimateStatus.AVAILABLE);
+                estimateRetryAfter.remove(fundCode);
+            } else {
+                invalidateEstimate(fundCode, status);
+                recordEstimateFailureBackoff(fundCode, status);
+            }
+        } catch (CancellationException exception) {
+            throw exception;
+        } catch (RuntimeException e) {
+            invalidateEstimate(fundCode, EstimateStatus.PARSE_ERROR);
+            recordEstimateFailureBackoff(fundCode, EstimateStatus.PARSE_ERROR);
+            log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
         }
     }
 
