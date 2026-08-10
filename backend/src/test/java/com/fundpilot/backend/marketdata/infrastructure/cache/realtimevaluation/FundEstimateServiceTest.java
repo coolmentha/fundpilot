@@ -14,9 +14,11 @@ import org.junit.jupiter.api.Test;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -127,8 +129,69 @@ class FundEstimateServiceTest {
                 .isEqualTo("2026-07-20 15:00");
 
         verify(pageClient, times(1)).fetchPageRaw(1);
-        verify(pageClient, times(1)).fetchPageRaw(2);
+        verify(pageClient, never()).fetchPageRaw(2);
         verify(client, never()).fetchGzRaw("000001");
+    }
+
+    @Test
+    void 静态页缓存从响应完成时开始计算有效期() {
+        EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
+        ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
+        EastmoneyFundEstimatePageClient pageClient = mock(EastmoneyFundEstimatePageClient.class);
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-07-20T07:00:00Z"));
+        Clock clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(ignored -> now.get());
+        when(clock.withZone(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation ->
+                Clock.fixed(now.get(), invocation.getArgument(0)));
+        when(thsClient.fetchEstimateRaw("000001")).thenReturn("");
+        when(pageClient.fetchPageRaw(1)).thenAnswer(ignored -> {
+            now.set(now.get().plus(Duration.ofMinutes(2)));
+            return """
+                    <div id="gsdata">2026-07-20 估算数据</div>
+                    <div id="dwjzdata">2026-07-17</div>
+                    <table id="tContent"><tbody id="tableContent">
+                      <tr><td></td><td>1</td><td>000001</td><td>测试基金</td>
+                        <td data-gz="1.2345">--</td><td data-gz="1.20%">--</td>
+                        <td>---</td><td>---</td><td>---</td><td>1.3000</td><td></td>
+                      </tr>
+                    </tbody></table>
+                    """;
+        });
+        when(pageClient.fetchPageRaw(2)).thenReturn("");
+        FundEstimateService service = service(client, thsClient, pageClient, unavailableEtfService(), clock);
+
+        service.fetchEstimateResult("000001");
+        service.fetchEstimateResult("000001");
+
+        verify(pageClient, times(1)).fetchPageRaw(1);
+        verify(pageClient, never()).fetchPageRaw(2);
+    }
+
+    @Test
+    void 静态页只保留本轮基金且命中当前基金后从下一页继续() {
+        EastmoneyFundGzClient client = mock(EastmoneyFundGzClient.class);
+        ThsFundEstimateClient thsClient = mock(ThsFundEstimateClient.class);
+        EastmoneyFundEstimatePageClient pageClient = mock(EastmoneyFundEstimatePageClient.class);
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-20T07:00:00Z"));
+        when(thsClient.fetchEstimateRaw("000001")).thenReturn("");
+        when(pageClient.fetchPageRaw(1)).thenAnswer(ignored -> {
+            clock.advance(Duration.ofSeconds(20));
+            return estimatePage("000001");
+        });
+        when(pageClient.fetchPageRaw(2)).thenAnswer(ignored -> {
+            clock.advance(Duration.ofSeconds(10));
+            return estimatePage("000002");
+        });
+        when(pageClient.fetchPageRaw(3)).thenReturn("");
+        FundEstimateService service = service(client, thsClient, pageClient, unavailableEtfService(), clock);
+
+        var targets = java.util.Set.of("000001", "000002");
+        service.fetchEstimateResult("000001", clock.instant().plusSeconds(25), targets);
+        service.fetchEstimateResult("000002", clock.instant().plusSeconds(25), targets);
+
+        verify(pageClient, times(1)).fetchPageRaw(1);
+        verify(pageClient, times(1)).fetchPageRaw(2);
+        verify(pageClient, never()).fetchPageRaw(3);
     }
 
     @Test
@@ -141,7 +204,8 @@ class FundEstimateServiceTest {
                 new java.math.BigDecimal("0.0123"), "2026-07-20 15:00", "2026-07-17");
         when(thsClient.fetchEstimateRaw("510300")).thenReturn("vm_fd_510300='broken';");
         when(pageClient.fetchPageRaw(1)).thenReturn("");
-        when(etfService.fetchEstimateResult("510300")).thenReturn(FundEstimateResult.available(snapshot));
+        when(etfService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("510300"),
+                org.mockito.ArgumentMatchers.any(Instant.class))).thenReturn(FundEstimateResult.available(snapshot));
 
         FundEstimateService service = service(client, thsClient, pageClient, etfService);
 
@@ -161,15 +225,45 @@ class FundEstimateServiceTest {
 
     private static EtfIopvEstimateService unavailableEtfService() {
         EtfIopvEstimateService service = mock(EtfIopvEstimateService.class);
-        when(service.fetchEstimateResult(anyString())).thenReturn(FundEstimateResult.unavailable());
+        when(service.fetchEstimateResult(anyString(), org.mockito.ArgumentMatchers.any(Instant.class)))
+                .thenReturn(FundEstimateResult.unavailable());
         return service;
     }
 
     private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient,
                                                EastmoneyFundEstimatePageClient pageClient,
                                                EtfIopvEstimateService etfService) {
-        return new FundEstimateService(client, pageClient, etfService, thsClient,
-                new MarketDataMetrics(new SimpleMeterRegistry()),
+        return service(client, thsClient, pageClient, etfService,
                 Clock.fixed(Instant.parse("2026-07-20T07:00:00Z"), ZoneOffset.UTC));
+    }
+
+    private static FundEstimateService service(EastmoneyFundGzClient client, ThsFundEstimateClient thsClient,
+                                               EastmoneyFundEstimatePageClient pageClient,
+                                               EtfIopvEstimateService etfService, Clock clock) {
+        return new FundEstimateService(client, pageClient, etfService, thsClient,
+                new MarketDataMetrics(new SimpleMeterRegistry()), clock);
+    }
+
+    private static String estimatePage(String code) {
+        return """
+                <div id="gsdata">2026-07-20 估算数据</div>
+                <div id="dwjzdata">2026-07-17</div>
+                <table id="tContent"><tbody id="tableContent">
+                  <tr><td></td><td>1</td><td>%s</td><td>测试基金</td>
+                    <td data-gz="1.2345">--</td><td data-gz="1.20%%">--</td>
+                    <td>---</td><td>---</td><td>---</td><td>1.3000</td><td></td>
+                  </tr>
+                </tbody></table>
+                """.formatted(code);
+    }
+
+    private static final class MutableClock extends Clock {
+        private final AtomicReference<Instant> now;
+
+        private MutableClock(Instant now) { this.now = new AtomicReference<>(now); }
+        @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+        @Override public Instant instant() { return now.get(); }
+        private void advance(Duration duration) { now.updateAndGet(value -> value.plus(duration)); }
     }
 }

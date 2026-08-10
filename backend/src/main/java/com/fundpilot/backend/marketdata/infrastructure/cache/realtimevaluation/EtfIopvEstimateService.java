@@ -47,10 +47,14 @@ public class EtfIopvEstimateService {
     private volatile Cache cache = Cache.empty();
 
     public FundEstimateResult fetchEstimateResult(String fundCode) {
+        return fetchEstimateResult(fundCode, Instant.MAX);
+    }
+
+    public FundEstimateResult fetchEstimateResult(String fundCode, Instant deadline) {
         if (!looksLikeExchangeFund(fundCode)) {
             return FundEstimateResult.unavailable();
         }
-        Cache current = load();
+        Cache current = load(deadline);
         FundEstimateSnapshot snapshot = current.rows().get(fundCode);
         if (snapshot != null) {
             return FundEstimateResult.available(snapshot);
@@ -60,16 +64,19 @@ public class EtfIopvEstimateService {
                 : FundEstimateResult.unavailable();
     }
 
-    private Cache load() {
+    private Cache load(Instant deadline) {
         Instant now = clock.instant();
         Cache current = cache;
-        if (current.expiresAt().isAfter(now)) {
+        if (current.complete() && current.expiresAt().isAfter(now)) {
             return current;
         }
         synchronized (this) {
             current = cache;
             now = clock.instant();
-            if (current.expiresAt().isAfter(now)) {
+            if (current.complete() && current.expiresAt().isAfter(now)) {
+                return current;
+            }
+            if (!clock.instant().isBefore(deadline)) {
                 return current;
             }
             long startedAt = System.nanoTime();
@@ -77,25 +84,25 @@ public class EtfIopvEstimateService {
                 Map<String, ThsEtfSpotParser.BaseNav> baseNavs = ThsEtfSpotParser.parse(thsEtfSpotClient.fetchSpotRaw());
                 if (baseNavs.isEmpty()) {
                     metrics.record("ThsEtfSpotClient", "fetchEstimateBaseNav", "empty", startedAt);
-                    current = Cache.unavailable(now);
+                    current = Cache.unavailable(clock.instant());
                 } else {
                     metrics.record("ThsEtfSpotClient", "fetchEstimateBaseNav", "success", startedAt);
-                    Map<String, EastmoneyEtfSpotParser.Quote> quotes = fetchQuotes();
-                    Map<String, FundEstimateSnapshot> rows = join(quotes, baseNavs);
-                    current = new Cache(Map.copyOf(rows), now.plus(CACHE_TTL), null);
-                    metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch",
-                            rows.isEmpty() ? "empty" : "success", startedAt);
+                    current = fetchQuotes(baseNavs, current, deadline);
+                    if (current.complete()) {
+                        metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch",
+                                current.rows().isEmpty() ? "empty" : "success", startedAt);
+                    }
                 }
             } catch (RetryableException ex) {
-                current = Cache.failed(now, EstimateStatus.TIMEOUT);
+                current = Cache.failed(clock.instant(), EstimateStatus.TIMEOUT);
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "timeout", startedAt);
                 log.debug("拉取 ETF IOPV 估值超时: {}", ex.getMessage());
             } catch (IllegalStateException ex) {
-                current = Cache.failed(now, EstimateStatus.PARSE_ERROR);
+                current = Cache.failed(clock.instant(), EstimateStatus.PARSE_ERROR);
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "parse_error", startedAt);
                 log.debug("解析 ETF IOPV 估值失败: {}", ex.getMessage());
             } catch (RuntimeException ex) {
-                current = Cache.unavailable(now);
+                current = Cache.unavailable(clock.instant());
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "failure", startedAt);
                 log.debug("拉取 ETF IOPV 估值失败: {}", ex.getMessage());
             }
@@ -104,21 +111,25 @@ public class EtfIopvEstimateService {
         }
     }
 
-    private Map<String, EastmoneyEtfSpotParser.Quote> fetchQuotes() {
-        Map<String, EastmoneyEtfSpotParser.Quote> result = new HashMap<>();
-        for (int page = 1; page <= MAX_PAGES; page++) {
-            EastmoneyEtfSpotParser.Page current = EastmoneyEtfSpotParser.parse(
-                    eastmoneyEtfSpotClient.fetchSpotPageRaw(page));
-            if (current.quotes().isEmpty()) {
-                break;
+    private Cache fetchQuotes(Map<String, ThsEtfSpotParser.BaseNav> baseNavs, Cache current, Instant deadline) {
+        int firstPage = current.complete() ? 1 : current.nextPage();
+        Map<String, FundEstimateSnapshot> rows = new HashMap<>(current.complete() ? Map.of() : current.rows());
+        for (int page = firstPage; page <= MAX_PAGES; page++) {
+            if (!clock.instant().isBefore(deadline)) {
+                return Cache.partial(rows, page);
             }
-            result.putAll(current.quotes());
-            int totalPages = Math.max(1, (current.total() + PAGE_SIZE - 1) / PAGE_SIZE);
+            EastmoneyEtfSpotParser.Page pageData = EastmoneyEtfSpotParser.parse(
+                    eastmoneyEtfSpotClient.fetchSpotPageRaw(page));
+            if (pageData.quotes().isEmpty()) {
+                return Cache.complete(rows, clock.instant());
+            }
+            rows.putAll(join(pageData.quotes(), baseNavs));
+            int totalPages = Math.max(1, (pageData.total() + PAGE_SIZE - 1) / PAGE_SIZE);
             if (page >= totalPages) {
-                break;
+                return Cache.complete(rows, clock.instant());
             }
         }
-        return Map.copyOf(result);
+        return Cache.complete(rows, clock.instant());
     }
 
     private Map<String, FundEstimateSnapshot> join(
@@ -151,17 +162,30 @@ public class EtfIopvEstimateService {
         return fundCode != null && fundCode.matches("(?:15|5\\d)\\d{4}");
     }
 
-    private record Cache(Map<String, FundEstimateSnapshot> rows, Instant expiresAt, EstimateStatus failureStatus) {
+    private record Cache(Map<String, FundEstimateSnapshot> rows, Instant expiresAt, EstimateStatus failureStatus,
+                         int nextPage) {
         private static Cache empty() {
-            return new Cache(Map.of(), Instant.MIN, null);
+            return new Cache(Map.of(), Instant.MIN, null, 1);
         }
 
-        private static Cache unavailable(Instant now) {
-            return new Cache(Map.of(), now.plus(CACHE_TTL), null);
+        private static Cache unavailable(Instant completedAt) {
+            return new Cache(Map.of(), completedAt.plus(CACHE_TTL), null, 0);
         }
 
-        private static Cache failed(Instant now, EstimateStatus status) {
-            return new Cache(Map.of(), now.plus(CACHE_TTL), status);
+        private static Cache failed(Instant completedAt, EstimateStatus status) {
+            return new Cache(Map.of(), completedAt.plus(CACHE_TTL), status, 0);
+        }
+
+        private static Cache partial(Map<String, FundEstimateSnapshot> rows, int nextPage) {
+            return new Cache(Map.copyOf(rows), Instant.MIN, null, nextPage);
+        }
+
+        private static Cache complete(Map<String, FundEstimateSnapshot> rows, Instant completedAt) {
+            return new Cache(Map.copyOf(rows), completedAt.plus(CACHE_TTL), null, 0);
+        }
+
+        private boolean complete() {
+            return nextPage == 0;
         }
     }
 }
