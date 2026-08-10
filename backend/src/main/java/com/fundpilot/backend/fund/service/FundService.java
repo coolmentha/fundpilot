@@ -148,8 +148,7 @@ public class FundService {
         try {
             marketDataRefresh.refreshOneForPortfolioFund(onboarding.portfolioFundId());
         } catch (RuntimeException exception) {
-            log.warn("基金开户后刷新行情失败 portfolio_fund={}: {}", onboarding.portfolioFundId(),
-                    exception.getMessage());
+            log.warn("基金开户后刷新行情失败 portfolio_fund={}", onboarding.portfolioFundId(), exception);
         }
         return FundView.from(saved, onboarding.portfolioFundId());
     }

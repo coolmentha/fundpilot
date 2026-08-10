@@ -53,7 +53,7 @@ public class KlineQueryHandler {
                 return new Kline("kline", benchmark, source.fetch(toSecid(benchmark), mapPeriod(period), KLINE_LIMIT)
                         .stream().map(KlineQueryHandler::toBar).toList());
             } catch (RuntimeException exception) {
-                log.warn("基金 {} 指数 K 线拉取失败，降级净值走势: {}", fundId, exception.getMessage());
+                log.warn("基金 {} 指数 K 线拉取失败，降级净值走势", fundId, exception);
             }
         }
         return new Kline("nav", benchmark, navs.history(product.fundProductId(), Instant.parse(HISTORY_START),

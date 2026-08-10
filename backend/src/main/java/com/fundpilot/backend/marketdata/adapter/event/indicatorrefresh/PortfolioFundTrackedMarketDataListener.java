@@ -18,7 +18,7 @@ class PortfolioFundTrackedMarketDataListener {
         try {
             commands.refreshOneForPortfolioFund(event.portfolioFundId());
         } catch (RuntimeException exception) {
-            log.warn("组合基金 {} 跟踪后异步拉取历史净值失败: {}", event.portfolioFundId(), exception.getMessage());
+            log.warn("组合基金 {} 跟踪后异步拉取历史净值失败", event.portfolioFundId(), exception);
         }
     }
 }

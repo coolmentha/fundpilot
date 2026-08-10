@@ -38,7 +38,7 @@ public class DailyNavPublishingCommandHandler {
                 if (publishOne(product, normalized)) published++; else skipped++;
             } catch (RuntimeException ex) {
                 skipped++;
-                log.warn("确认产品 {} 净值失败,跳过: {}", product.fundProductId(), ex.getMessage());
+                log.warn("确认产品 {} 净值失败,跳过", product.fundProductId(), ex);
             }
         }
         log.info("交易日 {} 净值确认完成:新落库 {} 只,跳过 {} 只", normalized, published, skipped);

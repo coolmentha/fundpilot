@@ -32,7 +32,7 @@ public class TradingCalendarSynchronizationJob {
         try {
             log.info("交易日历{}同步完成,新增 {} 条", source, commands.synchronize(incremental));
         } catch (RuntimeException exception) {
-            log.warn("交易日历{}同步异常,保留旧数据: {}", source, exception.getMessage());
+            log.warn("交易日历{}同步异常,保留旧数据", source, exception);
         }
     }
 }

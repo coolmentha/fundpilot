@@ -77,7 +77,7 @@ public final class FundFeeHtmlParser {
             }
             return new PurchaseFeeRate(original, discount);
         } catch (RuntimeException e) {
-            log.warn("申购费率解析失败: {}", e.getMessage());
+            log.warn("申购费率解析失败", e);
             return null;
         }
     }
@@ -113,7 +113,7 @@ public final class FundFeeHtmlParser {
             }
             return List.copyOf(ladder);
         } catch (RuntimeException e) {
-            log.warn("赎回费率阶梯解析失败: {}", e.getMessage());
+            log.warn("赎回费率阶梯解析失败", e);
             return List.of();
         }
     }
@@ -139,7 +139,7 @@ public final class FundFeeHtmlParser {
             }
             return null;
         } catch (RuntimeException e) {
-            log.warn("销售服务费率解析失败: {}", e.getMessage());
+            log.warn("销售服务费率解析失败", e);
             return null;
         }
     }

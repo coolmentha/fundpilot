@@ -51,7 +51,7 @@ public class RealtimeValuationRefreshJob {
         try {
             refresh.run();
         } catch (RuntimeException exception) {
-            log.warn("实时行情刷新异常: {}", exception.getMessage());
+            log.warn("实时行情刷新异常", exception);
         } finally {
             refreshingRealtime.set(false);
         }

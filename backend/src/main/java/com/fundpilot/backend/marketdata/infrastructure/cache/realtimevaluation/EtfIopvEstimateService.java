@@ -96,15 +96,15 @@ public class EtfIopvEstimateService {
             } catch (RetryableException ex) {
                 current = Cache.failed(clock.instant(), EstimateStatus.TIMEOUT);
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "timeout", startedAt);
-                log.debug("拉取 ETF IOPV 估值超时: {}", ex.getMessage());
+                log.debug("拉取 ETF IOPV 估值超时", ex);
             } catch (IllegalStateException ex) {
                 current = Cache.failed(clock.instant(), EstimateStatus.PARSE_ERROR);
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "parse_error", startedAt);
-                log.debug("解析 ETF IOPV 估值失败: {}", ex.getMessage());
+                log.debug("解析 ETF IOPV 估值失败", ex);
             } catch (RuntimeException ex) {
                 current = Cache.unavailable(clock.instant());
                 metrics.record("EastmoneyEtfSpotClient", "fetchEstimateBatch", "failure", startedAt);
-                log.debug("拉取 ETF IOPV 估值失败: {}", ex.getMessage());
+                log.debug("拉取 ETF IOPV 估值失败", ex);
             }
             cache = current;
             return current;

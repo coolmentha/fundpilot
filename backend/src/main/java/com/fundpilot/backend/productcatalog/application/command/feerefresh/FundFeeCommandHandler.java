@@ -24,7 +24,7 @@ public class FundFeeCommandHandler {
         try {
             fetched = source.fetch(code);
         } catch (RuntimeException exception) {
-            log.warn("基金 {} 费率刷新失败: {}", code, exception.getMessage());
+            log.warn("基金 {} 费率刷新失败", code, exception);
             return Optional.empty();
         }
         if (fetched == null) {
