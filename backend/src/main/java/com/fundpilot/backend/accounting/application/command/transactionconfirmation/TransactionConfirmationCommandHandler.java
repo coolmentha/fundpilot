@@ -131,8 +131,8 @@ public class TransactionConfirmationCommandHandler {
                     try {
                         return batchTransactions.execute(() -> confirmPendingFor(portfolioFundId, navDate));
                     } catch (RuntimeException exception) {
-                        log.warn("产品 {} 净值确认失败 portfolio_fund={}，跳过该基金: {}",
-                                fundProductId, portfolioFundId, exception.getMessage());
+                        log.warn("产品 {} 净值确认失败 portfolio_fund={}，跳过该基金",
+                                fundProductId, portfolioFundId, exception);
                         return 0;
                     }
                 })
@@ -164,8 +164,7 @@ public class TransactionConfirmationCommandHandler {
                         .map(candidate -> confirmOneWhereNavAvailable(candidate, fallbackDate))
                         .orElse(0);
             } catch (TransactionConfirmationFailure failure) {
-                log.warn("批量确认跳过坏流水 tx_id={} code={}: {}", transaction.id(),
-                        failure.code(), failure.getMessage());
+                log.warn("批量确认跳过坏流水 tx_id={} code={}", transaction.id(), failure.code(), failure);
             }
         }
         return confirmed;

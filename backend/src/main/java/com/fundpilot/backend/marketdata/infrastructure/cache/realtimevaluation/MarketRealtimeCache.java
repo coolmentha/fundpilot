@@ -228,7 +228,7 @@ public class MarketRealtimeCache {
             refreshRealtimeWithoutEstimates();
             log.info("行情缓存启动刷新完成(指数/市场宽度/板块/资金),基金估值由后台异步预热");
         } catch (RuntimeException e) {
-            log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新: {}", e.getMessage());
+            log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新", e);
         }
     }
 
@@ -287,7 +287,7 @@ public class MarketRealtimeCache {
             }
         } catch (RuntimeException e) {
             result = metricResult(e);
-            log.warn("指数实时行情与市场宽度刷新失败,保留旧缓存: {}", e.getMessage());
+            log.warn("指数实时行情与市场宽度刷新失败,保留旧缓存", e);
         } finally {
             marketDataMetrics.record("EastmoneyPush2Client", "fetchIndices", result, startedAt);
         }
@@ -307,7 +307,7 @@ public class MarketRealtimeCache {
             }
         } catch (RuntimeException e) {
             result = metricResult(e);
-            log.warn("行业板块刷新失败,保留旧缓存: {}", e.getMessage());
+            log.warn("行业板块刷新失败,保留旧缓存", e);
         } finally {
             marketDataMetrics.record("EastmoneyPush2Client", "fetchSectors", result, startedAt);
         }
@@ -324,7 +324,7 @@ public class MarketRealtimeCache {
             return counts;
         } catch (RuntimeException e) {
             result = metricResult(e);
-            log.warn("同花顺涨跌停统计刷新失败,保留旧市场宽度缓存: {}", e.getMessage());
+            log.warn("同花顺涨跌停统计刷新失败,保留旧市场宽度缓存", e);
             return null;
         } finally {
             marketDataMetrics.record("ThsIndexFlashClient", "fetchIndexFlash", result, startedAt);
@@ -345,7 +345,7 @@ public class MarketRealtimeCache {
             }
         } catch (RuntimeException e) {
             result = metricResult(e);
-            log.warn("北向资金刷新失败,保留旧缓存: {}", e.getMessage());
+            log.warn("北向资金刷新失败,保留旧缓存", e);
         } finally {
             marketDataMetrics.record("EastmoneyPush2Client", "fetchMoneyFlow", result, startedAt);
         }
@@ -415,7 +415,7 @@ public class MarketRealtimeCache {
             }
             setEstimateCursor(qdiiOnly, 0);
         } catch (RuntimeException e) {
-            log.warn("基金估值刷新失败: {}", e.getMessage());
+            log.warn("基金估值刷新失败", e);
         } finally {
             refreshingEstimates.set(false);
         }
@@ -461,7 +461,7 @@ public class MarketRealtimeCache {
         } catch (RuntimeException e) {
             invalidateEstimate(fundCode, EstimateStatus.PARSE_ERROR);
             recordEstimateFailureBackoff(fundCode, EstimateStatus.PARSE_ERROR);
-            log.warn("基金 {} 估值刷新异常,已失效旧估值: {}", fundCode, e.getMessage());
+            log.warn("基金 {} 估值刷新异常,已失效旧估值", fundCode, e);
         }
     }
 

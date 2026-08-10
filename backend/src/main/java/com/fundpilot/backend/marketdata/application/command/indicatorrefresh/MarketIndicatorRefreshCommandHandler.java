@@ -94,7 +94,7 @@ public class MarketIndicatorRefreshCommandHandler {
                 }
             } catch (RuntimeException ex) {
                 failure++;
-                log.warn("拉取产品 {} 行情指标失败，跳过当日 snapshot: {}", target.fundProductId(), ex.getMessage());
+                log.warn("拉取产品 {} 行情指标失败，跳过当日 snapshot", target.fundProductId(), ex);
             }
         }
         log.info("行情指标刷新完成: 成功 {} 只，失败 {} 只", success, failure);
@@ -126,7 +126,7 @@ public class MarketIndicatorRefreshCommandHandler {
                 kline = klineCache.computeIfAbsent(indexCode,
                         key -> klineSource.fetch(toSecid(key), limit));
             } catch (RuntimeException ex) {
-                log.warn("产品 {} 指数 K 线拉取失败，volumeState 留空: {}", target.fundProductId(), ex.getMessage());
+                log.warn("产品 {} 指数 K 线拉取失败，volumeState 留空", target.fundProductId(), ex);
             }
         }
         navPublisher.publishNewer(target.legacyFundId(), target.fundProductId(), target.fundCode(), ordered.stream()
@@ -230,7 +230,7 @@ public class MarketIndicatorRefreshCommandHandler {
             return volumeState(stored.stream().map(bar -> new BarInput(bar.open(), bar.close(),
                     bar.volume())).toList());
         } catch (RuntimeException ex) {
-            log.warn("指数 {} 本地 K 线读取失败，volumeState 留空: {}", indexCode, ex.getMessage());
+            log.warn("指数 {} 本地 K 线读取失败，volumeState 留空", indexCode, ex);
             return Optional.empty();
         }
     }

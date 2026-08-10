@@ -84,7 +84,7 @@ public class MarketDataSourceChain implements MarketDataSource {
                 continue;
             } catch (Exception ex) {
                 record(sourceName, operation, metricResult(ex), startedAt);
-                log.warn("数据源[{}] {} 失败 code={}: {}", source.getClass().getSimpleName(), operation, code, ex.getMessage());
+                log.warn("数据源[{}] {} 失败 code={}", source.getClass().getSimpleName(), operation, code, ex);
                 failures.add(ex);
             }
         }

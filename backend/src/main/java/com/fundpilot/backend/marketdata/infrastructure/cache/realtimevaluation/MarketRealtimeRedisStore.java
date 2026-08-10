@@ -32,7 +32,7 @@ public class MarketRealtimeRedisStore {
             String json = redisTemplate.opsForValue().get(KEY);
             return json == null ? Optional.empty() : Optional.of(MAPPER.readValue(json, Snapshot.class));
         } catch (Exception e) {
-            log.warn("Redis 行情缓存读取失败,使用进程内空缓存: {}", e.getMessage());
+            log.warn("Redis 行情缓存读取失败,使用进程内空缓存", e);
             return Optional.empty();
         }
     }
@@ -41,7 +41,7 @@ public class MarketRealtimeRedisStore {
         try {
             redisTemplate.opsForValue().set(KEY, MAPPER.writeValueAsString(snapshot));
         } catch (Exception e) {
-            log.warn("Redis 行情缓存写入失败,本进程继续使用内存缓存: {}", e.getMessage());
+            log.warn("Redis 行情缓存写入失败,本进程继续使用内存缓存", e);
         }
     }
 

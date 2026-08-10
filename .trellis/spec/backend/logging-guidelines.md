@@ -38,9 +38,19 @@ Questions to answer:
 
 ## What to Log
 
-<!-- Important events to log -->
+### Exception context
 
-(To be filled by the team)
+Caught exceptions must be passed to SLF4J as the final argument so logs retain the
+exception type, stack trace, and cause chain. Keep identifiers and fallback actions
+in the message template, but do not log complete external payloads or credentials.
+
+```java
+// Wrong: drops the stack trace and nested cause.
+log.warn("基金 {} 估值刷新失败: {}", fundCode, exception.getMessage());
+
+// Correct: keeps business context and the complete exception.
+log.warn("基金 {} 估值刷新失败", fundCode, exception);
+```
 
 ---
 
