@@ -340,3 +340,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 移除QDII盘中估值
+
+**Date**: 2026-08-10
+**Task**: 移除QDII盘中估值
+**Branch**: `hotfix/disable-qdii-estimates`
+
+### Summary
+
+诊断生产估值失败，移除QDII盘中估值调用、扩展时段调度及旧估值分时缓存，保留确认净值收益规则。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9744389` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
