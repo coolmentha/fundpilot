@@ -201,25 +201,40 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
-    void refreshQdiiFundEstimates_只刷新QDII() {
+    void refreshFundEstimates_QDII不请求估值且清除旧缓存() {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
         var domestic = fund("510300", TrackedNavProductGateway.InvestmentTarget.STOCK);
         var qdii = fund("968012", TrackedNavProductGateway.InvestmentTarget.QDII);
+        FundEstimateSnapshot oldEstimate = new FundEstimateSnapshot(
+                new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
+        FundIntradayChart oldChart = new FundIntradayChart(
+                "2026-07-10", "2026-07-09", BigDecimal.ONE, List.of(
+                        new FundIntradayChart.Point("13:29", new BigDecimal("1.0110")),
+                        new FundIntradayChart.Point("13:30", new BigDecimal("1.0123"))));
         when(products.findAll()).thenReturn(List.of(domestic, qdii));
-        when(estimateService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("968012"), any(Instant.class), anySet()))
+        when(redisStore.load()).thenReturn(java.util.Optional.of(new MarketRealtimeRedisStore.Snapshot(
+                List.of(), null, List.of(), null,
+                Map.of("968012", oldEstimate), Map.of("968012", EstimateStatus.AVAILABLE),
+                Map.of("968012", oldChart))));
+        when(estimateService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("510300"), any(Instant.class), anySet()))
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), estimateService, mock(WatchedIndicesApi.class), products,
-                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(MarketDataMetrics.class), CLOCK, redisStore,
                 mock(ThsIndexFlashClient.class));
+        cache.restoreFromRedis();
 
-        cache.refreshQdiiFundEstimates();
+        cache.refreshFundEstimates();
 
-        verify(estimateService, never()).fetchEstimateResult(
-                org.mockito.ArgumentMatchers.eq("510300"), any(Instant.class), anySet());
         verify(estimateService).fetchEstimateResult(
+                org.mockito.ArgumentMatchers.eq("510300"), any(Instant.class), anySet());
+        verify(estimateService, never()).fetchEstimateResult(
                 org.mockito.ArgumentMatchers.eq("968012"), any(Instant.class), anySet());
+        assertThat(cache.getEstimates(List.of("968012"))).isEmpty();
+        assertThat(cache.getEstimateStatus("968012")).isEqualTo(EstimateStatus.UNAVAILABLE);
+        assertThat(cache.getIntraday("968012")).isNull();
     }
 
     @Test

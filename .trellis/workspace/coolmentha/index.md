@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~342 | Active |
+| `journal-1.md` | ~375 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-08-10 | 移除QDII盘中估值 | `9744389` | `hotfix/disable-qdii-estimates` |
 | 10 | 2026-08-10 | 完善后端异常日志并发布 | `aeb6056` | `hotfix/fund-estimate-error-logging` |
 | 9 | 2026-08-07 | 发布国外实时指数 | `1238f18`, `c2c47e8` | `main` |
 | 8 | 2026-08-06 | 完成 K 线初始窗口修复并部署 | `77bc539`, `cea1864` | `main` |
