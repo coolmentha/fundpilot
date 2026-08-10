@@ -307,3 +307,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 完善后端异常日志并发布
+
+**Date**: 2026-08-10
+**Task**: 完善后端异常日志并发布
+**Branch**: `hotfix/fund-estimate-error-logging`
+
+### Summary
+
+将后端仅打印异常 message 的日志统一改为记录完整 Throwable，保留业务上下文，并补充 backend logging 规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `aeb6056` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
