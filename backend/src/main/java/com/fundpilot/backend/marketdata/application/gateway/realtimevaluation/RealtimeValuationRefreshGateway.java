@@ -5,5 +5,4 @@ public interface RealtimeValuationRefreshGateway {
     void refreshAll();
     void refreshRealtimeWithoutEstimates();
     void refreshFundEstimates();
-    void refreshQdiiFundEstimates();
 }

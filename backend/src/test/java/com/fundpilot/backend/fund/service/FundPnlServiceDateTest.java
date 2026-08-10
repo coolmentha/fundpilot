@@ -123,7 +123,7 @@ class FundPnlServiceDateTest {
     }
 
     @Test
-    void QDII北京时间凌晨已有当日估值_使用估值() {
+    void 普通基金北京时间凌晨已有当日估值_使用估值() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,

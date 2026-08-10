@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
  *   <li>{@link #breadthCache} 沪深京股票涨跌家数(30s 刷新)</li>
  *   <li>{@link #sectorCache} 行业板块涨跌 + 主力资金(30s 刷新)</li>
  *   <li>{@link #moneyFlowCache} 北向资金(30s 刷新)</li>
- *   <li>{@link #estimateCache} 基金当日估值(主要市场覆盖窗口 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
+ *   <li>{@link #estimateCache} 非 QDII 基金当日估值(A 股交易时段 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
  * </ul>
  *
  * <p>降级策略:指数/市场宽度/板块/资金刷新失败保留旧缓存。基金估值不同:它是当天短时态数据,
@@ -93,7 +93,6 @@ public class MarketRealtimeCache {
     private final Map<String, Instant> estimateRetryAfter = new ConcurrentHashMap<>();
     private final AtomicBoolean refreshingEstimates = new AtomicBoolean(false);
     private int allEstimateCursor;
-    private int qdiiEstimateCursor;
 
     @PostConstruct
     void restoreFromRedis() {
@@ -233,14 +232,14 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 应用启动完成后异步预热全部基金估值。
+     * 应用启动完成后异步预热非 QDII 基金估值。
      * <p>复用 Spring 异步执行与东方财富共享限流,避免 N 只基金请求阻塞健康检查。
      */
     @Async
     @EventListener(ApplicationReadyEvent.class)
     public void warmFundEstimatesAfterReady() {
         refreshFundEstimates();
-        log.info("基金估值缓存异步启动预热完成");
+        log.info("非QDII基金估值缓存异步启动预热完成");
     }
 
     public void refreshIndices() {
@@ -362,36 +361,29 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 刷新基金估值:遍历当前跟踪产品,由估值服务按源策略拉取。
+     * 刷新非 QDII 基金估值:遍历当前跟踪产品,由估值服务按源策略拉取。
      * <p>当日估值短时变化快,由后台 30s 周期刷新;读接口只读缓存,不等待外部接口。
      * 本轮失败、空响应或非当天数据会失效该基金旧缓存,防止旧估值冒充今日数据。
-     * <p>本方法不触发指数、市场宽度、板块或资金请求,供境外市场扩展时段的定时任务复用。
+     * QDII 不拉取盘中估值,已有缓存会失效为 {@link EstimateStatus#UNAVAILABLE}。
      */
     public void refreshFundEstimates() {
-        refreshFundEstimates(false);
-    }
-
-    public void refreshQdiiFundEstimates() {
-        refreshFundEstimates(true);
-    }
-
-    private void refreshFundEstimates(boolean qdiiOnly) {
         if (!refreshingEstimates.compareAndSet(false, true)) {
             log.info("上一轮基金估值刷新尚未完成，跳过本轮");
             return;
         }
-        int cursor = qdiiOnly ? qdiiEstimateCursor : allEstimateCursor;
+        int cursor = allEstimateCursor;
         try {
             List<TrackedNavProductGateway.TrackedProduct> tracked = products.findAll().stream()
-                    .filter(product -> !qdiiOnly
-                            || product.investmentTarget() == TrackedNavProductGateway.InvestmentTarget.QDII)
                     .sorted(Comparator.comparingLong(TrackedNavProductGateway.TrackedProduct::fundProductId))
                     .toList();
             if (tracked.isEmpty()) {
-                setEstimateCursor(qdiiOnly, 0);
+                allEstimateCursor = 0;
                 return;
             }
-            Set<String> targetCodes = tracked.stream().filter(MarketRealtimeCache::supportsStandardNav)
+            Set<String> targetCodes = tracked.stream()
+                    .filter(product -> product.investmentTarget()
+                            != TrackedNavProductGateway.InvestmentTarget.QDII)
+                    .filter(MarketRealtimeCache::supportsStandardNav)
                     .map(TrackedNavProductGateway.TrackedProduct::fundCode).collect(Collectors.toSet());
             int start = cursor < tracked.size() ? cursor : 0;
             int next = start;
@@ -402,7 +394,7 @@ public class MarketRealtimeCache {
                 } catch (CancellationException exception) {
                     persist();
                     log.info("基金估值刷新达到 25 秒总期限，下轮从第 {} 只继续", index + 1);
-                    setEstimateCursor(qdiiOnly, index);
+                    allEstimateCursor = index;
                     return;
                 }
                 next = index + 1;
@@ -410,10 +402,10 @@ public class MarketRealtimeCache {
             persist();
             if (next < tracked.size()) {
                 log.info("基金估值刷新达到 25 秒总期限，下轮从第 {} 只继续", next + 1);
-                setEstimateCursor(qdiiOnly, next);
+                allEstimateCursor = next;
                 return;
             }
-            setEstimateCursor(qdiiOnly, 0);
+            allEstimateCursor = 0;
         } catch (RuntimeException e) {
             log.warn("基金估值刷新失败", e);
         } finally {
@@ -421,17 +413,14 @@ public class MarketRealtimeCache {
         }
     }
 
-    private void setEstimateCursor(boolean qdiiOnly, int cursor) {
-        if (qdiiOnly) {
-            qdiiEstimateCursor = cursor;
-        } else {
-            allEstimateCursor = cursor;
-        }
-    }
-
     private void refreshFundEstimate(TrackedNavProductGateway.TrackedProduct product, Instant deadline,
                                      Set<String> targetCodes) {
         String fundCode = product.fundCode();
+        if (product.investmentTarget() == TrackedNavProductGateway.InvestmentTarget.QDII) {
+            invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
+            estimateRetryAfter.remove(fundCode);
+            return;
+        }
         if (!supportsStandardNav(product)) {
             invalidateEstimate(fundCode, EstimateStatus.UNAVAILABLE);
             return;

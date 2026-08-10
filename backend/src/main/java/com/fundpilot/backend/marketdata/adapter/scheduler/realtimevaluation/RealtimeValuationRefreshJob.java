@@ -33,13 +33,10 @@ public class RealtimeValuationRefreshJob {
         if (isTradingHours()) runRealtimeOnce(commands::refreshRealtimeWithoutEstimates);
     }
 
-    @Scheduled(cron = "*/30 * 9-23 * * MON-FRI", zone = "Asia/Shanghai")
-    @Scheduled(cron = "*/30 * 0-5 * * TUE-SAT", zone = "Asia/Shanghai")
+    @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshFundEstimates() {
         if (isTradingHours()) {
             commands.refreshFundEstimates();
-        } else {
-            commands.refreshQdiiFundEstimates();
         }
     }
 

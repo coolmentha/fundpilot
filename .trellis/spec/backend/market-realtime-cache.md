@@ -37,10 +37,9 @@ public EstimateStatus getEstimateStatus(String code);
 public Map<String, EstimateStatus> getEstimateStatuses(List<String> codes);
 public void refreshAll();                               // 全量刷新(含估值)
 public void refreshRealtimeWithoutEstimates();          // 仅刷新指数/市场宽度/板块/资金
-public void refreshFundEstimates();                     // 刷新全部平台基金估值
-public void refreshQdiiFundEstimates();                 // 仅刷新平台 QDII 估值
+public void refreshFundEstimates();                     // 刷新非 QDII 平台基金估值
 @Async public void onApplicationReady();                // 启动完成后后台预热实时行情
-@Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热基金估值
+@Async public void warmFundEstimatesAfterReady();       // 启动完成后后台预热非 QDII 基金估值
 ```
 
 ### 定时任务(`MarketRealtimeRefreshJob`)
@@ -49,9 +48,8 @@ public void refreshQdiiFundEstimates();                 // 仅刷新平台 QDII 
 @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
 public void refreshRealtime();  // A 股交易日与交易时段内刷新指数/市场宽度/板块/资金
 
-@Scheduled(cron = "*/30 * 9-23 * * MON-FRI", zone = "Asia/Shanghai")
-@Scheduled(cron = "*/30 * 0-5 * * TUE-SAT", zone = "Asia/Shanghai")
-public void refreshFundEstimates(); // A 股交易时段刷新全部平台基金,扩展时段只刷新 QDII
+@Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
+public void refreshFundEstimates(); // A 股交易时段刷新非 QDII 平台基金
 ```
 
 `FundView` 新增 `estimateStatus: NOT_ATTEMPTED|AVAILABLE|UNAVAILABLE|STALE|TIMEOUT|PARSE_ERROR`；
@@ -71,7 +69,7 @@ public void refreshFundEstimates(); // A 股交易时段刷新全部平台基金
 | 指数实时 | 30s | 5s | 单请求批量,快 |
 | 板块涨跌 | 30s | 30s | 单请求 |
 | 行业主力资金 | 30s | 30s | 随板块快照批量返回 |
-| 基金估值 | **30s** | 10s | 覆盖 A 股与 QDII 主要估值窗口,后台逐只刷新;失败立即失效该基金旧估值 |
+| 基金估值 | **30s** | 10s | 仅覆盖非 QDII 基金的 A 股交易时段；失败立即失效该基金旧估值 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
 刷新成功后写穿 Redis AOF，应用重启先恢复快照；Redis 故障时保留进程内副本并记录 warn。
@@ -126,14 +124,13 @@ N 个前端客户端共享同一份缓存。
 - A 股完整行情时段:9:30-11:30(上午)、13:00-15:00(下午)。
 - 交易日查询参数必须使用 `ChinaTradingDate.toUtcDate(clock.instant())`，即北京时间自然日对应的 UTC 00:00 标签
 - 非交易日:`trading_calendar` 表无记录或 `is_trading_day=false` 时不刷新 A 股完整行情。
-- 基金估值窗口:周一至周五 09:00-23:59、周二至周六 00:00-05:59；A 股交易时段调用 `refreshFundEstimates()`，其他时段调用 `refreshQdiiFundEstimates()`。
-- 基金估值专用刷新不受中国交易日历阻断，境外市场可能在中国节假日正常交易。
+- 基金估值窗口仅为已确认的 A 股交易日 09:30-11:30、13:00-15:00；晚间、跨夜和非交易日不刷新基金估值。
 
 ### 基金估值范围契约
 
-- `refreshFundEstimates()` 遍历平台当前跟踪产品并按产品去重；`refreshQdiiFundEstimates()` 只保留 `investmentTarget=QDII`。
+- `refreshFundEstimates()` 遍历平台当前跟踪产品并按产品去重；`investmentTarget=QDII` 不调用任何盘中估值源，已有估值和分时缓存清除并置 `UNAVAILABLE`。
 - 东方财富静态估值页与 ETF IOPV 仍按页获取；静态页只保留本轮平台基金代码，命中当前基金或收齐目标代码后立即保存下一页并返回。每页前检查本轮截止时间，未完成批次在 1 分钟内从下一页续刷，过期后从第一页重建；缓存有效期从最后响应完成时开始计算。
-- `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
+- 非 QDII 的 `HOLDING` 与 `PENDING_HOLDING` 都必须进入估值缓存；观察池基金也展示盘中三态涨跌。
 - 单只基金结果必须区分 `AVAILABLE/UNAVAILABLE/STALE/TIMEOUT/PARSE_ERROR`，不能把空响应和超时压成同一布尔值。
 - 只接受 `estimateTime` 属于北京时间当天的快照；旧日期为 `STALE`，空响应/产品不提供为 `UNAVAILABLE`，时间格式损坏为 `PARSE_ERROR`。
 - 货币基金和 REIT 本期不进入普通估值/净值源，状态为 `UNAVAILABLE`，前端显示中性“暂无估值”。
@@ -195,11 +192,10 @@ N 个前端客户端共享同一份缓存。
 - **Good**:一次指数批量请求同时包含自选指数与沪深京固定市场,两个缓存独立投影
 - **Base**:市场宽度首次预热失败,组合收益仍正常展示,进度条为空轨道
 - **Good**:15:20 盘后发布重启,异步预热 fundgz 后全仓收益继续显示今日估值
-- **Good**:QDII 在北京时间 22:29 首次返回当日 `gztime`,估值专用调度将状态从 STALE 更新为 AVAILABLE
+- **Good**:QDII 不调用盘中估值源，旧估值缓存清除为 `UNAVAILABLE`，收益继续按确认净值发现日结算
 - **Good**:QDII 的 7 月 17 日净值在 7 月 20 日首次发现，7 月 20 日按该净值与上一期计算收益并显示真实净值日；同日发现多条时取 `navDate` 最大者
 - **Good**:到 7 月 21 日没有新发现净值时，QDII 今日涨跌/盈亏为 0，市值和总盈亏仍按 7 月 17 日最新确认净值计算
 - **Good**:通过基金搜索创建名称含 QDII 的基金，`investmentTarget` 自动保存为 `QDII`
-- **Good**:中国节假日晚间境外市场正常交易,估值专用刷新不受 A 股交易日历阻断
 - **Good**:东方财富启动预热超时,应用 readiness 仍可及时完成,缓存等待后台任务或下次定时刷新
 - **Good**:某基金本轮超时后旧估值立即消失,总览显示「估值拉取失败」;下一轮成功后自动恢复
 - **Good**:货币基金/REIT 不调用普通估值源，页面中性显示“暂无估值”
@@ -226,8 +222,8 @@ N 个前端客户端共享同一份缓存。
   - 断言点:f2÷100 还原、f3÷100 还原、f6 原值、f62 缺失为 null；北向资金解析仅作为遗留兼容回归
 - `EastmoneyJsParserRealtimeTest`:市场宽度断言三个固定市场完整时正确求和；缺市场、缺 `f104/f105` 时返回 null。
 - 缓存层降级测试:指数/市场宽度等仍验证旧缓存保留；基金估值必须单独验证成功后空响应、异常、旧日期都会删除旧值。
-- `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签；晚间/跨夜只刷新估值，中国节假日不阻断境外估值，A 股时段不重复刷新。
-- `MarketRealtimeCacheTest`:断言持仓与观察池普通基金都调用 `fetchEstimateResult`；货币基金/REIT 不调用并置 `UNAVAILABLE`。
+- `MarketRealtimeRefreshJobTest`:固定 Clock,断言北京时间自然日映射到 UTC 00:00 日历标签；仅 A 股交易时段刷新基金估值，晚间和跨夜不调用刷新命令。
+- `MarketRealtimeCacheTest`:断言持仓与观察池普通基金都调用 `fetchEstimateResult`；QDII、货币基金和 REIT 不调用并置 `UNAVAILABLE`，QDII 已有缓存必须清除。
 - `MarketRealtimeCacheTest`:固定 `Clock`,断言超时/解析错误为失败，空响应/旧日期为中性状态，后续成功恢复 `AVAILABLE`。
 - `MarketRealtimeCacheTest`:断言两个启动事件都带 `@Async`，实时行情事件不查询基金列表，基金估值事件填充估值缓存。
 - `ThsJsParserTest` / `ThsMarketDataSourceIntegrationTest`:断言净值双请求日期关联、字典 JSONP、K 线 callback、指数代码映射。
