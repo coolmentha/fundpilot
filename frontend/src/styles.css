@@ -895,6 +895,16 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     font-size: 12px;
 }
 
+.market-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.market-status strong { color: var(--color-text); }
+.market-status span { color: var(--color-muted); }
+
 /* —— 组合总览 —— */
 .portfolio-overview-grid {
     display: grid;
@@ -988,6 +998,7 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 }
 
 .market-breadth-stat.up { color: var(--color-danger); }
+.market-breadth-stat.neutral { color: var(--color-muted); }
 .market-breadth-stat.down { color: var(--color-success); }
 
 .market-breadth-stat strong {
@@ -1040,7 +1051,7 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 
 .index-card {
     flex: 0 0 auto;
-    min-width: 160px;
+    width: 210px;
     padding: 12px 16px;
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
@@ -1130,7 +1141,7 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 
 .fund-watchlist .ant-table-content > table {
     width: 100% !important;
-    min-width: 810px;
+    min-width: 990px;
     table-layout: fixed !important;
 }
 
@@ -1156,27 +1167,9 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 .fund-watchlist .watchlist-name-text small { display: block; }
 .fund-watchlist .watchlist-name-text small { margin-top: 2px; color: var(--color-muted); font-size: 11px; font-weight: 400; }
 
-.watchlist-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 260px;
-    gap: 12px;
-}
-
-.allocation-panel {
-    padding: 12px 14px;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-}
-
-.allocation-title,
-.allocation-item > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
-.allocation-title { margin-bottom: 14px; }
-.allocation-title span { color: var(--color-muted); }
-.allocation-item { margin-bottom: 12px; font-size: 12px; }
-.allocation-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.allocation-bar { height: 6px; margin-top: 5px; overflow: hidden; background: var(--color-border); border-radius: 3px; }
-.allocation-bar i { display: block; height: 100%; background: var(--color-info); border-radius: inherit; }
+.valuation-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.valuation-cell strong, .valuation-cell small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.valuation-cell small { color: var(--color-muted); font-size: 11px; font-weight: 400; }
 
 .dashboard-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .dashboard-status-item {
@@ -1190,9 +1183,10 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     border: 1px solid var(--color-border);
     border-radius: 6px;
 }
-.distribution-values { display: flex; gap: 16px; }
-.pnl-up { color: var(--color-danger); }
-.pnl-down { color: var(--color-success); }
+
+.contribution-item div { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.contribution-item a { overflow: hidden; color: var(--color-text); text-overflow: ellipsis; white-space: nowrap; }
+.contribution-item strong { font-family: var(--font-ui); white-space: nowrap; }
 
 .estimate-tag {
     display: inline-block;
@@ -1206,214 +1200,12 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     vertical-align: middle;
 }
 
-/* —— 底部双栏 —— */
-.bottom-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-}
-
-.bottom-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 12px 16px;
-}
-
-/* —— 板块涨跌 —— */
-.sector-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.sector-list.empty {
-    padding: 16px;
-    justify-content: center;
-    align-items: center;
-}
-
-.sector-row {
-    display: grid;
-    grid-template-columns: 80px 1fr 80px 80px;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-}
-
-.sector-name {
-    color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.sector-bar-wrap {
-    height: 6px;
-    background: var(--color-subtle);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.sector-bar {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.3s ease;
-}
-
-.sector-pct, .sector-flow {
-    font-family: var(--font-ui);
-    text-align: right;
-    font-size: 12px;
-}
-
-/* —— 资金流向 —— */
-.money-flow {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.money-flow.empty {
-    padding: 16px;
-    align-items: center;
-}
-
-.flow-summary {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface-2);
-}
-
-.flow-summary-label {
-    font-size: 12px;
-    color: var(--color-muted);
-    margin-bottom: 4px;
-}
-
-.flow-summary-value {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-ui);
-    font-size: 19px;
-    font-weight: 700;
-}
-
-.flow-summary-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--color-muted);
-    white-space: nowrap;
-}
-
-.flow-leader {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    min-height: 30px;
-    padding: 0 2px;
-    font-size: 12px;
-}
-
-.flow-leader-label {
-    color: var(--color-muted);
-}
-
-.flow-leader-name {
-    color: var(--color-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.flow-leader-value {
-    font-family: var(--font-ui);
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.flow-columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-}
-
-.flow-column {
-    min-width: 0;
-}
-
-.flow-column-title {
-    margin-bottom: 6px;
-    font-size: 12px;
-    color: var(--color-muted);
-}
-
-.flow-row {
-    padding: 6px 0;
-}
-
-.flow-row.empty-row {
-    color: var(--color-muted);
-    text-align: center;
-}
-
-.flow-row-top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 5px;
-}
-
-.flow-label {
-    font-size: 13px;
-    color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.flow-value {
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.flow-value span {
-    margin-left: 4px;
-}
-
-.flow-meter {
-    height: 4px;
-    border-radius: 999px;
-    background: var(--color-subtle);
-    overflow: hidden;
-}
-
-.flow-meter span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-}
-
-.flow-meter.in span {
-    background: #cf1322;
-}
-
-.flow-meter.out span {
-    background: #3f8600;
-}
+/* —— 行业表现 —— */
+.industry-performance { min-width: 0; }
+.industry-performance.empty { display: grid; min-height: 120px; place-items: center; }
+.industry-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.industry-table .ant-table-content { overflow-x: auto; }
+.industry-table .ant-table-cell { white-space: nowrap; }
 
 /* —— 响应式 —— */
 @media (max-width: 1024px) {
@@ -1424,12 +1216,8 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     .portfolio-overview-card.breadth {
         grid-column: 1 / -1;
     }
-    .bottom-grid {
-        grid-template-columns: 1fr;
-    }
     .portfolio-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .portfolio-overview-card.breadth { grid-column: 1 / -1; }
-    .watchlist-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -1439,17 +1227,8 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     .portfolio-overview-card.primary {
         grid-column: 1 / -1;
     }
-    .sector-row {
-        grid-template-columns: 70px 1fr 70px;
-    }
-    .sector-flow {
-        display: none;
-    }
-    .flow-columns {
-        grid-template-columns: 1fr;
-    }
     .index-card {
-        min-width: 140px;
+        width: 190px;
     }
     .dashboard-status-grid { grid-template-columns: 1fr; }
     .valuation-notice { flex-direction: column; gap: 3px; }
@@ -1472,6 +1251,8 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     .overview-value {
         font-size: 22px;
     }
+    .market-status { align-items: flex-start; flex-direction: column; gap: 2px; }
+    .industry-toolbar { justify-content: flex-start; overflow-x: auto; }
     .dashboard-status-item { align-items: flex-start; flex-direction: column; }
 }
 

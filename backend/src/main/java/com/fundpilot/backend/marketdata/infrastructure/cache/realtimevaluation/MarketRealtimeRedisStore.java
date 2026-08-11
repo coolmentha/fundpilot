@@ -16,6 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.time.Instant;
 
 @Component
 @RequiredArgsConstructor
@@ -52,12 +53,21 @@ public class MarketRealtimeRedisStore {
             MoneyFlowSnapshot moneyFlow,
             Map<String, FundEstimateSnapshot> estimates,
             Map<String, EstimateStatus> estimateStatuses,
-            Map<String, FundIntradayChart> intradayCharts) {
+            Map<String, FundIntradayChart> intradayCharts,
+            Instant indicesUpdatedAt,
+            Instant breadthUpdatedAt,
+            Instant sectorsUpdatedAt) {
 
         public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
                         MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
                         Map<String, EstimateStatus> estimateStatuses) {
-            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of());
+            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of(), null, null, null);
+        }
+
+        public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
+                        MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
+                        Map<String, EstimateStatus> estimateStatuses, Map<String, FundIntradayChart> intradayCharts) {
+            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, intradayCharts, null, null, null);
         }
     }
 }

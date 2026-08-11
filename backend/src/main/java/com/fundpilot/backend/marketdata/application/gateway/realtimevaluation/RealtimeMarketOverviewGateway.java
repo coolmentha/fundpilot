@@ -12,10 +12,12 @@ public interface RealtimeMarketOverviewGateway {
     Map<String, Estimate> findEstimates(List<String> fundCodes);
     List<Sector> findSectors();
     MoneyFlow findMoneyFlow();
+    Instant findUpdatedAt();
 
     record IndexQuote(String secid, String name, BigDecimal currentPrice, BigDecimal changeAmount,
                       BigDecimal changePct, BigDecimal turnover) {}
-    record Breadth(int risingCount, int fallingCount, Integer limitUpCount, Integer limitDownCount) {}
+    record Breadth(int risingCount, int fallingCount, Integer flatCount,
+                   Integer limitUpCount, Integer limitDownCount) {}
     record Estimate(BigDecimal estimatedChangePct, String estimateTime, String baseNavDate) {}
     record Sector(String sectorName, BigDecimal changePct, BigDecimal turnover, BigDecimal mainforceNet) {}
     record MoneyFlow(BigDecimal northboundNet, Instant snapshotTime) {}

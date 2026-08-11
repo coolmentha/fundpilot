@@ -14,13 +14,14 @@ import java.util.Map;
 /**
  * 行情实时数据查询 Controller(行情工作台)。
  *
- * <p>五个只读接口,前端按不同频率轮询:
+ * <p>六个只读接口,前端按不同频率轮询:
  * <ul>
  *   <li>{@code GET /indices/realtime} 指数实时(5-10s 轮询)</li>
  *   <li>{@code GET /breadth} 沪深京股票涨跌家数(5-10s 轮询)</li>
  *   <li>{@code GET /funds/estimates?codes=xxx} 基金估值(10s 轮询)</li>
  *   <li>{@code GET /sectors} 板块涨跌(30s 轮询)</li>
  *   <li>{@code GET /money-flow} 北向资金(30s 轮询)</li>
+ *   <li>{@code GET /status} A 股状态与核心行情最后成功快照时间(30s 轮询)</li>
  * </ul>
  * 全部读 MarketData 内存缓存,零外部请求,无降级异常。
  */
@@ -65,5 +66,11 @@ public class MarketRealtimeController {
     @GetMapping("/money-flow")
     public ApiResponse<MoneyFlowView> moneyFlow() {
         return ApiResponse.ok(MoneyFlowView.from(queries.findMoneyFlow()));
+    }
+
+    /** A 股交易状态与工作台核心行情最后成功快照时间。 */
+    @GetMapping("/status")
+    public ApiResponse<MarketStatusView> status() {
+        return ApiResponse.ok(MarketStatusView.from(queries.findStatus()));
     }
 }

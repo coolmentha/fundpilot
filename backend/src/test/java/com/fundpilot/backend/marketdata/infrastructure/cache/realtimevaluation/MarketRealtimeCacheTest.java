@@ -50,7 +50,7 @@ class MarketRealtimeCacheTest {
         FundEstimateSnapshot estimate = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(redisStore.load()).thenReturn(Optional.of(new MarketRealtimeRedisStore.Snapshot(
-                List.of(index), new MarketBreadthSnapshot(3000, 2000, 42, 25), List.of(), null,
+                List.of(index), new MarketBreadthSnapshot(3000, 2000, 100, 42, 25), List.of(), null,
                 Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE))));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
@@ -60,6 +60,23 @@ class MarketRealtimeCacheTest {
 
         assertThat(cache.getIndices()).containsExactly(index);
         assertThat(cache.getEstimates(List.of("510300"))).containsEntry("510300", estimate);
+    }
+
+    @Test
+    void restoreFromRedis_旧快照缺平盘数时不恢复市场宽度() {
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        when(redisStore.load()).thenReturn(Optional.of(new MarketRealtimeRedisStore.Snapshot(
+                List.of(), new MarketBreadthSnapshot(3000, 2000, null, 42, 25), List.of(), null,
+                Map.of(), Map.of())));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
+                mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore,
+                mock(ThsIndexFlashClient.class));
+
+        cache.restoreFromRedis();
+
+        assertThat(cache.getBreadth()).isNull();
+        assertThat(cache.getMarketUpdatedAt()).isNull();
     }
 
     @Test
@@ -73,9 +90,9 @@ class MarketRealtimeCacheTest {
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn("""
                 {"data":{"diff":[
                   {"f2":400000,"f3":20,"f4":800,"f6":1000,"f12":"000300","f14":"沪深300"},
-                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f14":"上证指数","f104":1542,"f105":763},
-                  {"f2":120000,"f3":30,"f4":400,"f6":3000,"f12":"399001","f14":"深证成指","f104":2012,"f105":872},
-                  {"f2":150000,"f3":40,"f4":500,"f6":4000,"f12":"899050","f14":"北证50","f104":260,"f105":66}
+                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f14":"上证指数","f104":1542,"f105":763,"f106":84},
+                  {"f2":120000,"f3":30,"f4":400,"f6":3000,"f12":"399001","f14":"深证成指","f104":2012,"f105":872,"f106":65},
+                  {"f2":150000,"f3":40,"f4":500,"f6":4000,"f12":"899050","f14":"北证50","f104":260,"f105":66,"f106":4}
                 ]}}
                 """);
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
@@ -91,7 +108,38 @@ class MarketRealtimeCacheTest {
                         && secids.contains("0.399001")
                         && secids.contains("0.899050")));
         assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000300");
-        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(3814, 1701, 42, 25));
+        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(3814, 1701, 153, 42, 25));
+    }
+
+    @Test
+    void getMarketUpdatedAt_返回指数宽度行业中最旧的成功刷新时间() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-10T05:30:00Z"));
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi watchedIndices = mock(WatchedIndicesApi.class);
+        ThsIndexFlashClient indexFlash = mock(ThsIndexFlashClient.class);
+        when(watchedIndices.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(anyString())).thenReturn("""
+                {"data":{"diff":[
+                  {"f12":"000001","f104":100,"f105":50,"f106":10},
+                  {"f12":"399001","f104":200,"f105":80,"f106":20},
+                  {"f12":"899050","f104":30,"f105":10,"f106":3}
+                ]}}
+                """);
+        when(indexFlash.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
+        when(push2Client.fetchSectorListRaw("f3"))
+                .thenReturn("{\"data\":{\"diff\":[{\"f3\":100,\"f6\":1000,\"f12\":\"BK1\",\"f14\":\"测试行业\"}]}}")
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), watchedIndices,
+                mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), clock,
+                mock(MarketRealtimeRedisStore.class), indexFlash);
+
+        cache.refreshRealtimeWithoutEstimates();
+        Instant firstCompleteRefresh = clock.instant();
+        clock.advance(Duration.ofSeconds(30));
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getMarketUpdatedAt()).isEqualTo(firstCompleteRefresh);
     }
 
     @Test
@@ -105,9 +153,9 @@ class MarketRealtimeCacheTest {
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"data":{"diff":[
-                          {"f12":"000001","f104":100,"f105":50},
-                          {"f12":"399001","f104":200,"f105":80},
-                          {"f12":"899050","f104":30,"f105":10}
+                          {"f12":"000001","f104":100,"f105":50,"f106":10},
+                          {"f12":"399001","f104":200,"f105":80,"f106":20},
+                          {"f12":"899050","f104":30,"f105":10,"f106":3}
                         ]}}
                         """)
                 .thenReturn("""
@@ -124,7 +172,7 @@ class MarketRealtimeCacheTest {
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
 
-        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(330, 140, 42, 25));
+        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(330, 140, 33, 42, 25));
     }
 
     @Test
@@ -133,9 +181,9 @@ class MarketRealtimeCacheTest {
         ThsIndexFlashClient indexFlashClient = mock(ThsIndexFlashClient.class);
         String raw = """
                 {"data":{"diff":[
-                  {"f12":"000001","f104":100,"f105":50},
-                  {"f12":"399001","f104":200,"f105":80},
-                  {"f12":"899050","f104":30,"f105":10}
+                  {"f12":"000001","f104":100,"f105":50,"f106":10},
+                  {"f12":"399001","f104":200,"f105":80,"f106":20},
+                  {"f12":"899050","f104":30,"f105":10,"f106":3}
                 ]}}
                 """;
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn(raw);
@@ -149,7 +197,7 @@ class MarketRealtimeCacheTest {
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
 
-        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(330, 140, 42, 25));
+        assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(330, 140, 33, 42, 25));
     }
 
     @Test

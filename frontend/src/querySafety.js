@@ -42,10 +42,13 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             estimateTime: estimate?.estimateTime,
             valuationSource: fund.valuationSource,
             valuationDate: fund.valuationDate,
+            valuationFirstSeenAt: fund.valuationFirstSeenAt,
+            valuationNav: fund.valuationNav,
             holdingShares: fund.holdingShares,
             holdingAmount: fund.holdingAmount,
             dailyPnl: fund.dailyPnl,
             totalPnl: fund.totalPnl,
+            returnRate: fund.returnRate,
             status: fund.status,
             groups: fund.groups || [],
         };
@@ -54,4 +57,39 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
 
 export function selectHoldingRows(rows) {
     return (rows || []).filter((row) => row.status === 'HOLDING' && Number(row.holdingAmount) > 0);
+}
+
+export function selectContributors(funds) {
+    const rows = selectHoldingRows(funds)
+        .filter((fund) => Number.isFinite(Number(fund.dailyPnl)));
+    return {
+        contributor: rows.filter((fund) => Number(fund.dailyPnl) > 0)
+            .sort((a, b) => Number(b.dailyPnl) - Number(a.dailyPnl))[0] || null,
+        detractor: rows.filter((fund) => Number(fund.dailyPnl) < 0)
+            .sort((a, b) => Number(a.dailyPnl) - Number(b.dailyPnl))[0] || null,
+    };
+}
+
+export function mainforceRatio(sector) {
+    if (sector?.mainforceNet == null || sector?.turnover == null) return null;
+    const net = Number(sector.mainforceNet);
+    const turnover = Number(sector.turnover);
+    return Number.isFinite(net) && Number.isFinite(turnover) && turnover > 0 ? net / turnover : null;
+}
+
+export function sortSectors(sectors, sortBy) {
+    return [...(sectors || [])].sort((left, right) => {
+        const a = sectorSortValue(left, sortBy);
+        const b = sectorSortValue(right, sortBy);
+        if (a == null) return b == null ? 0 : 1;
+        if (b == null) return -1;
+        return b - a;
+    });
+}
+
+function sectorSortValue(sector, sortBy) {
+    const raw = sector?.[sortBy];
+    if (sortBy !== 'mainforceRatio' && raw == null) return null;
+    const value = sortBy === 'mainforceRatio' ? mainforceRatio(sector) : Number(raw);
+    return Number.isFinite(value) ? value : null;
 }

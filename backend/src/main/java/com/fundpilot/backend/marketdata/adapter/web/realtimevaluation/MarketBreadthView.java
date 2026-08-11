@@ -6,6 +6,7 @@ import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.Re
  * 沪深京股票市场宽度视图。
  *
  * @param risingCount  上涨股票家数
+ * @param flatCount 平盘股票家数
  * @param fallingCount 下跌股票家数
  * @param limitUpCount 涨停股票家数
  * @param limitDownCount 跌停股票家数
@@ -13,12 +14,13 @@ import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.Re
 public record MarketBreadthView(
         int risingCount,
         int fallingCount,
+        Integer flatCount,
         Integer limitUpCount,
         Integer limitDownCount) {
 
     public static MarketBreadthView from(Breadth snapshot) {
         return snapshot == null ? null : new MarketBreadthView(
                 snapshot.risingCount(), snapshot.fallingCount(),
-                snapshot.limitUpCount(), snapshot.limitDownCount());
+                snapshot.flatCount(), snapshot.limitUpCount(), snapshot.limitDownCount());
     }
 }

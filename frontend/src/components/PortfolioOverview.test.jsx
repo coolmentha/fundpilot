@@ -27,7 +27,7 @@ describe('PortfolioOverview', () => {
     it('展示完整市场宽度中的涨停和跌停家数', async () => {
         usePortfolioSummary.mockReturnValue({data: {}, isLoading: false, isError: false});
         useMarketBreadth.mockReturnValue({data: {
-            risingCount: 3814, fallingCount: 1701, limitUpCount: 42, limitDownCount: 25,
+            risingCount: 3814, flatCount: 153, fallingCount: 1701, limitUpCount: 42, limitDownCount: 25,
         }, isError: false});
         container = document.createElement('div');
         document.body.appendChild(container);
@@ -37,6 +37,7 @@ describe('PortfolioOverview', () => {
 
         expect(container.textContent).toContain('涨停 42');
         expect(container.textContent).toContain('跌停 25');
+        expect(container.textContent).toContain('平盘 153');
         expect(container.querySelector('.market-breadth-bar').getAttribute('aria-label')).toContain('涨停 42 只');
     });
 });

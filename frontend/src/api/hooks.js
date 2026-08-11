@@ -492,6 +492,16 @@ export function useMarketBreadth() {
     });
 }
 
+/** A 股交易状态与工作台核心行情时效,30 秒轮询。 */
+export function useMarketStatus() {
+    return useQuery({
+        queryKey: ['market', 'status'],
+        queryFn: () => get('/api/market/status'),
+        refetchInterval: 30_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
 /** 批量基金盘中估值,10 秒轮询。codes 为空时不启用。 */
 export function useFundEstimates(codes) {
     const codeStr = (codes || []).filter(Boolean).join(',');

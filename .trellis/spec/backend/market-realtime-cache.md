@@ -22,6 +22,7 @@ GET /api/market/breadth              → MarketBreadthView
 GET /api/market/funds/estimates?codes=xxx,yyy → Map<String, FundEstimateView>
 GET /api/market/sectors              → List<SectorView>
 GET /api/market/money-flow           → MoneyFlowView
+GET /api/market/status               → MarketStatusView
 GET /api/funds/{fundId}/kline?period=daily|weekly|monthly → KlineView
 ```
 
@@ -32,6 +33,7 @@ public List<IndexRealtimeSnapshot> getIndices();        // 读进程内副本，
 public MarketBreadthSnapshot getBreadth();              // 沪深京股票涨跌、涨停、跌停家数
 public List<SectorSnapshot> getSectors();
 public MoneyFlowSnapshot getMoneyFlow();
+public Instant getMarketUpdatedAt();                      // 指数/宽度/行业中最旧的成功刷新时间
 public Map<String, FundEstimateSnapshot> getEstimates(List<String> codes); // 只读缓存,不拉外部接口
 public EstimateStatus getEstimateStatus(String code);
 public Map<String, EstimateStatus> getEstimateStatuses(List<String> codes);
@@ -67,8 +69,9 @@ public void refreshFundEstimates(); // A 股交易时段刷新非 QDII 平台基
 | 数据类型 | 后端刷新 | 前端轮询 | 理由 |
 |---------|---------|---------|------|
 | 指数实时 | 30s | 5s | 单请求批量,快 |
-| 板块涨跌 | 30s | 30s | 单请求 |
+| 行业涨跌 | 30s | 30s | 单请求，`pz=100` 覆盖当前完整行业范围 |
 | 行业主力资金 | 30s | 30s | 随板块快照批量返回 |
+| 市场状态/快照时间 | 随核心行情刷新 | 30s | 只读缓存与交易日历 |
 | 基金估值 | **30s** | 10s | 仅覆盖非 QDII 基金的 A 股交易时段；失败立即失效该基金旧估值 |
 
 **关键不变量**:前端轮询频率 > 后端刷新频率。前端读内存零外部请求,
@@ -103,7 +106,7 @@ N 个前端客户端共享同一份缓存。
 | 价格类 | f2, f4 | ÷100 | f2=404364 → 4043.64 |
 | 百分比类 | f3 | ÷100 | f3=37 → 0.37% |
 | 金额类 | f5, f6, f62, f66, f72, f78, f84 | 原值(元) | f6=1465563104853.7 |
-| 家数类 | f104, f105 | 非负整数原值 | f104=1542 表上涨 1542 只 |
+| 家数类 | f104, f105, f106 | 非负整数原值 | f104=1542 表上涨 1542 只，f106 表平盘家数 |
 
 **陷阱**:f2/f3/f4 必须在解析器里 ÷100 还原,f6/f62 等金额字段原值。
 混用会导致指数点位差 100 倍或涨跌幅放大 100 倍。
@@ -111,12 +114,70 @@ N 个前端客户端共享同一份缓存。
 ### 市场宽度契约
 
 - 固定汇总三个市场 secid:`1.000001`(沪市)、`0.399001`(深市)、`0.899050`(北交所)。
-- `f104` 为上涨家数，`f105` 为下跌家数；三者分别求和后写入 `MarketBreadthSnapshot`。
+- `f104` 为上涨家数，`f105` 为下跌家数，`f106` 为平盘家数；三个固定市场分别求和后写入 `MarketBreadthSnapshot`。
 - 同花顺 `https://q.10jqka.com.cn/api.php?t=indexflash` 的 `zdt_data.zd_time`、`ztzs`、`dtzs` 必须为等长非空数组；取末项的非负整数作为涨停、跌停家数。客户端每轮先访问主页建立内存 Cookie 会话，再请求统计接口；不得保存、配置或记录 Cookie 值。
 - 这些字段表示当日有涨跌状态的沪深京股票，不等于全部上市 A 股总数，前端文案使用“大盘涨跌 / 沪深京股票”。
 - 市场宽度与用户 `watchedIndices` 解耦。缓存刷新时将自选 secid 与固定三个 secid 去重合并，一次调用 `fetchIndexRealtimeRaw`，再分别投影到 `indexCache` 与 `breadthCache`。
-- 任一固定市场缺失，任一 `f104/f105` 缺失、非整数、负数，或同花顺主页、接口、解析失败时，不得发布部分市场合计，已有完整 `breadthCache` 保持不变。旧 Redis 两项快照不恢复，直到取得四项完整快照。
+- 任一固定市场缺失，任一 `f104/f105/f106` 缺失、非整数、负数，或同花顺主页、接口、解析失败时，不得发布部分市场合计，已有完整 `breadthCache` 保持不变。旧 Redis 快照缺 `flatCount` 时不恢复，直到取得上涨、平盘、下跌、涨停、跌停五项完整快照。
 - 前端进度条左红表示上涨、右绿表示下跌，比例分母仅为 `risingCount + fallingCount`，平盘不参与。合计为 0 或接口数据为空时显示空轨道。
+
+## Scenario: 工作台核心行情时效与完整宽度
+
+### 1. Scope / Trigger
+
+- 触发：工作台展示市场状态、最后成功快照时间和五项市场宽度，需要前后端与 Redis 共用同一时效契约。
+
+### 2. Signatures
+
+```text
+GET /api/market/status → { marketState, updatedAt }
+GET /api/market/breadth → { risingCount, fallingCount, flatCount, limitUpCount, limitDownCount }
+```
+
+```java
+public Instant getMarketUpdatedAt();
+```
+
+### 3. Contracts
+
+- `MarketRealtimeCache` 分别保存 `indicesUpdatedAt`、`breadthUpdatedAt`、`sectorsUpdatedAt`，仅在对应数据族成功替换时更新。
+- Redis `Snapshot` 持久化三个时间；旧 JSON 缺字段时保持 `null`。
+- 三个时间都存在时，`updatedAt` 取其最旧值；否则返回 `null`。
+- 市场状态使用现有交易日历与 `Asia/Shanghai`：`PRE_OPEN`、`TRADING`、`LUNCH_BREAK`、`CLOSED`、`NON_TRADING_DAY`。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|------|------|
+| 固定市场缺失或 `f104/f105/f106` 任一无效 | 保留旧完整宽度与旧时间 |
+| 同花顺涨跌停失败 | 保留旧完整宽度与旧时间 |
+| 指数、宽度、行业任一时间为 `null` | `updatedAt=null` |
+| 非交易日 | `marketState=NON_TRADING_DAY` |
+
+### 5. Good / Base / Bad Cases
+
+- Good：三类数据都成功刷新，返回三个时间中最旧值和完整五项宽度。
+- Base：旧 Redis JSON 缺时间或 `flatCount`，可反序列化，但返回空时效/宽度直到下次成功刷新。
+- Bad：外部响应为空或部分市场缺字段，不得推进对应时间或发布部分快照。
+
+### 6. Tests Required
+
+- 解析器：`f106` 完整求和，缺失/负数/非整数返回空宽度。
+- 缓存：失败刷新不改旧快照和时间，三类成功时间取最小值。
+- Redis：新字段往返一致，旧 JSON 缺字段为 `null`。
+- 状态：覆盖 09:30、11:30、13:00、15:00 边界与非交易日。
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: 读取接口或部分刷新成功时伪造整体时效
+updatedAt = clock.instant();
+
+// Correct: 只在三类成功时间齐全时返回最旧值
+if (indicesUpdatedAt == null || breadthUpdatedAt == null || sectorsUpdatedAt == null) return null;
+return Stream.of(indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt)
+        .min(Instant::compareTo).orElse(null);
+```
 
 ### 交易时段判断契约
 

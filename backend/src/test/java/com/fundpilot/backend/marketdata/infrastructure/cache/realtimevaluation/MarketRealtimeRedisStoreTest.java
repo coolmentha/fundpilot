@@ -34,7 +34,7 @@ class MarketRealtimeRedisStoreTest {
         MarketRealtimeRedisStore.Snapshot expected = new MarketRealtimeRedisStore.Snapshot(
                 List.of(new IndexRealtimeSnapshot("1.000001", "上证指数", new BigDecimal("3500.12"),
                         new BigDecimal("12.34"), new BigDecimal("0.0035"), new BigDecimal("123456"))),
-                new MarketBreadthSnapshot(3000, 2000, 42, 25),
+                new MarketBreadthSnapshot(3000, 2000, 100, 42, 25),
                 List.of(new SectorSnapshot("BK0420", "航空机场", new BigDecimal("0.01"),
                         new BigDecimal("1000"), new BigDecimal("200"))),
                 new MoneyFlowSnapshot(new BigDecimal("300"), Instant.parse("2026-07-20T06:00:00Z")),
@@ -44,7 +44,9 @@ class MarketRealtimeRedisStoreTest {
                 Map.of("510300", new FundIntradayChart("2026-07-20", "2026-07-19", new BigDecimal("1.0000"),
                         List.of(new FundIntradayChart.Point("09:30", new BigDecimal("1.0010"))),
                         List.of(new FundIntradayChart.TradingSession("09:30", "11:30"),
-                                new FundIntradayChart.TradingSession("13:00", "15:00")))));
+                                new FundIntradayChart.TradingSession("13:00", "15:00")))),
+                Instant.parse("2026-07-20T06:00:00Z"), Instant.parse("2026-07-20T06:00:01Z"),
+                Instant.parse("2026-07-20T06:00:02Z"));
 
         store.save(expected);
 
@@ -52,5 +54,25 @@ class MarketRealtimeRedisStoreTest {
         verify(values).set(anyString(), json.capture());
         when(values.get(anyString())).thenReturn(json.getValue());
         assertThat(store.load()).contains(expected);
+    }
+
+    @Test
+    void load_旧JSON缺平盘数和更新时间时保持为空() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(values);
+        when(values.get(anyString())).thenReturn("""
+                {"indices":[],"breadth":{"risingCount":3000,"fallingCount":2000,
+                 "limitUpCount":42,"limitDownCount":25},"sectors":[],"moneyFlow":null,
+                 "estimates":{},"estimateStatuses":{},"intradayCharts":{}}
+                """);
+
+        MarketRealtimeRedisStore.Snapshot snapshot = new MarketRealtimeRedisStore(redisTemplate).load().orElseThrow();
+
+        assertThat(snapshot.breadth().flatCount()).isNull();
+        assertThat(snapshot.indicesUpdatedAt()).isNull();
+        assertThat(snapshot.breadthUpdatedAt()).isNull();
+        assertThat(snapshot.sectorsUpdatedAt()).isNull();
     }
 }

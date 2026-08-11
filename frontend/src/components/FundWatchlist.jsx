@@ -10,20 +10,12 @@ import FundGroupTabs from './FundGroupTabs.jsx';
 import {ALL_GROUPS_KEY, filterFundsByGroup, getStoredFundGroup, storeFundGroup} from '../fundGroups.js';
 import {valuationStatusText} from './valuationStatusText.js';
 
-/**
- * 自选基金行情列表:展示所有持仓/观察基金的实时涨跌(来自 fundgz 盘中估值)。
- *
- * <p>与 FundsPage 的差异:FundsPage 是档案管理(CRUD),本组件是行情看板
- * (实时涨跌排序、点击进详情)。涨跌数据来自 useFundEstimates(盘中估值缓存),
- * 失败时明确显示失败状态,不回退旧估值或上一交易日数据。
- *
- * <p>支持按涨跌幅排序(默认降序,涨幅大的在前)。
- */
+/** 行情工作台持仓表现，默认按今日盈亏贡献降序。 */
 export default function FundWatchlist() {
     const {data: funds, isLoading: fundsLoading, isError: fundsError, refetch: refetchFunds} = useFunds();
     const {data: fundGroups} = useFundGroups();
     const [activeGroup, setActiveGroup] = useState(getStoredFundGroup);
-    const codes = (funds || []).map((f) => f.fundCode).filter(Boolean);
+    const codes = (funds || []).map((fund) => fund.fundCode).filter(Boolean);
     const {
         data: estimates,
         isFetched: estimatesFetched,
@@ -31,9 +23,7 @@ export default function FundWatchlist() {
         refetch: refetchEstimates,
     } = useFundEstimates(codes);
 
-    // 合并基金档案 + 实时估值。失败态优先,防止两个轮询接口刷新时序不同导致旧估值回退。
     const rows = buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError});
-
     const effectiveActiveGroup = activeGroup === ALL_GROUPS_KEY
         || (fundGroups || []).some((group) => String(group.id) === activeGroup) ? activeGroup : ALL_GROUPS_KEY;
 
@@ -41,87 +31,75 @@ export default function FundWatchlist() {
         {
             title: '基金',
             dataIndex: 'fundName',
-            width: 260,
+            width: 240,
             ellipsis: true,
-            render: (v, r) => (
+            render: (value, row) => (
                 <span className="watchlist-name-cell">
-                    <Link className="watchlist-name-text" title={v} to={`/funds/${r.id}`}>
-                        <strong>{v}</strong><small>{r.fundCode} · {text(r.fundSubType)}</small>
+                    <Link className="watchlist-name-text" title={value} to={`/funds/${row.id}`}>
+                        <strong>{value}</strong><small>{row.fundCode} · {text(row.fundSubType)}</small>
                     </Link>
                 </span>
             ),
         },
         {
             title: '持仓市值', dataIndex: 'holdingAmount', width: 130, align: 'right',
-            render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{money(v)}</span>,
+            render: (value) => value == null
+                ? <span className="muted">-</span>
+                : <span className="num-cell">{money(value)}</span>,
         },
         {
-            title: '仓位', dataIndex: 'allocationPct', width: 80, align: 'right',
-            render: (v) => v == null ? <span className="muted">-</span> : <span className="num-cell">{v.toFixed(1)}%</span>,
+            title: '累计收益率', dataIndex: 'returnRate', width: 120, align: 'right',
+            sorter: (a, b) => numericSort(a.returnRate, b.returnRate),
+            render: (value) => (
+                <span className="num-cell" style={{color: pnlColor(value)}}>{signedPercent(value)}</span>
+            ),
         },
         {
-            title: '涨跌幅',
+            title: '今日涨跌',
             dataIndex: 'changePct',
-            width: 110,
+            width: 120,
             align: 'right',
-            sorter: (a, b) => (a.changePct ?? -Infinity) - (b.changePct ?? -Infinity),
-            defaultSortOrder: 'descend',
-            render: (v, r) => {
-                const statusText = estimateStatusText(r.estimateStatus);
-                if (statusText) return <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{statusText}</span>;
-                if (v === null || v === undefined) return <span className="muted">-</span>;
-                const color = pnlColor(v);
-                const isUp = Number(v) > 0;
-                const isDown = Number(v) < 0;
+            sorter: (a, b) => numericSort(a.changePct, b.changePct),
+            render: (value, row) => {
+                const status = displayEstimateStatus(row);
+                if (status) return <span className={row.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{status}</span>;
+                if (value == null) return <span className="muted">-</span>;
                 return (
-                    <span style={{color}}>
-                        {isUp && <ArrowUpOutlined/>}
-                        {isDown && <ArrowDownOutlined/>}
-                        <span style={{marginLeft: 4}}>{signedPercent(v)}</span>
-                        {r.isEstimated && <span className="estimate-tag" title={`估值时间 ${r.estimateTime || ''}`}>估</span>}
+                    <span style={{color: pnlColor(value)}}>
+                        {Number(value) > 0 && <ArrowUpOutlined/>}
+                        {Number(value) < 0 && <ArrowDownOutlined/>}
+                        <span style={{marginLeft: 4}}>{signedPercent(value)}</span>
                     </span>
                 );
             },
         },
         {
-            title: '当日收益',
+            title: '今日盈亏',
             dataIndex: 'dailyPnl',
-            width: 120,
+            width: 130,
             align: 'right',
-            responsive: ['sm'],
-            render: (v, r) => estimateStatusText(r.estimateStatus)
-                ? <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{estimateStatusText(r.estimateStatus)}</span>
-                : v !== null && v !== undefined
-                    ? <span className="num-cell" style={{color: pnlColor(v)}}>{signedMoney(v)}</span>
-                    : <span className="muted">-</span>,
+            sorter: (a, b) => numericSort(a.dailyPnl, b.dailyPnl),
+            defaultSortOrder: 'descend',
+            render: (value, row) => displayEstimateStatus(row)
+                ? <span className={row.estimateFetchFailed ? 'estimate-failure' : 'muted'}>
+                    {displayEstimateStatus(row)}
+                </span>
+                : value == null
+                    ? <span className="muted">-</span>
+                    : <span className="num-cell" style={{color: pnlColor(value)}}>{signedMoney(value)}</span>,
         },
         {
-            title: '数据状态', width: 110, align: 'right',
-            render: (_, r) => <span className={r.estimateFetchFailed ? 'estimate-failure' : 'muted'}>
-                {estimateStatusText(r.estimateStatus) || (r.isEstimated
-                    ? '盘中估值'
-                    : r.investmentTarget === 'QDII' && r.valuationSource === 'LATEST_CONFIRMED_NAV'
-                        ? `确认净值 ${date(r.valuationDate)}${r.valuationFirstSeenAt ? ` · 平台发现 ${datetime(r.valuationFirstSeenAt)}` : ''}`
-                        : valuationStatusText(r))}
-            </span>,
+            title: '估值 / 确认净值', width: 250,
+            render: (_, row) => <ValuationCell row={row}/>,
         },
     ];
 
     if (fundsError) {
-        return (
-            <div className="fund-watchlist">
-                <QueryErrorState onRetry={refetchFunds} description="基金列表加载失败"/>
-            </div>
-        );
+        return <div className="fund-watchlist"><QueryErrorState onRetry={refetchFunds} description="基金列表加载失败"/></div>;
     }
 
-    const holdingRows = filterFundsByGroup(selectHoldingRows(rows), effectiveActiveGroup);
-    const totalHoldingAmount = holdingRows.reduce((sum, r) => sum + Number(r.holdingAmount), 0);
-    const displayRows = holdingRows.map((r) => ({
-        ...r,
-        allocationPct: totalHoldingAmount > 0
-            ? Number(r.holdingAmount || 0) / totalHoldingAmount * 100 : null,
-    }));
+    const displayRows = filterFundsByGroup(selectHoldingRows(rows), effectiveActiveGroup)
+        .sort((a, b) => numericSort(b.dailyPnl, a.dailyPnl));
 
     return (
         <div className="fund-watchlist">
@@ -132,7 +110,6 @@ export default function FundWatchlist() {
                 setActiveGroup(groupKey);
                 storeFundGroup(groupKey);
             }}/>
-            <div className="watchlist-layout">
             <Table
                 dataSource={displayRows}
                 columns={columns}
@@ -140,24 +117,42 @@ export default function FundWatchlist() {
                 size="small"
                 pagination={false}
                 tableLayout="fixed"
-                rowClassName={(r) => r.status === 'HOLDING' ? 'row-holding' : ''}
+                rowClassName={(row) => row.status === 'HOLDING' ? 'row-holding' : ''}
                 locale={{emptyText: (
-                    <span className="muted">
-                        暂无基金,<Link to="/funds">去「我的基金」添加</Link>
-                    </span>
+                    <span className="muted">暂无基金，<Link to="/funds">去「我的基金」添加</Link></span>
                 )}}
             />
-            <aside className="allocation-panel" aria-label="仓位构成">
-                <div className="allocation-title"><strong>仓位构成</strong><span>100%</span></div>
-                {displayRows.filter((r) => r.allocationPct != null)
-                    .sort((a, b) => b.allocationPct - a.allocationPct).map((r) => (
-                    <div className="allocation-item" key={r.id}>
-                        <div><span title={r.fundName}>{r.fundName}</span><strong>{r.allocationPct.toFixed(1)}%</strong></div>
-                        <div className="allocation-bar"><i style={{width: `${r.allocationPct}%`}}/></div>
-                    </div>
-                ))}
-            </aside>
-            </div>
         </div>
     );
+}
+
+function ValuationCell({row}) {
+    const status = estimateStatusText(row.estimateStatus);
+    if (status && row.valuationNav == null) {
+        return <span className={row.estimateFetchFailed ? 'estimate-failure' : 'muted'}>{status}</span>;
+    }
+    const nav = row.valuationNav == null ? '-' : Number(row.valuationNav).toFixed(4);
+    if (row.isEstimated) {
+        return <span className="valuation-cell"><strong>盘中估值 {nav}</strong><small>{row.estimateTime || '-'}</small></span>;
+    }
+    const observedAt = row.valuationFirstSeenAt
+        ? `平台发现 ${datetime(row.valuationFirstSeenAt)}`
+        : date(row.valuationDate);
+    return (
+        <span className="valuation-cell">
+            <strong>{valuationStatusText(row)} · {nav}</strong>
+            <small>{observedAt}</small>
+        </span>
+    );
+}
+
+function displayEstimateStatus(row) {
+    return row.investmentTarget === 'QDII' && row.valuationSource === 'LATEST_CONFIRMED_NAV'
+        ? null : estimateStatusText(row.estimateStatus);
+}
+
+function numericSort(left, right) {
+    const a = left == null || !Number.isFinite(Number(left)) ? -Infinity : Number(left);
+    const b = right == null || !Number.isFinite(Number(right)) ? -Infinity : Number(right);
+    return a - b;
 }
