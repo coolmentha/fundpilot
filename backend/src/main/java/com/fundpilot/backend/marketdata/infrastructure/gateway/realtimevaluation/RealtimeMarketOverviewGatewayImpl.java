@@ -29,7 +29,7 @@ class RealtimeMarketOverviewGatewayImpl implements RealtimeMarketOverviewGateway
     public Breadth findBreadth() {
         var value = cache.getBreadth();
         return value == null ? null : new Breadth(value.risingCount(), value.fallingCount(),
-                value.limitUpCount(), value.limitDownCount());
+                value.flatCount(), value.limitUpCount(), value.limitDownCount());
     }
 
     @Override
@@ -49,5 +49,10 @@ class RealtimeMarketOverviewGatewayImpl implements RealtimeMarketOverviewGateway
     public MoneyFlow findMoneyFlow() {
         var value = cache.getMoneyFlow();
         return value == null ? null : new MoneyFlow(value.northboundNet(), value.snapshotTime());
+    }
+
+    @Override
+    public java.time.Instant findUpdatedAt() {
+        return cache.getMarketUpdatedAt();
     }
 }

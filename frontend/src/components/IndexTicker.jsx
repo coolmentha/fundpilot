@@ -2,7 +2,7 @@ import {Skeleton} from 'antd';
 import {ArrowUpOutlined, ArrowDownOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
 import {useRealtimeIndices} from '../api/hooks.js';
-import {signedPercent, pnlColor} from '../constants.js';
+import {compactMoney, signedPercent, pnlColor} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
 /**
@@ -57,9 +57,11 @@ export default function IndexTicker() {
                             {isUp && <ArrowUpOutlined/>}
                             {isDown && <ArrowDownOutlined/>}
                             <span className="index-pct">{signedPercent(idx.changePct)}</span>
-                            {idx.changeAmount !== null && idx.changeAmount !== undefined && (
-                                <span className="index-amount">{formatPrice(idx.changeAmount)}</span>
-                            )}
+                            <span className="index-amount">
+                                {Number(idx.turnover) > 0
+                                    ? `成交额 ${compactMoney(idx.turnover)}`
+                                    : `涨跌额 ${formatPrice(idx.changeAmount)}`}
+                            </span>
                         </div>
                     </div>
                 );

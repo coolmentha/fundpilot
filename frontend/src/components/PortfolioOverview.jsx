@@ -37,14 +37,17 @@ export default function PortfolioOverview() {
     const coveredFundCount = summary?.dailyCoveredFundCount ?? 0;
     const missingEstimateCount = Math.max(holdingFundCount - coveredFundCount, estimateFetchFailedCount);
     const risingStockCount = breadth?.risingCount;
+    const flatStockCount = breadth?.flatCount;
     const fallingStockCount = breadth?.fallingCount;
     const limitUpCount = breadth?.limitUpCount;
     const limitDownCount = breadth?.limitDownCount;
     const hasBreadth = Number.isFinite(risingStockCount)
+        && Number.isFinite(flatStockCount)
         && Number.isFinite(fallingStockCount)
         && Number.isFinite(limitUpCount)
         && Number.isFinite(limitDownCount)
         && risingStockCount >= 0
+        && flatStockCount >= 0
         && fallingStockCount >= 0
         && limitUpCount >= 0
         && limitDownCount >= 0;
@@ -52,7 +55,7 @@ export default function PortfolioOverview() {
     const risingPercent = breadthTotal > 0 ? (risingStockCount / breadthTotal) * 100 : 0;
     const fallingPercent = breadthTotal > 0 ? 100 - risingPercent : 0;
     const breadthAriaLabel = breadthTotal > 0
-        ? `沪深京股票上涨 ${risingStockCount} 只，占 ${risingPercent.toFixed(1)}%；下跌 ${fallingStockCount} 只，占 ${fallingPercent.toFixed(1)}%；涨停 ${limitUpCount} 只；跌停 ${limitDownCount} 只`
+        ? `沪深京股票上涨 ${risingStockCount} 只，占 ${risingPercent.toFixed(1)}%；平盘 ${flatStockCount} 只；下跌 ${fallingStockCount} 只，占 ${fallingPercent.toFixed(1)}%；涨停 ${limitUpCount} 只；跌停 ${limitDownCount} 只`
         : '沪深京股票涨跌数据暂不可用';
 
     return (
@@ -106,6 +109,9 @@ export default function PortfolioOverview() {
                     <span className="market-breadth-stat up">
                         上涨 <strong>{hasBreadth ? risingStockCount : '-'}</strong>
                         {breadthTotal > 0 && <small>{risingPercent.toFixed(1)}%</small>}
+                    </span>
+                    <span className="market-breadth-stat neutral">
+                        平盘 <strong>{hasBreadth ? flatStockCount : '-'}</strong>
                     </span>
                     <span className="market-breadth-stat down">
                         下跌 <strong>{hasBreadth ? fallingStockCount : '-'}</strong>

@@ -240,7 +240,8 @@ public final class EastmoneyJsParser {
      * 解析沪深京股票市场上涨、下跌家数。
      *
      * <p>调用方传入上证、深证、北证三个固定市场 secid。只有全部市场均存在且
-     * f104(上涨家数)、f105(下跌家数)完整时才返回汇总，避免发布部分市场数据。
+     * f104(上涨家数)、f105(下跌家数)、f106(平盘家数)完整时才返回汇总，
+     * 避免发布部分市场数据。
      *
      * @param rawJson      ulist.np 响应文本
      * @param marketSecids 必须完整参与汇总的市场 secid
@@ -267,6 +268,7 @@ public final class EastmoneyJsParser {
 
             int risingCount = 0;
             int fallingCount = 0;
+            int flatCount = 0;
             for (String secid : marketSecids) {
                 int dot = secid.indexOf('.');
                 if (dot < 0 || dot == secid.length() - 1) {
@@ -278,13 +280,15 @@ public final class EastmoneyJsParser {
                 }
                 Integer rising = integerOrNull(node, "f104");
                 Integer falling = integerOrNull(node, "f105");
-                if (rising == null || falling == null) {
+                Integer flat = integerOrNull(node, "f106");
+                if (rising == null || falling == null || flat == null) {
                     return null;
                 }
                 risingCount = Math.addExact(risingCount, rising);
                 fallingCount = Math.addExact(fallingCount, falling);
+                flatCount = Math.addExact(flatCount, flat);
             }
-            return new MarketBreadthSnapshot(risingCount, fallingCount);
+            return new MarketBreadthSnapshot(risingCount, fallingCount, flatCount);
         } catch (java.io.IOException | ArithmeticException e) {
             throw new IllegalStateException("市场宽度 JSON 解析失败", e);
         }

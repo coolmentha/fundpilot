@@ -87,6 +87,9 @@ public class MarketRealtimeCache {
     private volatile MarketBreadthSnapshot breadthCache = null;
     private volatile List<SectorSnapshot> sectorCache = List.of();
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
+    private volatile Instant indicesUpdatedAt;
+    private volatile Instant breadthUpdatedAt;
+    private volatile Instant sectorsUpdatedAt;
     private final Map<String, FundEstimateSnapshot> estimateCache = new ConcurrentHashMap<>();
     private final Map<String, FundIntradayChart> intradayCache = new ConcurrentHashMap<>();
     private final Map<String, EstimateStatus> estimateStatuses = new ConcurrentHashMap<>();
@@ -99,9 +102,12 @@ public class MarketRealtimeCache {
         redisStore.load().ifPresent(snapshot -> {
             indexCache = snapshot.indices() == null ? List.of() : List.copyOf(snapshot.indices());
             MarketBreadthSnapshot restoredBreadth = snapshot.breadth();
-            breadthCache = restoredBreadth != null && restoredBreadth.hasLimitCounts() ? restoredBreadth : null;
+            breadthCache = restoredBreadth != null && restoredBreadth.isComplete() ? restoredBreadth : null;
             sectorCache = snapshot.sectors() == null ? List.of() : List.copyOf(snapshot.sectors());
             moneyFlowCache = snapshot.moneyFlow();
+            indicesUpdatedAt = snapshot.indicesUpdatedAt();
+            breadthUpdatedAt = breadthCache == null ? null : snapshot.breadthUpdatedAt();
+            sectorsUpdatedAt = snapshot.sectorsUpdatedAt();
             if (snapshot.estimateStatuses() != null) {
                 estimateStatuses.putAll(snapshot.estimateStatuses());
             }
@@ -150,6 +156,15 @@ public class MarketRealtimeCache {
     /** 读北向资金缓存。 */
     public MoneyFlowSnapshot getMoneyFlow() {
         return moneyFlowCache;
+    }
+
+    /** 工作台核心行情中最旧的成功刷新时间；任一数据族未成功刷新时返回 null。 */
+    public Instant getMarketUpdatedAt() {
+        if (indicesUpdatedAt == null || breadthUpdatedAt == null || sectorsUpdatedAt == null) {
+            return null;
+        }
+        return List.of(indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt).stream()
+                .min(Instant::compareTo).orElse(null);
     }
 
     /**
@@ -268,6 +283,9 @@ public class MarketRealtimeCache {
                         .filter(java.util.Objects::nonNull)
                         .toList();
                 indicesUpdated = true;
+                if (watchedSecids.stream().allMatch(snapshotsBySecid::containsKey)) {
+                    indicesUpdatedAt = clock.instant();
+                }
             }
 
             MarketBreadthSnapshot breadth = EastmoneyJsParser.parseMarketBreadth(raw, MARKET_BREADTH_SECIDS);
@@ -276,7 +294,8 @@ public class MarketRealtimeCache {
             if (breadthUpdated) {
                 breadthCache = new MarketBreadthSnapshot(
                         breadth.risingCount(), breadth.fallingCount(),
-                        limits.limitUpCount(), limits.limitDownCount());
+                        breadth.flatCount(), limits.limitUpCount(), limits.limitDownCount());
+                breadthUpdatedAt = clock.instant();
             }
             if (snapshotsBySecid.isEmpty() && !breadthUpdated) {
                 result = "empty";
@@ -302,6 +321,7 @@ public class MarketRealtimeCache {
                 result = "empty";
             } else {
                 sectorCache = parsed;
+                sectorsUpdatedAt = clock.instant();
                 persist();
             }
         } catch (RuntimeException e) {
@@ -514,7 +534,8 @@ public class MarketRealtimeCache {
     private void persist() {
         redisStore.save(new MarketRealtimeRedisStore.Snapshot(
                 indexCache, breadthCache, sectorCache, moneyFlowCache,
-                Map.copyOf(estimateCache), Map.copyOf(estimateStatuses), Map.copyOf(intradayCache)));
+                Map.copyOf(estimateCache), Map.copyOf(estimateStatuses), Map.copyOf(intradayCache),
+                indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt));
     }
 
 }

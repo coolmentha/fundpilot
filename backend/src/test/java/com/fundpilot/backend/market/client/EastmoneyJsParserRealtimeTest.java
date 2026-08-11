@@ -84,31 +84,31 @@ class EastmoneyJsParserRealtimeTest {
     void parseMarketBreadth_沪深京数据完整_汇总涨跌家数() {
         String raw = """
                 {"data":{"diff":[
-                  {"f12":"000001","f104":1542,"f105":763},
-                  {"f12":"399001","f104":2012,"f105":872},
-                  {"f12":"899050","f104":260,"f105":66}
+                  {"f12":"000001","f104":1542,"f105":763,"f106":84},
+                  {"f12":"399001","f104":2012,"f105":872,"f106":65},
+                  {"f12":"899050","f104":260,"f105":66,"f106":4}
                 ]}}
                 """;
 
         MarketBreadthSnapshot result = EastmoneyJsParser.parseMarketBreadth(
                 raw, List.of("1.000001", "0.399001", "0.899050"));
 
-        assertThat(result).isEqualTo(new MarketBreadthSnapshot(3814, 1701));
+        assertThat(result).isEqualTo(new MarketBreadthSnapshot(3814, 1701, 153));
     }
 
     @Test
     void parseMarketBreadth_市场或字段缺失_不返回部分汇总() {
         String missingMarket = """
                 {"data":{"diff":[
-                  {"f12":"000001","f104":1542,"f105":763},
-                  {"f12":"399001","f104":2012,"f105":872}
+                  {"f12":"000001","f104":1542,"f105":763,"f106":84},
+                  {"f12":"399001","f104":2012,"f105":872,"f106":65}
                 ]}}
                 """;
         String missingField = """
                 {"data":{"diff":[
-                  {"f12":"000001","f104":1542,"f105":763},
-                  {"f12":"399001","f104":2012,"f105":872},
-                  {"f12":"899050","f104":260}
+                  {"f12":"000001","f104":1542,"f105":763,"f106":84},
+                  {"f12":"399001","f104":2012,"f105":872,"f106":65},
+                  {"f12":"899050","f104":260,"f105":66}
                 ]}}
                 """;
         List<String> secids = List.of("1.000001", "0.399001", "0.899050");

@@ -373,3 +373,36 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 优化行情工作台数据展示
+
+**Date**: 2026-08-11
+**Task**: 优化行情工作台数据展示
+**Branch**: `feature/market-dashboard-data-refresh`
+
+### Summary
+
+补充市场状态与缓存时效，重构持仓贡献和行业表现展示，并完成前后端验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `60eb506` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
