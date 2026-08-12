@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check V49 migration safety and rollback compatibility"}
+{"file":".trellis/spec/backend/transaction-consistency.md","reason":"Check fixed-plan regression, accounting boundary and idempotency"}
+{"file":".trellis/spec/backend/market-realtime-cache.md","reason":"Check valuation refresh and external-I/O boundaries"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check backend architecture, tests and forbidden patterns"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check frontend tests, lint and accessibility"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check API, persistence and UI field consistency"}
+{"file":".trellis/tasks/08-11-smart-dca/research/code-and-data-source.md","reason":"Check implementation against verified provider behavior"}
+{"file":".trellis/tasks/08-11-smart-dca/research/alipay-rule-snapshot.md","reason":"Check all rule tiers and version limitations"}
