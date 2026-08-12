@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
@@ -178,7 +179,7 @@ class FundServiceTest extends AbstractIntegrationTest {
                                      acquire_shares, remaining_shares, acquire_cost_per_share,
                                      created_date, updated_date)
                 VALUES (0, ?, ?, 999999, ?, 100, 100, 1.10, now(), now())
-                """, fund.getId(), portfolioFund.id(), openedAt);
+                """, fund.getId(), portfolioFund.id(), Timestamp.from(openedAt));
 
         FundView updated = fundService.update(fund.getId(), new FundCreateRequest(
                 null, null, null, null, null, null, null, null,
