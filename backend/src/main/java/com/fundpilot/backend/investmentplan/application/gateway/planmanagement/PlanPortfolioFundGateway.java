@@ -11,5 +11,9 @@ public interface PlanPortfolioFundGateway {
 
     /** 定投执行前锁定组合基金并确认仍为 TRACKED。 */
     Optional<PortfolioFund> findTrackedForExecution(long ownerId, long portfolioFundId);
-    record PortfolioFund(long id, Long legacyFundId) {}
+    record PortfolioFund(long id, Long legacyFundId, Long fundProductId, String benchmarkIndexCode) {
+        public PortfolioFund(long id, Long legacyFundId) {
+            this(id, legacyFundId, null, null);
+        }
+    }
 }

@@ -21,8 +21,8 @@ import {
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
-import {date, money, text} from '../constants.js';
-import {canDeleteDcaPlan, dcaPlanState, dcaScheduleText} from '../dcaPlan.js';
+import {date, money, percent, text} from '../constants.js';
+import {canDeleteDcaPlan, dcaDecisionReason, dcaPlanState, dcaScheduleText, dcaStrategyText} from '../dcaPlan.js';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
 
 const {Text} = Typography;
@@ -126,9 +126,25 @@ export default function DcaManagementPage() {
             render: (_, plan) => (
                 <div className="dca-plan-detail">
                     <span>{text(plan.frequency)} · {dcaScheduleText(plan)}</span>
-                    <Text type="secondary">每次 {money(plan.amount)}</Text>
+                    <Text type="secondary">{dcaStrategyText(plan.amountStrategy)} · 基础 {money(plan.amount)}</Text>
+                    <Text type="secondary">范围 {money(plan.minimumAmount ?? plan.amount)} - {money(plan.maximumAmount ?? plan.amount)}</Text>
                 </div>
             ),
+        },
+        {
+            title: '最近决策', key: 'decision', width: 190, responsive: ['lg'],
+            render: (_, plan) => plan.latestDecision ? (
+                    <div className="dca-plan-detail">
+                        <Text type={plan.latestDecision.result === 'SKIPPED' ? 'warning' : undefined}>
+                            {plan.latestDecision.result === 'SKIPPED' ? '本期跳过' : `本期 ${money(plan.latestDecision.actualAmount)}`}
+                        </Text>
+                        <Text type="secondary">{dcaDecisionReason(plan.latestDecision)}</Text>
+                        <Text type="secondary">{plan.latestDecision.ruleVersion || '-'} · 数据 {date(plan.latestDecision.dataDate)}</Text>
+                        {plan.latestDecision.deductionRate != null && (
+                            <Text type="secondary">扣款率 {percent(plan.latestDecision.deductionRate)}</Text>
+                        )}
+                    </div>
+            ) : <Text type="secondary">-</Text>,
         },
         {
             title: '本月剩余预计', key: 'remaining', width: 112,
@@ -191,8 +207,10 @@ export default function DcaManagementPage() {
                            locale={{emptyText: <EmptyState description="暂无定投计划"/>}}/>
                 )}
             </section>
-            <DcaPlanFormModal open={!!editing} editing={editing} onOk={onEdit}
-                              onCancel={() => setEditing(null)} confirmLoading={updatePlan.isPending}/>
+            <DcaPlanFormModal open={!!editing} editing={editing}
+                               benchmarkIndexCode={editing?.benchmarkIndexCode}
+                               onOk={onEdit}
+                               onCancel={() => setEditing(null)} confirmLoading={updatePlan.isPending}/>
         </div>
     );
 }

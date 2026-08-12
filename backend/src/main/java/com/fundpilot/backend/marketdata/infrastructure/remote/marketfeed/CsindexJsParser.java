@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import com.fundpilot.backend.marketdata.domain.indexvaluation.IndexValuation;
 
 /**
  * 中证指数公司(csindex.com.cn)响应解析器:把 {@code /csindex-home/perf/index-perf} 返回的
@@ -92,6 +93,30 @@ public final class CsindexJsParser {
             throw new IllegalStateException("csindex 解析后无有效日线(全周末或非法 OHLC): " + indexCode);
         }
         return new IndexKline(List.copyOf(bars));
+    }
+
+    /** 仅解析中证专用历史估值接口；这里的 peg 是该接口的 PE 观测字段，不与 K 线混用。 */
+    public static List<IndexValuation> parseIndexValuation(String rawJson, String indexCode, String source) {
+        JsonNode root;
+        try {
+            root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(rawJson);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("csindex 指数估值 JSON 解析失败: " + indexCode, e);
+        }
+        JsonNode data = root.path("data");
+        if (!data.isArray()) throw new IllegalStateException("csindex 指数估值数据为空: " + indexCode);
+        List<IndexValuation> result = new ArrayList<>(data.size());
+        for (JsonNode row : data) {
+            String tradeDate = row.path("tradeDate").asText();
+            JsonNode pe = row.path("peg");
+            if (tradeDate.isBlank() || !pe.isNumber() || pe.decimalValue().signum() <= 0) continue;
+            LocalDate date = LocalDate.parse(tradeDate, TRADE_DATE_FMT);
+            if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) continue;
+            result.add(new IndexValuation(indexCode, date.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                    pe.decimalValue(), source));
+        }
+        if (result.isEmpty()) throw new IllegalStateException("csindex 指数估值无有效 PE: " + indexCode);
+        return List.copyOf(result);
     }
 
     /**

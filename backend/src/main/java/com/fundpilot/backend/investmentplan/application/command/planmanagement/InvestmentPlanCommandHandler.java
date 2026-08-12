@@ -5,6 +5,7 @@ import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
+import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanAmountStrategy;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.math.BigDecimal;
@@ -28,11 +29,13 @@ public class InvestmentPlanCommandHandler {
 
     @Transactional
     public PlanResult createForPortfolioFund(long ownerId, long portfolioFundId, PlanInput input) {
-        portfolioFunds.requireTracked(ownerId, portfolioFundId);
+        var tracked = portfolioFunds.requireTracked(ownerId, portfolioFundId);
         InvestmentPlan plan;
         try {
+            var config = config(input, tracked);
             plan = InvestmentPlan.create(portfolioFundId, ownerId, input.enabled(), input.amount(),
-                    frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth());
+                    frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth(), config.strategy(),
+                    config.referenceIndexCode(), config.movingAverageDays());
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, exception.getMessage());
         }
@@ -47,7 +50,9 @@ public class InvestmentPlanCommandHandler {
     public PlanResult update(long ownerId, long planId, PlanInput input) {
         InvestmentPlan plan = owned(ownerId, planId);
         try {
-            plan.update(input.enabled(), input.amount(), frequency(input.frequency()), input.dayOfWeek(), input.dayOfMonth());
+            var config = config(input, portfolioFunds.requireTracked(ownerId, plan.portfolioFundId()));
+            plan.update(input.enabled(), input.amount(), frequency(input.frequency()), input.dayOfWeek(),
+                    input.dayOfMonth(), config.strategy(), config.referenceIndexCode(), config.movingAverageDays());
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, exception.getMessage());
         }
@@ -112,19 +117,81 @@ public class InvestmentPlanCommandHandler {
         }
     }
 
+    private static PlanConfig config(PlanInput input, PlanPortfolioFundGateway.PortfolioFund fund) {
+        InvestmentPlanAmountStrategy strategy;
+        try {
+            strategy = input.amountStrategy() == null || input.amountStrategy().isBlank()
+                    ? InvestmentPlanAmountStrategy.FIXED : InvestmentPlanAmountStrategy.valueOf(input.amountStrategy());
+        } catch (RuntimeException exception) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "不支持的金额策略");
+        }
+        String reference = switch (strategy) {
+            case LOW_VALUATION -> fund.benchmarkIndexCode();
+            case MOVING_AVERAGE -> input.referenceIndexCode() == null || input.referenceIndexCode().isBlank()
+                    ? fund.benchmarkIndexCode() : input.referenceIndexCode().trim();
+            case FIXED, CHANGE_RATE -> null;
+        };
+        if ((strategy == InvestmentPlanAmountStrategy.LOW_VALUATION
+                || strategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE)
+                && (reference == null || reference.isBlank())) {
+            throw new BusinessException(ErrorCode.DCA_PLAN_INVALID, "该策略需要基金基准指数");
+        }
+        Integer days = strategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE
+                ? input.movingAverageDays() == null ? 250 : input.movingAverageDays() : null;
+        return new PlanConfig(strategy, reference, days);
+    }
+
     public static PlanResult from(InvestmentPlan plan) {
+        BigDecimal minimumRate = switch (plan.amountStrategy()) {
+            case LOW_VALUATION -> BigDecimal.ZERO;
+            case MOVING_AVERAGE -> new BigDecimal("0.60");
+            case CHANGE_RATE -> new BigDecimal("0.50");
+            case FIXED -> BigDecimal.ONE;
+        };
+        BigDecimal maximumRate = switch (plan.amountStrategy()) {
+            case LOW_VALUATION -> BigDecimal.ONE;
+            case MOVING_AVERAGE -> new BigDecimal("2.10");
+            case CHANGE_RATE -> new BigDecimal("2.00");
+            case FIXED -> BigDecimal.ONE;
+        };
         return new PlanResult(plan.id(), plan.portfolioFundId(), plan.ownerId(), plan.enabled(), plan.amount(),
                 plan.frequency().name(), plan.dayOfWeek(), plan.dayOfMonth(), plan.status().name(),
-                plan.createdDate(), List.of());
+                plan.amountStrategy().name(), plan.referenceIndexCode(), plan.movingAverageDays(),
+                plan.amount().multiply(minimumRate), plan.amount().multiply(maximumRate),
+                plan.createdDate(), List.of(), null);
     }
     public record PlanInput(boolean enabled, BigDecimal amount, String frequency, Integer dayOfWeek,
-                            Integer dayOfMonth) {}
-    public record PlanResult(Long id, long portfolioFundId, long ownerId, boolean enabled, BigDecimal amount,
-                             String frequency, Integer dayOfWeek, Integer dayOfMonth, String status,
-                             Instant createdDate, List<Instant> remainingExecutionDates) {
-        public PlanResult withForecast(List<Instant> executionDates) {
-            return new PlanResult(id, portfolioFundId, ownerId, enabled, amount, frequency, dayOfWeek, dayOfMonth,
-                    status, createdDate, List.copyOf(executionDates));
+                            Integer dayOfMonth, String amountStrategy, String referenceIndexCode,
+                            Integer movingAverageDays) {
+        public PlanInput(boolean enabled, BigDecimal amount, String frequency, Integer dayOfWeek,
+                         Integer dayOfMonth) {
+            this(enabled, amount, frequency, dayOfWeek, dayOfMonth, "FIXED", null, null);
         }
     }
+    public record PlanResult(Long id, long portfolioFundId, long ownerId, boolean enabled, BigDecimal amount,
+                             String frequency, Integer dayOfWeek, Integer dayOfMonth, String status,
+                             String amountStrategy, String referenceIndexCode, Integer movingAverageDays,
+                             BigDecimal minimumAmount, BigDecimal maximumAmount, Instant createdDate,
+                             List<Instant> remainingExecutionDates, LatestDecision latestDecision) {
+        public PlanResult(Long id, long portfolioFundId, long ownerId, boolean enabled, BigDecimal amount,
+                          String frequency, Integer dayOfWeek, Integer dayOfMonth, String status,
+                          Instant createdDate, List<Instant> remainingExecutionDates) {
+            this(id, portfolioFundId, ownerId, enabled, amount, frequency, dayOfWeek, dayOfMonth, status,
+                    "FIXED", null, null, amount, amount, createdDate, remainingExecutionDates, null);
+        }
+        public PlanResult withForecast(List<Instant> executionDates) {
+            return new PlanResult(id, portfolioFundId, ownerId, enabled, amount, frequency, dayOfWeek, dayOfMonth,
+                    status, amountStrategy, referenceIndexCode, movingAverageDays, minimumAmount, maximumAmount,
+                    createdDate, List.copyOf(executionDates), latestDecision);
+        }
+        public PlanResult withLatestDecision(LatestDecision decision) {
+            return new PlanResult(id, portfolioFundId, ownerId, enabled, amount, frequency, dayOfWeek, dayOfMonth,
+                    status, amountStrategy, referenceIndexCode, movingAverageDays, minimumAmount, maximumAmount,
+                    createdDate, remainingExecutionDates, decision);
+        }
+    }
+    public record LatestDecision(String result, BigDecimal actualAmount, BigDecimal deductionRate,
+                                 String ruleVersion, Instant dataDate, String reasonCode, String reason) {}
+    private record PlanConfig(InvestmentPlanAmountStrategy strategy, String referenceIndexCode,
+                              Integer movingAverageDays) {}
 }

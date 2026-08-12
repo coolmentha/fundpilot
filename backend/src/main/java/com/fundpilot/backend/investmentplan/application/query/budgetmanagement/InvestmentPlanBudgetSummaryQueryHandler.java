@@ -33,7 +33,19 @@ public class InvestmentPlanBudgetSummaryQueryHandler {
         BigDecimal future = activePlans.stream().map(plan -> plan.amount().multiply(BigDecimal.valueOf(
                 datesByPlan.getOrDefault(plan.id(), java.util.List.of()).size())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        boolean hasSmartPlan = activePlans.stream().anyMatch(plan -> plan.amountStrategy()
+                != com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanAmountStrategy.FIXED);
+        BigDecimal minimumFuture = hasSmartPlan ? activePlans.stream().map(plan -> plan.amount()
+                .multiply(minimumRate(plan)).multiply(BigDecimal.valueOf(
+                        datesByPlan.getOrDefault(plan.id(), java.util.List.of()).size())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add) : null;
+        BigDecimal maximumFuture = hasSmartPlan ? activePlans.stream().map(plan -> plan.amount()
+                .multiply(maximumRate(plan)).multiply(BigDecimal.valueOf(
+                        datesByPlan.getOrDefault(plan.id(), java.util.List.of()).size())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add) : null;
         BigDecimal projected = invested.add(future);
+        BigDecimal minimumProjected = minimumFuture == null ? null : invested.add(minimumFuture);
+        BigDecimal maximumProjected = maximumFuture == null ? null : invested.add(maximumFuture);
         BigDecimal budget = budgets.findByOwnerId(ownerId).map(value -> value.monthlyBudget()).orElse(null);
         BigDecimal remaining = null;
         BigDecimal over = null;
@@ -42,9 +54,29 @@ public class InvestmentPlanBudgetSummaryQueryHandler {
             remaining = difference.max(BigDecimal.ZERO);
             over = difference.signum() < 0 ? difference.negate() : BigDecimal.ZERO;
         }
-        return new Summary(budget, invested, future, projected, remaining, over);
+        return new Summary(budget, invested, future, projected, remaining, over,
+                minimumFuture, maximumFuture, minimumProjected, maximumProjected);
+    }
+
+    private static BigDecimal minimumRate(InvestmentPlan plan) {
+        return switch (plan.amountStrategy()) {
+            case LOW_VALUATION -> BigDecimal.ZERO;
+            case MOVING_AVERAGE -> new BigDecimal("0.60");
+            case CHANGE_RATE -> new BigDecimal("0.50");
+            case FIXED -> BigDecimal.ONE;
+        };
+    }
+
+    private static BigDecimal maximumRate(InvestmentPlan plan) {
+        return switch (plan.amountStrategy()) {
+            case LOW_VALUATION, FIXED -> BigDecimal.ONE;
+            case MOVING_AVERAGE -> new BigDecimal("2.10");
+            case CHANGE_RATE -> new BigDecimal("2.00");
+        };
     }
 
     public record Summary(BigDecimal monthlyBudget, BigDecimal investedAmount, BigDecimal futureAmount,
-                          BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount) {}
+                          BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount,
+                          BigDecimal minimumFutureAmount, BigDecimal maximumFutureAmount,
+                          BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount) {}
 }

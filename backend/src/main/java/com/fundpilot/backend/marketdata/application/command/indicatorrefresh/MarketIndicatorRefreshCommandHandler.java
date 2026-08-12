@@ -1,20 +1,24 @@
 package com.fundpilot.backend.marketdata.application.command.indicatorrefresh;
 
 import com.fundpilot.backend.marketdata.application.command.indexkline.IndexKlineCommandHandler;
+import com.fundpilot.backend.marketdata.application.command.indexvaluation.IndexValuationCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.indicator.MarketIndicatorCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.navpublishing.NavPublishingCommandHandler;
 import com.fundpilot.backend.marketdata.application.event.indicatorrefresh.MarketIndicatorsRefreshed;
 import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.MarketIndicatorRefreshEventGateway;
 import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexKlineSourceGateway;
+import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexValuationSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.TrackedNavProductGateway;
 import com.fundpilot.backend.marketdata.application.query.indexkline.IndexKlineQueryHandler;
+import com.fundpilot.backend.marketdata.application.query.indexvaluation.IndexValuationQueryHandler;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
@@ -50,6 +54,9 @@ public class MarketIndicatorRefreshCommandHandler {
     private final IndexKlineQueryHandler klineQueries;
     private final MarketIndicatorCommandHandler indicators;
     private final Clock clock;
+    private final PublishedIndexValuationSourceGateway valuationSource;
+    private final IndexValuationCommandHandler valuationCommands;
+    private final IndexValuationQueryHandler valuationQueries;
 
     public void refreshBatch(int batchNumber) {
         refresh(products.findAll().stream().filter(product -> product.legacyFundId() != null
@@ -62,12 +69,12 @@ public class MarketIndicatorRefreshCommandHandler {
 
     public void refreshOne(long legacyFundId) {
         products.findByLegacyFundId(legacyFundId).ifPresent(product ->
-                refreshOne(product, new HashMap<>(), new HashSet<>()));
+                refreshOne(product, new HashMap<>(), new HashSet<>(), new HashSet<>()));
     }
 
     public void refreshOneForPortfolioFund(long portfolioFundId) {
         products.findByPortfolioFundId(portfolioFundId).ifPresent(product ->
-                refreshOne(product, new HashMap<>(), new HashSet<>()));
+                refreshOne(product, new HashMap<>(), new HashSet<>(), new HashSet<>()));
     }
 
     public void refreshBatchAndPublishCompletion(int batchNumber) {
@@ -78,18 +85,19 @@ public class MarketIndicatorRefreshCommandHandler {
     public void refreshOne(RefreshTarget target) {
         refreshOne(new TrackedNavProductGateway.TrackedProduct(target.legacyFundId(), target.fundProductId(),
                 target.fundCode(), target.fundName(), target.benchmarkIndexCode(), target.investmentTarget()),
-                new HashMap<>(), new HashSet<>());
+                new HashMap<>(), new HashSet<>(), new HashSet<>());
     }
 
     private void refresh(List<TrackedNavProductGateway.TrackedProduct> targets) {
         Map<String, PublishedIndexKlineSourceGateway.IndexKline> klineCache = new HashMap<>();
         Set<String> persistedKlines = new HashSet<>();
+        Set<String> refreshedValuations = new HashSet<>();
         int success = 0;
         int failure = 0;
         for (var target : targets) {
             try {
                 if (supportsStandardNav(target)) {
-                    refreshOne(target, klineCache, persistedKlines);
+                    refreshOne(target, klineCache, persistedKlines, refreshedValuations);
                     success++;
                 }
             } catch (RuntimeException ex) {
@@ -102,7 +110,7 @@ public class MarketIndicatorRefreshCommandHandler {
 
     private void refreshOne(TrackedNavProductGateway.TrackedProduct target,
                             Map<String, PublishedIndexKlineSourceGateway.IndexKline> klineCache,
-                            Set<String> persistedKlines) {
+                            Set<String> persistedKlines, Set<String> refreshedValuations) {
         if (!supportsStandardNav(target)) return;
         List<PublishedNavSourceGateway.NavSnapshot> history = navSource.fetchHistory(target.fundCode());
         if (history == null || history.isEmpty()) {
@@ -137,12 +145,36 @@ public class MarketIndicatorRefreshCommandHandler {
                     new IndexKlineCommandHandler.Bar(bar.tradeDate(), bar.open(), bar.high(), bar.low(),
                             bar.close(), bar.volume())).toList());
         }
+        refreshValuation(indexCode, refreshedValuations);
         volumeState = volumeStateFromStored(indexCode);
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());
         indicators.upsert(target.legacyFundId(), target.fundProductId(), target.fundCode(), today,
                 latest.accumulatedNav(), yearLine.map(YearLine::above).orElse(null),
                 yearLine.map(YearLine::rising).orElse(false), macd.orElse(null), volumeState.orElse(null),
                 weeklyDrop.orElse(null), sixtyDayHigh.orElse(false));
+    }
+
+    /** 估值请求在任何写事务外完成；失败只影响低估策略，不影响既有行情指标刷新。 */
+    private void refreshValuation(String indexCode, Set<String> refreshedValuations) {
+        if (indexCode == null || indexCode.isBlank()) return;
+        if (!refreshedValuations.add(indexCode)) return;
+        String source = "CSINDEX_INDEX_CSI_DS_PE_PEG";
+        LocalDate end = clock.instant().atZone(java.time.ZoneOffset.UTC).toLocalDate();
+        LocalDate start = valuationQueries.latest(indexCode, source)
+                .map(value -> value.tradeDate().atZone(java.time.ZoneOffset.UTC).toLocalDate().plusDays(1))
+                .orElse(LocalDate.of(2000, 1, 1));
+        if (start.isAfter(end)) return;
+        try {
+            var values = valuationSource.fetch(indexCode,
+                    start.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
+                    end.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE));
+            if (!values.isEmpty()) {
+                valuationCommands.upsert(values.stream().map(value -> new IndexValuationCommandHandler.Input(indexCode,
+                        value.tradeDate(), value.peRatio(), source)).toList());
+            }
+        } catch (RuntimeException ex) {
+            log.warn("指数 {} PE 历史刷新失败，低估策略本期可能跳过", indexCode, ex);
+        }
     }
 
     private static boolean supportsStandardNav(TrackedNavProductGateway.TrackedProduct product) {

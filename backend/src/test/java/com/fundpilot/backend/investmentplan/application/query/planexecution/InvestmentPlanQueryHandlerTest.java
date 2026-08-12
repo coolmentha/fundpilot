@@ -12,6 +12,7 @@ import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
+import com.fundpilot.backend.investmentplan.domain.execution.InvestmentPlanExecutionRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,8 @@ class InvestmentPlanQueryHandlerTest {
         when(visiblePlans.findByOwner(3L)).thenReturn(List.of(plan));
         when(forecasts.currentMonthExecutionDates(3L, List.of(plan))).thenReturn(Map.of());
 
-        var result = new InvestmentPlanQueryHandler(plans, portfolioFunds, forecasts, visiblePlans).list(3L);
+        var result = new InvestmentPlanQueryHandler(plans, portfolioFunds, forecasts, visiblePlans,
+                mock(InvestmentPlanExecutionRepository.class)).list(3L);
 
         assertThat(result).extracting(InvestmentPlanCommandHandler.PlanResult::id).containsExactly(7L);
         verify(visiblePlans).findByOwner(3L);

@@ -9,10 +9,10 @@ import {
     useDeleteDcaPlan,
     useUpdateDcaPlan,
 } from '../api/hooks.js';
-import {money, text, datetime} from '../constants.js';
+import {date, money, percent, text, datetime} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import DcaPlanFormModal from './DcaPlanFormModal.jsx';
-import {canDeleteDcaPlan, dcaScheduleText} from '../dcaPlan.js';
+import {canDeleteDcaPlan, dcaDecisionReason, dcaScheduleText, dcaStrategyText} from '../dcaPlan.js';
 
 const {Text} = Typography;
 
@@ -20,7 +20,7 @@ const {Text} = Typography;
  * 基金详情 · 定投计划 tab。用户配置一次,系统在定投日 14:55 自动生成 INVEST 交易。
  * 与移动止盈建议解耦:定投负责持续买入,止盈由基金绑定的纪律策略独立触发。
  */
-export default function FundDcaTab({portfolioFundId}) {
+export default function FundDcaTab({portfolioFundId, benchmarkIndexCode}) {
     const {message} = App.useApp();
     const {data: plans, isLoading} = useDcaPlans(portfolioFundId);
     const {data: active} = useActiveDcaPlan(portfolioFundId);
@@ -55,7 +55,25 @@ export default function FundDcaTab({portfolioFundId}) {
         {title: '状态', dataIndex: 'status', width: 120, render: (v) => <StatusTag value={v}/>},
         {title: '频率', dataIndex: 'frequency', width: 100, render: (v) => text(v)},
         {title: '定投日', key: 'schedule', width: 120, render: (_, r) => dcaScheduleText(r)},
-        {title: '金额', dataIndex: 'amount', width: 140, render: (v) => money(v)},
+        {title: '金额', key: 'amount', width: 190, render: (_, r) => (
+            <Space direction="vertical" size={0}>
+                <span>{dcaStrategyText(r.amountStrategy)} · {money(r.amount)}</span>
+                <Text type="secondary">{money(r.minimumAmount ?? r.amount)} - {money(r.maximumAmount ?? r.amount)}</Text>
+            </Space>
+        )},
+        {
+            title: '最近决策', key: 'decision', width: 180,
+            render: (_, r) => r.latestDecision ? (
+                <Space direction="vertical" size={0}>
+                    <span>{r.latestDecision.result === 'SKIPPED' ? '本期跳过' : money(r.latestDecision.actualAmount)}</span>
+                    <Text type="secondary">{dcaDecisionReason(r.latestDecision)}</Text>
+                    <Text type="secondary">{r.latestDecision.ruleVersion || '-'} · 数据 {date(r.latestDecision.dataDate)}</Text>
+                    {r.latestDecision.deductionRate != null && (
+                        <Text type="secondary">扣款率 {percent(r.latestDecision.deductionRate)}</Text>
+                    )}
+                </Space>
+            ) : <Text type="secondary">-</Text>,
+        },
         {
             title: '启用', dataIndex: 'enabled', width: 80,
             render: (v) => <Tag color={v ? 'green' : 'default'}>{v ? '开' : '关'}</Tag>,
@@ -98,7 +116,7 @@ export default function FundDcaTab({portfolioFundId}) {
                 <Card className="data-card" size="small" title="当前生效定投计划">
                     <Space wrap>
                         <StatusTag value={active.status}/>
-                        <Text>{text(active.frequency)} · {dcaScheduleText(active)} · {money(active.amount)}</Text>
+                        <Text>{text(active.frequency)} · {dcaScheduleText(active)} · {dcaStrategyText(active.amountStrategy)} · {money(active.amount)}</Text>
                     </Space>
                 </Card>
             )}
@@ -108,8 +126,9 @@ export default function FundDcaTab({portfolioFundId}) {
             </div>
             <Table rowKey="id" size="small" loading={isLoading} dataSource={plans}
                    columns={columns} pagination={false}/>
-            <DcaPlanFormModal open={modalOpen} editing={editing} onOk={onOk}
-                              onCancel={() => setModalOpen(false)}
+            <DcaPlanFormModal open={modalOpen} editing={editing} benchmarkIndexCode={benchmarkIndexCode}
+                               onOk={onOk}
+                               onCancel={() => setModalOpen(false)}
                               confirmLoading={createPlan.isPending || updatePlan.isPending}/>
         </Space>
     );

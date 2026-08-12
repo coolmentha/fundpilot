@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.fundpilot.backend.investmentplan.application.gateway.planmanagement.PlanPortfolioFundGateway;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.List;
@@ -20,7 +21,7 @@ class PlanPortfolioFundGatewayImplTest {
         PortfolioFundApi funds = mock(PortfolioFundApi.class);
         when(funds.findOwnedByLegacyFundId(3L, 41L)).thenReturn(Optional.of(voidedFund()));
 
-        assertVoided(() -> new PlanPortfolioFundGatewayImpl(funds)
+        assertVoided(() -> gateway(funds)
                 .requireTrackedByLegacyFund(3L, 41L));
     }
 
@@ -29,7 +30,7 @@ class PlanPortfolioFundGatewayImplTest {
         PortfolioFundApi funds = mock(PortfolioFundApi.class);
         when(funds.findOwned(3L, 7L)).thenReturn(Optional.of(voidedFund()));
 
-        assertVoided(() -> new PlanPortfolioFundGatewayImpl(funds).requireTracked(3L, 7L));
+        assertVoided(() -> gateway(funds).requireTracked(3L, 7L));
     }
 
     @Test
@@ -37,7 +38,7 @@ class PlanPortfolioFundGatewayImplTest {
         PortfolioFundApi funds = mock(PortfolioFundApi.class);
         when(funds.findByOwner(3L)).thenReturn(List.of(trackedFund(), voidedFund()));
 
-        var result = new PlanPortfolioFundGatewayImpl(funds).findTrackedByOwner(3L);
+        var result = gateway(funds).findTrackedByOwner(3L);
 
         assertThat(result).extracting(PlanPortfolioFundGateway.PortfolioFund::id)
                 .containsExactly(7L);
@@ -48,7 +49,7 @@ class PlanPortfolioFundGatewayImplTest {
         PortfolioFundApi funds = mock(PortfolioFundApi.class);
         when(funds.findForUpdate(7L)).thenReturn(Optional.of(trackedFund()));
 
-        var result = new PlanPortfolioFundGatewayImpl(funds).findTrackedForExecution(3L, 7L);
+        var result = gateway(funds).findTrackedForExecution(3L, 7L);
 
         assertThat(result).contains(new PlanPortfolioFundGateway.PortfolioFund(7L, 41L));
         verify(funds).findForUpdate(7L);
@@ -70,5 +71,9 @@ class PlanPortfolioFundGatewayImplTest {
     private static PortfolioFundApi.PortfolioFund trackedFund() {
         return new PortfolioFundApi.PortfolioFund(7L, 41L, 3L, 101L,
                 PortfolioFundApi.Validity.TRACKED, true, new BigDecimal("0.30"), null, null, null);
+    }
+
+    private static PlanPortfolioFundGatewayImpl gateway(PortfolioFundApi funds) {
+        return new PlanPortfolioFundGatewayImpl(funds, mock(FundProductApi.class));
     }
 }

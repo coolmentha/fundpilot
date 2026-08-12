@@ -38,5 +38,8 @@ class InvestmentPlanJpaEntity {
     private String frequency;
     @Column(name = "day_of_week") private Integer dayOfWeek;
     @Column(name = "day_of_month") private Integer dayOfMonth;
+    @Column(name = "amount_strategy") private String amountStrategy;
+    @Column(name = "reference_index_code") private String referenceIndexCode;
+    @Column(name = "moving_average_days") private Integer movingAverageDays;
     private String status;
 }

@@ -95,6 +95,35 @@ class CsindexJsParserTest {
     }
 
     @Test
+    void parseIndexValuation_仅保存中证peg正值并转换日期() {
+        String raw = """
+                {"data":[
+                  {"tradeDate":"20260105","peg":12.45},
+                  {"tradeDate":"20260106","peg":0},
+                  {"tradeDate":"20260107","peg":14.44},
+                  {"tradeDate":"20260110","peg":15.00}
+                ]}
+                """;
+
+        var values = CsindexJsParser.parseIndexValuation(raw, "000300.SH", "CSINDEX_INDEX_CSI_DS_PE_PEG");
+
+        assertThat(values).hasSize(2);
+        assertThat(values.get(0).tradeDate()).isEqualTo(Instant.parse("2026-01-05T00:00:00Z"));
+        assertThat(values.get(0).peRatio()).isEqualByComparingTo("12.45");
+        assertThat(values.get(0).source()).isEqualTo("CSINDEX_INDEX_CSI_DS_PE_PEG");
+        assertThat(values.get(1).peRatio()).isEqualByComparingTo("14.44");
+    }
+
+    @Test
+    void parseIndexValuation_没有有效估值时触发降级() {
+        assertThatThrownBy(() -> CsindexJsParser.parseIndexValuation(
+                "{\"data\":[{\"tradeDate\":\"20260105\",\"peg\":0}]}",
+                "000300", "CSINDEX_INDEX_CSI_DS_PE_PEG"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("000300");
+    }
+
+    @Test
     void aggregate_周K_按周一分组_open首_high_max_low_min_close末_vol_sum_date末日() {
         // 2026-01-05(周一)/06/07 同周;2026-01-12(周一)下周
         IndexKline daily = new IndexKline(java.util.List.of(

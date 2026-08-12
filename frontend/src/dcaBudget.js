@@ -12,6 +12,10 @@ const toPositiveNumber = (value) => {
 export function buildDcaBudgetProgress(summary) {
     const investedAmount = toNonNegativeNumber(summary?.investedAmount);
     const futureAmount = toNonNegativeNumber(summary?.futureAmount);
+    const minimumFutureAmount = summary?.minimumFutureAmount == null
+        ? null : toNonNegativeNumber(summary.minimumFutureAmount);
+    const maximumFutureAmount = summary?.maximumFutureAmount == null
+        ? null : toNonNegativeNumber(summary.maximumFutureAmount);
     const projectedAmount = investedAmount + futureAmount;
     const monthlyBudget = toPositiveNumber(summary?.monthlyBudget);
 
@@ -28,6 +32,8 @@ export function buildDcaBudgetProgress(summary) {
             budgetPercent: 0,
             scale: 0,
             isOverBudget: false,
+            minimumFutureAmount,
+            maximumFutureAmount,
         };
     }
 
@@ -46,5 +52,7 @@ export function buildDcaBudgetProgress(summary) {
         budgetPercent: (monthlyBudget / scale) * 100,
         scale,
         isOverBudget: difference < 0,
+        minimumFutureAmount,
+        maximumFutureAmount,
     };
 }

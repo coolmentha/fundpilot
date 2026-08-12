@@ -46,7 +46,8 @@ export default function FundDetailPage() {
         {key: 'strategy', label: '策略参数', children: <StrategyTab portfolioFundId={fund.portfolioFundId}/>},
         {key: 'advice', label: '纪律建议', children: <SignalTab fundId={id}/>},
         {key: 'market', label: '行情指标', children: <MarketTab portfolioFundId={fund.portfolioFundId} fundSubType={fund.fundSubType}/>},
-        {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}/>},
+        {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}
+                                                               benchmarkIndexCode={fund.benchmarkIndexCode}/>},
     ];
 
     return (
