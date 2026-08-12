@@ -436,3 +436,24 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - 推送分支并通过 PR、main CI、v0.11.19 部署
+
+
+## Session 14: 支持修改当前持仓成本价
+
+**Date**: 2026-08-12
+**Task**: 支持修改当前持仓成本价
+**Branch**: `feature/smart-dca`
+
+### Summary
+
+新增当前持仓成本价修正能力，仅更新 Accounting Position，不修改历史交易或 FIFO lot；补齐收益查询、前端编辑与测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `14fb3f3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
