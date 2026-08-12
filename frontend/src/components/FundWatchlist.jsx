@@ -48,8 +48,8 @@ export default function FundWatchlist() {
                 : <span className="num-cell">{money(value)}</span>,
         },
         {
-            title: '累计收益率', dataIndex: 'returnRate', width: 120, align: 'right',
-            sorter: (a, b) => numericSort(a.returnRate, b.returnRate),
+            title: '持仓收益率', dataIndex: 'holdingReturnRate', width: 120, align: 'right',
+            sorter: (a, b) => numericSort(a.holdingReturnRate, b.holdingReturnRate),
             render: (value) => (
                 <span className="num-cell" style={{color: pnlColor(value)}}>{signedPercent(value)}</span>
             ),

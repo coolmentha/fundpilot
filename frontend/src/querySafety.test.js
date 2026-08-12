@@ -112,20 +112,31 @@ describe('query safety guards', () => {
         expect(row.valuationSource).toBe('CONFIRMED_NAV');
     });
 
-    it('透传持仓表需要的收益和净值字段', () => {
+    it('按当前持仓成本计算持仓收益率', () => {
         const [row] = buildFundWatchlistRows([{
             id: 1,
             fundCode: '510300',
-            returnRate: 0.1234,
+            holdingAmount: 1123.4,
+            totalPnl: 123.4,
+            returnRate: 0.9999,
             valuationNav: 4.5678,
             valuationFirstSeenAt: '2026-07-10T07:01:02Z',
         }], {}, {estimatesFetched: false, estimatesError: false});
 
         expect(row).toMatchObject({
-            returnRate: 0.1234,
+            holdingReturnRate: 0.1234,
             valuationNav: 4.5678,
             valuationFirstSeenAt: '2026-07-10T07:01:02Z',
         });
+    });
+
+    it('持仓成本不可用时不计算持仓收益率', () => {
+        const rows = buildFundWatchlistRows([
+            {id: 1, holdingAmount: null, totalPnl: null},
+            {id: 2, holdingAmount: 100, totalPnl: 100},
+        ], {}, {estimatesFetched: false, estimatesError: false});
+
+        expect(rows.map((row) => row.holdingReturnRate)).toEqual([null, null]);
     });
 
     it('从持仓中选择最大贡献和最大拖累', () => {

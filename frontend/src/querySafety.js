@@ -10,6 +10,13 @@ export function estimateStatusText(status) {
 
 export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError}) {
     return (funds || []).map((fund) => {
+        const holdingAmount = Number(fund.holdingAmount);
+        const totalPnl = Number(fund.totalPnl);
+        const holdingCost = holdingAmount - totalPnl;
+        const holdingReturnRate = fund.holdingAmount != null && fund.totalPnl != null
+            && Number.isFinite(holdingAmount) && Number.isFinite(totalPnl) && holdingCost > 0
+            ? totalPnl / holdingCost
+            : null;
         const confirmedNav = fund.valuationSource === 'CONFIRMED_NAV'
             || (fund.investmentTarget === 'QDII'
                 && fund.valuationSource === 'LATEST_CONFIRMED_NAV');
@@ -48,7 +55,7 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             holdingAmount: fund.holdingAmount,
             dailyPnl: fund.dailyPnl,
             totalPnl: fund.totalPnl,
-            returnRate: fund.returnRate,
+            holdingReturnRate,
             status: fund.status,
             groups: fund.groups || [],
         };
