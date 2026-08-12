@@ -116,7 +116,7 @@ flowchart LR
 
 - CONFIRMED 净份额 = 增加方向份额之和 - 减少方向份额之和。
 - `ADJUST_OUT` 会优先缩减现有 open lot，但不生成赎回明细和费用。
-- 买入确认加权更新 `FundEntity.costPerShare`；卖出不改变成本单价。
+- 买入确认在 Accounting `Position.costPerShare` 上加权更新；卖出不改变成本单价。
 - 清仓后再次买入时，如果旧份额不大于 0，新买入成本自然成为新的成本基准。
 
 ## 失败与错误

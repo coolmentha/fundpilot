@@ -224,6 +224,45 @@ class FundPnlServiceDateTest {
     }
 
     @Test
+    void 兼容基金查询使用Accounting当前成本而不是legacy成本() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-09T00:00:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+        FundEntity fund = fund();
+        fund.setCostPerShare(new BigDecimal("1.00"));
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(nav("2026-07-09T00:00:00Z", "1.50"),
+                        nav("2026-07-08T00:00:00Z", "1.40")));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund,
+                Map.of(1L, new BigDecimal("1.25")));
+
+        assertThat(pnl.totalPnl()).isEqualByComparingTo("25.00");
+    }
+
+    @Test
+    void Accounting持仓存在但成本为空时不回退legacy成本() {
+        Clock clock = Clock.fixed(Instant.parse("2026-07-09T00:00:00Z"), ZoneOffset.UTC);
+        FundPnlService service = new FundPnlService(
+                fundPositionService, fundNavHistoryRepository, fundRepository,
+                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+        FundEntity fund = fund();
+        fund.setCostPerShare(new BigDecimal("1.00"));
+        when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
+                .thenReturn(List.of(nav("2026-07-09T00:00:00Z", "1.50"),
+                        nav("2026-07-08T00:00:00Z", "1.40")));
+        when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
+        Map<Long, BigDecimal> currentCost = new java.util.HashMap<>();
+        currentCost.put(1L, null);
+
+        FundPnlService.Pnl pnl = service.computeForFund(fund, currentCost);
+
+        assertThat(pnl.totalPnl()).isNull();
+    }
+
+    @Test
     void 货币基金不读取盘中估值且返回不可用() {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(

@@ -7,8 +7,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 持仓聚合。account 侧唯一持有 {@code openedAt}、{@code costPerShare} 与 {@code status}，
- * 三者均可由 CONFIRMED 账本重放得出，账本始终是事实来源。
+ * 持仓聚合。Accounting 独占 {@code openedAt}、{@code costPerShare} 与 {@code status}；
+ * 状态和建仓时间由 CONFIRMED 账本校准，成本按买入加权并允许用户修正当前基准。
  */
 public final class Position {
 
@@ -96,6 +96,17 @@ public final class Position {
     public void applyExistingPosition(BigDecimal existingCostPerShare, Instant openedAtSnapshot) {
         costPerShare = existingCostPerShare;
         openedAt = openedAtSnapshot;
+    }
+
+    /** 用户修正当前持仓成本；历史交易和 lot 成本不随之改写。 */
+    public void correctCostPerShare(BigDecimal correctedCostPerShare) {
+        if (status != PositionStatus.OPEN) {
+            throw new IllegalStateException("只有当前持仓可以修正成本单价");
+        }
+        if (correctedCostPerShare == null || correctedCostPerShare.signum() <= 0) {
+            throw new IllegalArgumentException("成本单价必须大于 0");
+        }
+        costPerShare = correctedCostPerShare;
     }
 
     private static long requirePositive(long value, String field) {

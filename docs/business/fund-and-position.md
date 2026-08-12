@@ -77,6 +77,8 @@ flowchart LR
 - 在途份额：PENDING 交易按来源方向求和，仅用于展示或检查，不进入事实持仓。
 - `openedAt`：首次进入或重新进入 `HOLDING` 时，从已确认正向交易的业务时间确定。
 - `costPerShare`：买入确认时按实际投入金额加权；卖出不修改。
+- 当前持仓成本录错时，用户可以在基金编辑入口修正 `costPerShare`；修正只改变当前持仓成本基准，不回写交易流水或 FIFO lot，因此历史及未来已实现盈亏仍按真实 lot 成本核算。
+- 空仓观察基金和已清仓基金没有可修正的当前持仓成本。
 - 历史高点和持有期高点：从累计净值历史实时派生，不在基金表冗余存储。
 
 ## 自定义分组
@@ -122,6 +124,7 @@ flowchart LR
 | 基金类型为空 | `FUND_CATEGORY_REQUIRED` |
 | 持有份额非正 | `INITIAL_HOLDING_SHARES_INVALID` |
 | 成本单价非正 | `COST_PER_SHARE_INVALID` |
+| 空仓或已清仓基金修改成本单价 | `FUND_NOT_FOUND` |
 | 建仓时间在未来 | `OPENED_AT_IN_FUTURE` |
 | 无有效单位净值 | `NAV_HISTORY_EMPTY` |
 | 分组名称为空、过长或含控制字符 | `FUND_GROUP_NAME_INVALID` |

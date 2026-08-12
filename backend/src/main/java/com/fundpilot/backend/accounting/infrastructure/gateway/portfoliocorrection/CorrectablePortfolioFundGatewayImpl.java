@@ -22,6 +22,15 @@ class CorrectablePortfolioFundGatewayImpl implements CorrectablePortfolioFundGat
     }
 
     @Override
+    public Optional<PortfolioFund> findOwnedForUpdate(long ownerId, long portfolioFundId) {
+        return portfolioFundApi.findForUpdate(portfolioFundId)
+                .filter(result -> result.ownerId() == ownerId)
+                .map(result -> new PortfolioFund(result.id(), result.legacyFundId(),
+                        Validity.valueOf(result.validity().name()), result.voidedAt(),
+                        result.voidedBy(), result.voidReason()));
+    }
+
+    @Override
     public VoidResult voidPortfolioFund(long ownerId, long portfolioFundId, long actorId,
                                         String reason, Instant occurredAt) {
         try {

@@ -13,9 +13,11 @@ public final class PortfolioCorrectionFailure extends RuntimeException {
     }
 
     public enum Code {
+        COST_PER_SHARE_INVALID,
         VOID_CONFIRMATION_REQUIRED,
         VOID_REASON_REQUIRED,
         PORTFOLIO_FUND_NOT_FOUND,
+        PORTFOLIO_FUND_NOT_OPEN,
         PORTFOLIO_FUND_HAS_PENDING_TRANSACTIONS,
         PORTFOLIO_FUND_CORRECTION_CONFLICT
     }

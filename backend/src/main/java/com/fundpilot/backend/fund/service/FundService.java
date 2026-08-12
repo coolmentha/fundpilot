@@ -1,6 +1,8 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.accounting.adapter.api.portfoliocorrection.PortfolioCostCorrectionApi;
 import com.fundpilot.backend.accounting.adapter.api.fundonboarding.PortfolioFundOnboardingApi;
+import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.discipline.adapter.api.classification.DisciplineClassificationApi;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
@@ -50,8 +53,10 @@ public class FundService {
     private final CurrentActorApi currentActorApi;
     private final FundProductApi productCatalogApi;
     private final PortfolioFundApi portfolioFundApi;
+    private final PositionApi positionApi;
     private final PortfolioGroupingApi portfolioGroupingApi;
     private final PortfolioFundOnboardingApi onboardingApi;
+    private final PortfolioCostCorrectionApi costCorrectionApi;
     private final DisciplineClassificationApi disciplineClassifications;
 
     private static final MathContext MATH = MathContext.DECIMAL64;
@@ -72,10 +77,12 @@ public class FundService {
                             && portfolioFund.validity() == PortfolioFundApi.Validity.TRACKED;
                 })
                 .toList();
-        var pnlByFund = fundPnlService.computeForFunds(funds);
+        Map<Long, BigDecimal> currentCostByFundId = currentCostByFundId(userId, portfolioByLegacyFundId);
+        var pnlByFund = fundPnlService.computeForFunds(funds, currentCostByFundId);
         return funds.stream()
                 .map(fund -> FundView.from(fund, pnlByFund.get(fund.getId()),
-                        portfolioByLegacyFundId.get(fund.getId()).id()))
+                        portfolioByLegacyFundId.get(fund.getId()).id(),
+                        currentCostOrLegacy(fund, currentCostByFundId)))
                 .toList();
     }
 
@@ -150,7 +157,10 @@ public class FundService {
         } catch (RuntimeException exception) {
             log.warn("基金开户后刷新行情失败 portfolio_fund={}", onboarding.portfolioFundId(), exception);
         }
-        return FundView.from(saved, onboarding.portfolioFundId());
+        var currentPosition = positionApi.findOwned(userId, onboarding.portfolioFundId());
+        BigDecimal currentCostPerShare = currentPosition.isPresent()
+                ? currentPosition.orElseThrow().costPerShare() : saved.getCostPerShare();
+        return FundView.from(saved, onboarding.portfolioFundId(), currentCostPerShare);
     }
 
     /** 查单个基金(含今日涨跌/持仓盈亏,issue #18);不存在抛 400(业务问题,非路由不存在)。 */
@@ -158,8 +168,11 @@ public class FundService {
     public FundView get(Long id) {
         FundEntity fund = requireFund(id);
         var portfolioFund = requireTrackedPortfolioFund(fund);
-        return FundView.from(fund, fundPnlService.computeForFund(fund.getId()),
-                portfolioFund.id());
+        Map<Long, BigDecimal> currentCostByFundId = new HashMap<>();
+        positionApi.findOwned(currentActorApi.userId(), portfolioFund.id())
+                .ifPresent(position -> currentCostByFundId.put(fund.getId(), position.costPerShare()));
+        return FundView.from(fund, fundPnlService.computeForFund(fund, currentCostByFundId),
+                portfolioFund.id(), currentCostOrLegacy(fund, currentCostByFundId));
     }
 
     /** 更新基金;仅合并请求中非 null 的字段(含类型字段,用户可覆盖自动识别结果)。 */
@@ -199,13 +212,25 @@ public class FundService {
                 saved.getPositionWarningRatio()));
         portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
                 saved.getOwnerId(), portfolioFund.id(), request.groupNames()));
+        var currentPosition = positionApi.findOwned(saved.getOwnerId(), portfolioFund.id());
+        BigDecimal responseCostPerShare = currentPosition.isPresent()
+                ? currentPosition.orElseThrow().costPerShare() : saved.getCostPerShare();
+        if (request.costPerShare() != null) {
+            try {
+                responseCostPerShare = costCorrectionApi.correct(new PortfolioCostCorrectionApi.CorrectCostPerShare(
+                        saved.getOwnerId(), portfolioFund.id(), request.costPerShare()))
+                        .costPerShare();
+            } catch (PortfolioCostCorrectionApi.Failure failure) {
+                throw costCorrectionFailure(failure);
+            }
+        }
         if (request.fundCategory() != null) {
             disciplineClassifications.set(new DisciplineClassificationApi.SetClassification(
                     saved.getOwnerId(), portfolioFund.id(),
                     DisciplineClassificationApi.Category.valueOf(saved.getFundCategory().name()),
                     DisciplineClassificationApi.Source.USER_CUSTOMIZED));
         }
-        return FundView.from(saved, portfolioFund.id());
+        return FundView.from(saved, portfolioFund.id(), responseCostPerShare);
     }
 
     /**
@@ -252,6 +277,14 @@ public class FundService {
         return new BusinessException(code, failure.getMessage());
     }
 
+    private BusinessException costCorrectionFailure(PortfolioCostCorrectionApi.Failure failure) {
+        ErrorCode code = switch (failure.code()) {
+            case COST_PER_SHARE_INVALID -> ErrorCode.COST_PER_SHARE_INVALID;
+            case PORTFOLIO_FUND_NOT_FOUND, PORTFOLIO_FUND_NOT_OPEN -> ErrorCode.FUND_NOT_FOUND;
+        };
+        return new BusinessException(code, failure.getMessage());
+    }
+
     private PortfolioFundApi.PortfolioFund requirePortfolioFund(FundEntity fund) {
         return portfolioFundApi.findOwnedByLegacyFundId(fund.getOwnerId(), fund.getId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -271,5 +304,24 @@ public class FundService {
         long userId = currentActorApi.userId();
         return fundRepository.findByIdAndOwnerId(id, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + id + " 不存在"));
+    }
+
+    private Map<Long, BigDecimal> currentCostByFundId(long ownerId,
+                                                       Map<Long, PortfolioFundApi.PortfolioFund> portfolioByLegacyFundId) {
+        Map<Long, BigDecimal> costByPortfolioFundId = new HashMap<>();
+        positionApi.findByOwner(ownerId).forEach(position ->
+                costByPortfolioFundId.put(position.portfolioFundId(), position.costPerShare()));
+        Map<Long, BigDecimal> result = new HashMap<>();
+        portfolioByLegacyFundId.values().forEach(portfolioFund -> {
+            if (costByPortfolioFundId.containsKey(portfolioFund.id())) {
+                result.put(portfolioFund.legacyFundId(), costByPortfolioFundId.get(portfolioFund.id()));
+            }
+        });
+        return result;
+    }
+
+    private BigDecimal currentCostOrLegacy(FundEntity fund, Map<Long, BigDecimal> currentCostByFundId) {
+        return currentCostByFundId.containsKey(fund.getId())
+                ? currentCostByFundId.get(fund.getId()) : fund.getCostPerShare();
     }
 }

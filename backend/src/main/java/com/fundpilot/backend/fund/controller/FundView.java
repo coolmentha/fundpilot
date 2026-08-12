@@ -84,6 +84,11 @@ public record FundView(
     }
 
     public static FundView from(FundEntity fund, Long portfolioFundId) {
+        return from(fund, portfolioFundId, fund.getCostPerShare());
+    }
+
+    /** 更新持仓成本后以 Accounting 事实覆盖 legacy 字段，仅用于本次响应。 */
+    public static FundView from(FundEntity fund, Long portfolioFundId, BigDecimal costPerShare) {
         return new FundView(
                 fund.getId(),
                 portfolioFundId,
@@ -97,7 +102,7 @@ public record FundView(
                 fund.getOperationMode(),
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
-                fund.getCostPerShare(),
+                costPerShare,
                 fund.isPositionWarningEnabled(),
                 fund.getPositionWarningRatio(),
                 null, false, false, EstimateStatus.NOT_ATTEMPTED,
@@ -111,6 +116,11 @@ public record FundView(
     }
 
     public static FundView from(FundEntity fund, FundPnlService.Pnl pnl, Long portfolioFundId) {
+        return from(fund, pnl, portfolioFundId, fund.getCostPerShare());
+    }
+
+    public static FundView from(FundEntity fund, FundPnlService.Pnl pnl, Long portfolioFundId,
+                                BigDecimal costPerShare) {
         return new FundView(
                 fund.getId(),
                 portfolioFundId,
@@ -124,7 +134,7 @@ public record FundView(
                 fund.getOperationMode(),
                 fund.getInvestmentPhilosophy(),
                 fund.getOpenedAt(),
-                fund.getCostPerShare(),
+                costPerShare,
                 fund.isPositionWarningEnabled(),
                 fund.getPositionWarningRatio(),
                 pnl.dailyChangePct(),

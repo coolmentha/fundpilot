@@ -6,6 +6,8 @@ import java.util.Optional;
 public interface CorrectablePortfolioFundGateway {
     Optional<PortfolioFund> findOwned(long ownerId, long portfolioFundId);
 
+    Optional<PortfolioFund> findOwnedForUpdate(long ownerId, long portfolioFundId);
+
     VoidResult voidPortfolioFund(long ownerId, long portfolioFundId, long actorId,
                                  String reason, Instant occurredAt);
 

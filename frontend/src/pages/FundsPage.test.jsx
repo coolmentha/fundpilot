@@ -2,20 +2,22 @@ import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {App} from 'antd';
 import {MemoryRouter} from 'react-router-dom';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+
+const {saveFund, state} = vi.hoisted(() => ({
+    saveFund: vi.fn(),
+    state: {funds: []},
+}));
 
 vi.mock('../api/hooks.js', () => ({
     useFunds: () => ({
-        data: [{
-            id: 1, fundCode: '000001', fundName: '测试基金', fundCategory: 'INDEX', fundSubType: 'INDEX',
-            benchmarkIndexCode: '000300', positionWarningEnabled: true, positionWarningRatio: 0.3, groups: [],
-        }],
+        data: state.funds,
         isLoading: false, refetch: vi.fn(),
     }),
     useFundGroups: () => ({data: []}),
     useDcaBudgetSummary: () => ({data: null, isLoading: false, isError: false, refetch: vi.fn()}),
     useFundSearch: () => ({data: [], isFetching: false}),
-    useSaveFund: () => ({mutateAsync: vi.fn(), isPending: false}),
+    useSaveFund: () => ({mutateAsync: saveFund, isPending: false}),
     useVoidPortfolioFund: () => ({mutateAsync: vi.fn(), isPending: false}),
 }));
 
@@ -38,6 +40,16 @@ describe('FundsPage', () => {
     let container;
     let root;
 
+    beforeEach(() => {
+        saveFund.mockReset();
+        state.funds = [{
+            id: 1, portfolioFundId: 11, fundCode: '000001', fundName: '测试基金',
+            fundCategory: 'INDEX', fundSubType: 'INDEX', benchmarkIndexCode: '000300',
+            positionWarningEnabled: true, positionWarningRatio: 0.3,
+            holdingShares: 100, costPerShare: 1.2, groups: [],
+        }];
+    });
+
     afterEach(async () => {
         if (root) await act(async () => root.unmount());
         container?.remove();
@@ -57,5 +69,61 @@ describe('FundsPage', () => {
 
         expect(document.body.textContent).toContain('编辑基金');
         expect(document.body.textContent).toContain('测试基金');
+        expect(Number(document.querySelector('#costPerShare')?.value)).toBe(1.2);
+    });
+
+    it('提交修改后的当前持仓成本价', async () => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(
+            <MemoryRouter initialEntries={['/funds?editId=1']}><App><FundsPage/></App></MemoryRouter>,
+        ));
+        await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+
+        const input = document.querySelector('#costPerShare');
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '1.25');
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            document.querySelector('.ant-modal-footer .ant-btn-primary').click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+
+        expect(saveFund).toHaveBeenCalledWith({
+            id: 1,
+            body: expect.objectContaining({costPerShare: 1.25}),
+        });
+    });
+
+    it('成本价未变化时不提交成本修正', async () => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(
+            <MemoryRouter initialEntries={['/funds?editId=1']}><App><FundsPage/></App></MemoryRouter>,
+        ));
+        await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+        await act(async () => {
+            document.querySelector('.ant-modal-footer .ant-btn-primary').click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+
+        expect(saveFund).toHaveBeenCalledWith({
+            id: 1,
+            body: expect.objectContaining({costPerShare: null}),
+        });
+    });
+
+    it('空仓基金编辑时不显示成本价输入框', async () => {
+        state.funds = [{...state.funds[0], holdingShares: null, costPerShare: null}];
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(
+            <MemoryRouter initialEntries={['/funds?editId=1']}><App><FundsPage/></App></MemoryRouter>,
+        ));
+        await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+
+        expect(document.querySelector('#costPerShare')).toBeNull();
     });
 });
