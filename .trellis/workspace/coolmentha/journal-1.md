@@ -406,3 +406,33 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 完成智能定投
+
+**Date**: 2026-08-12
+**Task**: 完成智能定投
+**Branch**: `feature/smart-dca`
+
+### Summary
+
+新增低估、均线、涨跌幅智能定投与固定模式，补充本地估值、执行留痕、预算区间和前端展示。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4a7b1aa` | (see git log) |
+
+### Testing
+
+- [OK] 后端定向及架构测试 75 个通过
+- [OK] 前端 103 个测试、lint、build 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送分支并通过 PR、main CI、v0.11.19 部署
