@@ -229,8 +229,8 @@ _Avoid_: 普通基金把今日涨跌当"T-1 vs T-2"（那是昨日涨跌）；QD
 _Avoid_: 用份额×(gsz-昨日单位净值) 算估算盈亏（单位净值口径，分红基金失真）
 
 **持仓成本价（Cost Per Share）**:
-每份基金的成本单价，`FundEntity` 上的维护字段。建仓时用户可填（不填默认 T-1 净值）；后续 INCREASE/TRANSFER_IN/INVEST 交易 CONFIRMED 时同一事务内加权更新（`新单价 = (旧单价×旧份额 + 本次amount) / 新旧份额之和`）。卖出不改单价。清仓再入场时旧值自然被新交易覆盖。用于总盈亏计算。
-_Avoid_: 持仓成本总额（旧定义已废弃，改成单价）；穿透交易表实时派生（成本价是持仓属性应存储，与 peakNav 等行情派生值不同）
+每份基金的当前成本单价。建仓时用户可填（不填默认 T-1 净值）；后续 INCREASE/TRANSFER_IN/INVEST 交易 CONFIRMED 时同一事务内加权更新（`新单价 = (旧单价×旧份额 + 本次amount) / 新旧份额之和`）。持仓期间允许用户修正当前成本价，修正后用于总盈亏及后续成本相关计算，但不追溯修改历史交易或 FIFO lot 的取得成本。卖出不改单价。清仓再入场时旧值自然被新交易覆盖。
+_Avoid_: 持仓成本总额（旧定义已废弃，改成单价）；穿透交易表实时派生；用当前成本修正篡改历史已实现盈亏
 
 **总盈亏（Total PnL）**:
 基金整体赚了还是亏了。估值阶段开始前 = 持仓份额 ×（最近已确认单位净值 - 成本单价）；估值阶段 = 持仓份额 ×（最近已确认单位净值 × (1 + 今日涨跌幅) - 成本单价）；当日净值落库后 = 持仓份额 ×（当日单位净值 - 成本单价）。用于"盈利基金/亏损基金"分组。无持仓为 null；估值阶段已经开始但估值空响应或失败时，当前持仓市值与总盈亏为未知，不得拿上一期已公布净值冒充当前值。
@@ -267,7 +267,7 @@ _Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，sig
 新建基金时录入已有持仓的建仓动作。`FundCreateRequest.initialMarketValue` 有值即触发——状态流转对齐 BUILD 信号确认
 （`FundStatus → HOLDING`、写 INCREASE 交易），但确认时机同步：`shares = initialMarketValue / T-1净值`，置 CONFIRMED，
 不等 NavConfirmJob。`initialMarketValue` 是**入仓市值**（"现在值多少钱"），净值用 T-1（最近一期已公布）反算份额。
-`costPerShare` 可选填（成本单价，不填默认 T-1 净值），>0 校验，存入 `FundEntity.costPerShare` 作为初始成本基准。
+`costPerShare` 可选填（成本单价，不填默认 T-1 净值），>0 校验，存入 Accounting `Position.costPerShare` 作为当前成本基准；`FundEntity.costPerShare` 仅保留为 legacy 兼容字段，不再作为当前事实来源。
 交易 `amount` 写 `initialMarketValue`（市值口径）。`openedAt` 用户可填（大致建仓时点，影响移动止盈持仓期高点起算），
 不填用 now，须 ≤ 今天。与手动交易的本质区别：手动交易是已建仓后的资金动作（走 NavConfirmJob 异步确认），
 初始持仓录入是建仓本身（同步确认）。交易来源用 INCREASE（对齐 handleBuild 建仓语义，不用 TRANSFER_IN——建仓是首笔买入非转入），

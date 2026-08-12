@@ -9,6 +9,8 @@ import com.fundpilot.backend.fund.enums.FundTransactionSource;
 import com.fundpilot.backend.fund.enums.FundTransactionStatus;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundService;
+import com.fundpilot.backend.accounting.domain.position.Position;
+import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
@@ -24,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,6 +40,32 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
     @Autowired PortfolioFundApi portfolioFundApi;
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired PositionRepository positions;
+
+    @Test
+    void correctsCurrentCostThroughFundUpdateAndMapsInvalidInput() throws Exception {
+        var fund = fundService.create(new FundCreateRequest(
+                "009998", "当前成本测试基金", FundCategory.BROAD_BASE, FundSubType.INDEX, null));
+        var position = Position.empty(fund.portfolioFundId(), testActorId());
+        position.reconcile(true, new java.math.BigDecimal("100"), java.time.Instant.parse("2026-08-01T00:00:00Z"));
+        position.applyExistingPosition(new java.math.BigDecimal("1.10"),
+                java.time.Instant.parse("2026-08-01T00:00:00Z"));
+        positions.save(position);
+
+        mockMvc.perform(put("/api/funds/{id}", fund.id())
+                        .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"costPerShare\":1.25}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.costPerShare").value(1.25));
+
+        mockMvc.perform(put("/api/funds/{id}", fund.id())
+                        .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"costPerShare\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COST_PER_SHARE_INVALID"));
+    }
 
     @Test
     void blocksPendingThenVoidsWithoutDeletingLedgerAndRetryKeepsFirstAudit() throws Exception {

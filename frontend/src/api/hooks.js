@@ -52,6 +52,8 @@ export function useSaveFund() {
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['funds']});
             qc.invalidateQueries({queryKey: ['fund-groups']});
+            qc.invalidateQueries({queryKey: ['portfolio-summary']});
+            qc.invalidateQueries({queryKey: ['portfolio-returns']});
         },
     });
 }

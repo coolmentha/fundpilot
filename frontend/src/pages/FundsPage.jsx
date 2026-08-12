@@ -90,6 +90,7 @@ export default function FundsPage() {
             benchmarkIndexCode: fund.benchmarkIndexCode,
             positionWarningEnabled: fund.positionWarningEnabled !== false,
             positionWarningRatioPct: Number(fund.positionWarningRatio ?? 0.3) * 100,
+            costPerShare: Number(fund.holdingShares) > 0 ? fund.costPerShare : null,
             groupNames: (fund.groups || []).map((group) => group.name),
         });
         setOpen(true);
@@ -128,6 +129,9 @@ export default function FundsPage() {
             const values = await form.validateFields();
             // openedAt:DatePicker 返回 dayjs,按北京时区零点转 ISO 提交(后端 Instant 解析);未选则不传(后端用 now)
             const {positionWarningRatioPct, ...requestValues} = values;
+            if (editing && Number(requestValues.costPerShare) === Number(editing.costPerShare)) {
+                requestValues.costPerShare = null;
+            }
             const normalized = {...requestValues, positionWarningRatio: positionWarningRatioPct / 100};
             const body = values.openedAt
                 ? {...normalized, openedAt: `${dayjs(values.openedAt).utcOffset(8).format('YYYY-MM-DD')}T00:00:00+08:00`}
@@ -312,6 +316,14 @@ export default function FundsPage() {
                                      formatter={(value) => value === undefined || value === null ? '' : `${value}%`}
                                      parser={(value) => value?.replace('%', '')}/>
                     </Form.Item>
+                    {editing && Number(editing.holdingShares) > 0 && (
+                        <Form.Item label="成本单价" name="costPerShare"
+                                   help="只修正当前持仓成本，不修改历史交易"
+                                   rules={[{required: true, message: '请输入成本单价'},
+                                       {type: 'number', min: 0.00000001, message: '成本单价必须大于 0'}]}>
+                            <InputNumber min={0.00000001} precision={8} className="full-width"/>
+                        </Form.Item>
+                    )}
                     {!editing && (
                         <Form.Item label="持有份额（可选）" name="initialHoldingShares"
                                    help="现有持仓的实际份额。不填则创建空仓基金"

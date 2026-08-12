@@ -71,14 +71,28 @@ public class FundPnlService {
      * 聚合单基金的涨跌与盈亏。调用方已有基金实体时走本重载,避免重复查 fund 表。
      */
     public Pnl computeForFund(FundEntity fund) {
+        return computeForFund(fund, Map.of());
+    }
+
+    /** 兼容基金查询可传入 Accounting 当前成本；缺少 Position 时回退 legacy 字段。 */
+    public Pnl computeForFund(FundEntity fund, Map<Long, BigDecimal> currentCostByFundId) {
         Long fundId = fund.getId();
         List<FundNavHistoryEntity> latestTwo = fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(fundId);
         BigDecimal rawShares = fundPositionService.getHoldingShares(fundId);
-        return computeForFund(fund, latestTwo, rawShares, null, null);
+        return computeForFund(fund, latestTwo, rawShares, null, null, currentCostByFundId);
     }
 
     /** 列表/组合批量聚合，固定三次批量读取，避免逐基金 N+1。 */
     public Map<Long, Pnl> computeForFunds(List<FundEntity> funds) {
+        return computeForFunds(funds, Map.of());
+    }
+
+    /**
+     * 使用调用方已读取的 Accounting 当前成本计算兼容基金查询；缺少 Position 时回退 legacy 字段。
+     * <p>成本 map 的 key 存在即表示 Accounting 是权威来源，即使该值为 null 也不能回退 legacy。
+     */
+    public Map<Long, Pnl> computeForFunds(List<FundEntity> funds,
+                                          Map<Long, BigDecimal> currentCostByFundId) {
         if (funds.isEmpty()) {
             return Map.of();
         }
@@ -109,14 +123,15 @@ public class FundPnlService {
                     fund,
                     navsByFund.getOrDefault(fund.getId(), List.of()),
                     sharesByFund.getOrDefault(fund.getId(), BigDecimal.ZERO),
-                    estimates, estimateStatuses));
+                    estimates, estimateStatuses, currentCostByFundId));
         }
         return result;
     }
 
     private Pnl computeForFund(FundEntity fund, List<FundNavHistoryEntity> latestTwo,
                                BigDecimal rawShares, Map<String, FundEstimateSnapshot> batchEstimates,
-                               Map<String, EstimateStatus> batchEstimateStatuses) {
+                               Map<String, EstimateStatus> batchEstimateStatuses,
+                               Map<Long, BigDecimal> currentCostByFundId) {
         BigDecimal latestAccumulatedNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousAccumulatedNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
         BigDecimal latestUnitNav = latestTwo.size() >= 1 ? latestTwo.get(0).getNav() : null;
@@ -149,7 +164,9 @@ public class FundPnlService {
 
         // 持仓份额为 0 视作无持仓:盈亏类字段为 null,但今日涨跌仍返回(观察池基金也看涨跌,story 21)
         BigDecimal holdingShares = rawShares != null && rawShares.signum() != 0 ? rawShares : null;
-        BigDecimal costPerShare = holdingShares != null ? fund.getCostPerShare() : null;
+        BigDecimal costPerShare = holdingShares == null ? null
+                : currentCostByFundId.containsKey(fund.getId())
+                ? currentCostByFundId.get(fund.getId()) : fund.getCostPerShare();
 
         // 今日盈亏 = 昨日市值 × 今日涨跌幅(三态统一口径,不引入单位净值 gsz)
         // 非估计态:dailyChangePct = (latest-previous)/previous,基准是 previousNav

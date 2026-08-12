@@ -1,5 +1,7 @@
 package com.fundpilot.backend.fund.service;
 
+import com.fundpilot.backend.accounting.domain.position.Position;
+import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
@@ -15,8 +17,11 @@ import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +41,8 @@ class FundServiceTest extends AbstractIntegrationTest {
     @Autowired FundProductApi productCatalogApi;
     @Autowired PortfolioFundApi portfolioFundApi;
     @Autowired PortfolioGroupingApi portfolioGroupingApi;
+    @Autowired PositionRepository positions;
+    @Autowired JdbcTemplate jdbcTemplate;
 
     @Test
     void create_正常创建() {
@@ -156,6 +163,62 @@ class FundServiceTest extends AbstractIntegrationTest {
         assertThat(reloaded.getBenchmarkIndexCode()).isEqualTo("931865.CSI");
         var product = productCatalogApi.findById(reloaded.getProductId()).orElseThrow();
         assertThat(product.benchmarkIndexCode()).isEqualTo("931865.CSI");
+    }
+
+    @Test
+    void update_只修正当前持仓成本且不修改lot() {
+        FundEntity fund = persistFund(FundCategory.BROAD_BASE);
+        var portfolioFund = portfolioFundApi.findOwnedByLegacyFundId(testActorId(), fund.getId()).orElseThrow();
+        Position position = Position.empty(portfolioFund.id(), testActorId());
+        Instant openedAt = Instant.parse("2026-08-01T00:00:00Z");
+        position.reconcile(true, new BigDecimal("100"), openedAt);
+        position.applyExistingPosition(new BigDecimal("1.10"), openedAt);
+        positions.save(position);
+        jdbcTemplate.update("""
+                INSERT INTO fund_lot(version, fund_id, portfolio_fund_id, acquire_tx_id, acquire_date,
+                                     acquire_shares, remaining_shares, acquire_cost_per_share,
+                                     created_date, updated_date)
+                VALUES (0, ?, ?, 999999, ?, 100, 100, 1.10, now(), now())
+                """, fund.getId(), portfolioFund.id(), Timestamp.from(openedAt));
+
+        FundView updated = fundService.update(fund.getId(), new FundCreateRequest(
+                null, null, null, null, null, null, null, null,
+                new BigDecimal("1.25"), null, null));
+
+        assertThat(updated.costPerShare()).isEqualByComparingTo("1.25");
+        assertThat(positions.findByPortfolioFund(portfolioFund.id()).orElseThrow())
+                .extracting(Position::costPerShare, Position::openedAt)
+                .containsExactly(new BigDecimal("1.25000000"), openedAt);
+        var lot = jdbcTemplate.queryForMap("""
+                SELECT remaining_shares, acquire_cost_per_share FROM fund_lot
+                WHERE portfolio_fund_id = ? AND deleted_date IS NULL
+                """, portfolioFund.id());
+        assertThat((BigDecimal) lot.get("remaining_shares")).isEqualByComparingTo("100");
+        assertThat((BigDecimal) lot.get("acquire_cost_per_share")).isEqualByComparingTo("1.10");
+    }
+
+    @Test
+    void update_空仓不能修改成本价() {
+        FundEntity fund = persistFund(FundCategory.BROAD_BASE);
+        var portfolioFund = portfolioFundApi.findOwnedByLegacyFundId(testActorId(), fund.getId()).orElseThrow();
+        positions.save(Position.empty(portfolioFund.id(), testActorId()));
+
+        assertThatThrownBy(() -> fundService.update(fund.getId(), new FundCreateRequest(
+                null, null, null, null, null, null, null, null,
+                new BigDecimal("1.25"), null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.FUND_NOT_FOUND.name());
+    }
+
+    @Test
+    void update_非正成本价抛COST_PER_SHARE_INVALID() {
+        FundEntity fund = persistFund(FundCategory.BROAD_BASE);
+
+        assertThatThrownBy(() -> fundService.update(fund.getId(), new FundCreateRequest(
+                null, null, null, null, null, null, null, null,
+                BigDecimal.ZERO, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code").isEqualTo(ErrorCode.COST_PER_SHARE_INVALID.name());
     }
 
     private FundEntity persistFund(FundCategory category) {

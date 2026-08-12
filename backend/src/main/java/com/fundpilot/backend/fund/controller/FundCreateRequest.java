@@ -23,8 +23,8 @@ import java.util.List;
  * @param positionWarningEnabled 是否启用当前持仓占比提醒(可选,默认 true)
  * @param positionWarningRatio 当前持仓占比提醒线(可选,默认 30%,范围为 (0, 100%])
  * @param initialHoldingShares 持有份额(可选):新建时录入已有持仓;null 表示不录持仓；非正数为非法输入
- * @param costPerShare         成本单价(可选,仅 initialHoldingShares 有值时生效):不填默认 T-1 净值;>0 校验;
- *                             存入 FundEntity.costPerShare 作为初始成本基准(ADR-0013)
+ * @param costPerShare         成本单价(可选):新建持仓时不填默认 T-1 净值；更新时非 null 表示修正当前持仓成本；
+ *                             两种场景都必须大于 0，且修正不回写历史交易或 FIFO lot(ADR-0013)
  * @param openedAt             建仓时间(可选,仅 initialHoldingShares 有值时生效):用户记得的大致建仓时点,
  *                             影响移动止盈的持仓期高点起算;null 则用 now。须 ≤ 今天
  */

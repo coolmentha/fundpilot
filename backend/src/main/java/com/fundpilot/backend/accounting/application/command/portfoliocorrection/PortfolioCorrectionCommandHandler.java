@@ -1,11 +1,15 @@
 package com.fundpilot.backend.accounting.application.command.portfoliocorrection;
 
 import com.fundpilot.backend.accounting.application.gateway.portfoliocorrection.CorrectablePortfolioFundGateway;
+import com.fundpilot.backend.accounting.domain.position.PositionRepository;
+import com.fundpilot.backend.accounting.domain.position.PositionStatus;
 import com.fundpilot.backend.accounting.domain.transaction.PendingTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -13,8 +17,39 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class PortfolioCorrectionCommandHandler {
     private final CorrectablePortfolioFundGateway portfolioFunds;
+    private final PositionRepository positions;
     private final PendingTransactionRepository pendingTransactions;
     private final Clock clock;
+
+    @Transactional
+    public CostCorrectionResult correctCostPerShare(long ownerId, long portfolioFundId,
+                                                     BigDecimal costPerShare) {
+        var portfolioFund = portfolioFunds.findOwnedForUpdate(ownerId, portfolioFundId)
+                .orElseThrow(() -> new PortfolioCorrectionFailure(
+                        PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
+                        "组合基金不存在: " + portfolioFundId));
+        if (portfolioFund.validity() != CorrectablePortfolioFundGateway.Validity.TRACKED) {
+            throw new PortfolioCorrectionFailure(
+                    PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
+                    "组合基金不存在: " + portfolioFundId);
+        }
+        BigDecimal normalizedCost = costPerShare == null ? null
+                : costPerShare.setScale(8, RoundingMode.HALF_UP);
+        if (normalizedCost == null || normalizedCost.signum() <= 0) {
+            throw new PortfolioCorrectionFailure(
+                    PortfolioCorrectionFailure.Code.COST_PER_SHARE_INVALID,
+                    "成本单价必须大于 0");
+        }
+        var position = positions.findByPortfolioFund(portfolioFundId)
+                .filter(existing -> existing.ownerId() == ownerId
+                        && existing.status() == PositionStatus.OPEN)
+                .orElseThrow(() -> new PortfolioCorrectionFailure(
+                        PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_OPEN,
+                        "只有当前持仓可以修改成本单价"));
+        position.correctCostPerShare(normalizedCost);
+        var saved = positions.save(position);
+        return new CostCorrectionResult(saved.portfolioFundId(), saved.costPerShare());
+    }
 
     @Transactional
     public VoidResult voidPortfolioFund(long ownerId, long portfolioFundId,
@@ -72,5 +107,8 @@ public class PortfolioCorrectionCommandHandler {
 
     public record VoidResult(long portfolioFundId, boolean changed, Instant voidedAt,
                              Long voidedBy, String voidReason) {
+    }
+
+    public record CostCorrectionResult(long portfolioFundId, BigDecimal costPerShare) {
     }
 }

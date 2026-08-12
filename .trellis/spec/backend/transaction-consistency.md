@@ -606,3 +606,65 @@ amount = facts.isEmpty() ? plan.amount() : policy.calculate(facts);
 decision = policy.calculate(plan.amountStrategy(), plan.amount(), facts);
 executions.insert(decision.executable() ? executed(decision) : skipped(decision));
 ```
+
+## Scenario: Current position cost correction
+
+### 1. Scope / Trigger
+
+Applies when a user corrects the cost basis of an existing open position through the fund edit flow.
+
+### 2. Signatures
+
+```java
+PortfolioCostCorrectionApi.CostCorrectionResult PortfolioCostCorrectionApi.correct(
+    PortfolioCostCorrectionApi.CorrectCostPerShare request);
+PortfolioCorrectionCommandHandler.CostCorrectionResult PortfolioCorrectionCommandHandler.correctCostPerShare(
+    long ownerId, long portfolioFundId, BigDecimal costPerShare);
+void Position.correctCostPerShare(BigDecimal correctedCostPerShare);
+```
+
+`PUT /api/funds/{legacyFundId}` uses optional `costPerShare`; `null` means no cost correction.
+
+### 3. Contracts
+
+- Lock `PortfolioFund` before loading and saving `Position`, matching transaction-confirmation lock order.
+- Normalize a supplied cost to `NUMERIC(19,8)` with `HALF_UP`; the rounded value must remain positive.
+- Only a `TRACKED` portfolio fund owned by the caller with an `OPEN` position can be corrected.
+- Update only `accounting_position.cost_per_share`. Do not write legacy `fund.cost_per_share`, transactions,
+  shares, `openedAt`, status, or FIFO lot acquisition costs.
+- Later purchases use the corrected position cost as the previous cost in the existing weighted formula.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| Null, non-positive, or rounded-to-zero cost | `COST_PER_SHARE_INVALID` |
+| Missing, voided, or another user's portfolio fund | `FUND_NOT_FOUND` at the legacy API boundary |
+| Empty or cleared position | `FUND_NOT_FOUND` at the legacy API boundary |
+| Valid open position | Persist the normalized current cost and return it |
+
+### 5. Good/Base/Bad Cases
+
+- Good: correcting `1.10` to `1.25` changes current unrealized PnL and leaves the FIFO lot at `1.10`.
+- Base: omitting `costPerShare` updates fund metadata without touching the position.
+- Bad: updating legacy `fund.cost_per_share` or rewriting confirmed transactions/lots.
+
+### 6. Tests Required
+
+- Domain test: correction changes only cost and rejects a non-`OPEN` position.
+- Command test: positive normalization, rounded-to-zero rejection, ownership hiding, and save behavior.
+- PostgreSQL integration test: persisted Position changes while FIFO lot shares and acquisition cost remain unchanged.
+- UI test: input appears only for positive holdings, submits a changed value, and submits `null` when unchanged.
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: creates a second source of truth and changes historical accounting.
+fund.setCostPerShare(cost);
+lots.updateAcquireCost(portfolioFundId, cost);
+
+// Correct: serialize with transaction confirmation and update only the current Position fact.
+portfolioFunds.findOwnedForUpdate(ownerId, portfolioFundId);
+position.correctCostPerShare(cost.setScale(8, RoundingMode.HALF_UP));
+positions.save(position);
+```

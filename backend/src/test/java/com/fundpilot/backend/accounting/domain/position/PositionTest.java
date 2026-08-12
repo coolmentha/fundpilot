@@ -1,9 +1,11 @@
 package com.fundpilot.backend.accounting.domain.position;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PositionTest {
@@ -29,5 +31,27 @@ class PositionTest {
         position.applyPurchase(new BigDecimal("200"), new BigDecimal("100"), new BigDecimal("1500"),
                 BigDecimal.ZERO);
         assertThat(position.costPerShare()).isEqualByComparingTo("12.50");
+    }
+
+    @Test
+    void 修正当前成本价不改变其他持仓事实() {
+        Instant openedAt = Instant.parse("2026-08-01T00:00:00Z");
+        Position position = Position.empty(11L, 3L);
+        position.reconcile(true, new BigDecimal("100"), openedAt);
+        position.applyExistingPosition(new BigDecimal("1.10"), openedAt);
+
+        position.correctCostPerShare(new BigDecimal("1.25"));
+
+        assertThat(position.costPerShare()).isEqualByComparingTo("1.25");
+        assertThat(position.status()).isEqualTo(PositionStatus.OPEN);
+        assertThat(position.openedAt()).isEqualTo(openedAt);
+    }
+
+    @Test
+    void 非当前持仓不能修正成本价() {
+        Position position = Position.empty(11L, 3L);
+
+        assertThatThrownBy(() -> position.correctCostPerShare(new BigDecimal("1.25")))
+                .isInstanceOf(IllegalStateException.class);
     }
 }
