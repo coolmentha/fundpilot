@@ -52,6 +52,30 @@ class InvestmentPlanCommandHandlerTest {
     }
 
     @Test
+    void 智能策略配置使用基准指数并清理无关参数() {
+        var plans = mock(InvestmentPlanRepository.class);
+        var funds = mock(PlanPortfolioFundGateway.class);
+        when(funds.requireTracked(3L, 11L)).thenReturn(
+                new PlanPortfolioFundGateway.PortfolioFund(11L, 41L, 1001L, "000300.SH"));
+        when(plans.findEffectiveByPortfolioFundId(11L)).thenReturn(Optional.empty());
+        when(plans.save(any(InvestmentPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var handler = new InvestmentPlanCommandHandler(plans, funds);
+
+        var low = handler.createForPortfolioFund(3L, 11L,
+                new PlanInput(true, new BigDecimal("100"), "DAILY", null, null,
+                        "LOW_VALUATION", "930050.CSI", null));
+        var fixed = handler.createForPortfolioFund(3L, 11L,
+                new PlanInput(true, new BigDecimal("100"), "DAILY", null, null,
+                        "FIXED", "930050.CSI", 250));
+
+        assertThat(low.amountStrategy()).isEqualTo("LOW_VALUATION");
+        assertThat(low.referenceIndexCode()).isEqualTo("000300.SH");
+        assertThat(fixed.amountStrategy()).isEqualTo("FIXED");
+        assertThat(fixed.referenceIndexCode()).isNull();
+        assertThat(fixed.movingAverageDays()).isNull();
+    }
+
+    @Test
     void DRAFT计划退休返回IllegalStateTransition() {
         var plans = mock(InvestmentPlanRepository.class);
         var funds = trackedFunds();

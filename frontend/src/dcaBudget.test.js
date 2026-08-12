@@ -59,4 +59,16 @@ describe('DCA budget progress', () => {
         expect(progress.projectedAmount).toBe(0);
         expect(Number.isFinite(progress.investedPercent)).toBe(true);
     });
+
+    it('hides the smart range when there are no smart plans', () => {
+        const progress = buildDcaBudgetProgress({
+            investedAmount: 100,
+            futureAmount: 200,
+            minimumFutureAmount: null,
+            maximumFutureAmount: null,
+        });
+
+        expect(progress.minimumFutureAmount).toBeNull();
+        expect(progress.maximumFutureAmount).toBeNull();
+    });
 });

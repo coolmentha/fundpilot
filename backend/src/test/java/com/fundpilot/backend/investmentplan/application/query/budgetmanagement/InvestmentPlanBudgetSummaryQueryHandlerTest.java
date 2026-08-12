@@ -46,5 +46,7 @@ class InvestmentPlanBudgetSummaryQueryHandlerTest {
         assertThat(summary.investedAmount()).isEqualByComparingTo("150");
         assertThat(summary.futureAmount()).isEqualByComparingTo("100");
         assertThat(summary.projectedAmount()).isEqualByComparingTo("250");
+        assertThat(summary.minimumFutureAmount()).isNull();
+        assertThat(summary.maximumFutureAmount()).isNull();
     }
 }

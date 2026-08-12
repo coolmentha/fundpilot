@@ -9,6 +9,7 @@ import com.fundpilot.backend.investmentplan.application.gateway.planexecution.Pl
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
+import com.fundpilot.backend.investmentplan.domain.execution.InvestmentPlanExecutionRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,7 +37,7 @@ class InvestmentPlanForecastQueryHandlerTest {
                 new PlanTransactionGateway.Occurrence(7L, july27, new BigDecimal("100"), status)));
 
         var handler = new InvestmentPlanForecastQueryHandler(calendar, transactions,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), mock(InvestmentPlanExecutionRepository.class));
 
         assertThat(handler.currentMonthExecutionDates(3L, List.of(dailyPlan())))
                 .containsEntry(7L, List.of(july28));
@@ -55,7 +56,8 @@ class InvestmentPlanForecastQueryHandlerTest {
         when(transactions.occurrences(3L, monthStart, nextMonthStart)).thenReturn(List.of());
 
         var handler = new InvestmentPlanForecastQueryHandler(calendar, transactions,
-                Clock.fixed(Instant.parse("2026-08-03T05:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-08-03T05:00:00Z"), ZoneOffset.UTC),
+                mock(InvestmentPlanExecutionRepository.class));
 
         assertThat(handler.currentMonthExecutionDates(3L, List.of(monthlyPlan())))
                 .containsEntry(7L, List.of(aug10));

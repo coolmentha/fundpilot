@@ -176,6 +176,16 @@ public class EastmoneyClientConfig {
                 .target(CsindexClient.class, csindexBaseUrl);
     }
 
+    @Bean
+    public CsindexValuationClient csindexValuationClient(
+            @Value("${csindex.base-url:https://www.csindex.com.cn}") String csindexBaseUrl) {
+        return Feign.builder()
+                .requestInterceptor(requestInterceptor())
+                .retryer(retryer())
+                .options(options())
+                .target(CsindexValuationClient.class, csindexBaseUrl);
+    }
+
     /** 注册 AKShare {@code stock_zh_index_daily_tx} 使用的腾讯指数日线客户端。 */
     @Bean
     public TencentIndexClient tencentIndexClient(

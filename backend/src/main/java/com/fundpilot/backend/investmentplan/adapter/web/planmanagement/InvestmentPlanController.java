@@ -94,20 +94,31 @@ public class InvestmentPlanController {
     }
 
     public record Request(boolean enabled, BigDecimal amount, String frequency,
-                          Integer dayOfWeek, Integer dayOfMonth) {
+                          Integer dayOfWeek, Integer dayOfMonth, String amountStrategy,
+                          String referenceIndexCode, Integer movingAverageDays) {
+        public Request(boolean enabled, BigDecimal amount, String frequency,
+                       Integer dayOfWeek, Integer dayOfMonth) {
+            this(enabled, amount, frequency, dayOfWeek, dayOfMonth, "FIXED", null, null);
+        }
         InvestmentPlanCommandHandler.PlanInput toInput() {
-            return new InvestmentPlanCommandHandler.PlanInput(enabled, amount, frequency, dayOfWeek, dayOfMonth);
+            return new InvestmentPlanCommandHandler.PlanInput(enabled, amount, frequency, dayOfWeek, dayOfMonth,
+                    amountStrategy, referenceIndexCode, movingAverageDays);
         }
     }
     public record PlanView(Long id, long portfolioFundId, boolean enabled, BigDecimal amount,
                            String frequency, Integer dayOfWeek, Integer dayOfMonth,
-                           String status, Instant createdDate, int remainingOccurrences,
-                           BigDecimal remainingAmount, List<Instant> remainingExecutionDates) {
+                           String status, String amountStrategy, String referenceIndexCode,
+                           Integer movingAverageDays, BigDecimal minimumAmount, BigDecimal maximumAmount,
+                           Instant createdDate, int remainingOccurrences, BigDecimal remainingAmount,
+                           List<Instant> remainingExecutionDates,
+                           InvestmentPlanCommandHandler.LatestDecision latestDecision) {
         static PlanView from(InvestmentPlanCommandHandler.PlanResult result) {
             var dates = result.remainingExecutionDates();
             return new PlanView(result.id(), result.portfolioFundId(), result.enabled(), result.amount(),
                     result.frequency(), result.dayOfWeek(), result.dayOfMonth(), result.status(),
-                    result.createdDate(), dates.size(), result.amount().multiply(BigDecimal.valueOf(dates.size())), dates);
+                    result.amountStrategy(), result.referenceIndexCode(), result.movingAverageDays(),
+                    result.minimumAmount(), result.maximumAmount(), result.createdDate(), dates.size(),
+                    result.amount().multiply(BigDecimal.valueOf(dates.size())), dates, result.latestDecision());
         }
     }
     record Response<T>(boolean success, T data, String code, String message) {

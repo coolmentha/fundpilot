@@ -539,3 +539,70 @@ repository.save(new PortfolioReturnSnapshotEntity());
 row = repository.findByBusinessDate(businessDate).orElseGet(PortfolioReturnSnapshotEntity::new);
 repository.save(row);
 ```
+
+## Scenario: Smart investment-plan amounts
+
+### 1. Scope / Trigger
+
+Applies when changing investment-plan amount strategies, local valuation facts, execution idempotency,
+monthly forecasts, budget ranges, or the plan UI.
+
+### 2. Signatures
+
+- Plan strategies: `FIXED / LOW_VALUATION / MOVING_AVERAGE / CHANGE_RATE`.
+- Rule version: `ALIPAY_2025_06_V1`.
+- DB uniqueness: `index_valuation(index_code, trade_date, source)` and
+  `investment_plan_execution(investment_plan_id, business_date)`.
+- API request fields: `amountStrategy`, `referenceIndexCode`, `movingAverageDays`.
+- API response additions: `minimumAmount`, `maximumAmount`, `latestDecision`; budget summaries add
+  minimum/maximum future and projected amounts.
+
+### 3. Contracts
+
+- `investment_plan.amount` remains the base amount; existing and omitted strategies are `FIXED`.
+- Low valuation uses the fund benchmark and locally stored CSI PE values before the business date. It invests
+  100% only at or below the 30th percentile.
+- Moving average uses the saved reference index, 180/250/500 closes, and ten-close amplitude. Change rate uses
+  latest published unit NAV and current accounting cost per share.
+- Missing smart facts create a `SKIPPED` execution record and no transaction. Never fall back to the fixed amount.
+- An executed smart decision and its `INVEST/PENDING` transaction commit together. A monthly skip consumes that
+  month's occurrence; daily and weekly schedule behavior is unchanged.
+- Budget headline amounts remain based on the base amount; ranges are `100%-100% / 0%-100% / 60%-210% /
+  50%-200%`. UI reason text must map internal reason codes to Chinese labels.
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|---|---|
+| Low valuation has no fund benchmark | Reject plan configuration as invalid |
+| Moving average has no reference index or a period outside 180/250/500 | Reject plan configuration as invalid |
+| PE, K-line, NAV, or cost facts are unavailable | Persist the matching `SKIPPED` reason; create no transaction |
+| The same plan/business day is retried | Create neither a second decision nor a second transaction |
+| A monthly plan already has a transaction or decision in the month | Do not compensate later in that month |
+
+### 5. Good/Base/Bad Cases
+
+- Good: a low-valuation plan at the 30th percentile creates one pending transaction at the base amount and records
+  its rule version and data date.
+- Base: a fixed plan follows the pre-existing path without smart rounding or an execution record.
+- Bad: unavailable PE silently creates a fixed-amount transaction, or an executed reason exposes
+  `MOVING_AVERAGE` directly in the UI.
+
+### 6. Tests Required
+
+- Policy tests cover every tier boundary, missing facts, and two-decimal `HALF_UP` amounts.
+- Execution tests cover fixed-path regression, smart execute/skip, same-day retry, and monthly skip without catch-up.
+- Persistence/integration tests cover V49 defaults, constraints, upserts, and both unique keys on PostgreSQL.
+- Query/UI tests cover base forecasts, min/max ranges, recent decision fields, and Chinese reason labels.
+- Modulith and architecture tests must keep cross-module reads behind named adapter APIs.
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: missing market facts change the agreed amount semantics and lose the audit trail.
+amount = facts.isEmpty() ? plan.amount() : policy.calculate(facts);
+
+// Correct: one local decision is the idempotent business fact for this plan and business date.
+decision = policy.calculate(plan.amountStrategy(), plan.amount(), facts);
+executions.insert(decision.executable() ? executed(decision) : skipped(decision));
+```

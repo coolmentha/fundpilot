@@ -42,6 +42,13 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
                 <div><span>本月剩余预计</span><strong>{money(progress.futureAmount)}</strong></div>
                 <div><span>全月预计</span><strong>{money(progress.projectedAmount)}</strong></div>
             </div>
+            {(progress.minimumFutureAmount !== null || progress.maximumFutureAmount !== null) && (
+                <div className="dca-budget-range">
+                    <span>智能计划未来区间</span>
+                    <strong>{money(progress.minimumFutureAmount)} - {money(progress.maximumFutureAmount)}</strong>
+                    <span>实际金额以执行日策略结果为准</span>
+                </div>
+            )}
             {progress.hasBudget && (
                 <>
                     <div className="dca-budget-progress" role="progressbar"

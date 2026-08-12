@@ -4,6 +4,7 @@ import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanFrequency;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
+import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanAmountStrategy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import java.util.List;
@@ -38,6 +39,9 @@ class InvestmentPlanRepositoryImpl implements InvestmentPlanRepository {
         entity.setFrequency(plan.frequency().name());
         entity.setDayOfWeek(plan.dayOfWeek());
         entity.setDayOfMonth(plan.dayOfMonth());
+        entity.setAmountStrategy(plan.amountStrategy().name());
+        entity.setReferenceIndexCode(plan.referenceIndexCode());
+        entity.setMovingAverageDays(plan.movingAverageDays());
         entity.setStatus(plan.status().name());
         entity.setEnabled(plan.enabled());
         return toDomain(plans.save(entity));
@@ -49,6 +53,8 @@ class InvestmentPlanRepositoryImpl implements InvestmentPlanRepository {
         return InvestmentPlan.rehydrate(entity.getId(), entity.getLegacyDcaPlanId(), entity.getPortfolioFundId(),
                 entity.getOwnerId(), entity.isEnabled(), entity.getAmount(),
                 InvestmentPlanFrequency.valueOf(entity.getFrequency()), entity.getDayOfWeek(), entity.getDayOfMonth(),
+                InvestmentPlanAmountStrategy.valueOf(entity.getAmountStrategy() == null ? "FIXED"
+                        : entity.getAmountStrategy()), entity.getReferenceIndexCode(), entity.getMovingAverageDays(),
                 InvestmentPlanStatus.valueOf(entity.getStatus()), entity.getCreatedDate());
     }
 }

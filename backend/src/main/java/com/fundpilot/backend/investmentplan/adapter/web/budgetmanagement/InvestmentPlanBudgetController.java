@@ -31,12 +31,16 @@ public class InvestmentPlanBudgetController {
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
         var summary = summaries.currentMonth(ownerId);
         return Response.ok(new SummaryView(summary.monthlyBudget(), summary.investedAmount(), summary.futureAmount(),
-                summary.projectedAmount(), summary.remainingAmount(), summary.overBudgetAmount()));
+                summary.projectedAmount(), summary.remainingAmount(), summary.overBudgetAmount(),
+                summary.minimumFutureAmount(), summary.maximumFutureAmount(), summary.minimumProjectedAmount(),
+                summary.maximumProjectedAmount()));
     }
     public record Request(BigDecimal monthlyBudget) {}
     public record View(BigDecimal monthlyBudget) {}
     public record SummaryView(BigDecimal monthlyBudget, BigDecimal investedAmount, BigDecimal futureAmount,
-                              BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount) {}
+                              BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount,
+                              BigDecimal minimumFutureAmount, BigDecimal maximumFutureAmount,
+                              BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount) {}
     record Response<T>(boolean success, T data, String code, String message) {
         static <T> Response<T> ok(T data) { return new Response<>(true, data, null, null); }
     }

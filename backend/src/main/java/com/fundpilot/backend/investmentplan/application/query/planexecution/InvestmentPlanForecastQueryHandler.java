@@ -2,6 +2,7 @@ package com.fundpilot.backend.investmentplan.application.query.planexecution;
 
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTradingCalendarGateway;
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTransactionGateway;
+import com.fundpilot.backend.investmentplan.domain.execution.InvestmentPlanExecutionRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan;
 import com.fundpilot.backend.sharedkernel.BusinessDay;
 import java.time.Clock;
@@ -25,6 +26,7 @@ public class InvestmentPlanForecastQueryHandler {
     private final PlanTradingCalendarGateway calendar;
     private final PlanTransactionGateway transactions;
     private final Clock clock;
+    private final InvestmentPlanExecutionRepository executions;
 
     @Transactional(readOnly = true)
     public Map<Long, List<Instant>> currentMonthExecutionDates(long ownerId, List<InvestmentPlan> plans) {
@@ -42,6 +44,11 @@ public class InvestmentPlanForecastQueryHandler {
         for (var occurrence : transactions.occurrences(ownerId, monthStart, monthEnd)) {
             occupied.add(new Key(occurrence.planId(), BusinessDay.toDateLabel(occurrence.tradeDate())));
             occupiedPlanIds.add(occurrence.planId());
+        }
+        for (var execution : executions.findBetween(activePlans.stream().map(InvestmentPlan::id).toList(),
+                monthStart, monthEnd)) {
+            occupied.add(new Key(execution.planId(), BusinessDay.toDateLabel(execution.businessDate())));
+            occupiedPlanIds.add(execution.planId());
         }
         Instant today = BusinessDay.toDateLabel(now);
         boolean todayPendingExecution = now.atZone(BusinessDay.ZONE).toLocalTime().isBefore(EXECUTION_TIME);

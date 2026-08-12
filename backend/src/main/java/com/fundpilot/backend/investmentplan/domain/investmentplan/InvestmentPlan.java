@@ -16,12 +16,17 @@ public final class InvestmentPlan {
     private InvestmentPlanFrequency frequency;
     private Integer dayOfWeek;
     private Integer dayOfMonth;
+    private InvestmentPlanAmountStrategy amountStrategy;
+    private String referenceIndexCode;
+    private Integer movingAverageDays;
     private InvestmentPlanStatus status;
     private final Instant createdDate;
 
     private InvestmentPlan(Long id, Long legacyDcaPlanId, long portfolioFundId, long ownerId, boolean enabled,
                            BigDecimal amount, InvestmentPlanFrequency frequency, Integer dayOfWeek,
-                           Integer dayOfMonth, InvestmentPlanStatus status, Instant createdDate) {
+                           Integer dayOfMonth, InvestmentPlanAmountStrategy amountStrategy,
+                           String referenceIndexCode, Integer movingAverageDays,
+                           InvestmentPlanStatus status, Instant createdDate) {
         this.id = id;
         this.legacyDcaPlanId = legacyDcaPlanId;
         this.portfolioFundId = positive(portfolioFundId, "组合基金 ID");
@@ -31,42 +36,91 @@ public final class InvestmentPlan {
         this.frequency = Objects.requireNonNull(frequency, "定投频率不能为空");
         this.dayOfWeek = dayOfWeek;
         this.dayOfMonth = dayOfMonth;
+        this.amountStrategy = Objects.requireNonNullElse(amountStrategy, InvestmentPlanAmountStrategy.FIXED);
+        this.referenceIndexCode = normalizeIndexCode(referenceIndexCode);
+        this.movingAverageDays = this.amountStrategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE
+                ? movingAverageDays == null ? Integer.valueOf(250) : movingAverageDays : null;
         this.status = Objects.requireNonNull(status, "计划状态不能为空");
         this.createdDate = createdDate;
         validateSchedule();
+        validateAmountStrategy(this.amountStrategy, this.referenceIndexCode, this.movingAverageDays);
     }
 
     public static InvestmentPlan rehydrate(long id, Long legacyDcaPlanId, long portfolioFundId, long ownerId,
                                            boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
                                            Integer dayOfWeek, Integer dayOfMonth, InvestmentPlanStatus status) {
         return rehydrate(id, legacyDcaPlanId, portfolioFundId, ownerId, enabled, amount, frequency,
-                dayOfWeek, dayOfMonth, status, null);
+                dayOfWeek, dayOfMonth, InvestmentPlanAmountStrategy.FIXED, null, null, status, null);
     }
 
     public static InvestmentPlan rehydrate(long id, Long legacyDcaPlanId, long portfolioFundId, long ownerId,
                                            boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
                                            Integer dayOfWeek, Integer dayOfMonth, InvestmentPlanStatus status,
                                            Instant createdDate) {
+        return rehydrate(id, legacyDcaPlanId, portfolioFundId, ownerId, enabled, amount, frequency,
+                dayOfWeek, dayOfMonth, InvestmentPlanAmountStrategy.FIXED, null, null, status, createdDate);
+    }
+
+    public static InvestmentPlan rehydrate(long id, Long legacyDcaPlanId, long portfolioFundId, long ownerId,
+                                           boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
+                                           Integer dayOfWeek, Integer dayOfMonth,
+                                           InvestmentPlanAmountStrategy amountStrategy, String referenceIndexCode,
+                                           Integer movingAverageDays, InvestmentPlanStatus status) {
+        return rehydrate(id, legacyDcaPlanId, portfolioFundId, ownerId, enabled, amount, frequency,
+                dayOfWeek, dayOfMonth, amountStrategy, referenceIndexCode, movingAverageDays, status, null);
+    }
+
+    public static InvestmentPlan rehydrate(long id, Long legacyDcaPlanId, long portfolioFundId, long ownerId,
+                                           boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
+                                           Integer dayOfWeek, Integer dayOfMonth,
+                                           InvestmentPlanAmountStrategy amountStrategy, String referenceIndexCode,
+                                           Integer movingAverageDays, InvestmentPlanStatus status, Instant createdDate) {
         return new InvestmentPlan(positive(id, "计划 ID"), legacyDcaPlanId, portfolioFundId, ownerId, enabled,
-                amount, frequency, dayOfWeek, dayOfMonth, status, createdDate);
+                amount, frequency, dayOfWeek, dayOfMonth, amountStrategy, referenceIndexCode, movingAverageDays,
+                status, createdDate);
     }
 
     public static InvestmentPlan create(long portfolioFundId, long ownerId, boolean enabled, BigDecimal amount,
                                         InvestmentPlanFrequency frequency, Integer dayOfWeek, Integer dayOfMonth) {
         return new InvestmentPlan(null, null, portfolioFundId, ownerId, enabled, amount, frequency,
-                dayOfWeek, dayOfMonth, InvestmentPlanStatus.EFFECTIVE, null);
+                dayOfWeek, dayOfMonth, InvestmentPlanAmountStrategy.FIXED, null, null,
+                InvestmentPlanStatus.EFFECTIVE, null);
+    }
+
+    public static InvestmentPlan create(long portfolioFundId, long ownerId, boolean enabled, BigDecimal amount,
+                                        InvestmentPlanFrequency frequency, Integer dayOfWeek, Integer dayOfMonth,
+                                        InvestmentPlanAmountStrategy amountStrategy, String referenceIndexCode,
+                                        Integer movingAverageDays) {
+        return new InvestmentPlan(null, null, portfolioFundId, ownerId, enabled, amount, frequency,
+                dayOfWeek, dayOfMonth, amountStrategy, referenceIndexCode, movingAverageDays,
+                InvestmentPlanStatus.EFFECTIVE, null);
     }
 
     public void update(boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
                        Integer dayOfWeek, Integer dayOfMonth) {
+        update(enabled, amount, frequency, dayOfWeek, dayOfMonth, amountStrategy, referenceIndexCode,
+                movingAverageDays);
+    }
+
+    public void update(boolean enabled, BigDecimal amount, InvestmentPlanFrequency frequency,
+                       Integer dayOfWeek, Integer dayOfMonth, InvestmentPlanAmountStrategy amountStrategy,
+                       String referenceIndexCode, Integer movingAverageDays) {
         BigDecimal validatedAmount = requireAmount(amount);
         InvestmentPlanFrequency validatedFrequency = Objects.requireNonNull(frequency, "定投频率不能为空");
         validateSchedule(validatedFrequency, dayOfWeek, dayOfMonth);
+        InvestmentPlanAmountStrategy validatedStrategy = Objects.requireNonNullElse(amountStrategy,
+                InvestmentPlanAmountStrategy.FIXED);
+        String validatedIndexCode = normalizeIndexCode(referenceIndexCode);
+        validateAmountStrategy(validatedStrategy, validatedIndexCode, movingAverageDays);
         this.enabled = enabled;
         this.amount = validatedAmount;
         this.frequency = validatedFrequency;
         this.dayOfWeek = validatedFrequency == InvestmentPlanFrequency.DAILY ? null : dayOfWeek;
         this.dayOfMonth = validatedFrequency == InvestmentPlanFrequency.MONTHLY ? dayOfMonth : null;
+        this.amountStrategy = validatedStrategy;
+        this.referenceIndexCode = validatedIndexCode;
+        this.movingAverageDays = validatedStrategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE
+                ? movingAverageDays == null ? 250 : movingAverageDays : null;
     }
 
     public void activate() {
@@ -202,6 +256,26 @@ public final class InvestmentPlan {
         return value;
     }
 
+    private static String normalizeIndexCode(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static void validateAmountStrategy(InvestmentPlanAmountStrategy strategy, String indexCode,
+                                                Integer movingAverageDays) {
+        if (strategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE
+                && (indexCode == null || indexCode.isBlank())) {
+            throw new IllegalArgumentException("均线策略必须选择参考指数");
+        }
+        if (strategy == InvestmentPlanAmountStrategy.MOVING_AVERAGE
+                && movingAverageDays != null && movingAverageDays != 180
+                && movingAverageDays != 250 && movingAverageDays != 500) {
+            throw new IllegalArgumentException("均线周期只能为 180、250 或 500 日");
+        }
+        if (strategy != InvestmentPlanAmountStrategy.MOVING_AVERAGE && movingAverageDays != null) {
+            throw new IllegalArgumentException("只有均线策略支持均线周期");
+        }
+    }
+
     private static long positive(long value, String field) {
         if (value <= 0) throw new IllegalArgumentException(field + "必须为正数");
         return value;
@@ -216,6 +290,9 @@ public final class InvestmentPlan {
     public InvestmentPlanFrequency frequency() { return frequency; }
     public Integer dayOfWeek() { return dayOfWeek; }
     public Integer dayOfMonth() { return dayOfMonth; }
+    public InvestmentPlanAmountStrategy amountStrategy() { return amountStrategy; }
+    public String referenceIndexCode() { return referenceIndexCode; }
+    public Integer movingAverageDays() { return movingAverageDays; }
     public InvestmentPlanStatus status() { return status; }
     public Instant createdDate() { return createdDate; }
 }

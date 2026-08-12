@@ -1,5 +1,11 @@
 import {describe, expect, it} from 'vitest';
-import {canDeleteDcaPlan, dcaPlanState, dcaScheduleText} from './dcaPlan.js';
+import {
+    canDeleteDcaPlan,
+    dcaDecisionReason,
+    dcaPlanState,
+    dcaScheduleText,
+    dcaStrategyText,
+} from './dcaPlan.js';
 
 describe('DCA plan display', () => {
     it.each([
@@ -23,5 +29,12 @@ describe('DCA plan display', () => {
         expect(canDeleteDcaPlan({status: 'DRAFT'})).toBe(true);
         expect(canDeleteDcaPlan({status: 'EFFECTIVE', enabled: true})).toBe(false);
         expect(canDeleteDcaPlan({status: 'EFFECTIVE', enabled: false})).toBe(false);
+    });
+
+    it('formats smart strategies and decision reasons', () => {
+        expect(dcaStrategyText('MOVING_AVERAGE')).toBe('均线策略');
+        expect(dcaDecisionReason({reasonCode: 'MOVING_AVERAGE'})).toBe('按均线策略执行');
+        expect(dcaDecisionReason({reasonCode: 'COST_UNAVAILABLE'})).toBe('平均持仓成本不可用');
+        expect(dcaDecisionReason({reasonCode: 'UNKNOWN', reason: '数据不足'})).toBe('数据不足');
     });
 });
