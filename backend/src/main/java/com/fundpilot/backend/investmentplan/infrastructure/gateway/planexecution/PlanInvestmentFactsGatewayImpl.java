@@ -35,7 +35,7 @@ class PlanInvestmentFactsGatewayImpl implements PlanInvestmentFactsGateway {
             case FIXED -> Optional.of(new Facts(SmartInvestmentAmountPolicy.Facts.empty(), null, indexCode, null));
             case LOW_VALUATION -> valuation(indexCode, businessDate);
             case MOVING_AVERAGE -> movingAverage(indexCode, plan.movingAverageDays(), businessDate);
-            case CHANGE_RATE -> changeRate(plan.ownerId(), fund.id(), fund.fundProductId());
+            case CHANGE_RATE -> changeRate(plan.ownerId(), fund.id(), fund.fundProductId(), businessDate);
         };
     }
 
@@ -71,8 +71,11 @@ class PlanInvestmentFactsGatewayImpl implements PlanInvestmentFactsGateway {
                 amplitude, null, null), latest.tradeDate(), indexCode, window));
     }
 
-    private Optional<Facts> changeRate(long ownerId, long portfolioFundId, Long productId) {
-        var nav = productId == null ? Optional.<PublishedNavApi.PublishedNav>empty() : navs.latest(productId);
+    private Optional<Facts> changeRate(long ownerId, long portfolioFundId, Long productId, Instant businessDate) {
+        var history = productId == null ? List.<PublishedNavApi.PublishedNav>of()
+                : navs.history(productId, Instant.EPOCH, businessDate);
+        var nav = history.isEmpty() ? Optional.<PublishedNavApi.PublishedNav>empty()
+                : Optional.of(history.getLast());
         var position = positions.findOwned(ownerId, portfolioFundId);
         return Optional.of(new Facts(new SmartInvestmentAmountPolicy.Facts(null, null, null, null,
                 nav.map(PublishedNavApi.PublishedNav::unitNav).orElse(null),

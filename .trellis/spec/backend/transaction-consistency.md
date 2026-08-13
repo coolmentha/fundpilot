@@ -563,7 +563,7 @@ monthly forecasts, budget ranges, or the plan UI.
 - Low valuation uses the fund benchmark and locally stored CSI PE values before the business date. It invests
   100% only at or below the 30th percentile.
 - Moving average uses the saved reference index, 180/250/500 closes, and ten-close amplitude. Change rate uses
-  latest published unit NAV and current accounting cost per share.
+  the latest published unit NAV strictly before the business date and the current accounting cost per share.
 - Missing smart facts create a `SKIPPED` execution record and no transaction. Never fall back to the fixed amount.
 - An executed smart decision and its `INVEST/PENDING` transaction commit together. A monthly skip consumes that
   month's occurrence; daily and weekly schedule behavior is unchanged.
