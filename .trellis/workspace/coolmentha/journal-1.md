@@ -457,3 +457,24 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: 修正智能定投涨跌幅净值口径
+
+**Date**: 2026-08-13
+**Task**: 修正智能定投涨跌幅净值口径
+**Branch**: `feature/smart-dca`
+
+### Summary
+
+涨跌幅策略改为仅使用严格早于定投业务日的最近确认净值，并补充日期边界回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a248b2d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
