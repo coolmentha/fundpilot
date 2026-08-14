@@ -21,11 +21,11 @@ public interface EastmoneyPush2Client {
     /**
      * 批量指数实时行情。secids 用逗号分隔(此处不编码,东方财富按字面逗号解析)。
      * <p>fields:f2 最新价、f3 涨跌幅、f4 涨跌额、f6 成交额、f12 代码、f14 名称、
-     * f104 上涨家数、f105 下跌家数、f106 平盘家数。
+     * f10 量比、f124 行情时间戳、f104 上涨家数、f105 下跌家数、f106 平盘家数。
      *
      * @param secids secid 列表(逗号分隔,如 "1.000001,1.000300,0.399006")
      */
-    @RequestLine("GET /api/qt/ulist.np/get?fields=f2%2Cf3%2Cf4%2Cf6%2Cf12%2Cf14%2Cf104%2Cf105%2Cf106&secids={secids}")
+    @RequestLine("GET /api/qt/ulist.np/get?fields=f2%2Cf3%2Cf4%2Cf6%2Cf10%2Cf12%2Cf13%2Cf14%2Cf104%2Cf105%2Cf106%2Cf124&secids={secids}")
     String fetchIndexRealtimeRaw(@Param("secids") String secids);
 
     /**

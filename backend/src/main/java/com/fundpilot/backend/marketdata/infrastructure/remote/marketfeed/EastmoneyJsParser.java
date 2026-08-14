@@ -237,6 +237,56 @@ public final class EastmoneyJsParser {
     }
 
     /**
+     * 从指数批量响应中解析固定指数的量价快照。
+     * <p>当前原始字段口径下，f3 ÷10000 为小数涨跌幅，f10 ÷100 为量比，f124 为 Unix 秒。
+     * 关键字段缺失、非数值或量比非正时返回 null，避免发布无法解释的市场状态。
+     */
+    public static MarketVolumePriceSnapshot parseMarketVolumePrice(String rawJson, String secid) {
+        if (rawJson == null || rawJson.isBlank() || secid == null || secid.isBlank()) {
+            return null;
+        }
+        int dot = secid.indexOf('.');
+        if (dot <= 0 || dot == secid.length() - 1) {
+            return null;
+        }
+        String market = secid.substring(0, dot);
+        String code = secid.substring(dot + 1);
+        try {
+            JsonNode diff = MAPPER.readTree(rawJson).path("data").path("diff");
+            if (!diff.isArray() || diff.isEmpty()) {
+                return null;
+            }
+            for (JsonNode node : diff) {
+                String nodeMarket = textOrNull(node, "f13");
+                if (!code.equals(textOrNull(node, "f12"))
+                        || (nodeMarket != null && !market.equals(nodeMarket))) {
+                    continue;
+                }
+                JsonNode changeNode = node.path("f3");
+                JsonNode ratioNode = node.path("f10");
+                JsonNode timeNode = node.path("f124");
+                if (!changeNode.isNumber() || !ratioNode.isNumber()
+                        || !timeNode.isIntegralNumber() || !timeNode.canConvertToLong()) {
+                    return null;
+                }
+                BigDecimal volumeRatio = ratioNode.decimalValue()
+                        .divide(new BigDecimal("100"), MathContext.DECIMAL64);
+                long epochSecond = timeNode.longValue();
+                if (volumeRatio.signum() <= 0 || epochSecond <= 0) {
+                    return null;
+                }
+                return new MarketVolumePriceSnapshot(
+                        changeNode.decimalValue().divide(new BigDecimal("10000"), MathContext.DECIMAL64),
+                        volumeRatio,
+                        Instant.ofEpochSecond(epochSecond));
+            }
+            return null;
+        } catch (java.io.IOException | java.time.DateTimeException e) {
+            throw new IllegalStateException("市场量价 JSON 解析失败", e);
+        }
+    }
+
+    /**
      * 解析沪深京股票市场上涨、下跌家数。
      *
      * <p>调用方传入上证、深证、北证三个固定市场 secid。只有全部市场均存在且

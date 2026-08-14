@@ -4,6 +4,7 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEst
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundIntradayChart;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,9 @@ class MarketRealtimeRedisStoreTest {
                         List.of(new FundIntradayChart.TradingSession("09:30", "11:30"),
                                 new FundIntradayChart.TradingSession("13:00", "15:00")))),
                 Instant.parse("2026-07-20T06:00:00Z"), Instant.parse("2026-07-20T06:00:01Z"),
-                Instant.parse("2026-07-20T06:00:02Z"));
+                Instant.parse("2026-07-20T06:00:02Z"),
+                new MarketVolumePriceSnapshot(new BigDecimal("0.0035"), new BigDecimal("1.68"),
+                        Instant.parse("2026-07-20T06:00:00Z")));
 
         store.save(expected);
 
@@ -74,5 +77,6 @@ class MarketRealtimeRedisStoreTest {
         assertThat(snapshot.indicesUpdatedAt()).isNull();
         assertThat(snapshot.breadthUpdatedAt()).isNull();
         assertThat(snapshot.sectorsUpdatedAt()).isNull();
+        assertThat(snapshot.marketVolumePrice()).isNull();
     }
 }

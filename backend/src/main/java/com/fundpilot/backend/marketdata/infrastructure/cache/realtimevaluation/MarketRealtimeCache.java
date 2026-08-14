@@ -9,6 +9,7 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEst
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundIntradayChart;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketLimitCounts;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
@@ -72,6 +73,7 @@ public class MarketRealtimeCache {
             "0.399001", // 深证成指：深市宽度
             "0.899050"  // 北证 50：北交所宽度
     );
+    private static final String MARKET_VOLUME_PRICE_SECID = "1.000001";
 
     private final EastmoneyPush2Client push2Client;
     private final FundEstimateService fundEstimateService;
@@ -85,6 +87,7 @@ public class MarketRealtimeCache {
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
     private volatile List<IndexRealtimeSnapshot> indexCache = List.of();
     private volatile MarketBreadthSnapshot breadthCache = null;
+    private volatile MarketVolumePriceSnapshot marketVolumePriceCache = null;
     private volatile List<SectorSnapshot> sectorCache = List.of();
     private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private volatile Instant indicesUpdatedAt;
@@ -103,6 +106,7 @@ public class MarketRealtimeCache {
             indexCache = snapshot.indices() == null ? List.of() : List.copyOf(snapshot.indices());
             MarketBreadthSnapshot restoredBreadth = snapshot.breadth();
             breadthCache = restoredBreadth != null && restoredBreadth.isComplete() ? restoredBreadth : null;
+            marketVolumePriceCache = snapshot.marketVolumePrice();
             sectorCache = snapshot.sectors() == null ? List.of() : List.copyOf(snapshot.sectors());
             moneyFlowCache = snapshot.moneyFlow();
             indicesUpdatedAt = snapshot.indicesUpdatedAt();
@@ -146,6 +150,11 @@ public class MarketRealtimeCache {
     /** 读沪深京股票市场宽度缓存。 */
     public MarketBreadthSnapshot getBreadth() {
         return breadthCache;
+    }
+
+    /** 读上证指数实时量价快照。 */
+    public MarketVolumePriceSnapshot getMarketVolumePrice() {
+        return marketVolumePriceCache;
     }
 
     /** 读板块缓存(东方财富返回顺序,通常按涨幅降序)。 */
@@ -267,6 +276,8 @@ public class MarketRealtimeCache {
 
             List<String> requestOrder = List.copyOf(requestedSecids);
             String raw = push2Client.fetchIndexRealtimeRaw(String.join(",", requestOrder));
+            MarketVolumePriceSnapshot marketVolumePrice = EastmoneyJsParser
+                    .parseMarketVolumePrice(raw, MARKET_VOLUME_PRICE_SECID);
             Map<String, IndexRealtimeSnapshot> snapshotsBySecid = EastmoneyJsParser
                     .parseIndexRealtime(raw, requestOrder).stream()
                     .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(),
@@ -274,6 +285,10 @@ public class MarketRealtimeCache {
             // 逐指数合并：缺失的 secid 保留旧快照(与「刷新失败保留旧缓存」降级一致)，
             // 只有整体缺失才整体保留旧缓存
             boolean indicesUpdated = false;
+            boolean marketVolumePriceUpdated = marketVolumePrice != null;
+            if (marketVolumePriceUpdated) {
+                marketVolumePriceCache = marketVolumePrice;
+            }
             if (!snapshotsBySecid.isEmpty()) {
                 Map<String, IndexRealtimeSnapshot> previousBySecid = indexCache.stream()
                         .collect(Collectors.toMap(IndexRealtimeSnapshot::secid, Function.identity(),
@@ -297,10 +312,10 @@ public class MarketRealtimeCache {
                         breadth.flatCount(), limits.limitUpCount(), limits.limitDownCount());
                 breadthUpdatedAt = clock.instant();
             }
-            if (snapshotsBySecid.isEmpty() && !breadthUpdated) {
+            if (snapshotsBySecid.isEmpty() && !breadthUpdated && !marketVolumePriceUpdated) {
                 result = "empty";
             }
-            if (indicesUpdated || breadthUpdated) {
+            if (indicesUpdated || breadthUpdated || marketVolumePriceUpdated) {
                 persist();
             }
         } catch (RuntimeException e) {
@@ -535,7 +550,7 @@ public class MarketRealtimeCache {
         redisStore.save(new MarketRealtimeRedisStore.Snapshot(
                 indexCache, breadthCache, sectorCache, moneyFlowCache,
                 Map.copyOf(estimateCache), Map.copyOf(estimateStatuses), Map.copyOf(intradayCache),
-                indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt));
+                indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt, marketVolumePriceCache));
     }
 
 }

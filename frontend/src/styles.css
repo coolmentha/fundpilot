@@ -1033,6 +1033,101 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 .market-breadth-up { background: var(--color-danger); }
 .market-breadth-down { background: var(--color-success); }
 
+.market-volume-price {
+    --volume-price-accent: var(--color-info);
+    display: grid;
+    grid-template-columns: minmax(190px, 0.8fr) minmax(180px, 0.7fr) minmax(280px, 1.5fr);
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+    margin-top: 12px;
+    padding: 13px 4px;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    border-left: 3px solid var(--volume-price-accent);
+}
+
+.market-volume-price.up { --volume-price-accent: var(--color-danger); }
+.market-volume-price.down { --volume-price-accent: var(--color-success); }
+.market-volume-price.unavailable { --volume-price-accent: var(--color-muted); }
+
+.market-volume-price.loading {
+    display: block;
+    padding: 12px;
+}
+
+.volume-price-state,
+.volume-price-metrics {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.volume-price-state {
+    gap: 10px;
+    padding-left: 10px;
+    color: var(--volume-price-accent);
+}
+
+.volume-price-state > span:first-child { font-size: 20px; }
+
+.volume-price-state div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.volume-price-label,
+.volume-price-advice span {
+    color: var(--color-muted);
+    font-size: 11px;
+}
+
+.volume-price-state strong {
+    color: var(--color-text);
+    font-size: 17px;
+}
+
+.volume-price-phase {
+    padding: 1px 5px;
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.volume-price-metrics {
+    justify-content: space-around;
+    gap: 16px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.volume-price-metrics span { white-space: nowrap; }
+
+.volume-price-metrics strong {
+    margin-left: 5px;
+    color: var(--color-text);
+    font-family: var(--font-ui);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+}
+
+.volume-price-advice {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.volume-price-advice strong {
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
 /* —— 指数条 —— */
 .index-ticker {
     display: flex;
@@ -1232,6 +1327,13 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     }
     .dashboard-status-grid { grid-template-columns: 1fr; }
     .valuation-notice { flex-direction: column; gap: 3px; }
+    .market-volume-price {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 12px 4px;
+    }
+    .volume-price-metrics { justify-content: flex-start; padding-left: 10px; }
+    .volume-price-advice { padding-left: 10px; }
 }
 
 @media (max-width: 420px) {

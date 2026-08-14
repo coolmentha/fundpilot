@@ -67,6 +67,7 @@ FundPilot 解决三个问题：
 
 - 组合今日收益、上涨/下跌基金数量和沪深京市场宽度。
 - 用户关注指数实时行情。
+- 上证指数量价状态、涨跌幅、量比、盘中暂估/收盘标识和市场纪律提醒。
 - 自选基金盘中估值、今日涨跌、持仓和收益。
 - 行业板块涨跌排行。
 - 行业板块主力净流入/净流出排行。
@@ -163,7 +164,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 | 信号 | `/api/funds/{id}/signals/today`、`/api/signals/pending` |
 | 信号回应 | `/api/funds/{id}/operations`、`/api/funds/{id}/signals/{signalId}/ignore` |
 | 交易 | `/api/funds/{id}/transactions`、`/api/transactions/{id}/confirm` |
-| 行情 | `/api/market/indices/realtime`、`/api/market/breadth`、`/api/market/sectors` |
+| 行情 | `/api/market/indices/realtime`、`/api/market/breadth`、`/api/market/volume-price`、`/api/market/sectors` |
 | 配置 | `/api/user-config` |
 | 管理 | `/api/admin/**` |
 

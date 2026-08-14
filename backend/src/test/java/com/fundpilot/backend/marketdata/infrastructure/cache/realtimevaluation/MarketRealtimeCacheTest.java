@@ -7,6 +7,7 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEst
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundIntradayChart;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsIndexFlashClient;
 import com.fundpilot.backend.marketdata.adapter.api.watchedindex.WatchedIndicesApi;
 import com.fundpilot.backend.platform.observability.MarketDataMetrics;
@@ -90,7 +91,7 @@ class MarketRealtimeCacheTest {
         when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString())).thenReturn("""
                 {"data":{"diff":[
                   {"f2":400000,"f3":20,"f4":800,"f6":1000,"f12":"000300","f14":"沪深300"},
-                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f12":"000001","f14":"上证指数","f104":1542,"f105":763,"f106":84},
+                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f10":168,"f12":"000001","f13":"1","f14":"上证指数","f104":1542,"f105":763,"f106":84,"f124":1783651800},
                   {"f2":120000,"f3":30,"f4":400,"f6":3000,"f12":"399001","f14":"深证成指","f104":2012,"f105":872,"f106":65},
                   {"f2":150000,"f3":40,"f4":500,"f6":4000,"f12":"899050","f14":"北证50","f104":260,"f105":66,"f106":4}
                 ]}}
@@ -109,6 +110,40 @@ class MarketRealtimeCacheTest {
                         && secids.contains("0.899050")));
         assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000300");
         assertThat(cache.getBreadth()).isEqualTo(new MarketBreadthSnapshot(3814, 1701, 153, 42, 25));
+        assertThat(cache.getMarketVolumePrice()).isEqualTo(new MarketVolumePriceSnapshot(
+                new BigDecimal("0.001"), new BigDecimal("1.68"), Instant.ofEpochSecond(1783651800)));
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_第二次缺少量比时保留旧量价快照() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi watchedIndices = mock(WatchedIndicesApi.class);
+        ThsIndexFlashClient indexFlash = mock(ThsIndexFlashClient.class);
+        when(watchedIndices.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(anyString())).thenReturn("""
+                {"data":{"diff":[
+                  {"f2":350000,"f3":10,"f4":300,"f6":2000,"f10":168,"f12":"000001","f13":"1","f14":"上证指数","f104":1542,"f105":763,"f106":84,"f124":1783651800},
+                  {"f12":"399001","f104":2012,"f105":872,"f106":65},
+                  {"f12":"899050","f104":260,"f105":66,"f106":4}
+                ]}}
+                """).thenReturn("""
+                {"data":{"diff":[
+                  {"f2":351000,"f3":20,"f4":300,"f6":2000,"f12":"000001","f13":"1","f14":"上证指数","f104":1542,"f105":763,"f106":84,"f124":1783651860},
+                  {"f12":"399001","f104":2012,"f105":872,"f106":65},
+                  {"f12":"899050","f104":260,"f105":66,"f106":4}
+                ]}}
+                """);
+        when(indexFlash.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH, INDEX_FLASH);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), watchedIndices,
+                mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK,
+                mock(MarketRealtimeRedisStore.class), indexFlash);
+
+        cache.refreshRealtimeWithoutEstimates();
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getMarketVolumePrice()).isEqualTo(new MarketVolumePriceSnapshot(
+                new BigDecimal("0.001"), new BigDecimal("1.68"), Instant.ofEpochSecond(1783651800)));
     }
 
     @Test
