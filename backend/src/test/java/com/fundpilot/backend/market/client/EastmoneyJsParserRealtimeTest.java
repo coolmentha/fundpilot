@@ -3,6 +3,7 @@ package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,6 +79,36 @@ class EastmoneyJsParserRealtimeTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).secid()).isEqualTo("1.000001");
+    }
+
+    @Test
+    void parseMarketVolumePrice_正常响应_还原涨跌幅量比和行情时间() {
+        String raw = """
+                {"data":{"diff":[
+                  {"f3":37,"f10":168,"f12":"000001","f13":"1","f124":1783651800},
+                  {"f3":62,"f10":120,"f12":"000300","f13":"1","f124":1783651800}
+                ]}}
+                """;
+
+        MarketVolumePriceSnapshot result = EastmoneyJsParser.parseMarketVolumePrice(raw, "1.000001");
+
+        assertThat(result).isNotNull();
+        assertThat(result.changePct()).isEqualByComparingTo("0.0037");
+        assertThat(result.volumeRatio()).isEqualByComparingTo("1.68");
+        assertThat(result.quoteTime()).isEqualTo(Instant.ofEpochSecond(1783651800));
+    }
+
+    @Test
+    void parseMarketVolumePrice_关键字段缺失或非法_返回null() {
+        assertThat(EastmoneyJsParser.parseMarketVolumePrice(
+                "{\"data\":{\"diff\":[{\"f3\":37,\"f12\":\"000001\",\"f124\":1783651800}]}}",
+                "1.000001")).isNull();
+        assertThat(EastmoneyJsParser.parseMarketVolumePrice(
+                "{\"data\":{\"diff\":[{\"f3\":37,\"f10\":0,\"f12\":\"000001\",\"f124\":1783651800}]}}",
+                "1.000001")).isNull();
+        assertThat(EastmoneyJsParser.parseMarketVolumePrice(
+                "{\"data\":{\"diff\":[{\"f3\":37,\"f10\":168,\"f12\":\"000001\",\"f124\":\"bad\"}]}}",
+                "1.000001")).isNull();
     }
 
     @Test

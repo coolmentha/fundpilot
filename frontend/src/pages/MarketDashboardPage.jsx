@@ -1,6 +1,7 @@
 import {Link} from 'react-router-dom';
 import IndexTicker from '../components/IndexTicker.jsx';
 import PortfolioOverview from '../components/PortfolioOverview.jsx';
+import MarketVolumePrice from '../components/MarketVolumePrice.jsx';
 import FundWatchlist from '../components/FundWatchlist.jsx';
 import SectorPerformance from '../components/SectorPerformance.jsx';
 import {useFunds, useMarketStatus} from '../api/hooks.js';
@@ -35,6 +36,7 @@ export default function MarketDashboardPage() {
                     </div>
                 </div>
                 <PortfolioOverview/>
+                <MarketVolumePrice/>
             </section>
 
             <section className="dashboard-section index-section" aria-label="大盘指数">

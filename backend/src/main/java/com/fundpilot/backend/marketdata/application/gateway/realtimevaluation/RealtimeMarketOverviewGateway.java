@@ -9,6 +9,7 @@ import java.util.Map;
 public interface RealtimeMarketOverviewGateway {
     List<IndexQuote> findCurrentActorIndices();
     Breadth findBreadth();
+    MarketVolumePrice findMarketVolumePrice();
     Map<String, Estimate> findEstimates(List<String> fundCodes);
     List<Sector> findSectors();
     MoneyFlow findMoneyFlow();
@@ -18,6 +19,7 @@ public interface RealtimeMarketOverviewGateway {
                       BigDecimal changePct, BigDecimal turnover) {}
     record Breadth(int risingCount, int fallingCount, Integer flatCount,
                    Integer limitUpCount, Integer limitDownCount) {}
+    record MarketVolumePrice(BigDecimal changePct, BigDecimal volumeRatio, Instant quoteTime) {}
     record Estimate(BigDecimal estimatedChangePct, String estimateTime, String baseNavDate) {}
     record Sector(String sectorName, BigDecimal changePct, BigDecimal turnover, BigDecimal mainforceNet) {}
     record MoneyFlow(BigDecimal northboundNet, Instant snapshotTime) {}

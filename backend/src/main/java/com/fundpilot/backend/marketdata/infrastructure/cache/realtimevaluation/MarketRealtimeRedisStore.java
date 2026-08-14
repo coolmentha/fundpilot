@@ -4,6 +4,7 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEst
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundIntradayChart;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
+import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
 import lombok.RequiredArgsConstructor;
@@ -56,18 +57,20 @@ public class MarketRealtimeRedisStore {
             Map<String, FundIntradayChart> intradayCharts,
             Instant indicesUpdatedAt,
             Instant breadthUpdatedAt,
-            Instant sectorsUpdatedAt) {
+            Instant sectorsUpdatedAt,
+            MarketVolumePriceSnapshot marketVolumePrice) {
 
         public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
                         MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
                         Map<String, EstimateStatus> estimateStatuses) {
-            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of(), null, null, null);
+            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of(), null, null, null, null);
         }
 
         public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
                         MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
                         Map<String, EstimateStatus> estimateStatuses, Map<String, FundIntradayChart> intradayCharts) {
-            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, intradayCharts, null, null, null);
+            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, intradayCharts,
+                    null, null, null, null);
         }
     }
 }

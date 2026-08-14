@@ -7,6 +7,7 @@ const {useFunds, useMarketStatus} = vi.hoisted(() => ({useFunds: vi.fn(), useMar
 vi.mock('../api/hooks.js', () => ({useFunds, useMarketStatus}));
 vi.mock('../components/IndexTicker.jsx', () => ({default: () => <div>指数</div>}));
 vi.mock('../components/PortfolioOverview.jsx', () => ({default: () => <div>总览数据</div>}));
+vi.mock('../components/MarketVolumePrice.jsx', () => ({default: () => <div>市场量价</div>}));
 vi.mock('../components/FundWatchlist.jsx', () => ({default: () => <div>持仓表</div>}));
 vi.mock('../components/SectorPerformance.jsx', () => ({default: () => <div>行业表</div>}));
 
@@ -44,6 +45,7 @@ describe('MarketDashboardPage', () => {
 
         expect(container.textContent).toContain('A 股已收盘');
         expect(container.textContent).toContain('数据截至 15:00:08');
+        expect(container.textContent).toContain('市场量价');
         expect(container.textContent).toContain('今日最大贡献贡献基金');
         expect(container.textContent).toContain('今日最大拖累拖累基金');
     });

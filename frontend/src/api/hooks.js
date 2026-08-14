@@ -494,6 +494,16 @@ export function useMarketBreadth() {
     });
 }
 
+/** 上证指数实时量价关系，5 秒轮询后端缓存。 */
+export function useMarketVolumePrice() {
+    return useQuery({
+        queryKey: ['market', 'volume-price'],
+        queryFn: () => get('/api/market/volume-price'),
+        refetchInterval: 5_000,
+        refetchIntervalInBackground: false,
+    });
+}
+
 /** A 股交易状态与工作台核心行情时效,30 秒轮询。 */
 export function useMarketStatus() {
     return useQuery({

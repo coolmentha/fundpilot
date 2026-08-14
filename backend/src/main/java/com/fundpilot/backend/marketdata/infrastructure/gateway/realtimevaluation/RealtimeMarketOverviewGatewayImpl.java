@@ -33,6 +33,13 @@ class RealtimeMarketOverviewGatewayImpl implements RealtimeMarketOverviewGateway
     }
 
     @Override
+    public MarketVolumePrice findMarketVolumePrice() {
+        var value = cache.getMarketVolumePrice();
+        return value == null ? null : new MarketVolumePrice(
+                value.changePct(), value.volumeRatio(), value.quoteTime());
+    }
+
+    @Override
     public Map<String, Estimate> findEstimates(List<String> fundCodes) {
         return cache.getEstimates(fundCodes).entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey,
                 entry -> new Estimate(entry.getValue().estimatedChangePct(), entry.getValue().estimateTime(),

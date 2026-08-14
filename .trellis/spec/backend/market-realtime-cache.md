@@ -121,6 +121,64 @@ N 个前端客户端共享同一份缓存。
 - 任一固定市场缺失，任一 `f104/f105/f106` 缺失、非整数、负数，或同花顺主页、接口、解析失败时，不得发布部分市场合计，已有完整 `breadthCache` 保持不变。旧 Redis 快照缺 `flatCount` 时不恢复，直到取得上涨、平盘、下跌、涨停、跌停五项完整快照。
 - 前端进度条左红表示上涨、右绿表示下跌，比例分母仅为 `risingCount + fallingCount`，平盘不参与。合计为 0 或接口数据为空时显示空轨道。
 
+## Scenario: 工作台市场量价状态
+
+### 1. Scope / Trigger
+
+- 触发：工作台需要用上证指数涨跌幅和量比展示一个市场量价判断，同时保持外部请求次数不变。
+
+### 2. Signatures
+
+```text
+东方财富批量字段: f3, f10, f12, f13, f124
+MarketVolumePriceSnapshot(changePct, volumeRatio, quoteTime)
+GET /api/market/volume-price
+  -> { state, phase, changePct, volumeRatio, quoteTime }
+```
+
+### 3. Contracts
+
+- 上证固定使用 `1.000001`；`f3 / 10000` 为小数涨跌幅，`f10 / 100` 为量比，`f124` 为 Unix 秒。
+- `MarketRealtimeCache` 与指数、市场宽度共用同一次批量请求。解析成功才替换量价快照；失败保留旧值，不增加请求。
+- Redis `Snapshot.marketVolumePrice` 可空；旧 JSON 缺字段时恢复为 `null`，其他行情字段照常恢复。
+- 量比 `>=1.5` 为放量、`<=0.5` 为缩量、其余为平稳；涨跌幅正/负/零分别为上涨/下跌/平盘。
+- 交易日交易时段及午休返回 `INTRADAY_ESTIMATE`，盘前、收盘及非交易日返回 `CLOSED`。仅交易时段检查两分钟时效。
+- `state` 为 `HIGH_UP|LOW_UP|HIGH_DOWN|LOW_DOWN|NORMAL_UP|NORMAL_DOWN|FLAT|UNAVAILABLE`。前端只映射文案，不能重新推导状态。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 结果 |
+|------|------|
+| `f3/f10/f124` 缺失、非数值，量比 `<=0` 或时间非法 | 不发布新快照，保留旧缓存 |
+| 交易中快照超过两分钟 | `UNAVAILABLE`，数值置空，保留原始 `quoteTime` |
+| 盘前快照不是上一交易日 | `UNAVAILABLE` |
+| 交易中、午休或收盘快照不是当日 | `UNAVAILABLE` |
+| 非交易日快照不是最近交易日 | `UNAVAILABLE` |
+| 前端状态未知或数值为空 | 显示“量能观察中”，不生成方向性提醒 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：当日 `changePct=0.0037`、`volumeRatio=1.68` 返回 `HIGH_UP` 和完整行情时间。
+- Base：`0.5 < volumeRatio < 1.5` 按价格方向返回 `NORMAL_UP` 或 `NORMAL_DOWN`；涨跌幅为零返回 `FLAT`。
+- Bad：第二次响应缺 `f10` 时缓存仍保留旧快照，但查询层不得把过期或错日快照冒充当前结论。
+
+### 6. Tests Required
+
+- 解析器：断言 `f3/f10/f124` 缩放与缺失、非法字段降级。
+- 缓存与 Redis：断言成功往返、旧 JSON 兼容和第二次缺 `f10` 保留旧快照。
+- 查询：断言八种状态、`0.5/1.5` 边界、午休/盘前/收盘/非交易日和两分钟过期。
+- Web 与前端：断言字段映射、不可用降级、工作台挂载和 `aria-live="polite"`。
+
+### 7. Wrong vs Correct
+
+```java
+// Wrong: 失败时用服务器时间和零量比伪造当前行情
+snapshot = new MarketVolumePriceSnapshot(changePct, BigDecimal.ZERO, clock.instant());
+
+// Correct: 只发布数据源完整快照；查询层独立校验日期和时效
+if (parsed != null) marketVolumePriceCache = parsed;
+```
+
 ## Scenario: 工作台核心行情时效与完整宽度
 
 ### 1. Scope / Trigger
@@ -292,6 +350,8 @@ return Stream.of(indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt)
 - `ExternalClientConfigTest`:断言 connect=1s/read=3s；`RateLimiterTest` 断言最大等待预算。
 - `DailyNavConfirmServiceTest`:断言不依赖 fundgz，FOF/QDII 滞后日期仍可增量入库，次日上午可按指定交易日跨夜补拉。
 - `MarketRealtimeCacheTest`:断言一次指数请求同时包含自选与固定市场；残缺响应不覆盖旧 `breadthCache`。
+- `EastmoneyJsParserRealtimeTest` / `RealtimeMarketOverviewQueryHandlerTest`:断言量比缩放、四种主要组合、平稳/平盘、时段/交易日和两分钟过期边界。
+- `MarketRealtimeCacheTest`:断言第二次批量响应缺少 `f10` 时保留旧量价快照。
 - `DailyChangeResolverTest`:断言 STALE/NOT_ATTEMPTED 返回 0，AVAILABLE 使用估值，UNAVAILABLE/TIMEOUT/PARSE_ERROR 返回未知，当日净值始终优先。
 - `FundPnlServiceTest`:断言估值阶段开始前使用最近确认单位净值；估值失败时当前持仓市值/总盈亏未知且组合失败数正确；当日净值已入库时忽略估值失败状态。
 - `FundPnlServiceDateTest`:固定 `Clock`，断言 QDII 最新净值 `firstSeenAt` 的北京时间当天使用按 `navDate DESC` 取得的最新两期净值；次日今日涨跌/盈亏为 0，但市值/总盈亏仍使用最新确认净值；单基金与批量结果一致。
