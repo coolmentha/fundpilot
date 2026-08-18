@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
-- **Last Active**: 2026-08-13
+- **Total Sessions**: 16
+- **Last Active**: 2026-08-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~480 | Active |
+| `journal-1.md` | ~501 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-08-18 | 详情页行情指标优先展示 | `22bbc24` | `feature/fund-detail-market-metrics-first-column` |
 | 15 | 2026-08-13 | 修正智能定投涨跌幅净值口径 | `a248b2d` | `feature/smart-dca` |
 | 14 | 2026-08-12 | 支持修改当前持仓成本价 | `14fb3f3` | `feature/smart-dca` |
 | 13 | 2026-08-12 | 完成智能定投 | `4a7b1aa` | `feature/smart-dca` |
