@@ -194,7 +194,7 @@ class FundPositionServiceTest extends AbstractIntegrationTest {
 
     private FundEntity persistFund() {
         FundEntity fund = new FundEntity();
-        fund.setFundCode("161725");
+        fund.setFundCode("TEST-POSITION");
         fund.setFundName("测试基金");
         return fundRepository.save(fund);
     }

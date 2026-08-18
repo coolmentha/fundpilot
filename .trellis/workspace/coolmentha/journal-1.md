@@ -478,3 +478,24 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 16: 详情页行情指标优先展示
+
+**Date**: 2026-08-18
+**Task**: 详情页行情指标优先展示
+**Branch**: `feature/fund-detail-market-metrics-first-column`
+
+### Summary
+
+将基金详情页行情指标移至首个 Tab 并默认展示，补充顺序与激活状态回归测试；前端 lint、110 项测试和生产构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22bbc24` | (see git log) |
+
+### Status
+
+[OK] **Completed**

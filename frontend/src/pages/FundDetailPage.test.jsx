@@ -75,6 +75,11 @@ describe('FundDetailPage', () => {
         expect(container.textContent).toContain('+¥1.50');
         expect(container.textContent).toContain('(+2.00%)');
         expect(container.textContent).not.toContain('今日涨跌');
+        expect([...container.querySelectorAll('.ant-tabs-tab-btn')].map((tab) => tab.textContent)).toEqual([
+            '行情指标', '交易流水', '策略参数', '纪律建议', '定投计划',
+        ]);
+        expect(container.querySelector('.ant-tabs-tab-active')?.textContent).toBe('行情指标');
+        expect(container.textContent).toContain('行情指标内容');
         expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
             '/confirm?fundId=1', '/advice?fundId=1', '/funds?editId=1',
         ]));
