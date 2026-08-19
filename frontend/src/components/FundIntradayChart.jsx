@@ -31,8 +31,9 @@ function formatPercent(value) {
     return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
-function buildIntradayOption(times, values, percentAxis, colors) {
+function buildIntradayOption(times, values, percentAxis, colors, latestChange) {
     const bound = percentAxis ? symmetricPercentBound(values) : null;
+    const seriesColor = latestChange > 0 ? colors.up : latestChange < 0 ? colors.down : colors.zero;
     const axisLabel = percentAxis
         ? (value) => formatPercent(Number(value))
         : (value) => Number(value).toFixed(4);
@@ -84,8 +85,18 @@ function buildIntradayOption(times, values, percentAxis, colors) {
             showSymbol: false,
             symbol: 'none',
             connectNulls: false,
-            lineStyle: {color: colors.primary, width: 2},
-            areaStyle: {color: colors.area},
+            lineStyle: {color: seriesColor, width: 2},
+            areaStyle: {
+                origin: 'start',
+                opacity: 0.18,
+                color: {
+                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                        {offset: 0, color: seriesColor},
+                        {offset: 1, color: 'transparent'},
+                    ],
+                },
+            },
             markLine: percentAxis ? {
                 silent: true,
                 symbol: 'none',
@@ -138,10 +149,14 @@ export default function FundIntradayChart({portfolioFundId}) {
             const nav = navByTime.get(time);
             return Number.isFinite(nav) ? nav : null;
         });
-        const values = usePercentAxis
+        const percentValues = Number.isFinite(baseNav) && baseNav > 0
             ? navValues.map((nav) => nav === null ? null : Number(((nav / baseNav - 1) * 100).toFixed(6)))
-            : navValues;
-        chart.setOption(buildIntradayOption(times, values, usePercentAxis, getChartColors(themeMode)), {notMerge: true});
+            : [];
+        const values = usePercentAxis ? percentValues : navValues;
+        const latestChange = percentValues.findLast(Number.isFinite) ?? 0;
+        chart.setOption(buildIntradayOption(
+            times, values, usePercentAxis, getChartColors(themeMode), latestChange,
+        ), {notMerge: true});
         chart.resize();
     }, [baseNav, intraday, sessionTimes, themeMode, usePercentAxis]);
 
