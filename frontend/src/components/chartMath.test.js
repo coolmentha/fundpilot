@@ -2,10 +2,10 @@ import {describe, expect, it} from 'vitest';
 import {calculateMacd, movingAverage, symmetricPercentBound} from './chartMath.js';
 
 describe('chartMath', () => {
-    it('returns a symmetric percentage bound with a stable minimum', () => {
-        expect(symmetricPercentBound([4, -2, null])).toBe(5);
+    it('uses the largest absolute percentage as the symmetric bound', () => {
+        expect(symmetricPercentBound([4, -2, null])).toBe(4);
         expect(symmetricPercentBound([0, 0])).toBe(0.01);
-        expect(symmetricPercentBound([0.04])).toBe(0.05);
+        expect(symmetricPercentBound([0.04])).toBe(0.04);
     });
 
     it('calculates moving averages with null warm-up values', () => {

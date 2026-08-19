@@ -35,11 +35,7 @@ export function getChartColors(themeMode) {
 
 export function symmetricPercentBound(values) {
     const maxAbs = Math.max(0, ...values.filter(Number.isFinite).map((value) => Math.abs(value)));
-    const raw = Math.max(0.01, maxAbs);
-    const magnitude = 10 ** Math.floor(Math.log10(raw));
-    const normalized = raw / magnitude;
-    const unit = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-    return unit * magnitude;
+    return maxAbs || 0.01;
 }
 
 export function movingAverage(values, period) {

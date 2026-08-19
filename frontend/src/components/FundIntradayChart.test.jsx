@@ -42,7 +42,7 @@ describe('FundIntradayChart', () => {
         await act(async () => root.render(<FundIntradayChart portfolioFundId={1}/>));
         const percentOption = chart.setOption.mock.lastCall[0];
         expect(percentOption.series[0].data).toEqual([4, -2]);
-        expect(percentOption.yAxis).toMatchObject({min: -5, max: 5});
+        expect(percentOption.yAxis).toMatchObject({min: -4, max: 4});
         expect(percentOption.series[0].markLine.data).toEqual([{yAxis: 0}]);
 
         const navOption = [...container.querySelectorAll('.ant-segmented-item')]
