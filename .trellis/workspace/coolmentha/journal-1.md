@@ -499,3 +499,26 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 17: 修复手工成本价重算并完成发布验证
+
+**Date**: 2026-08-21
+**Task**: 修复手工成本价重算并完成发布验证
+**Branch**: `hotfix/cost-basis-reset`
+
+### Summary
+
+将手工成本修正记录为成本基准重置流水，修复账本重放与交易流水展示；补齐集成测试夹具，PR #225 完整 CI 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8e0fdcd` | (see git log) |
+| `d8e384f` | (see git log) |
+| `18a960e` | (see git log) |
+
+### Status
+
+[OK] **Completed**
