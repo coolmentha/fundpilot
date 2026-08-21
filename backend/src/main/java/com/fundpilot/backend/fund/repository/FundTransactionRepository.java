@@ -51,7 +51,7 @@ public interface FundTransactionRepository extends JpaRepository<FundTransaction
 
     @Query(value = "select fund_id as fundId, " +
             "coalesce(sum(case when source in ('INCREASE','TRANSFER_IN','INVEST','ADJUST_IN') " +
-            "then shares else -shares end), 0) as holdingShares " +
+            "then shares when source = 'COST_BASIS_RESET' then 0 else -shares end), 0) as holdingShares " +
             "from fund_transaction where status='CONFIRMED' and deleted_date is null " +
             "and fund_id in (:fundIds) group by fund_id", nativeQuery = true)
     List<HoldingSharesProjection> aggregateConfirmedShares(@Param("fundIds") Collection<Long> fundIds);

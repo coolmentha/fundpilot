@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
-import {date, datetime, errorTitle, percent} from './constants.js';
+import {
+    date, datetime, errorTitle, fundSourceOptions, percent, text, transactionCostPerShare,
+} from './constants.js';
 
 describe('Instant formatting', () => {
     it('uses Asia/Shanghai for date time', () => {
@@ -37,5 +39,32 @@ describe('numeric formatting', () => {
         expect(percent(null)).toBe('-');
         expect(percent(undefined)).toBe('-');
         expect(percent(0)).toBe('0.00%');
+    });
+});
+
+describe('transaction cost basis', () => {
+    it('labels cost corrections without exposing them as manual transactions', () => {
+        expect(text('COST_BASIS_RESET')).toBe('成本修正');
+        expect(fundSourceOptions.map(({value}) => value)).not.toContain('COST_BASIS_RESET');
+    });
+
+    it('derives cost per share only for cost corrections', () => {
+        expect(transactionCostPerShare({
+            source: 'COST_BASIS_RESET', amount: '120.00', shares: '100.00',
+        })).toBe(1.2);
+        expect(transactionCostPerShare({
+            source: 'INCREASE', amount: '120.00', shares: '100.00',
+        })).toBeNull();
+    });
+
+    it.each([
+        {source: 'COST_BASIS_RESET', amount: '120.00', shares: '0'},
+        {source: 'COST_BASIS_RESET', amount: null, shares: '100'},
+        {source: 'COST_BASIS_RESET', amount: 'not-a-number', shares: '100'},
+        {source: 'COST_BASIS_RESET', amount: '120.00', shares: null},
+        {source: 'COST_BASIS_RESET', amount: '120.00', shares: 'not-a-number'},
+        null,
+    ])('returns no value for invalid correction data %#', (transaction) => {
+        expect(transactionCostPerShare(transaction)).toBeNull();
     });
 });

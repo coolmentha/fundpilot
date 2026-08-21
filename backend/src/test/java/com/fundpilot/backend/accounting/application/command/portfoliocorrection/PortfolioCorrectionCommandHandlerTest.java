@@ -4,6 +4,10 @@ import com.fundpilot.backend.accounting.application.gateway.portfoliocorrection.
 import com.fundpilot.backend.accounting.domain.position.Position;
 import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.PendingTransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
+import com.fundpilot.backend.accounting.application.gateway.transactionledger.LedgerEventGateway;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -84,10 +88,24 @@ class PortfolioCorrectionCommandHandlerTest {
     @Test
     void correctsCurrentCostWithoutChangingOtherPositionFacts() {
         PositionRepository positions = mock(PositionRepository.class);
+        TransactionRepository transactions = mock(TransactionRepository.class);
         Position position = openPosition();
         when(positions.findByPortfolioFund(11L)).thenReturn(Optional.of(position));
         when(positions.save(any(Position.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        var handler = handler(new FakeGateway(), positions,
+        when(transactions.findByPortfolioFundAndStatus(11L, TransactionStatus.CONFIRMED))
+                .thenReturn(java.util.List.of(LedgerTransaction.recordExistingPosition(11L, 3L,
+                        new BigDecimal("100"), new BigDecimal("1.10"), NOW, NOW)));
+        when(transactions.save(any(LedgerTransaction.class)))
+                .thenAnswer(invocation -> {
+                    LedgerTransaction transaction = invocation.getArgument(0);
+                    return LedgerTransaction.rehydrate(99L, transaction.portfolioFundId(), transaction.ownerId(),
+                            transaction.source(), transaction.status(), transaction.amount(), transaction.shares(),
+                            transaction.nav(), transaction.fee(), transaction.feeRate(), transaction.tradeDate(),
+                            transaction.confirmTime(), transaction.cancelTime(), transaction.createdDate(),
+                            transaction.relatedTransactionId(), transaction.signalLogId(), transaction.dcaPlanId(),
+                            transaction.disciplineAdviceId(), transaction.investmentPlanId(), transaction.signalReason());
+                });
+        var handler = handler(new FakeGateway(), positions, transactions,
                 (portfolioFundId, legacyFundId) -> false);
 
         var result = handler.correctCostPerShare(3L, 11L, new BigDecimal("1.25"));
@@ -147,8 +165,27 @@ class PortfolioCorrectionCommandHandlerTest {
             CorrectablePortfolioFundGateway gateway,
             PositionRepository positions,
             PendingTransactionRepository pendingTransactions) {
-        return new PortfolioCorrectionCommandHandler(gateway, positions, pendingTransactions,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        return handler(gateway, positions, mock(TransactionRepository.class), pendingTransactions,
+                mock(LedgerEventGateway.class));
+    }
+
+    private PortfolioCorrectionCommandHandler handler(
+            CorrectablePortfolioFundGateway gateway,
+            PositionRepository positions,
+            TransactionRepository transactions,
+            PendingTransactionRepository pendingTransactions) {
+        return handler(gateway, positions, transactions, pendingTransactions,
+                mock(LedgerEventGateway.class));
+    }
+
+    private PortfolioCorrectionCommandHandler handler(
+            CorrectablePortfolioFundGateway gateway,
+            PositionRepository positions,
+            TransactionRepository transactions,
+            PendingTransactionRepository pendingTransactions,
+            LedgerEventGateway events) {
+        return new PortfolioCorrectionCommandHandler(gateway, positions, transactions, pendingTransactions,
+                events, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private Position openPosition() {

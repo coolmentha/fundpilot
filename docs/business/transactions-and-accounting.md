@@ -15,6 +15,7 @@
 | `TRANSFER_OUT` | 减少 | 份额 | 净额、净值、费用 | 转出或基金转换转出腿 |
 | `ADJUST_IN` | 增加 | 份额 | 无 | 账实调增，录入即确认 |
 | `ADJUST_OUT` | 减少 | 份额 | 无 | 账实调减，录入即确认 |
+| `COST_BASIS_RESET` | 不变 | 总成本、份额快照 | 无 | 成本修正，录入即确认；仅由基金编辑入口创建 |
 
 信号触发的交易保留 `signalLog` 关联；手动交易和自动定投的 `signalLog` 为空。自动定投通过 `dcaPlanId` 关联执行计划。
 
@@ -25,7 +26,7 @@ stateDiagram-v2
     [*] --> PENDING: 创建普通买入或卖出交易
     PENDING --> CONFIRMED: 交易日单位净值齐备并确认
     PENDING --> CANCELLED: 用户撤销
-    [*] --> CONFIRMED: ADJUST 或初始持仓同步录入
+    [*] --> CONFIRMED: ADJUST、成本修正或初始持仓同步录入
 ```
 
 - `CONFIRMED` 和 `CANCELLED` 都是终态，不能再次确认或撤销。
@@ -117,6 +118,8 @@ flowchart LR
 - CONFIRMED 净份额 = 增加方向份额之和 - 减少方向份额之和。
 - `ADJUST_OUT` 会优先缩减现有 open lot，但不生成赎回明细和费用。
 - 买入确认在 Accounting `Position.costPerShare` 上加权更新；卖出不改变成本单价。
+- 手工成本修正写入 `COST_BASIS_RESET` 流水，以 `amount / shares` 记录新的每份成本；该流水不改变份额、不创建或修改 FIFO lot。
+- 存在成本重置流水时，按业务交易时间和流水 ID 重放：最近重置点之前的买入成本不再参与，之后的买入继续加权。交易日早于重置但更晚确认的流水仍排在重置前。
 - 清仓后再次买入时，如果旧份额不大于 0，新买入成本自然成为新的成本基准。
 
 ## 失败与错误

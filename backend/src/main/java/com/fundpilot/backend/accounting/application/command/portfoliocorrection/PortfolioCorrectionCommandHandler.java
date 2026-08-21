@@ -1,9 +1,15 @@
 package com.fundpilot.backend.accounting.application.command.portfoliocorrection;
 
 import com.fundpilot.backend.accounting.application.gateway.portfoliocorrection.CorrectablePortfolioFundGateway;
+import com.fundpilot.backend.accounting.application.event.transaction.TransactionCreated;
+import com.fundpilot.backend.accounting.application.gateway.transactionledger.LedgerEventGateway;
+import com.fundpilot.backend.accounting.domain.ledgerreplay.LedgerReplay;
 import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.accounting.domain.position.PositionStatus;
+import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.PendingTransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +24,9 @@ import java.time.Instant;
 public class PortfolioCorrectionCommandHandler {
     private final CorrectablePortfolioFundGateway portfolioFunds;
     private final PositionRepository positions;
+    private final TransactionRepository transactions;
     private final PendingTransactionRepository pendingTransactions;
+    private final LedgerEventGateway events;
     private final Clock clock;
 
     @Transactional
@@ -46,8 +54,22 @@ public class PortfolioCorrectionCommandHandler {
                 .orElseThrow(() -> new PortfolioCorrectionFailure(
                         PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_OPEN,
                         "只有当前持仓可以修改成本单价"));
+        var confirmed = transactions.findByPortfolioFundAndStatus(portfolioFundId, TransactionStatus.CONFIRMED);
+        BigDecimal holdingShares = LedgerReplay.netShares(confirmed);
+        if (holdingShares.signum() <= 0) {
+            throw new PortfolioCorrectionFailure(
+                    PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_OPEN,
+                    "当前确认持仓份额无效，不能修改成本单价");
+        }
+        Instant correctedAt = clock.instant();
+        LedgerTransaction reset = LedgerTransaction.recordCostBasisReset(
+                portfolioFundId, ownerId, holdingShares, normalizedCost, correctedAt);
         position.correctCostPerShare(normalizedCost);
+        LedgerTransaction savedReset = transactions.save(reset);
         var saved = positions.save(position);
+        events.publishCreated(new TransactionCreated(savedReset.id(), savedReset.portfolioFundId(),
+                savedReset.ownerId(), savedReset.source().name(), savedReset.amount(), savedReset.shares(),
+                savedReset.tradeDate(), correctedAt));
         return new CostCorrectionResult(saved.portfolioFundId(), saved.costPerShare());
     }
 

@@ -1,6 +1,7 @@
 package com.fundpilot.backend.accounting.domain.transaction;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -123,6 +124,9 @@ public final class LedgerTransaction {
         if (source.isAdjustment()) {
             throw new IllegalArgumentException("调整交易录入即确认，不能作为待确认流水");
         }
+        if (source.isCostBasisReset()) {
+            throw new IllegalArgumentException("成本基准重置只能通过成本修正入口创建");
+        }
         requireInput(source, amount, shares);
         return new LedgerTransaction(null, portfolioFundId, ownerId, source, TransactionStatus.PENDING,
                 amount, shares, null, null, null, tradeDate, null, null, null, null,
@@ -155,6 +159,25 @@ public final class LedgerTransaction {
         return new LedgerTransaction(null, portfolioFundId, ownerId, source, TransactionStatus.CONFIRMED,
                 null, normalized, null, null, null, Objects.requireNonNull(tradeDate, "交易发生时间不能为空"),
                 Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null, null, null);
+    }
+
+    /** 录入一笔成本基准重置，创建即确认且不改变持仓份额。 */
+    public static LedgerTransaction recordCostBasisReset(long portfolioFundId, long ownerId,
+                                                         BigDecimal shares, BigDecimal costPerShare,
+                                                         Instant occurredAt) {
+        BigDecimal normalizedShares = ShareScale.normalize(shares);
+        if (normalizedShares == null || normalizedShares.signum() <= 0) {
+            throw new IllegalArgumentException("成本基准重置需填正数份额");
+        }
+        if (costPerShare == null || costPerShare.signum() <= 0) {
+            throw new IllegalArgumentException("成本单价必须大于 0");
+        }
+        Instant timestamp = Objects.requireNonNull(occurredAt, "修正时间不能为空");
+        BigDecimal totalCost = normalizedShares.multiply(costPerShare)
+                .setScale(8, RoundingMode.HALF_UP);
+        return new LedgerTransaction(null, portfolioFundId, ownerId, TransactionSource.COST_BASIS_RESET,
+                TransactionStatus.CONFIRMED, totalCost, normalizedShares, null, null, null,
+                timestamp, timestamp, null, null, null, null, null, null, null);
     }
 
     /** 录入一笔期初持仓流水，创建即确认，按用户输入成本建立后续 FIFO 所需 lot。 */

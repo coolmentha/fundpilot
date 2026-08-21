@@ -79,6 +79,10 @@ public class TransactionLedgerCommandHandler {
         if (source == null) {
             throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED, "交易来源必填");
         }
+        if (source.isCostBasisReset()) {
+            throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED,
+                    "成本基准重置只能通过成本修正入口创建");
+        }
         requireTradable(ownerId, portfolioFundId);
         Instant now = clock.instant();
         Instant effectiveTradeDate = tradeDate != null ? tradeDate : now;
@@ -380,6 +384,7 @@ public class TransactionLedgerCommandHandler {
         TRANSFER_OUT,
         INVEST,
         ADJUST_IN,
-        ADJUST_OUT
+        ADJUST_OUT,
+        COST_BASIS_RESET
     }
 }

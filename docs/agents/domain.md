@@ -52,7 +52,7 @@
 ## 术语规则
 
 - `SignalType` 表达策略建议，当前新信号只使用 `NONE/SELL`。
-- `FundTransactionSource` 表达账目份额变化，使用 `INCREASE/DECREASE/TRANSFER_IN/TRANSFER_OUT/INVEST/ADJUST_IN/ADJUST_OUT`。
+- `FundTransactionSource` 表达交易或账务修正来源；`INCREASE/DECREASE/TRANSFER_IN/TRANSFER_OUT/INVEST/ADJUST_IN/ADJUST_OUT` 改变份额，`COST_BASIS_RESET` 只重置当前成本基准。
 - 不要把 `SELL` 信号与 `DECREASE` 交易来源当成同一个概念。
 - `BUILD/ADD` 和 `CALIBRATED/CALIBRATION_FAILED` 是兼容遗留，不是当前主流程。
 - 事实持仓只由 CONFIRMED 交易份额聚合，PENDING 不进入持仓。

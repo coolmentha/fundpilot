@@ -153,7 +153,8 @@ public class TransactionApi {
     public record AdviceRelatedTransaction(long transactionId, String status) {}
     public record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, BigDecimal amount,
                                            String status) {}
-    public enum Source { INCREASE, DECREASE, TRANSFER_IN, TRANSFER_OUT, INVEST, ADJUST_IN, ADJUST_OUT }
+    public enum Source { INCREASE, DECREASE, TRANSFER_IN, TRANSFER_OUT, INVEST, ADJUST_IN, ADJUST_OUT,
+        COST_BASIS_RESET }
     public enum Status { PENDING, CONFIRMED, CANCELLED }
 
     public static final class Failure extends RuntimeException {

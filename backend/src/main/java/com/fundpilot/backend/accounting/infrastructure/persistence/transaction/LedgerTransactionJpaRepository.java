@@ -43,7 +43,7 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
 
     @Query(value = "select portfolio_fund_id as portfolioFundId, "
             + "coalesce(sum(case when source in ('INCREASE','TRANSFER_IN','INVEST','ADJUST_IN') "
-            + "then shares else -shares end), 0) as holdingShares "
+            + "then shares when source = 'COST_BASIS_RESET' then 0 else -shares end), 0) as holdingShares "
             + "from fund_transaction where status = 'CONFIRMED' and deleted_date is null "
             + "and portfolio_fund_id in (:portfolioFundIds) group by portfolio_fund_id",
             nativeQuery = true)

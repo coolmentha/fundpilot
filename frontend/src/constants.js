@@ -56,6 +56,7 @@ export const labels = {
     INVEST: '定投',
     ADJUST_IN: '调增',
     ADJUST_OUT: '调减',
+    COST_BASIS_RESET: '成本修正',
     // WeeklyMacdState
     DIVERGENCE_BOTTOM: '底背离',
     GREEN_SHRINKING: '绿柱缩小',
@@ -101,6 +102,14 @@ export const text = (value) => labels[value] || (value === 0 ? '0' : (value || '
 export const money = (value) => Number(value || 0).toLocaleString('zh-CN', {
     style: 'currency', currency: 'CNY', maximumFractionDigits: 2,
 });
+export const transactionCostPerShare = (transaction = {}) => {
+    const {source, amount, shares} = transaction || {};
+    if (source !== 'COST_BASIS_RESET' || amount == null || shares == null) return null;
+    const total = Number(amount);
+    const quantity = Number(shares);
+    return Number.isFinite(total) && total > 0 && Number.isFinite(quantity) && quantity > 0
+        ? total / quantity : null;
+};
 export const percent = (value) => {
     if (value === null || value === undefined) return '-';
     const n = Number(value);

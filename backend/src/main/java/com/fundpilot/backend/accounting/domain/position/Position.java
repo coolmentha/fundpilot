@@ -98,6 +98,14 @@ public final class Position {
         openedAt = openedAtSnapshot;
     }
 
+    /** 按包含成本基准重置的确认账本回放当前成本。 */
+    public void applyReplayedCostPerShare(BigDecimal replayedCostPerShare) {
+        if (replayedCostPerShare == null || replayedCostPerShare.signum() <= 0) {
+            throw new IllegalArgumentException("重放成本单价必须大于 0");
+        }
+        costPerShare = replayedCostPerShare;
+    }
+
     /** 用户修正当前持仓成本；历史交易和 lot 成本不随之改写。 */
     public void correctCostPerShare(BigDecimal correctedCostPerShare) {
         if (status != PositionStatus.OPEN) {
