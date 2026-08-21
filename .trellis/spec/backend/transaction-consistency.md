@@ -630,9 +630,13 @@ void Position.correctCostPerShare(BigDecimal correctedCostPerShare);
 - Lock `PortfolioFund` before loading and saving `Position`, matching transaction-confirmation lock order.
 - Normalize a supplied cost to `NUMERIC(19,8)` with `HALF_UP`; the rounded value must remain positive.
 - Only a `TRACKED` portfolio fund owned by the caller with an `OPEN` position can be corrected.
-- Update only `accounting_position.cost_per_share`. Do not write legacy `fund.cost_per_share`, transactions,
-  shares, `openedAt`, status, or FIFO lot acquisition costs.
-- Later purchases use the corrected position cost as the previous cost in the existing weighted formula.
+- In the same transaction, save one confirmed `COST_BASIS_RESET` ledger row and update
+  `accounting_position.cost_per_share`. The row stores confirmed shares as a snapshot and
+  `amount = shares * costPerShare`; its share direction is zero.
+- Do not write legacy `fund.cost_per_share`, rewrite earlier transactions, or change shares, `openedAt`, status,
+  FIFO lots, or realized PnL.
+- If a reset exists, replay ledger cost by effective trade date and ID: discard costs before the latest reset and
+  continue weighting later purchases. Without a reset, preserve the legacy incremental path.
 
 ### 4. Validation & Error Matrix
 
@@ -641,7 +645,7 @@ void Position.correctCostPerShare(BigDecimal correctedCostPerShare);
 | Null, non-positive, or rounded-to-zero cost | `COST_PER_SHARE_INVALID` |
 | Missing, voided, or another user's portfolio fund | `FUND_NOT_FOUND` at the legacy API boundary |
 | Empty or cleared position | `FUND_NOT_FOUND` at the legacy API boundary |
-| Valid open position | Persist the normalized current cost and return it |
+| Valid open position with positive confirmed shares | Persist the reset ledger row and normalized current cost |
 
 ### 5. Good/Base/Bad Cases
 
@@ -652,9 +656,10 @@ void Position.correctCostPerShare(BigDecimal correctedCostPerShare);
 ### 6. Tests Required
 
 - Domain test: correction changes only cost and rejects a non-`OPEN` position.
-- Command test: positive normalization, rounded-to-zero rejection, ownership hiding, and save behavior.
-- PostgreSQL integration test: persisted Position changes while FIFO lot shares and acquisition cost remain unchanged.
-- UI test: input appears only for positive holdings, submits a changed value, and submits `null` when unchanged.
+- Command test: positive normalization, rounded-to-zero rejection, ownership hiding, reset row, and save behavior.
+- Replay test: later purchase weighting, late confirmation before reset, multiple resets, and no-reset compatibility.
+- PostgreSQL integration test: Position and reset row persist while FIFO lot shares and acquisition cost remain unchanged.
+- UI test: input appears only for positive holdings, submits a changed value, refreshes the ledger, and submits `null` when unchanged.
 
 ### 7. Wrong vs Correct
 
@@ -663,8 +668,9 @@ void Position.correctCostPerShare(BigDecimal correctedCostPerShare);
 fund.setCostPerShare(cost);
 lots.updateAcquireCost(portfolioFundId, cost);
 
-// Correct: serialize with transaction confirmation and update only the current Position fact.
+// Correct: serialize with transaction confirmation and persist one auditable reset with the Position projection.
 portfolioFunds.findOwnedForUpdate(ownerId, portfolioFundId);
+transactions.save(LedgerTransaction.recordCostBasisReset(portfolioFundId, ownerId, shares, cost, now));
 position.correctCostPerShare(cost.setScale(8, RoundingMode.HALF_UP));
 positions.save(position);
 ```

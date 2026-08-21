@@ -64,6 +64,7 @@ public class AccountingRebuildService {
                         tx, unitNav, lotsByFund, transferNetAmounts, oldRedemptionRates);
                 case "ADJUST_OUT" -> consumeLots(tx, lotsByFund, false, BigDecimal.ZERO, unitNav);
                 case "ADJUST_IN" -> { /* 事实份额由交易保留，不创建收费 lot。 */ }
+                case "COST_BASIS_RESET" -> { /* 成本基准事实不参与净值或 lot 重建。 */ }
                 default -> throw new IllegalStateException("未知交易来源: " + tx.source());
             }
         }
@@ -270,7 +271,8 @@ public class AccountingRebuildService {
     }
 
     private boolean requiresNav(String source) {
-        return !"ADJUST_IN".equals(source) && !"ADJUST_OUT".equals(source);
+        return !"ADJUST_IN".equals(source) && !"ADJUST_OUT".equals(source)
+                && !"COST_BASIS_RESET".equals(source);
     }
 
     private record OldLotEvidence(Instant acquireTime, BigDecimal costPerShare) {}

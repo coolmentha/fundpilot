@@ -54,6 +54,7 @@ export function useSaveFund() {
             qc.invalidateQueries({queryKey: ['fund-groups']});
             qc.invalidateQueries({queryKey: ['portfolio-summary']});
             qc.invalidateQueries({queryKey: ['portfolio-returns']});
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
         },
     });
 }

@@ -11,6 +11,10 @@ import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.FundService;
 import com.fundpilot.backend.accounting.domain.position.Position;
 import com.fundpilot.backend.accounting.domain.position.PositionRepository;
+import com.fundpilot.backend.accounting.domain.lot.Lot;
+import com.fundpilot.backend.accounting.domain.lot.LotRepository;
+import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
@@ -41,6 +45,8 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
     @Autowired EntityManager entityManager;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired PositionRepository positions;
+    @Autowired TransactionRepository ledgerTransactions;
+    @Autowired LotRepository lots;
 
     @Test
     void correctsCurrentCostThroughFundUpdateAndMapsInvalidInput() throws Exception {
@@ -51,6 +57,13 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
         position.applyExistingPosition(new java.math.BigDecimal("1.10"),
                 java.time.Instant.parse("2026-08-01T00:00:00Z"));
         positions.save(position);
+        LedgerTransaction initialTransaction = ledgerTransactions.save(LedgerTransaction.recordExistingPosition(
+                fund.portfolioFundId(), testActorId(), new java.math.BigDecimal("100"),
+                new java.math.BigDecimal("1.10"), java.time.Instant.parse("2026-08-01T00:00:00Z"),
+                java.time.Instant.parse("2026-08-01T00:00:00Z")));
+        Lot initialLot = lots.save(Lot.open(fund.portfolioFundId(), initialTransaction.id(),
+                java.time.Instant.parse("2026-08-01T00:00:00Z"), new java.math.BigDecimal("100"),
+                new java.math.BigDecimal("1.10")));
 
         mockMvc.perform(put("/api/funds/{id}", fund.id())
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
@@ -65,6 +78,38 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"costPerShare\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COST_PER_SHARE_INVALID"));
+
+        var confirmed = ledgerTransactions.findByPortfolioFundAndStatus(
+                fund.portfolioFundId(), com.fundpilot.backend.accounting.domain.transaction.TransactionStatus.CONFIRMED);
+        assertThat(confirmed).hasSize(2);
+        LedgerTransaction storedInitial = confirmed.stream()
+                .filter(transaction -> transaction.id().equals(initialTransaction.id()))
+                .findFirst().orElseThrow();
+        LedgerTransaction reset = confirmed.stream()
+                .filter(transaction -> transaction.source()
+                        == com.fundpilot.backend.accounting.domain.transaction.TransactionSource.COST_BASIS_RESET)
+                .findFirst().orElseThrow();
+        assertThat(storedInitial.amount()).isEqualByComparingTo("110.00");
+        assertThat(storedInitial.shares()).isEqualByComparingTo("100.00");
+        assertThat(storedInitial.nav()).isEqualByComparingTo("1.10");
+        assertThat(reset.status()).isEqualTo(
+                com.fundpilot.backend.accounting.domain.transaction.TransactionStatus.CONFIRMED);
+        assertThat(reset.amount()).isEqualByComparingTo("125.00000000");
+        assertThat(reset.shares()).isEqualByComparingTo("100.00");
+        assertThat(reset.signedShares()).isZero();
+        assertThat(reset.nav()).isNull();
+        assertThat(reset.fee()).isNull();
+        assertThat(reset.feeRate()).isNull();
+        assertThat(positions.findByPortfolioFund(fund.portfolioFundId()).orElseThrow().costPerShare())
+                .isEqualByComparingTo("1.25");
+        assertThat(lots.findByPortfolioFund(fund.portfolioFundId())).singleElement()
+                .satisfies(lot -> {
+                    assertThat(lot.id()).isEqualTo(initialLot.id());
+                    assertThat(lot.acquireTransactionId()).isEqualTo(initialTransaction.id());
+                    assertThat(lot.acquireShares()).isEqualByComparingTo("100.00");
+                    assertThat(lot.remainingShares()).isEqualByComparingTo("100.00");
+                    assertThat(lot.acquireCostPerShare()).isEqualByComparingTo("1.10");
+                });
     }
 
     @Test

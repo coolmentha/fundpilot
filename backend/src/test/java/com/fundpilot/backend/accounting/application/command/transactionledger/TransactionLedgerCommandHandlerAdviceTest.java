@@ -3,6 +3,7 @@ package com.fundpilot.backend.accounting.application.command.transactionledger;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +22,23 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class TransactionLedgerCommandHandlerAdviceTest {
+
+    @Test
+    void ordinaryManualEntryRejectsCostBasisReset() {
+        TradedPortfolioFundGateway portfolioFunds = mock(TradedPortfolioFundGateway.class);
+        TransactionLedgerCommandHandler handler = new TransactionLedgerCommandHandler(
+                mock(TransactionRepository.class), mock(LotRepository.class), portfolioFunds,
+                mock(TradingDayGateway.class), mock(PositionCommandHandler.class),
+                mock(LedgerEventGateway.class), Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> handler.recordManual(3L, 11L,
+                TransactionLedgerCommandHandler.Source.COST_BASIS_RESET,
+                new BigDecimal("100"), new BigDecimal("100"), Instant.EPOCH, null))
+                .isInstanceOf(TransactionLedgerFailure.class)
+                .extracting(error -> ((TransactionLedgerFailure) error).code())
+                .isEqualTo(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED);
+        verifyNoInteractions(portfolioFunds);
+    }
 
     @Test
     void legacy基金交易拒绝访问其他用户的组合基金() {

@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 账本重放：把一组流水折算为持仓事实。跨 transaction 与 lot 两个聚合，是账目模块的核心业务规则，
@@ -47,9 +48,65 @@ public final class LedgerReplay {
                     tracked = tracked.subtract(trackedConsumed);
                     untracked = untracked.subtract(shares.subtract(trackedConsumed)).max(BigDecimal.ZERO);
                 }
+                case COST_BASIS_RESET -> { /* 成本事实不改变份额或 lot 跟踪。 */ }
             }
         }
         return untracked;
+    }
+
+    /**
+     * 仅对包含成本基准重置的账本重放当前成本；没有重置记录时返回 empty，保留存量持仓的旧增量规则。
+     * 重置前的买入成本被丢弃，重置后的 ADJUST_IN 保留零成本份额语义。
+     */
+    public static Optional<BigDecimal> replayCostPerShare(List<LedgerTransaction> confirmed) {
+        boolean resetSeen = false;
+        BigDecimal shares = BigDecimal.ZERO;
+        BigDecimal untracked = BigDecimal.ZERO;
+        BigDecimal costPerShare = null;
+        for (LedgerTransaction transaction : inLedgerOrder(confirmed)) {
+            BigDecimal transactionShares = ShareScale.normalizeOrZero(transaction.shares());
+            switch (transaction.source()) {
+                case COST_BASIS_RESET -> {
+                    if (transaction.amount() == null || transaction.amount().signum() <= 0
+                            || transactionShares.signum() <= 0) {
+                        throw new IllegalStateException("成本基准重置缺少有效成本快照 tx=" + transaction.id());
+                    }
+                    costPerShare = transaction.amount().divide(transactionShares,
+                            java.math.MathContext.DECIMAL64);
+                    // 快照反映写入时已确认份额；晚确认但业务日期更早的流水已经重放到 shares，不能丢掉。
+                    shares = shares.signum() > 0 ? shares : transactionShares;
+                    untracked = BigDecimal.ZERO;
+                    resetSeen = true;
+                }
+                case INCREASE, TRANSFER_IN, INVEST -> {
+                    BigDecimal previousShares = shares;
+                    if (previousShares.signum() <= 0 || costPerShare == null) {
+                        costPerShare = transaction.amount() == null || transactionShares.signum() <= 0
+                                ? null : transaction.amount().divide(transactionShares,
+                                java.math.MathContext.DECIMAL64);
+                    } else {
+                        BigDecimal trackedPrevious = previousShares.subtract(untracked).max(BigDecimal.ZERO);
+                        costPerShare = costPerShare.multiply(trackedPrevious,
+                                java.math.MathContext.DECIMAL64).add(transaction.amount())
+                                .divide(previousShares.add(transactionShares),
+                                        java.math.MathContext.DECIMAL64);
+                    }
+                    shares = previousShares.add(transactionShares);
+                }
+                case ADJUST_IN -> {
+                    shares = shares.add(transactionShares);
+                    untracked = untracked.add(transactionShares);
+                }
+                case DECREASE, TRANSFER_OUT, ADJUST_OUT -> {
+                    shares = shares.subtract(transactionShares).max(BigDecimal.ZERO);
+                    BigDecimal trackedConsumed = shares.add(transactionShares).subtract(untracked)
+                            .max(BigDecimal.ZERO).min(transactionShares);
+                    untracked = untracked.subtract(transactionShares.subtract(trackedConsumed))
+                            .max(BigDecimal.ZERO);
+                }
+            }
+        }
+        return resetSeen ? Optional.ofNullable(costPerShare) : Optional.empty();
     }
 
     /** 最近一笔正向 CONFIRMED 流水的交易时间，用于重建建仓时间。 */

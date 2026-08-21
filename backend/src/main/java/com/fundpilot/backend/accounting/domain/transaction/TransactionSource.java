@@ -10,7 +10,8 @@ public enum TransactionSource {
     TRANSFER_OUT,
     INVEST,
     ADJUST_IN,
-    ADJUST_OUT;
+    ADJUST_OUT,
+    COST_BASIS_RESET;
 
     /** 买入类：录入金额，确认时按净值折算份额并建 lot。 */
     public boolean isBuy() {
@@ -27,11 +28,17 @@ public enum TransactionSource {
         return this == ADJUST_IN || this == ADJUST_OUT;
     }
 
-    /** 份额方向：加仓类 +1，减仓类 -1。 */
+    /** 成本基准重置只记录成本事实，不改变持仓份额。 */
+    public boolean isCostBasisReset() {
+        return this == COST_BASIS_RESET;
+    }
+
+    /** 份额方向：加仓类 +1，减仓类 -1，成本基准重置 0。 */
     public BigDecimal direction() {
         return switch (this) {
             case INCREASE, TRANSFER_IN, INVEST, ADJUST_IN -> BigDecimal.ONE;
             case DECREASE, TRANSFER_OUT, ADJUST_OUT -> BigDecimal.ONE.negate();
+            case COST_BASIS_RESET -> BigDecimal.ZERO;
         };
     }
 }

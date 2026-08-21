@@ -3,7 +3,7 @@ import {Card, Table, Tooltip, Typography, Button, Popconfirm, Modal, Form, Input
 import {InfoCircleOutlined, PlusOutlined} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {useFundTransactions, useCancelTransaction, useCreateManualTransaction, useConfirmTransaction, useFunds, useFundFeeRates} from '../api/hooks.js';
-import {datetime, money, fundSourceOptions} from '../constants.js';
+import {datetime, money, fundSourceOptions, transactionCostPerShare} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import PendingTransactionEditModal from '../components/PendingTransactionEditModal.jsx';
@@ -23,7 +23,7 @@ const transactionSourceOptions = [
 
 /**
  * 基金详情 · 交易流水 tab(issue #18 交易合并到基金详情 + 手动录入)。
- * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持七类来源,
+ * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持交易来源,
  * 买入类填金额、卖出类填份额(份额/金额等净值确认后回填),手动卖出不卡 7 天硬约束。
  */
 export default function FundTransactionTab({fundId, portfolioFundId}) {
@@ -52,6 +52,11 @@ export default function FundTransactionTab({fundId, portfolioFundId}) {
             render: (v) => v == null ? '-' : <span className="num-cell">{money(v)}</span>},
         {title: '份额', dataIndex: 'shares', width: 120, align: 'right',
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(2)}</span>},
+        {title: '成本价', width: 100, align: 'right',
+            render: (_, transaction) => {
+                const value = transactionCostPerShare(transaction);
+                return value == null ? '-' : <span className="num-cell">{value.toFixed(4)}</span>;
+            }},
         {title: '净值', dataIndex: 'nav', width: 100, align: 'right',
             render: (v) => v == null ? '-' : <span className="num-cell">{Number(v).toFixed(4)}</span>},
         {title: '手续费', dataIndex: 'fee', width: 110, align: 'right',
@@ -118,7 +123,7 @@ export default function FundTransactionTab({fundId, portfolioFundId}) {
         <Card title={<Title level={5}>交易流水</Title>}
               extra={<Button type="primary" icon={<PlusOutlined/>} onClick={() => setOpen(true)}>手动录入</Button>}>
             <Table rowKey="id" size="small" loading={isLoading} dataSource={transactions}
-                   columns={columns} pagination={{pageSize: 10, size: 'small'}} scroll={{x: 820}}
+                   columns={columns} pagination={{pageSize: 10, size: 'small'}} scroll={{x: 920}}
                    locale={{emptyText: <EmptyState description="暂无交易"/>}}/>
 
             <Modal title="手动录入交易" open={open} onCancel={() => setOpen(false)}
