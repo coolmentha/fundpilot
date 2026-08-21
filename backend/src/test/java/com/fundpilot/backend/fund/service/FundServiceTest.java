@@ -2,6 +2,8 @@ package com.fundpilot.backend.fund.service;
 
 import com.fundpilot.backend.accounting.domain.position.Position;
 import com.fundpilot.backend.accounting.domain.position.PositionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.fund.controller.FundCreateRequest;
@@ -42,6 +44,7 @@ class FundServiceTest extends AbstractIntegrationTest {
     @Autowired PortfolioFundApi portfolioFundApi;
     @Autowired PortfolioGroupingApi portfolioGroupingApi;
     @Autowired PositionRepository positions;
+    @Autowired TransactionRepository transactions;
     @Autowired JdbcTemplate jdbcTemplate;
 
     @Test
@@ -174,12 +177,15 @@ class FundServiceTest extends AbstractIntegrationTest {
         position.reconcile(true, new BigDecimal("100"), openedAt);
         position.applyExistingPosition(new BigDecimal("1.10"), openedAt);
         positions.save(position);
+        LedgerTransaction initialTransaction = transactions.save(LedgerTransaction.recordExistingPosition(
+                portfolioFund.id(), testActorId(), new BigDecimal("100"), new BigDecimal("1.10"),
+                openedAt, openedAt));
         jdbcTemplate.update("""
                 INSERT INTO fund_lot(version, fund_id, portfolio_fund_id, acquire_tx_id, acquire_date,
                                      acquire_shares, remaining_shares, acquire_cost_per_share,
                                      created_date, updated_date)
-                VALUES (0, ?, ?, 999999, ?, 100, 100, 1.10, now(), now())
-                """, fund.getId(), portfolioFund.id(), Timestamp.from(openedAt));
+                VALUES (0, ?, ?, ?, ?, 100, 100, 1.10, now(), now())
+                """, fund.getId(), portfolioFund.id(), initialTransaction.id(), Timestamp.from(openedAt));
 
         FundView updated = fundService.update(fund.getId(), new FundCreateRequest(
                 null, null, null, null, null, null, null, null,
