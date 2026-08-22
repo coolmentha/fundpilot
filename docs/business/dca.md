@@ -31,7 +31,22 @@ stateDiagram-v2
 | `WEEKLY` | `dayOfWeek=1..5` | 只在对应周一至周五执行 |
 | `MONTHLY` | `dayOfMonth=1..28` | 计划日执行；遇连续休市顺延到下一个交易日，可跨月 |
 
-每次定投金额必须大于 0。周计划不接受周末，月计划不接受 29-31 日。
+每次定投基础金额必须大于 0。周计划不接受周末，月计划不接受 29-31 日。
+
+## 金额策略
+
+计划可配置 `amountStrategy`，决定每次执行的实际买入金额（规则版本固化 `ALIPAY_2025_06_V1`，由纯函数 `SmartInvestmentAmountPolicy` 计算）：
+
+| 策略 | 规则 | 数据不可用时 |
+| --- | --- | --- |
+| `FIXED` | 按计划金额全额执行 | 不适用（无外部数据依赖） |
+| `LOW_VALUATION` | 指数估值百分位 ≤30% 才按 100% 执行；>30% 当日跳过（`VALUATION_NOT_LOW`） | 跳过（`VALUATION_UNAVAILABLE`） |
+| `MOVING_AVERAGE` | 按指数收盘价相对 N 日均线的偏离分档定率；下跌且近十日振幅 ≥5% 取加倍档（60%+tier×10%），振幅 <5% 取减半档（160%+tier×10%，即低波动加倍）；上涨按偏离程度取 90%/80%/70%/60% | 跳过（`INDEX_KLINE_UNAVAILABLE`） |
+| `CHANGE_RATE` | 按 (最新净值−平均成本)/平均成本 分档：深亏最多 200%，浮亏越多买越多；浮盈 ≥25% 时降至 50%，浮盈越多买越少 | 跳过（`NAV_UNAVAILABLE` / `COST_UNAVAILABLE`） |
+
+- 智能策略的事实数据（估值百分位、指数均线与振幅、基金净值、平均成本）经 `PlanInvestmentFactsGateway` 注入；计算结果金额下限 0.01 元。
+- 智能策略当日是否执行的决策（含跳过原因码、档位系数、指标快照）落 `investment_plan_execution` 决策记录；`SKIPPED` 不生成交易。
+- FIXED 无决策记录，幂等仅依赖同日交易唯一。
 
 ## 自动执行流程
 
@@ -40,14 +55,18 @@ flowchart LR
     A[交易日 14:55] --> B[遍历 EFFECTIVE 计划]
     B --> C{enabled 且今天命中周期}
     C -- 否 --> D[跳过]
-    C -- 是 --> E{同一计划今天已有交易}
+    C -- 是 --> E{同一计划本期已有交易或决策}
     E -- 是 --> D
-    E -- 否 --> F[原子插入 INVEST / PENDING]
-    F --> G[等待交易日单位净值]
-    G --> H[确认份额、费用、lot 和成本]
+    E -- 否 --> F{amountStrategy}
+    F -- FIXED --> G[原子插入 INVEST / PENDING]
+    F -- 智能策略 --> H[计算实际金额]
+    H -- 可执行 --> G
+    H -- 跳过 --> I[落 SKIPPED 决策记录]
+    G --> J[等待交易日单位净值]
+    J --> K[确认份额、费用、lot 和成本]
 ```
 
-`DcaSuggestionJob` 先确认当天是 A 股交易日，再逐基金调用独立事务。单只基金生成失败只记录错误，不影响其他计划。
+`InvestmentPlanExecutionJob` 先确认当天是 A 股交易日，再逐计划调用独立事务。单个计划失败只记录错误，不影响其他计划。
 
 ## 月计划顺延
 
@@ -56,10 +75,11 @@ flowchart LR
 - 如果计划日至昨天之间已经出现交易日，说明本期执行窗口已过去，当天不补。
 - 如果计划日至昨天全部为休市日，今天作为顺延后的首个交易日执行。
 - 同一计划同一北京时间自然日只允许一条交易，因此任务重跑不会重复生成。
+- 新建月计划时若创建时间已过本月计划日的执行窗口（issue #158），首次执行自动顺延到下月，不在创建当月补跑。
 
 ## 幂等
 
-幂等键由 `dcaPlanId` 和交易 `tradeDate` 的北京时间自然日共同确定。
+幂等键由计划 ID（交易的 `investmentPlanId`）和交易 `tradeDate` 的北京时间自然日共同确定。
 
 同日已有任意状态交易都视为本期已处理：
 
@@ -78,7 +98,7 @@ flowchart LR
 - 全月预计：已定投与本月剩余预计之和。
 - 当天只有在 14:55 前仍属于本月剩余预计；月末休市顺延到下月时，金额归属实际执行月份。
 
-定投管理页通过全局 `/api/dca-plans` 一次取得全部计划、基金信息、本月剩余次数、金额和预计执行日期。预算摘要与逐计划拆分共用 `DcaPlanForecastService`，逐计划剩余金额之和必须等于摘要的本月剩余预计。
+定投管理页通过全局计划接口一次取得全部计划、基金信息、本月剩余次数、金额和预计执行日期。预算摘要与逐计划拆分共用 `InvestmentPlanForecastQueryHandler`，逐计划剩余金额之和必须等于摘要的本月剩余预计。
 
 月度预算可空。未设置时仍显示三项金额但不显示进度或超额；设置后显示剩余或预计超出。预算只提示，不暂停计划、不阻止交易生成或净值确认。
 
@@ -115,6 +135,6 @@ flowchart LR
 
 ## 实现与验证入口
 
-- 实现：[DcaPlanService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaPlanService.java)、[DcaPlanForecastService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaPlanForecastService.java)、[DcaSuggestionService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaSuggestionService.java)、[DcaBudgetSummaryService](../../backend/src/main/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryService.java)、[DcaSuggestionJob](../../backend/src/main/java/com/fundpilot/backend/dca/job/DcaSuggestionJob.java)
-- 测试：[DcaPlanServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaPlanServiceTest.java)、[DcaPlanForecastServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaPlanForecastServiceTest.java)、[DcaSuggestionJobTest](../../backend/src/test/java/com/fundpilot/backend/dca/job/DcaSuggestionJobTest.java)、[DcaBudgetSummaryServiceTest](../../backend/src/test/java/com/fundpilot/backend/dca/service/DcaBudgetSummaryServiceTest.java)
+- 实现：[InvestmentPlanCommandHandler](../../backend/src/main/java/com/fundpilot/backend/investmentplan/application/command/planmanagement/InvestmentPlanCommandHandler.java)、[InvestmentPlanForecastQueryHandler](../../backend/src/main/java/com/fundpilot/backend/investmentplan/application/query/planexecution/InvestmentPlanForecastQueryHandler.java)、[InvestmentPlanBudgetSummaryQueryHandler](../../backend/src/main/java/com/fundpilot/backend/investmentplan/application/query/budgetmanagement/InvestmentPlanBudgetSummaryQueryHandler.java)、[InvestmentPlanExecutionCommandHandler](../../backend/src/main/java/com/fundpilot/backend/investmentplan/application/command/planexecution/InvestmentPlanExecutionCommandHandler.java)
+- 测试：[InvestmentPlanCommandHandlerTest](../../backend/src/test/java/com/fundpilot/backend/investmentplan/application/command/planmanagement/InvestmentPlanCommandHandlerTest.java)、[InvestmentPlanForecastQueryHandlerTest](../../backend/src/test/java/com/fundpilot/backend/investmentplan/application/query/planexecution/InvestmentPlanForecastQueryHandlerTest.java)、[InvestmentPlanBudgetSummaryQueryHandlerTest](../../backend/src/test/java/com/fundpilot/backend/investmentplan/application/query/budgetmanagement/InvestmentPlanBudgetSummaryQueryHandlerTest.java)、[InvestmentPlanExecutionCommandHandlerTest](../../backend/src/test/java/com/fundpilot/backend/investmentplan/application/command/planexecution/InvestmentPlanExecutionCommandHandlerTest.java)
 - 相关决策：[ADR-0016](../adr/0016-dca-config-auto-invest-not-signal.md)、[ADR-0018](../adr/0018-dca-take-profit-presets-and-cycle.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

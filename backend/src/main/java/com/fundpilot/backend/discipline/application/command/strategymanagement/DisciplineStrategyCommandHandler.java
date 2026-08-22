@@ -79,9 +79,10 @@ public class DisciplineStrategyCommandHandler {
     }
 
     public static Result from(DisciplineStrategy value) {
-        return new Result(value.id(), value.portfolioFundId(), value.ownerId(), value.status(), value.activation(),
+        return new Result(value.id(), value.portfolioFundId(), value.ownerId(), value.status().name(), value.activation(),
                 value.pullback(), value.harvest(), value.minimumHolding(), value.maxSingleSell(), value.cooldownDays(),
-                value.presetCategory(), value.presetVersion(), value.customized(), value.takeProfitPhase());
+                value.presetCategory(), value.presetVersion(), value.customized(),
+                value.takeProfitPhase() == null ? null : value.takeProfitPhase().name());
     }
 
     public record Input(BigDecimal profitActivationPercent, BigDecimal stopLossPullbackPercent,

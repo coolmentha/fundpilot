@@ -27,7 +27,7 @@ public class FundService {
 
 ## 3. ErrorCode 枚举,不用魔法字符串
 
-异常 code 用 `com.fundpilot.backend.exception.ErrorCode` 枚举,不散落字符串字面量。
+异常 code 用 `com.fundpilot.backend.platform.web.error.ErrorCode` 枚举,不散落字符串字面量。
 
 ```java
 throw new BusinessException(ErrorCode.FUND_NOT_FOUND, "Fund #" + id + " 不存在");

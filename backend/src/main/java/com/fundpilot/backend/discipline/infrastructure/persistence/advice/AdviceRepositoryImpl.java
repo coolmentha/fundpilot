@@ -20,7 +20,7 @@ class AdviceRepositoryImpl implements AdviceRepository {
     }
 
     @Override public java.util.List<Advice> findPendingByOwner(long ownerId) {
-        return advice.findByOwnerIdAndResponseStatusOrderBySignalDateDesc(ownerId, "PENDING").stream()
+        return advice.findByOwnerIdAndResponseStatusOrderBySignalDateDesc(ownerId, AdviceResponseStatus.PENDING.name()).stream()
                 .map(AdviceRepositoryImpl::toDomain).toList();
     }
     @Override public java.util.List<Advice> findByPortfolioFundAndSignalDateBetween(long portfolioFundId,
@@ -35,7 +35,8 @@ class AdviceRepositoryImpl implements AdviceRepository {
     @Override
     public Optional<Advice> findLatestSellAdviceByPortfolioFund(long portfolioFundId) {
         return advice.findFirstByPortfolioFundIdAndSignalTypeAndResponseStatusInOrderBySignalDateDesc(portfolioFundId,
-                        (short) AdviceAction.SELL.ordinal(), java.util.List.of("PENDING", "RESPONDED"))
+                        (short) AdviceAction.SELL.ordinal(),
+                        java.util.List.of(AdviceResponseStatus.PENDING.name(), AdviceResponseStatus.RESPONDED.name()))
                 .map(AdviceRepositoryImpl::toDomain);
     }
 
@@ -61,7 +62,7 @@ class AdviceRepositoryImpl implements AdviceRepository {
                                  String warnings, String hardConstraintBreaches) {
         DisciplineAdviceJpaEntity entity = advice.findByPortfolioFundIdAndSignalDate(portfolioFundId, signalDate)
                 .orElseGet(DisciplineAdviceJpaEntity::new);
-        if (!"PENDING".equals(entity.getResponseStatus()) && entity.getId() != null) {
+        if (!AdviceResponseStatus.PENDING.name().equals(entity.getResponseStatus()) && entity.getId() != null) {
             return toDomain(entity);
         }
         entity.setPortfolioFundId(portfolioFundId);

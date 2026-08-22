@@ -9,7 +9,7 @@ public final class DisciplineStrategy {
     private final Long id;
     private final long portfolioFundId;
     private final long ownerId;
-    private String status;
+    private StrategyParamStatus status;
     private BigDecimal activation;
     private BigDecimal pullback;
     private BigDecimal harvest;
@@ -19,17 +19,17 @@ public final class DisciplineStrategy {
     private String presetCategory;
     private Integer presetVersion;
     private boolean customized;
-    private String takeProfitPhase;
+    private TakeProfitPhase takeProfitPhase;
     private Instant cycleStartedAt;
     private BigDecimal cyclePeakNav;
     private Long triggeredAdviceId;
     private Instant cooldownStartedAt;
 
-    private DisciplineStrategy(Long id, long portfolioFundId, long ownerId, String status,
+    private DisciplineStrategy(Long id, long portfolioFundId, long ownerId, StrategyParamStatus status,
                                BigDecimal activation, BigDecimal pullback, BigDecimal harvest,
                                BigDecimal minimumHolding, BigDecimal maxSingleSell, Integer cooldownDays,
                                String presetCategory, Integer presetVersion, boolean customized,
-                               String takeProfitPhase, Instant cycleStartedAt, BigDecimal cyclePeakNav,
+                               TakeProfitPhase takeProfitPhase, Instant cycleStartedAt, BigDecimal cyclePeakNav,
                                Long triggeredAdviceId, Instant cooldownStartedAt) {
         this.id = id;
         this.portfolioFundId = positive(portfolioFundId, "组合基金 ID");
@@ -46,9 +46,9 @@ public final class DisciplineStrategy {
         this.cooldownStartedAt = cooldownStartedAt;
     }
     public static DisciplineStrategy create(long portfolioFundId, long ownerId, Input input) {
-        return new DisciplineStrategy(null, portfolioFundId, ownerId, "PENDING_CALIBRATION", input.activation(),
-                input.pullback(), input.harvest(), input.minimumHolding(), input.maxSingleSell(), input.cooldownDays(),
-                input.presetCategory(), input.presetVersion(), input.customized(),
+        return new DisciplineStrategy(null, portfolioFundId, ownerId, StrategyParamStatus.PENDING_CALIBRATION,
+                input.activation(), input.pullback(), input.harvest(), input.minimumHolding(), input.maxSingleSell(),
+                input.cooldownDays(), input.presetCategory(), input.presetVersion(), input.customized(),
                 null, null, null, null, null);
     }
     public static DisciplineStrategy rehydrate(long id, long portfolioFundId, long ownerId,
@@ -59,25 +59,26 @@ public final class DisciplineStrategy {
                                                 String takeProfitPhase, Instant cycleStartedAt, BigDecimal cyclePeakNav,
                                                 Long triggeredAdviceId, Instant cooldownStartedAt) {
         return new DisciplineStrategy(positive(id, "策略 ID"), portfolioFundId, ownerId,
-                status, activation,
+                StrategyParamStatus.valueOf(status), activation,
                 pullback, harvest, minimumHolding, maxSingleSell, cooldownDays,
-                presetCategory, presetVersion, customized, takeProfitPhase,
+                presetCategory, presetVersion, customized,
+                takeProfitPhase == null ? null : TakeProfitPhase.valueOf(takeProfitPhase),
                 cycleStartedAt, cyclePeakNav, triggeredAdviceId, cooldownStartedAt);
     }
     public void update(Input input) {
-        if ("EFFECTIVE".equals(status)) throw new IllegalStateException("请先停用策略再编辑");
+        if (status == StrategyParamStatus.EFFECTIVE) throw new IllegalStateException("请先停用策略再编辑");
         apply(input.activation(), input.pullback(), input.harvest(), input.minimumHolding(), input.maxSingleSell(), input.cooldownDays());
         presetCategory = input.presetCategory();
         presetVersion = input.presetVersion();
         customized = input.customized();
     }
     public void activate() {
-        status = "EFFECTIVE";
+        status = StrategyParamStatus.EFFECTIVE;
         positionOpened();
     }
     public void positionOpened() {
-        if (!"EFFECTIVE".equals(status)) return;
-        takeProfitPhase = "ACCUMULATING";
+        if (status != StrategyParamStatus.EFFECTIVE) return;
+        takeProfitPhase = TakeProfitPhase.ACCUMULATING;
         cycleStartedAt = null;
         cyclePeakNav = null;
         triggeredAdviceId = null;
@@ -87,12 +88,12 @@ public final class DisciplineStrategy {
     public boolean prepareTakeProfit(BigDecimal overallReturn, BigDecimal currentAccumulatedNav,
                                      Instant today, boolean cooldownFinished) {
         if (takeProfitPhase == null) {
-            takeProfitPhase = "ACCUMULATING";
+            takeProfitPhase = TakeProfitPhase.ACCUMULATING;
         }
-        if ("TRIGGERED".equals(takeProfitPhase)) {
+        if (takeProfitPhase == TakeProfitPhase.TRIGGERED) {
             return false;
         }
-        if ("COOLDOWN".equals(takeProfitPhase)) {
+        if (takeProfitPhase == TakeProfitPhase.COOLDOWN) {
             if (!cooldownFinished) {
                 return false;
             }
@@ -101,13 +102,13 @@ public final class DisciplineStrategy {
             if (overallReturn.compareTo(activation) >= 0) {
                 arm(currentAccumulatedNav, today);
             } else {
-                takeProfitPhase = "ACCUMULATING";
+                takeProfitPhase = TakeProfitPhase.ACCUMULATING;
                 cycleStartedAt = null;
                 cyclePeakNav = null;
             }
             return false;
         }
-        if ("ACCUMULATING".equals(takeProfitPhase)) {
+        if (takeProfitPhase == TakeProfitPhase.ACCUMULATING) {
             if (overallReturn.compareTo(activation) >= 0) {
                 arm(currentAccumulatedNav, today);
             }
@@ -126,15 +127,15 @@ public final class DisciplineStrategy {
 
     public void markTriggered(long adviceId) {
         triggeredAdviceId = positive(adviceId, "建议 ID");
-        takeProfitPhase = "TRIGGERED";
+        takeProfitPhase = TakeProfitPhase.TRIGGERED;
     }
 
     /** 止盈卖出确认后进入冷静期；非 TRIGGERED 态幂等忽略。 */
     public void enterCooldown(Instant now) {
-        if (!"TRIGGERED".equals(takeProfitPhase)) {
+        if (takeProfitPhase != TakeProfitPhase.TRIGGERED) {
             return;
         }
-        takeProfitPhase = "COOLDOWN";
+        takeProfitPhase = TakeProfitPhase.COOLDOWN;
         cooldownStartedAt = Objects.requireNonNull(now, "冷静期开始时间不能为空");
         cycleStartedAt = null;
         cyclePeakNav = null;
@@ -142,24 +143,24 @@ public final class DisciplineStrategy {
     }
 
     public void supersedeTriggered() {
-        if (!"TRIGGERED".equals(takeProfitPhase)) {
+        if (takeProfitPhase != TakeProfitPhase.TRIGGERED) {
             return;
         }
-        takeProfitPhase = "ARMED";
+        takeProfitPhase = TakeProfitPhase.ARMED;
         triggeredAdviceId = null;
         cycleStartedAt = null;
         cyclePeakNav = null;
     }
 
     private void arm(BigDecimal currentAccumulatedNav, Instant today) {
-        takeProfitPhase = "ARMED";
+        takeProfitPhase = TakeProfitPhase.ARMED;
         cycleStartedAt = today;
         cyclePeakNav = currentAccumulatedNav;
         triggeredAdviceId = null;
     }
     public void retire() {
-        if (!"EFFECTIVE".equals(status)) throw new IllegalStateException("策略未生效");
-        status = "PENDING_CALIBRATION";
+        if (status != StrategyParamStatus.EFFECTIVE) throw new IllegalStateException("策略未生效");
+        status = StrategyParamStatus.PENDING_CALIBRATION;
         takeProfitPhase = null;
         cycleStartedAt = null;
         cyclePeakNav = null;
@@ -185,14 +186,14 @@ public final class DisciplineStrategy {
     private static long positive(long value, String field) { if (value <= 0) throw new IllegalArgumentException(field + "必须为正数"); return value; }
     public Long id() { return id; } public long portfolioFundId() { return portfolioFundId; }
     public long ownerId() { return ownerId; }
-    public String status() { return status; }
+    public StrategyParamStatus status() { return status; }
     public BigDecimal activation() { return activation; } public BigDecimal pullback() { return pullback; }
     public BigDecimal harvest() { return harvest; } public BigDecimal minimumHolding() { return minimumHolding; }
     public BigDecimal maxSingleSell() { return maxSingleSell; } public Integer cooldownDays() { return cooldownDays; }
     public String presetCategory() { return presetCategory; }
     public Integer presetVersion() { return presetVersion; }
     public boolean customized() { return customized; }
-    public String takeProfitPhase() { return takeProfitPhase; }
+    public TakeProfitPhase takeProfitPhase() { return takeProfitPhase; }
     public Instant cycleStartedAt() { return cycleStartedAt; }
     public BigDecimal cyclePeakNav() { return cyclePeakNav; }
     public Long triggeredAdviceId() { return triggeredAdviceId; }

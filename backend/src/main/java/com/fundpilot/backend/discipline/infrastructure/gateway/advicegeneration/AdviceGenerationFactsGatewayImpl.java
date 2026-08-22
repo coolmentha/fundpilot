@@ -3,6 +3,7 @@ package com.fundpilot.backend.discipline.infrastructure.gateway.advicegeneration
 import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.accounting.adapter.api.transaction.TransactionApi;
 import com.fundpilot.backend.discipline.application.gateway.advicegeneration.AdviceGenerationFactsGateway;
+import com.fundpilot.backend.discipline.domain.advice.AdvicePolicy;
 import com.fundpilot.backend.marketdata.adapter.api.indicator.MarketIndicatorApi;
 import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
 import com.fundpilot.backend.marketdata.adapter.api.tradingcalendar.TradingCalendarApi;
@@ -54,7 +55,9 @@ class AdviceGenerationFactsGatewayImpl implements AdviceGenerationFactsGateway {
         var latestNav = navs.latest(productId);
         var market = indicators.find(productId, businessDate).map(value -> new MarketSnapshot(
                 value.currentNav(), value.priceAboveYearLine(), value.yearLineRising(),
-                value.weeklyMacdState(), value.volumeState(), value.weeklyDropPercent(), value.sixtyDayHigh()))
+                enumValue(AdvicePolicy.MacdState.class, value.weeklyMacdState()),
+                enumValue(AdvicePolicy.VolumeState.class, value.volumeState()),
+                value.weeklyDropPercent(), value.sixtyDayHigh()))
                 .orElse(null);
         var ledger = transactions.findByPortfolioFund(ownerId, portfolioFundId);
         Instant lastBuy = ledger.stream()
@@ -77,12 +80,26 @@ class AdviceGenerationFactsGatewayImpl implements AdviceGenerationFactsGateway {
         matureShares = matureShares.add(holdingShares.subtract(trackedShares).max(BigDecimal.ZERO))
                 .min(holdingShares);
         return Optional.of(new Facts(portfolioFundId, ownerId, productId,
-                product.get().productType() == null ? null : product.get().productType().name(),
-                position.get().status().name(), position.get().openedAt(), position.get().costPerShare(),
+                product.get().productType() == null ? null
+                        : AdvicePolicy.ProductType.valueOf(product.get().productType().name()),
+                AdvicePolicy.PositionStatus.valueOf(position.get().status().name()),
+                position.get().openedAt(), position.get().costPerShare(),
                 holdingShares, market, latestNav.map(PublishedNavApi.PublishedNav::unitNav).orElse(null),
                 latestNav.map(PublishedNavApi.PublishedNav::accumulatedNav).orElse(null),
                 navs.peakAccumulatedNav(productId, null).orElse(null),
                 navs.peakAccumulatedNav(productId, position.get().openedAt()).orElse(null),
                 lastBuy, matureShares));
+    }
+
+    /** 未知枚举值(如 marketdata 新增状态)降级为 null,由策略按"条件不成立"处理。 */
+    private static <E extends Enum<E>> E enumValue(Class<E> type, String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(type, value);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 }

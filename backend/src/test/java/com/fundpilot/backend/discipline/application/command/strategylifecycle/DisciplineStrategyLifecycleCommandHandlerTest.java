@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.StrategyParamStatus;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -25,7 +27,7 @@ class DisciplineStrategyLifecycleCommandHandlerTest {
 
         new DisciplineStrategyLifecycleCommandHandler(strategies).positionCleared(10L);
 
-        assertThat(strategy.status()).isEqualTo("PENDING_CALIBRATION");
+        assertThat(strategy.status()).isEqualTo(StrategyParamStatus.PENDING_CALIBRATION);
         verify(strategies).save(strategy);
     }
 
@@ -36,8 +38,8 @@ class DisciplineStrategyLifecycleCommandHandlerTest {
 
         new DisciplineStrategyLifecycleCommandHandler(strategies).positionOpened(10L);
 
-        assertThat(strategy.status()).isEqualTo("EFFECTIVE");
-        assertThat(strategy.takeProfitPhase()).isEqualTo("ACCUMULATING");
+        assertThat(strategy.status()).isEqualTo(StrategyParamStatus.EFFECTIVE);
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.ACCUMULATING);
         verify(strategies).save(strategy);
     }
 

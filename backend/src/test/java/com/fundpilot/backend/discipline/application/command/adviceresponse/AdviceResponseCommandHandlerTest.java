@@ -14,6 +14,7 @@ import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -104,7 +105,7 @@ class AdviceResponseCommandHandlerTest {
 
         ArgumentCaptor<DisciplineStrategy> saved = ArgumentCaptor.forClass(DisciplineStrategy.class);
         verify(strategies).save(saved.capture());
-        assertThat(saved.getValue().takeProfitPhase()).isEqualTo("ARMED");
+        assertThat(saved.getValue().takeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
         assertThat(saved.getValue().triggeredAdviceId()).isNull();
     }
 

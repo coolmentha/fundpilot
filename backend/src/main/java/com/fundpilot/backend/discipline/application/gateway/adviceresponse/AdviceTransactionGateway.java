@@ -21,8 +21,11 @@ public interface AdviceTransactionGateway {
     record PendingTransaction(long transactionId) {
     }
 
-    record RelatedTransaction(long transactionId, String status) {
+    record RelatedTransaction(long transactionId, Status status) {
     }
+
+    /** Accounting 账目状态(TransactionApi.Status 同名)。 */
+    enum Status { PENDING, CONFIRMED, CANCELLED }
 
     enum Source { INCREASE, DECREASE }
 

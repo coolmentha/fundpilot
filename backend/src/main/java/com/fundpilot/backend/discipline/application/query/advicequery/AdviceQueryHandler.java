@@ -54,7 +54,7 @@ public class AdviceQueryHandler {
                 value.responseStatus().name(), value.signalDate(), value.triggerTier(), value.coefficient(),
                 value.suggestedValue(), value.suggestedMeasureUnit(), value.reason(), value.warnings(),
                 related == null ? null : related.transactionId(),
-                related == null ? null : related.status());
+                related == null || related.status() == null ? null : related.status().name());
     }
     public record Result(long id, Long legacyFundId, long portfolioFundId, String action, String responseStatus,
                          Instant signalDate, Integer triggerTier, BigDecimal coefficient, BigDecimal suggestedValue,

@@ -203,7 +203,7 @@ _Avoid_: QDII 盘中估值；把估算净值当作已确认净值；用旧估值
 _Avoid_: 用 fundgz 作为净值发布门卫；把外部请求放在数据库事务内；只接受 navDate=今天而漏掉滞后基金；跨夜补拉仍固定与“今天”比较
 
 **K 线图（Kline Chart）**:
-行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(MarketDataFetchService 每日算 VolumeState 时顺便落库,零额外请求)渲染日 K,
+行情工作台基金详情页 K 线,前端用 klinecharts v9(内置 MA/MACD/VOL 指标)。ETF/指数基金读 `index_kline` 本地缓存(行情指标刷新任务每日算量能状态时顺便落库,零额外请求)渲染日 K,
 周/月 K 在日 K 上聚合(open=首日、high=max、low=min、close=末日、volume=sum)。主图蜡烛 + MA5/10/20/30(可开关),副图成交量(常驻)+ MACD(可切换)。主动/混合基金或缓存空且实时拉取失败时降级净值面积图。
 **必须读本地缓存**:push2his.eastmoney.com 对按需高频请求 IP-blocks(http 000 "Unexpected end of file"),
 图表按 view/切周期拉会触发限流;改读缓存后图表不再直连 push2his。缓存空(尚未同步)时实时拉作兜底。
@@ -287,18 +287,26 @@ _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）�
 用户配置一次、系统按周期自动买入的执行机制。**定投是自动执行,不是信号**——直接生成 `source=INVEST` 的 PENDING 交易,
 完全绕开信号引擎（SignalLog）和卖出纪律。止盈交给基金绑定的移动止盈信号独立触发,与定投解耦。
 
-`FundDcaPlanEntity` 镜像 `FundStrategyEntity` 结构:fundEntity / enabled / amount / frequency(DAILY·日定投 / WEEKLY·周定投 / MONTHLY·月定投) /
-dayOfWeek(1=周一..5=周五) / dayOfMonth(1-28,月定投日,封顶 28) / status。**新建即激活**:create 直接落 EFFECTIVE
+`InvestmentPlan` 聚合（investmentplan 模块）承载:portfolioFundId / enabled / amount（基础金额）/ frequency(DAILY·日定投 / WEEKLY·周定投 / MONTHLY·月定投) /
+dayOfWeek(1=周一..5=周五) / dayOfMonth(1-28,月定投日,封顶 28) / status / amountStrategy / referenceIndexCode / movingAverageDays。**新建即激活**:create 直接落 EFFECTIVE
 (同基金已有 EFFECTIVE 则回退 DRAFT)。状态流转:EFFECTIVE --retire--> DRAFT --activate--> EFFECTIVE,
-同基金同时最多一份 `EFFECTIVE`（数据库 `uq_fund_dca_plan_effective` 兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
-只有 `DRAFT` 计划允许软删除；运行中或已暂停的 EFFECTIVE 必须先停用。删除计划不删除或改写任何历史/待确认交易，交易保留原 `dcaPlanId` 作为来源记录。
+同基金同时最多一份 `EFFECTIVE`（数据库唯一约束兜底）。`enabled=false` 的 EFFECTIVE 计划 Job 跳过（暂停不绝育）。
+只有 `DRAFT` 计划允许软删除；运行中或已暂停的 EFFECTIVE 必须先停用。删除计划不删除或改写任何历史/待确认交易。
 
-**DcaSuggestionJob**:cron `0 55 14 * * MON-FRI`,每个交易日 14:55 遍历所有 EFFECTIVE 计划。定投日判定:
+**金额策略（amountStrategy）**:FIXED 固定金额按计划金额全额执行;LOW_VALUATION 指数估值百分位 ≤30% 才执行,
+否则当日跳过;MOVING_AVERAGE 按指数收盘价相对 N 日均线偏离分档定率,下跌且近十日振幅 ≥5% 加倍档、<5% 减半档,
+上涨按偏离程度递减;CHANGE_RATE 按(最新净值−平均成本)/平均成本 分档定率,浮盈越多买越少、浮亏越多买越多。
+智能策略由 `SmartInvestmentAmountPolicy`（规则版本固化 `ALIPAY_2025_06_V1`,纯函数无 IO）计算实际金额,
+事实数据（估值百分位/指数均线/振幅/净值/成本）经 `PlanInvestmentFactsGateway` 注入;数据不可用时当日跳过并落
+`investment_plan_execution` 决策记录(SKIPPED + 原因码),不生成交易。
+
+**InvestmentPlanExecutionJob**:cron `0 55 14 * * MON-FRI`(Asia/Shanghai),每个交易日 14:55 遍历 EFFECTIVE 计划逐计划独立事务执行。定投日判定:
 日定投每个交易日都执行;周定投比对 day-of-week;月定投比对 day-of-month,计划日遇节假日顺延到下一个交易日补执行
-（包括月末连续休市后跨月顺延；判定候选计划日至昨天均非交易日,则今天补）。命中且 `enabled=true` 则生成 PENDING INVEST 交易
-（amount=计划金额,shares/nav 留空,`tradeDate`=实际执行日）。
-**幂等**:同一计划同一北京时间自然日已有任意状态交易都跳过
-（`FundTransactionEntity.dcaPlanId` + `existsByDcaPlanIdAndTradeDateBetween` 兜底防重跑）。已确认表示本期完成，已撤销表示用户放弃本期，均不得重建。
+（包括月末连续休市后跨月顺延；判定候选计划日至昨天均非交易日,则今天补）。新建月计划若创建时已错过本月计划日窗口,
+首次执行自动顺延到下月(issue #158)。命中且 `enabled=true` 则生成 PENDING INVEST 交易
+（FIXED 用计划金额,智能策略用决策金额,shares/nav 留空,`tradeDate`=实际执行日）。
+**幂等**:同一计划同一北京时间自然日已有任意状态交易都跳过,月定投另查本月是否已生成任意账目或决策记录防止月内重复；
+数据库原子插入兜底并发重跑。已确认表示本期完成，已撤销表示用户放弃本期，均不得重建。
 
 **NavConfirmJob 时序**:14:55 定投下单(PENDING) → 20:00 DailyNavConfirmJob 拉当日净值 → 次日 03:00 NavConfirmJob 确认昨日 PENDING
 （用下单日净值算 shares）。cron 从 `0 0 21 * *` 改 `0 0 3 * *`——凌晨确认的是"之前生成的"流水,单日定投流水在 14:55 已生成,

@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,7 @@ import java.util.Map;
  * </ul>
  * 全部读 MarketData 内存缓存,零外部请求,无降级异常。
  */
+@Tag(name = "实时行情接口", description = "实时行情相关操作")
 @RestController
 @RequestMapping("/api/market")
 @RequiredArgsConstructor
@@ -34,6 +37,7 @@ public class MarketRealtimeController {
     private final RealtimeMarketOverviewQueryHandler queries;
 
     /** 用户关注指数的实时行情(前端 5-10s 轮询)。 */
+    @Operation(summary = "查询关注指数实时行情")
     @GetMapping("/indices/realtime")
     public ApiResponse<List<IndexRealtimeView>> indices() {
         return ApiResponse.ok(queries.findCurrentActorIndices().stream()
@@ -41,12 +45,14 @@ public class MarketRealtimeController {
     }
 
     /** 沪深京股票上涨、下跌、涨停、跌停家数。 */
+    @Operation(summary = "查询市场涨跌家数")
     @GetMapping("/breadth")
     public ApiResponse<MarketBreadthView> breadth() {
         return ApiResponse.ok(MarketBreadthView.from(queries.findBreadth()));
     }
 
     /** 上证指数当日量价关系与盘中/收盘阶段。 */
+    @Operation(summary = "查询上证指数量价状态")
     @GetMapping("/volume-price")
     public ApiResponse<MarketVolumePriceView> volumePrice() {
         return ApiResponse.ok(MarketVolumePriceView.from(queries.findVolumePrice()));
@@ -57,12 +63,14 @@ public class MarketRealtimeController {
      * @param codes 基金代码逗号分隔(如 "000001,000002")
      * @return code → 估值视图;缓存未命中的 code 不在 map 中(前端降级显示「-」)
      */
+    @Operation(summary = "批量查询基金估值")
     @GetMapping("/funds/estimates")
     public ApiResponse<Map<String, FundEstimateView>> estimates(@RequestParam("codes") List<String> codes) {
         return ApiResponse.ok(FundEstimateView.from(queries.findEstimates(codes)));
     }
 
     /** 行业板块涨跌排行(前端 30s 轮询)。 */
+    @Operation(summary = "查询行业板块涨跌")
     @GetMapping("/sectors")
     public ApiResponse<List<SectorView>> sectors() {
         return ApiResponse.ok(queries.findSectors().stream()
@@ -70,12 +78,14 @@ public class MarketRealtimeController {
     }
 
     /** 北向资金净流入(前端 30s 轮询)。 */
+    @Operation(summary = "查询北向资金净流入")
     @GetMapping("/money-flow")
     public ApiResponse<MoneyFlowView> moneyFlow() {
         return ApiResponse.ok(MoneyFlowView.from(queries.findMoneyFlow()));
     }
 
     /** A 股交易状态与工作台核心行情最后成功快照时间。 */
+    @Operation(summary = "查询A股交易状态")
     @GetMapping("/status")
     public ApiResponse<MarketStatusView> status() {
         return ApiResponse.ok(MarketStatusView.from(queries.findStatus()));
