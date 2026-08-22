@@ -8,7 +8,7 @@ import com.fundpilot.backend.fund.enums.InvestmentPhilosophy;
 import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.enums.OperationMode;
 import com.fundpilot.backend.fund.service.FundPnlService;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
+import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -61,7 +61,7 @@ public record FundView(
         BigDecimal dailyChangePct,
         boolean isEstimated,
         boolean estimateFetchFailed,
-        EstimateStatus estimateStatus,
+        MarketEstimateApi.Status estimateStatus,
         BigDecimal holdingShares,
         BigDecimal holdingAmount,
         BigDecimal dailyPnl,
@@ -105,7 +105,7 @@ public record FundView(
                 costPerShare,
                 fund.isPositionWarningEnabled(),
                 fund.getPositionWarningRatio(),
-                null, false, false, EstimateStatus.NOT_ATTEMPTED,
+                null, false, false, MarketEstimateApi.Status.NOT_ATTEMPTED,
                 null, null, null, null, null, null, null, null, null, null,
                 fund.getCreatedDate(), groupsOf(fund));
     }

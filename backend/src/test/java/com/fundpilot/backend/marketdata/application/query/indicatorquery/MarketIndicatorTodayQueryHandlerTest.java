@@ -25,7 +25,8 @@ class MarketIndicatorTodayQueryHandlerTest {
                 "000300", OwnedFundProductGateway.ProductType.ETF)));
         Instant today = Instant.parse("2026-07-07T00:00:00Z");
         when(indicators.find(11L, today)).thenReturn(Optional.of(new MarketIndicatorQueryHandler.Result(11L,
-                "510300", today, new BigDecimal("1.01"), true, true, "NORMAL", "NORMAL",
+                "510300", today, new BigDecimal("1.01"), true, true,
+                "GREEN_SHRINKING", "NORMAL",
                 BigDecimal.ZERO, false)));
         MarketIndicatorTodayQueryHandler handler = new MarketIndicatorTodayQueryHandler(products, indicators, CLOCK);
 

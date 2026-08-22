@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -29,7 +30,7 @@ class AdviceLifecycleCommandHandlerTest {
         new AdviceLifecycleCommandHandler(advice, strategies, Clock.fixed(NOW, ZoneOffset.UTC))
                 .confirmed(71L);
 
-        assertThat(strategy.takeProfitPhase()).isEqualTo("COOLDOWN");
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.COOLDOWN);
         assertThat(strategy.cooldownStartedAt()).isEqualTo(NOW);
         assertThat(strategy.triggeredAdviceId()).isNull();
         verify(strategies).save(strategy);
@@ -46,7 +47,7 @@ class AdviceLifecycleCommandHandlerTest {
         new AdviceLifecycleCommandHandler(advice, strategies, Clock.fixed(NOW, ZoneOffset.UTC))
                 .confirmed(71L);
 
-        assertThat(strategy.takeProfitPhase()).isEqualTo("ARMED");
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
     }
 
     @Test
@@ -59,7 +60,7 @@ class AdviceLifecycleCommandHandlerTest {
         new AdviceLifecycleCommandHandler(advice, strategies, Clock.fixed(NOW, ZoneOffset.UTC))
                 .cancelled(73L);
 
-        assertThat(strategy.takeProfitPhase()).isEqualTo("ARMED");
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
         assertThat(strategy.triggeredAdviceId()).isNull();
         verify(strategies).save(strategy);
     }

@@ -5,8 +5,8 @@ import java.time.Instant;
 
 public record MarketIndicator(long fundProductId, String fundCode, Instant snapshotDate,
                               BigDecimal currentNav, Boolean priceAboveYearLine,
-                              boolean yearLineRising, String weeklyMacdState,
-                              String volumeState, BigDecimal weeklyDropPercent,
+                              boolean yearLineRising, WeeklyMacdState weeklyMacdState,
+                              VolumeState volumeState, BigDecimal weeklyDropPercent,
                               boolean sixtyDayHigh) {
     public MarketIndicator {
         if (fundProductId <= 0) throw new IllegalArgumentException("基金产品标识必须为正数");

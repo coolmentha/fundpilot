@@ -6,6 +6,7 @@ import com.fundpilot.backend.discipline.domain.advice.AdviceAction;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -71,7 +72,7 @@ public class AdviceResponseCommandHandler {
     /** 忽略的是当前 TRIGGERED 止盈建议时,把策略复位回 ARMED,否则后续不再生成卖出建议。 */
     private void resetTriggeredStrategy(long adviceId) {
         strategies.findByTriggeredAdviceId(adviceId)
-                .filter(strategy -> "TRIGGERED".equals(strategy.takeProfitPhase()))
+                .filter(strategy -> strategy.takeProfitPhase() == TakeProfitPhase.TRIGGERED)
                 .ifPresent(strategy -> {
                     strategy.supersedeTriggered();
                     strategies.save(strategy);

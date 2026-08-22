@@ -12,6 +12,8 @@ import com.fundpilot.backend.marketdata.application.gateway.navpublishing.Publis
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.TrackedNavProductGateway;
 import com.fundpilot.backend.marketdata.application.query.indexkline.IndexKlineQueryHandler;
 import com.fundpilot.backend.marketdata.application.query.indexvaluation.IndexValuationQueryHandler;
+import com.fundpilot.backend.marketdata.domain.indicator.VolumeState;
+import com.fundpilot.backend.marketdata.domain.indicator.WeeklyMacdState;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -122,10 +124,10 @@ public class MarketIndicatorRefreshCommandHandler {
                 .map(PublishedNavSourceGateway.NavSnapshot::accumulatedNav).toList();
         var latest = ordered.getLast();
         Optional<YearLine> yearLine = yearLine(accumulated);
-        Optional<String> macd = weeklyMacd(ordered);
+        Optional<WeeklyMacdState> macd = weeklyMacd(ordered);
         Optional<Boolean> sixtyDayHigh = sixtyDayHigh(accumulated);
         Optional<BigDecimal> weeklyDrop = weeklyDrop(accumulated);
-        Optional<String> volumeState = Optional.empty();
+        Optional<VolumeState> volumeState = Optional.empty();
         String indexCode = target.benchmarkIndexCode();
         PublishedIndexKlineSourceGateway.IndexKline kline = null;
         if (indexCode != null && !indexCode.isBlank()) {
@@ -223,7 +225,7 @@ public class MarketIndicatorRefreshCommandHandler {
         return Optional.of(start.subtract(values.getLast()).divide(start, MathContext.DECIMAL64));
     }
 
-    private static Optional<String> weeklyMacd(List<PublishedNavSourceGateway.NavSnapshot> daily) {
+    private static Optional<WeeklyMacdState> weeklyMacd(List<PublishedNavSourceGateway.NavSnapshot> daily) {
         Map<Instant, BigDecimal> weekly = new HashMap<>();
         for (var nav : daily) {
             Instant weekEnd = nav.navDate().atZone(ZoneOffset.UTC).toLocalDate()
@@ -241,8 +243,8 @@ public class MarketIndicatorRefreshCommandHandler {
         double[] dea = ema(dif, 9);
         double current = 2 * (dif[dif.length - 1] - dea[dea.length - 1]);
         double previous = 2 * (dif[dif.length - 2] - dea[dea.length - 2]);
-        return Optional.of(current > 0 ? current > previous ? "RED_EXPANDING" : "RED_SHRINKING"
-                : Math.abs(current) > Math.abs(previous) ? "GREEN_EXPANDING" : "GREEN_SHRINKING");
+        return Optional.of(current > 0 ? current > previous ? WeeklyMacdState.RED_EXPANDING : WeeklyMacdState.RED_SHRINKING
+                : Math.abs(current) > Math.abs(previous) ? WeeklyMacdState.GREEN_EXPANDING : WeeklyMacdState.GREEN_SHRINKING);
     }
 
     private static double[] ema(double[] values, int period) {
@@ -255,7 +257,7 @@ public class MarketIndicatorRefreshCommandHandler {
     }
 
     /** 基于已落库完整 K 线序列计算成交量状态，避免增量刷新 10 根窗口不足被覆盖为 null。 */
-    private Optional<String> volumeStateFromStored(String indexCode) {
+    private Optional<VolumeState> volumeStateFromStored(String indexCode) {
         if (indexCode == null || indexCode.isBlank()) return Optional.empty();
         try {
             List<IndexKlineQueryHandler.Bar> stored = klineQueries.findAll(indexCode);
@@ -267,15 +269,15 @@ public class MarketIndicatorRefreshCommandHandler {
         }
     }
 
-    private static Optional<String> volumeState(List<BarInput> bars) {
+    private static Optional<VolumeState> volumeState(List<BarInput> bars) {
         if (bars.size() < VOLUME_WINDOW) return Optional.empty();
         double average = bars.subList(bars.size() - VOLUME_WINDOW, bars.size()).stream()
                 .mapToLong(BarInput::volume).average().orElseThrow();
         var latest = bars.getLast();
         if (latest.volume() >= average * 1.5 && latest.close().compareTo(latest.open()) < 0) {
-            return Optional.of("HIGH_DROP");
+            return Optional.of(VolumeState.HIGH_DROP);
         }
-        return Optional.of(latest.volume() < average * 0.5 ? "LOW_STABLE" : "NORMAL");
+        return Optional.of(latest.volume() < average * 0.5 ? VolumeState.LOW_STABLE : VolumeState.NORMAL);
     }
 
     private record BarInput(java.math.BigDecimal open, java.math.BigDecimal close, long volume) {}

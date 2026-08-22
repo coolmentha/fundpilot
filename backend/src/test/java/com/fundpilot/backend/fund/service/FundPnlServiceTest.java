@@ -10,8 +10,7 @@ import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
+import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,9 +36,9 @@ import static org.mockito.Mockito.when;
  */
 class FundPnlServiceTest extends AbstractIntegrationTest {
 
-    /** issue #38:mock 实时行情缓存为空,让三态降级到落库净值算(隔离网络,恢复原数值断言)。 */
+    /** issue #38:mock 实时估值契约为空,让三态降级到落库净值算(隔离网络,恢复原数值断言)。 */
     @MockitoBean
-    MarketRealtimeCache marketRealtimeCache;
+    MarketEstimateApi marketEstimates;
 
     @MockitoBean
     Clock clock;
@@ -51,7 +50,9 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        when(marketRealtimeCache.getEstimates(anyList())).thenReturn(Map.of());
+        when(marketEstimates.getEstimates(anyList())).thenReturn(Map.of());
+        when(marketEstimates.getEstimateStatus(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(MarketEstimateApi.Status.NOT_ATTEMPTED);
         when(clock.instant()).thenReturn(Instant.parse("2026-07-06T03:30:00Z"));
         when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         when(clock.withZone(ZoneOffset.UTC)).thenReturn(clock);
@@ -175,8 +176,8 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
         fund.setCostPerShare(new BigDecimal("1.80"));
         fundRepository.save(fund);
-        when(marketRealtimeCache.getEstimates(java.util.List.of("008585"))).thenReturn(Map.of(
-                "008585", new FundEstimateSnapshot(new BigDecimal("0.0035"), "2026-07-06 11:30", "2026-07-03")));
+        when(marketEstimates.getEstimates(java.util.List.of("008585"))).thenReturn(Map.of(
+                "008585", new MarketEstimateApi.Snapshot(new BigDecimal("0.0035"), "2026-07-06 11:30", "2026-07-03")));
 
         PortfolioSummary summary = fundPnlService.computePortfolioSummary();
 
@@ -198,7 +199,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
         fund.setCostPerShare(new BigDecimal("1.80"));
         fundRepository.save(fund);
-        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+        when(marketEstimates.getEstimateStatus("008585")).thenReturn(MarketEstimateApi.Status.TIMEOUT);
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
         PortfolioSummary summary = fundPnlService.computePortfolioSummary();
@@ -223,7 +224,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         txWithAmount(fund, FundTransactionSource.INCREASE, "1000", "1800", FundTransactionStatus.CONFIRMED);
         fund.setCostPerShare(new BigDecimal("1.80"));
         fundRepository.save(fund);
-        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+        when(marketEstimates.getEstimateStatus("008585")).thenReturn(MarketEstimateApi.Status.TIMEOUT);
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 
@@ -242,7 +243,7 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
         fund.setCostPerShare(new BigDecimal("1.80"));
         fundRepository.save(fund);
         when(clock.instant()).thenReturn(Instant.parse("2026-07-06T00:00:00Z"));
-        when(marketRealtimeCache.hasEstimateFetchFailed("008585")).thenReturn(true);
+        when(marketEstimates.getEstimateStatus("008585")).thenReturn(MarketEstimateApi.Status.TIMEOUT);
 
         FundPnlService.Pnl pnl = fundPnlService.computeForFund(fund.getId());
 

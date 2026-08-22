@@ -10,6 +10,8 @@ import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.StrategyParamStatus;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import com.fundpilot.backend.platform.transaction.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.time.Instant;
@@ -52,7 +54,7 @@ public class AdviceGenerationCommandHandler {
     @Transactional
     public void generate(long strategyId, Instant businessDate) {
         DisciplineStrategy strategy = strategies.findById(strategyId).orElse(null);
-        if (strategy == null || !"EFFECTIVE".equals(strategy.status())) {
+        if (strategy == null || strategy.status() != StrategyParamStatus.EFFECTIVE) {
             return;
         }
         var loaded = facts.load(strategy.ownerId(), strategy.portfolioFundId(), businessDate);
@@ -72,13 +74,12 @@ public class AdviceGenerationCommandHandler {
                         market.weeklyMacdState(), market.volumeState()),
                 value.currentUnitNav(), value.currentAccumulatedNav(), value.matureRedeemableShares(), businessDate),
                 daysSinceLastBuy, cooldownFinished);
-
         if (result.action() == AdviceAction.SELL) {
             // 已有在途卖出建议时抑制或替换，保证"同一基金最多一笔在途卖出"的一次性语义
             if (!supersedeOrBlock(strategy, result, businessDate)) {
                 return;
             }
-        } else if ("TRIGGERED".equals(strategy.takeProfitPhase())) {
+        } else if (strategy.takeProfitPhase() == TakeProfitPhase.TRIGGERED) {
             strategies.save(strategy);
             return;
         }
@@ -111,7 +112,7 @@ public class AdviceGenerationCommandHandler {
         boolean unresponded = value.responseStatus() == AdviceResponseStatus.PENDING;
         boolean acceptedInFlight = value.responseStatus() == AdviceResponseStatus.RESPONDED
                 && transactions.relatedTransaction(value.id())
-                .map(related -> !"CONFIRMED".equals(related.status())).orElse(false);
+                .map(related -> related.status() != AdviceTransactionGateway.Status.CONFIRMED).orElse(false);
 
         if (unresponded && "LOGIC_BROKEN".equals(result.reason())) {
             if (!sameDay) {

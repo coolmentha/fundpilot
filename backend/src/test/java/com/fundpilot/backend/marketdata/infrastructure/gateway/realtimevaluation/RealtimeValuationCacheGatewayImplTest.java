@@ -1,6 +1,7 @@
 package com.fundpilot.backend.marketdata.infrastructure.gateway.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -15,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 class RealtimeValuationCacheGatewayImplTest {
+    private final MarketRealtimeCache marketRealtimeCache = mock(MarketRealtimeCache.class);
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-29T05:00:00Z"), ZoneOffset.UTC);
 
     @Test
@@ -28,7 +30,7 @@ class RealtimeValuationCacheGatewayImplTest {
                 "baseNavDate":"2026-07-28"}},"estimateStatuses":{"000001":"AVAILABLE","000002":"TIMEOUT"}}
                 """);
 
-        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK)
+        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache)
                 .findByFundCodes(List.of("000001", "000002", "000003"));
 
         assertThat(result.get("000001").estimatedChangePct()).isEqualByComparingTo("0.0123");
@@ -48,7 +50,7 @@ class RealtimeValuationCacheGatewayImplTest {
                 "baseNavDate":"2026-07-27"}},"estimateStatuses":{"000001":"AVAILABLE"}}
                 """);
 
-        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK)
+        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache)
                 .findByFundCodes(List.of("000001"));
 
         assertThat(result.get("000001").status()).isEqualTo("STALE");
@@ -59,7 +61,7 @@ class RealtimeValuationCacheGatewayImplTest {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         when(redis.opsForValue()).thenThrow(new IllegalStateException("redis unavailable"));
 
-        assertThat(new RealtimeValuationCacheGatewayImpl(redis, CLOCK)
+        assertThat(new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache)
                 .findByFundCodes(List.of("000001"))).isEmpty();
     }
 
@@ -77,7 +79,7 @@ class RealtimeValuationCacheGatewayImplTest {
                 "points":[{"time":"09:30","nav":1.0010},{"time":"09:31","nav":1.0020}]}}}
                 """);
 
-        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK).findIntraday("000001");
+        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache).findIntraday("000001");
 
         assertThat(result).isPresent();
         assertThat(result.orElseThrow().points()).extracting(value -> value.time())
@@ -100,7 +102,7 @@ class RealtimeValuationCacheGatewayImplTest {
                 "points":[{"time":"09:30","nav":1.0010},{"time":"09:31","nav":1.0020}]}}}
                 """);
 
-        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK).findIntraday("000001");
+        var result = new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache).findIntraday("000001");
 
         assertThat(result).isPresent();
         assertThat(result.orElseThrow().tradingSessions()).isEmpty();
@@ -119,6 +121,6 @@ class RealtimeValuationCacheGatewayImplTest {
                 "points":[{"time":"09:30","nav":1.0010},{"time":"09:31","nav":1.0020}]}}}
                 """);
 
-        assertThat(new RealtimeValuationCacheGatewayImpl(redis, CLOCK).findIntraday("000001")).isEmpty();
+        assertThat(new RealtimeValuationCacheGatewayImpl(redis, CLOCK, marketRealtimeCache).findIntraday("000001")).isEmpty();
     }
 }

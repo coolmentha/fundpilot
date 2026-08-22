@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fundpilot.backend.discipline.domain.advice.AdvicePolicy;
 import com.fundpilot.backend.discipline.application.gateway.advicegeneration.AdviceGenerationFactsGateway;
 import com.fundpilot.backend.discipline.application.gateway.adviceresponse.AdviceTransactionGateway;
 import com.fundpilot.backend.discipline.domain.advice.Advice;
@@ -17,6 +18,7 @@ import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
 import com.fundpilot.backend.discipline.domain.advice.AdviceResponseStatus;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategy;
 import com.fundpilot.backend.discipline.domain.strategy.DisciplineStrategyRepository;
+import com.fundpilot.backend.discipline.domain.strategy.TakeProfitPhase;
 import com.fundpilot.backend.platform.transaction.RequiresNewTransactionExecutor;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -60,7 +62,7 @@ class AdviceGenerationCommandHandlerTest {
                 eq(AdviceAction.SELL), eq(null), eq(null), eq(new BigDecimal("100")),
                 eq("SHARE"), eq("LOGIC_BROKEN"), eq(null), eq(null));
         assertThat(pendingToday.responseStatus()).isEqualTo(AdviceResponseStatus.PENDING);
-        assertThat(strategy.takeProfitPhase()).isEqualTo("ARMED");
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.ARMED);
         assertThat(strategy.triggeredAdviceId()).isNull();
     }
 
@@ -116,7 +118,8 @@ class AdviceGenerationCommandHandlerTest {
         when(advice.findLatestSellAdviceByPortfolioFund(10L)).thenReturn(Optional.of(accepted));
         AdviceTransactionGateway transactionsGateway = mock(AdviceTransactionGateway.class);
         when(transactionsGateway.relatedTransaction(71L)).thenReturn(
-                Optional.of(new AdviceTransactionGateway.RelatedTransaction(200L, "PENDING")));
+                Optional.of(new AdviceTransactionGateway.RelatedTransaction(200L,
+                        AdviceTransactionGateway.Status.PENDING)));
 
         when(facts.load(1L, 10L, BUSINESS_DATE)).thenReturn(Optional.of(factsForLogicBroken()));
 
@@ -126,7 +129,7 @@ class AdviceGenerationCommandHandlerTest {
         // 已采纳的触发不被重置，也不生成新的卖出建议
         verify(advice, never()).replaceGenerated(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
-        assertThat(strategy.takeProfitPhase()).isEqualTo("TRIGGERED");
+        assertThat(strategy.takeProfitPhase()).isEqualTo(TakeProfitPhase.TRIGGERED);
         assertThat(strategy.triggeredAdviceId()).isEqualTo(71L);
     }
 
@@ -139,10 +142,12 @@ class AdviceGenerationCommandHandlerTest {
     }
 
     private static AdviceGenerationFactsGateway.Facts factsForLogicBroken() {
-        return new AdviceGenerationFactsGateway.Facts(10L, 1L, 100L, "ACTIVE", "OPEN",
+        return new AdviceGenerationFactsGateway.Facts(10L, 1L, 100L,
+                AdvicePolicy.ProductType.ACTIVE, AdvicePolicy.PositionStatus.OPEN,
                 BUSINESS_DATE, new BigDecimal("1.0"), new BigDecimal("100"),
                 new AdviceGenerationFactsGateway.MarketSnapshot(new BigDecimal("0.9"), false, false,
-                        "GREEN_EXPANDING", "ACTIVE", new BigDecimal("0.05"), false),
+                        AdvicePolicy.MacdState.GREEN_EXPANDING, AdvicePolicy.VolumeState.NORMAL,
+                        new BigDecimal("0.05"), false),
                 new BigDecimal("0.9"), new BigDecimal("1.8"), new BigDecimal("2.0"),
                 new BigDecimal("2.0"), null, new BigDecimal("100"));
     }

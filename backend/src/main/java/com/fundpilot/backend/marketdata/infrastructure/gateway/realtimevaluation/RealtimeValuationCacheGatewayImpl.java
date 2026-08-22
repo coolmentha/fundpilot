@@ -1,6 +1,7 @@
 package com.fundpilot.backend.marketdata.infrastructure.gateway.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -29,6 +30,7 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
     private static final JsonMapper MAPPER = JsonMapper.builder().findAndAddModules().build();
     private final StringRedisTemplate redis;
     private final Clock clock;
+    private final MarketRealtimeCache marketRealtimeCache;
 
     @Override
     public Map<String, Valuation> findByFundCodes(Collection<String> fundCodes) {
@@ -91,6 +93,26 @@ public class RealtimeValuationCacheGatewayImpl implements RealtimeValuationCache
             log.warn("读取基金分时缓存失败: fundCode={}", fundCode, exception);
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Map<String, Estimate> findEstimates(Collection<String> fundCodes) {
+        return marketRealtimeCache.getEstimates(List.copyOf(fundCodes)).entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
+                        entry -> new Estimate(entry.getValue().estimatedChangePct(), entry.getValue().estimateTime(),
+                                entry.getValue().baseNavDate())));
+    }
+
+    @Override
+    public Map<String, String> findEstimateStatuses(Collection<String> fundCodes) {
+        return marketRealtimeCache.getEstimateStatuses(List.copyOf(fundCodes)).entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
+                        entry -> entry.getValue().name()));
+    }
+
+    @Override
+    public String findEstimateStatus(String fundCode) {
+        return marketRealtimeCache.getEstimateStatus(fundCode).name();
     }
 
     /** 估值时间是否属于今日(北京自然日)；Redis 中昨日 AVAILABLE 不得再当今日数据返回。 */

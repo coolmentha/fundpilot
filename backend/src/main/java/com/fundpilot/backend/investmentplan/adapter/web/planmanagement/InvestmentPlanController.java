@@ -2,7 +2,13 @@ package com.fundpilot.backend.investmentplan.adapter.web.planmanagement;
 
 import com.fundpilot.backend.investmentplan.application.command.planmanagement.InvestmentPlanCommandHandler;
 import com.fundpilot.backend.investmentplan.application.query.planexecution.InvestmentPlanQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -17,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "定投计划接口", description = "定投计划相关操作")
 @RestController
 @RequestMapping("/api/investment-plans")
 @RequiredArgsConstructor
@@ -25,77 +32,94 @@ public class InvestmentPlanController {
     private final InvestmentPlanQueryHandler queries;
 
     @GetMapping
-    public Response<List<PlanView>> list(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return Response.ok(queries.list(ownerId).stream().map(PlanView::from).toList());
+    @Operation(summary = "查询定投计划列表")
+    public ApiResponse<List<PlanView>> list(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
+        return ApiResponse.ok(queries.list(ownerId).stream().map(PlanView::from).toList());
     }
 
     @GetMapping("/funds/{legacyFundId}")
-    public Response<List<PlanView>> listByFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "按基金查询定投计划列表")
+    public ApiResponse<List<PlanView>> listByFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                @PathVariable long legacyFundId) {
-        return Response.ok(queries.listByLegacyFund(ownerId, legacyFundId).stream().map(PlanView::from).toList());
+        return ApiResponse.ok(queries.listByLegacyFund(ownerId, legacyFundId).stream().map(PlanView::from).toList());
     }
 
     @GetMapping("/portfolio-funds/{portfolioFundId}")
-    public Response<List<PlanView>> listByPortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "按组合基金查询定投计划列表")
+    public ApiResponse<List<PlanView>> listByPortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                         @PathVariable long portfolioFundId) {
-        return Response.ok(queries.listByPortfolioFund(ownerId, portfolioFundId).stream().map(PlanView::from).toList());
+        return ApiResponse.ok(queries.listByPortfolioFund(ownerId, portfolioFundId).stream().map(PlanView::from).toList());
     }
 
     @GetMapping("/funds/{legacyFundId}/active")
-    public Response<PlanView> active(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "查询基金生效中的定投计划")
+    public ApiResponse<PlanView> active(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                      @PathVariable long legacyFundId) {
         var plan = queries.activeByLegacyFund(ownerId, legacyFundId);
-        return Response.ok(plan == null ? null : PlanView.from(plan));
+        return ApiResponse.ok(plan == null ? null : PlanView.from(plan));
     }
 
     @GetMapping("/portfolio-funds/{portfolioFundId}/active")
-    public Response<PlanView> activePortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "查询组合基金生效中的定投计划")
+    public ApiResponse<PlanView> activePortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                    @PathVariable long portfolioFundId) {
         var plan = queries.activeByPortfolioFund(ownerId, portfolioFundId);
-        return Response.ok(plan == null ? null : PlanView.from(plan));
+        return ApiResponse.ok(plan == null ? null : PlanView.from(plan));
     }
 
     @PostMapping("/funds/{legacyFundId}")
-    public Response<PlanView> create(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "创建定投计划")
+    public ApiResponse<PlanView> create(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                      @PathVariable long legacyFundId, @RequestBody Request request) {
-        return Response.ok(PlanView.from(commands.create(ownerId, legacyFundId, request.toInput())));
+        return ApiResponse.ok(PlanView.from(commands.create(ownerId, legacyFundId, request.toInput())));
     }
 
     @PostMapping("/portfolio-funds/{portfolioFundId}")
-    public Response<PlanView> createPortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "为组合基金创建定投计划")
+    public ApiResponse<PlanView> createPortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                    @PathVariable long portfolioFundId, @RequestBody Request request) {
-        return Response.ok(PlanView.from(commands.createForPortfolioFund(ownerId, portfolioFundId, request.toInput())));
+        return ApiResponse.ok(PlanView.from(commands.createForPortfolioFund(ownerId, portfolioFundId, request.toInput())));
     }
 
     @PutMapping("/{planId}")
-    public Response<PlanView> update(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "更新定投计划")
+    public ApiResponse<PlanView> update(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                      @PathVariable long planId, @RequestBody Request request) {
-        return Response.ok(PlanView.from(commands.update(ownerId, planId, request.toInput())));
+        return ApiResponse.ok(PlanView.from(commands.update(ownerId, planId, request.toInput())));
     }
 
     @PostMapping("/{planId}/{action:activate|retire|pause|resume}")
-    public Response<PlanView> action(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "执行定投计划操作（激活/退役/暂停/恢复）")
+    public ApiResponse<PlanView> action(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                      @PathVariable long planId, @PathVariable String action) {
         var plan = switch (action) {
             case "activate" -> commands.activate(ownerId, planId);
             case "retire" -> commands.retire(ownerId, planId);
             case "pause" -> commands.setEnabled(ownerId, planId, false);
             case "resume" -> commands.setEnabled(ownerId, planId, true);
-            default -> throw new IllegalStateException("不支持的计划操作");
+            default -> throw new BusinessException(ErrorCode.PLAN_ACTION_INVALID, "不支持的计划操作: " + action);
         };
-        return Response.ok(PlanView.from(plan));
+        return ApiResponse.ok(PlanView.from(plan));
     }
 
     @DeleteMapping("/{planId}")
-    public Response<Void> delete(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @Operation(summary = "删除定投计划")
+    public ApiResponse<Void> delete(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                  @PathVariable long planId) {
         commands.delete(ownerId, planId);
-        return Response.ok(null);
+        return ApiResponse.ok(null);
     }
 
-    public record Request(boolean enabled, BigDecimal amount, String frequency,
-                          Integer dayOfWeek, Integer dayOfMonth, String amountStrategy,
-                          String referenceIndexCode, Integer movingAverageDays) {
+    @Schema(description = "定投计划创建/更新请求")
+    public record Request(
+            @Schema(description = "是否启用，true 启用 / false 暂停扣款", example = "true") boolean enabled,
+            @Schema(description = "每期定投金额", example = "500.00") BigDecimal amount,
+            @Schema(description = "扣款频率，枚举（DAILY 每日 / WEEKLY 每周 / MONTHLY 每月）", example = "MONTHLY") String frequency,
+            @Schema(description = "每周几扣款，WEEKLY 频率时使用", example = "1") Integer dayOfWeek,
+            @Schema(description = "每月几号扣款，MONTHLY 频率时使用", example = "1") Integer dayOfMonth,
+            @Schema(description = "金额策略，枚举（FIXED 固定金额 / LOW_VALUATION 低估值 / MOVING_AVERAGE 移动平均），默认 FIXED", example = "FIXED") String amountStrategy,
+            @Schema(description = "参考指数代码，LOW_VALUATION/MOVING_AVERAGE 策略时使用", example = "000300.SH") String referenceIndexCode,
+            @Schema(description = "移动平均天数，MOVING_AVERAGE 策略时使用", example = "20") Integer movingAverageDays) {
         public Request(boolean enabled, BigDecimal amount, String frequency,
                        Integer dayOfWeek, Integer dayOfMonth) {
             this(enabled, amount, frequency, dayOfWeek, dayOfMonth, "FIXED", null, null);
@@ -105,6 +129,7 @@ public class InvestmentPlanController {
                     amountStrategy, referenceIndexCode, movingAverageDays);
         }
     }
+    @Schema(description = "定投计划视图")
     public record PlanView(Long id, long portfolioFundId, boolean enabled, BigDecimal amount,
                            String frequency, Integer dayOfWeek, Integer dayOfMonth,
                            String status, String amountStrategy, String referenceIndexCode,
@@ -121,7 +146,8 @@ public class InvestmentPlanController {
                     result.amount().multiply(BigDecimal.valueOf(dates.size())), dates, result.latestDecision());
         }
     }
-    record Response<T>(boolean success, T data, String code, String message) {
-        static <T> Response<T> ok(T data) { return new Response<>(true, data, null, null); }
+    @Schema(description = "统一响应结果")
+    record ApiResponse<T>(boolean success, T data, String code, String message) {
+        static <T> ApiResponse<T> ok(T data) { return new ApiResponse<>(true, data, null, null); }
     }
 }

@@ -19,6 +19,7 @@ import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.Pub
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.TrackedNavProductGateway;
 import com.fundpilot.backend.marketdata.application.query.indexkline.IndexKlineQueryHandler;
+import com.fundpilot.backend.marketdata.domain.indicator.VolumeState;
 import com.fundpilot.backend.marketdata.application.query.indexvaluation.IndexValuationQueryHandler;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -85,10 +86,10 @@ class MarketIndicatorRefreshCommandHandlerDateTest {
         handler.refreshOne(new MarketIndicatorRefreshCommandHandler.RefreshTarget(1L, 11L, "510300",
                 "测试基金", "000300", null));
 
-        ArgumentCaptor<String> volumeState = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<VolumeState> volumeState = ArgumentCaptor.forClass(VolumeState.class);
         verify(indicators).upsert(eq(1L), eq(11L), eq("510300"), any(), any(), any(), anyBoolean(),
                 any(), volumeState.capture(), any(), anyBoolean());
-        assertThat(volumeState.getValue()).isEqualTo("NORMAL");
+        assertThat(volumeState.getValue()).isEqualTo(VolumeState.NORMAL);
     }
 
     @Test

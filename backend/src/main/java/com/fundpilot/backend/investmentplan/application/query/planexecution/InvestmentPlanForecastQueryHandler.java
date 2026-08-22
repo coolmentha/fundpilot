@@ -4,6 +4,7 @@ import com.fundpilot.backend.investmentplan.application.gateway.planexecution.Pl
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTransactionGateway;
 import com.fundpilot.backend.investmentplan.domain.execution.InvestmentPlanExecutionRepository;
 import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan;
+import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlanStatus;
 import com.fundpilot.backend.sharedkernel.BusinessDay;
 import java.time.Clock;
 import java.time.Instant;
@@ -34,7 +35,7 @@ public class InvestmentPlanForecastQueryHandler {
         Instant monthStart = monthStart(now);
         Instant monthEnd = nextMonthStart(now);
         List<InvestmentPlan> activePlans = plans.stream()
-                .filter(plan -> plan.enabled() && plan.status().name().equals("EFFECTIVE"))
+                .filter(plan -> plan.enabled() && plan.status() == InvestmentPlanStatus.EFFECTIVE)
                 .toList();
         if (activePlans.isEmpty()) return Map.of();
 

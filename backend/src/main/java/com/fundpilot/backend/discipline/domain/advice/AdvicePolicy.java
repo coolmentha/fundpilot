@@ -11,12 +11,21 @@ public final class AdvicePolicy {
     private static final MathContext MATH = MathContext.DECIMAL64;
     private static final int MIN_HOLD_DAYS = 5;
 
+    /** Accounting 持仓状态(PositionApi.Status 同名)。 */
+    public enum PositionStatus { EMPTY, OPEN, CLEARED }
+    /** 产品类型(FundProductApi.ProductType 同名)。 */
+    public enum ProductType { ETF, INDEX, INDEX_ENHANCED, ACTIVE }
+    /** 周线 MACD 状态(marketdata WeeklyMacdState 同名)。 */
+    public enum MacdState { RED_EXPANDING, RED_SHRINKING, GREEN_EXPANDING, GREEN_SHRINKING }
+    /** 指数量能状态(marketdata VolumeState 同名)。 */
+    public enum VolumeState { HIGH_DROP, NORMAL, LOW_STABLE }
+
     public Result evaluate(DisciplineStrategy strategy, Facts facts, long tradingDaysSinceLastBuy,
                            boolean cooldownFinished) {
-        if ("CLEARED".equals(facts.positionStatus())) {
+        if (facts.positionStatus() == PositionStatus.CLEARED) {
             return Result.none("FUND_CLEARED");
         }
-        if (!"OPEN".equals(facts.positionStatus())) {
+        if (facts.positionStatus() != PositionStatus.OPEN) {
             return Result.none("NO_STRATEGY");
         }
         if (facts.market() == null) {
@@ -59,10 +68,11 @@ public final class AdvicePolicy {
     private static boolean logicBroken(Facts facts) {
         Boolean priceAboveYearLine = facts.market().priceAboveYearLine();
         if (priceAboveYearLine == null || priceAboveYearLine
-                || !"GREEN_EXPANDING".equals(facts.market().weeklyMacdState())) {
+                || facts.market().weeklyMacdState() != MacdState.GREEN_EXPANDING) {
             return false;
         }
-        return "ACTIVE".equals(facts.productType()) || "HIGH_DROP".equals(facts.market().volumeState());
+        return facts.productType() == ProductType.ACTIVE
+                || facts.market().volumeState() == VolumeState.HIGH_DROP;
     }
 
     private static BigDecimal min(BigDecimal first, BigDecimal... values) {
@@ -77,13 +87,13 @@ public final class AdvicePolicy {
         return value != null && value.signum() > 0;
     }
 
-    public record Facts(String productType, String positionStatus, BigDecimal costPerShare,
+    public record Facts(ProductType productType, PositionStatus positionStatus, BigDecimal costPerShare,
                         BigDecimal holdingShares, Market market, BigDecimal currentUnitNav,
                         BigDecimal currentAccumulatedNav, BigDecimal matureRedeemableShares,
                         java.time.Instant businessDate) {
     }
 
-    public record Market(Boolean priceAboveYearLine, String weeklyMacdState, String volumeState) {
+    public record Market(Boolean priceAboveYearLine, MacdState weeklyMacdState, VolumeState volumeState) {
     }
 
     public record Result(AdviceAction action, BigDecimal suggestedValue, String suggestedMeasureUnit,

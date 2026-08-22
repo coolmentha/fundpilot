@@ -1,7 +1,6 @@
 package com.fundpilot.backend.fund.service.support;
 
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
+import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -37,8 +36,8 @@ public final class DailyChangeResolver {
      */
     public static DailyChangeResult resolve(boolean todayNavConfirmed,
                                             BigDecimal latestNav, BigDecimal previousNav,
-                                            Optional<FundEstimateSnapshot> estimate,
-                                            EstimateStatus estimateStatus) {
+                                            Optional<MarketEstimateApi.Snapshot> estimate,
+                                            MarketEstimateApi.Status estimateStatus) {
         // 盘后态:当日净值已落库 → 用落库净值算(当日/昨日-1),非估算
         if (todayNavConfirmed) {
             return new DailyChangeResult(FundPnlCalculator.dailyChangePct(latestNav, previousNav), false);
@@ -48,7 +47,8 @@ public final class DailyChangeResolver {
             return new DailyChangeResult(estimate.get().estimatedChangePct(), true);
         }
         // 当日 gztime 尚未出现 → 今日涨跌为 0,持仓估值由调用方使用最近确认净值。
-        if (estimateStatus == EstimateStatus.STALE || estimateStatus == EstimateStatus.NOT_ATTEMPTED) {
+        if (estimateStatus == MarketEstimateApi.Status.STALE
+                || estimateStatus == MarketEstimateApi.Status.NOT_ATTEMPTED) {
             return new DailyChangeResult(BigDecimal.ZERO, false);
         }
         // 空响应或失败 → 今日数据未知。T-1 vs T-2 是昨日涨跌,不能冒充今日值。

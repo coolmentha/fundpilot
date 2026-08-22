@@ -4,6 +4,7 @@ import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.Re
 import com.fundpilot.backend.marketdata.application.gateway.portfoliofund.OwnedFundProductGateway;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,22 @@ public class RealtimeValuationQueryHandler {
                 .map(RealtimeValuationQueryHandler::toIntradayResult);
     }
 
+    /** 批量读当日估值快照;缓存未命中的 code 不出现在 map 中。 */
+    public Map<String, EstimateResult> findEstimates(Collection<String> fundCodes) {
+        return cache.findEstimates(fundCodes).entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
+                        entry -> new EstimateResult(entry.getValue().estimatedChangePct(),
+                                entry.getValue().estimateTime(), entry.getValue().baseNavDate())));
+    }
+
+    public Map<String, String> findEstimateStatuses(Collection<String> fundCodes) {
+        return cache.findEstimateStatuses(fundCodes);
+    }
+
+    public String findEstimateStatus(String fundCode) {
+        return cache.findEstimateStatus(fundCode);
+    }
+
     private static IntradayResult toIntradayResult(RealtimeValuationCacheGateway.Intraday value) {
         return new IntradayResult(value.estimateDate(), value.baseNav(), value.points().stream()
                 .map(point -> new IntradayPoint(point.time(), point.nav())).toList(),
@@ -40,6 +57,7 @@ public class RealtimeValuationQueryHandler {
 
     public record ValuationResult(String fundCode, java.math.BigDecimal estimatedChangePct,
                                   String estimateTime, String baseNavDate, String status) {}
+    public record EstimateResult(java.math.BigDecimal estimatedChangePct, String estimateTime, String baseNavDate) {}
     public record IntradayResult(String estimateDate, java.math.BigDecimal baseNav, List<IntradayPoint> points,
                                  List<IntradaySession> tradingSessions) {}
     public record IntradayPoint(String time, java.math.BigDecimal nav) {}

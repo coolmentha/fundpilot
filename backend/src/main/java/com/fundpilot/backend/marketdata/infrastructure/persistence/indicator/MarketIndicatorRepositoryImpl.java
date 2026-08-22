@@ -2,6 +2,8 @@ package com.fundpilot.backend.marketdata.infrastructure.persistence.indicator;
 
 import com.fundpilot.backend.marketdata.domain.indicator.MarketIndicator;
 import com.fundpilot.backend.marketdata.domain.indicator.MarketIndicatorRepository;
+import com.fundpilot.backend.marketdata.domain.indicator.VolumeState;
+import com.fundpilot.backend.marketdata.domain.indicator.WeeklyMacdState;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -44,16 +46,20 @@ class MarketIndicatorRepositoryImpl implements MarketIndicatorRepository {
                     weekly_drop_percent = EXCLUDED.weekly_drop_percent,
                     is_sixty_day_high = EXCLUDED.is_sixty_day_high,
                     updated_date = CURRENT_TIMESTAMP
-                """, legacyFundId, i.fundProductId(), i.fundCode(), sqlDate(i.snapshotDate()), i.currentNav(), i.priceAboveYearLine(), i.yearLineRising(), i.weeklyMacdState(), i.volumeState(), i.weeklyDropPercent(), i.sixtyDayHigh());
+                """, legacyFundId, i.fundProductId(), i.fundCode(), sqlDate(i.snapshotDate()), i.currentNav(), i.priceAboveYearLine(), i.yearLineRising(), name(i.weeklyMacdState()), name(i.volumeState()), i.weeklyDropPercent(), i.sixtyDayHigh());
         return find(i.fundProductId(), i.snapshotDate()).orElseThrow();
     }
     private static MarketIndicator map(ResultSet rs) throws SQLException {
         return new MarketIndicator(rs.getLong("fund_product_id"), rs.getString("fund_code"),
                 rs.getDate("snapshot_date").toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant(),
                 rs.getBigDecimal("current_nav"), rs.getObject("price_above_year_line", Boolean.class),
-                rs.getBoolean("year_line_rising"), rs.getString("weekly_macd_state"),
-                rs.getString("volume_state"), rs.getBigDecimal("weekly_drop_percent"),
+                rs.getBoolean("year_line_rising"), enumValue(WeeklyMacdState.class, rs.getString("weekly_macd_state")),
+                enumValue(VolumeState.class, rs.getString("volume_state")), rs.getBigDecimal("weekly_drop_percent"),
                 rs.getBoolean("is_sixty_day_high"));
+    }
+    private static String name(Enum<?> value) { return value == null ? null : value.name(); }
+    private static <E extends Enum<E>> E enumValue(Class<E> type, String value) {
+        return value == null ? null : Enum.valueOf(type, value);
     }
     private static Date sqlDate(Instant value) { return Date.valueOf(value.atZone(ZoneOffset.UTC).toLocalDate()); }
 }

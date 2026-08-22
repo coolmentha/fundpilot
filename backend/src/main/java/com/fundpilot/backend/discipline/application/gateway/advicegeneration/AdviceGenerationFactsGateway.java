@@ -1,5 +1,6 @@
 package com.fundpilot.backend.discipline.application.gateway.advicegeneration;
 
+import com.fundpilot.backend.discipline.domain.advice.AdvicePolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -10,8 +11,8 @@ public interface AdviceGenerationFactsGateway {
     long tradingDaysBetween(Instant fromExclusive, Instant toInclusive);
     Optional<Facts> load(long ownerId, long portfolioFundId, Instant businessDate);
 
-    record Facts(long portfolioFundId, long ownerId, long fundProductId, String productType,
-                 String positionStatus, Instant openedAt, BigDecimal costPerShare,
+    record Facts(long portfolioFundId, long ownerId, long fundProductId, AdvicePolicy.ProductType productType,
+                 AdvicePolicy.PositionStatus positionStatus, Instant openedAt, BigDecimal costPerShare,
                  BigDecimal holdingShares, MarketSnapshot market, BigDecimal currentUnitNav,
                  BigDecimal currentAccumulatedNav, BigDecimal peakAccumulatedNav,
                  BigDecimal holdingPeriodPeakNav, Instant lastBuyTime,
@@ -19,7 +20,8 @@ public interface AdviceGenerationFactsGateway {
     }
 
     record MarketSnapshot(BigDecimal currentNav, Boolean priceAboveYearLine,
-                          boolean yearLineRising, String weeklyMacdState, String volumeState,
+                          boolean yearLineRising, AdvicePolicy.MacdState weeklyMacdState,
+                          AdvicePolicy.VolumeState volumeState,
                           BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
     }
 }

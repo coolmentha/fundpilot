@@ -43,6 +43,7 @@ public class AdviceTransactionGatewayImpl implements AdviceTransactionGateway {
     @Override
     public java.util.Optional<RelatedTransaction> relatedTransaction(long adviceId) {
         return transactions.findByAdvice(adviceId)
-                .map(value -> new RelatedTransaction(value.transactionId(), value.status()));
+                .map(value -> new RelatedTransaction(value.transactionId(),
+                        AdviceTransactionGateway.Status.valueOf(value.status())));
     }
 }

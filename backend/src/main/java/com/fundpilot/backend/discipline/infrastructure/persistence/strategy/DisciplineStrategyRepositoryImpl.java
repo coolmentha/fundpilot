@@ -4,18 +4,18 @@ import lombok.RequiredArgsConstructor; import org.springframework.stereotype.Rep
 @Repository @RequiredArgsConstructor class DisciplineStrategyRepositoryImpl implements DisciplineStrategyRepository {
     private final DisciplineStrategyJpaRepository strategies;
     @Override public Optional<DisciplineStrategy> findById(long id) { return strategies.findById(id).map(this::toDomain); }
-    @Override public Optional<DisciplineStrategy> findEffectiveByPortfolioFundId(long id) { return strategies.findByPortfolioFundIdAndStatus(id, "EFFECTIVE").map(this::toDomain); }
-    @Override public List<DisciplineStrategy> findEffective() { return strategies.findByStatus("EFFECTIVE").stream().map(this::toDomain).toList(); }
+    @Override public Optional<DisciplineStrategy> findEffectiveByPortfolioFundId(long id) { return strategies.findByPortfolioFundIdAndStatus(id, StrategyParamStatus.EFFECTIVE.name()).map(this::toDomain); }
+    @Override public List<DisciplineStrategy> findEffective() { return strategies.findByStatus(StrategyParamStatus.EFFECTIVE.name()).stream().map(this::toDomain).toList(); }
     @Override public List<DisciplineStrategy> findByPortfolioFundId(long id) { return strategies.findByPortfolioFundId(id).stream().map(this::toDomain).toList(); }
     @Override public Optional<DisciplineStrategy> findByTriggeredAdviceId(long adviceId) { return strategies.findByTriggeredAdviceId(adviceId).map(this::toDomain); }
     @Override public DisciplineStrategy save(DisciplineStrategy value) {
         DisciplineStrategyJpaEntity entity = value.id() == null ? new DisciplineStrategyJpaEntity() : strategies.findById(value.id()).orElseThrow();
-        entity.setPortfolioFundId(value.portfolioFundId()); entity.setOwnerId(value.ownerId()); entity.setStatus(value.status());
+        entity.setPortfolioFundId(value.portfolioFundId()); entity.setOwnerId(value.ownerId()); entity.setStatus(value.status().name());
         entity.setActivation(value.activation()); entity.setPullback(value.pullback()); entity.setHarvest(value.harvest());
         entity.setMinimumHolding(value.minimumHolding()); entity.setMaxSingleSell(value.maxSingleSell()); entity.setCooldownDays(value.cooldownDays());
         entity.setPresetCategory(value.presetCategory()); entity.setPresetVersion(value.presetVersion());
         entity.setCustomized(value.customized());
-        entity.setTakeProfitPhase(value.takeProfitPhase()); entity.setCycleStartedAt(value.cycleStartedAt());
+        entity.setTakeProfitPhase(value.takeProfitPhase() == null ? null : value.takeProfitPhase().name()); entity.setCycleStartedAt(value.cycleStartedAt());
         entity.setCyclePeakNav(value.cyclePeakNav()); entity.setTriggeredAdviceId(value.triggeredAdviceId());
         entity.setCooldownStartedAt(value.cooldownStartedAt());
         return toDomain(strategies.save(entity));

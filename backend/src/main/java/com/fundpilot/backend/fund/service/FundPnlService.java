@@ -12,9 +12,7 @@ import com.fundpilot.backend.fund.service.support.DailyChangeResolver;
 import com.fundpilot.backend.fund.service.support.DailyChangeResult;
 import com.fundpilot.backend.fund.service.support.FundPnlCalculator;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
+import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -49,7 +47,7 @@ public class FundPnlService {
     private final FundNavHistoryRepository fundNavHistoryRepository;
     private final FundRepository fundRepository;
     private final FundTransactionRepository fundTransactionRepository;
-    private final MarketRealtimeCache marketRealtimeCache;
+    private final MarketEstimateApi marketEstimates;
     private final Clock clock;
     private final CurrentActorApi currentActorApi;
 
@@ -112,10 +110,10 @@ public class FundPnlService {
         });
         List<String> fundCodes = funds.stream().map(FundEntity::getFundCode)
                 .filter(code -> code != null && !code.isBlank()).distinct().toList();
-        Map<String, FundEstimateSnapshot> estimates = fundCodes.isEmpty()
-                ? Map.of() : marketRealtimeCache.getEstimates(fundCodes);
-        Map<String, EstimateStatus> estimateStatuses = fundCodes.isEmpty()
-                ? Map.of() : marketRealtimeCache.getEstimateStatuses(fundCodes);
+        Map<String, MarketEstimateApi.Snapshot> estimates = fundCodes.isEmpty()
+                ? Map.of() : marketEstimates.getEstimates(fundCodes);
+        Map<String, MarketEstimateApi.Status> estimateStatuses = fundCodes.isEmpty()
+                ? Map.of() : marketEstimates.getEstimateStatuses(fundCodes);
 
         Map<Long, Pnl> result = new LinkedHashMap<>();
         for (FundEntity fund : funds) {
@@ -129,8 +127,8 @@ public class FundPnlService {
     }
 
     private Pnl computeForFund(FundEntity fund, List<FundNavHistoryEntity> latestTwo,
-                               BigDecimal rawShares, Map<String, FundEstimateSnapshot> batchEstimates,
-                               Map<String, EstimateStatus> batchEstimateStatuses,
+                               BigDecimal rawShares, Map<String, MarketEstimateApi.Snapshot> batchEstimates,
+                               Map<String, MarketEstimateApi.Status> batchEstimateStatuses,
                                Map<Long, BigDecimal> currentCostByFundId) {
         BigDecimal latestAccumulatedNav = latestTwo.size() >= 1 ? latestTwo.get(0).getAccumulatedNav() : null;
         BigDecimal previousAccumulatedNav = latestTwo.size() >= 2 ? latestTwo.get(1).getAccumulatedNav() : null;
@@ -144,11 +142,11 @@ public class FundPnlService {
         boolean standardNavSupported = supportsStandardNav(fund);
 
         // QDII 按平台发现日结算；其他日期不复用历史收益，也不混入盘中估值。
-        EstimateStatus estimateStatus = confirmedNavSelected ? EstimateStatus.AVAILABLE
-                : qdii ? EstimateStatus.STALE
-                : !standardNavSupported ? EstimateStatus.UNAVAILABLE
+        MarketEstimateApi.Status estimateStatus = confirmedNavSelected ? MarketEstimateApi.Status.AVAILABLE
+                : qdii ? MarketEstimateApi.Status.STALE
+                : !standardNavSupported ? MarketEstimateApi.Status.UNAVAILABLE
                 : getEstimateStatus(fund.getFundCode(), batchEstimateStatuses);
-        Optional<FundEstimateSnapshot> estimate = confirmedNavSelected || qdii || !standardNavSupported
+        Optional<MarketEstimateApi.Snapshot> estimate = confirmedNavSelected || qdii || !standardNavSupported
                 ? Optional.empty()  // 盘后不需要估值
                 : getCachedEstimate(fund.getFundCode(), batchEstimates);
         DailyChangeResult changeResult = standardNavSupported || confirmedNavSelected
@@ -158,7 +156,7 @@ public class FundPnlService {
         BigDecimal dailyChangePct = changeResult.todayChangePct();
         boolean isEstimated = changeResult.isEstimated();
         if (standardNavSupported && dailyChangePct != null && !estimateStatus.isFailure()) {
-            estimateStatus = EstimateStatus.AVAILABLE;
+            estimateStatus = MarketEstimateApi.Status.AVAILABLE;
         }
         boolean estimateFetchFailed = estimateStatus.isFailure();
 
@@ -185,8 +183,8 @@ public class FundPnlService {
         String valuationSource = todayNavConfirmed ? "CONFIRMED_NAV"
                 : isEstimated ? "INTRADAY_ESTIMATE"
                 : latestUnitNav != null ? "LATEST_CONFIRMED_NAV" : null;
-        String estimateTime = estimate.map(FundEstimateSnapshot::estimateTime).orElse(null);
-        String baseNavDate = estimate.map(FundEstimateSnapshot::baseNavDate).orElse(null);
+        String estimateTime = estimate.map(MarketEstimateApi.Snapshot::estimateTime).orElse(null);
+        String baseNavDate = estimate.map(MarketEstimateApi.Snapshot::baseNavDate).orElse(null);
 
         return new Pnl(dailyChangePct, isEstimated, estimateFetchFailed, estimateStatus,
                 holdingShares, holdingAmount, dailyPnl, totalPnl, positionNav, valuationSource,
@@ -195,33 +193,29 @@ public class FundPnlService {
     }
 
     /** 从实时缓存读取 fundgz 当日估值;缓存未命中降级返 empty。 */
-    private Optional<FundEstimateSnapshot> getCachedEstimate(String fundCode) {
+    private Optional<MarketEstimateApi.Snapshot> getCachedEstimate(String fundCode) {
         return getCachedEstimate(fundCode, null);
     }
 
-    private Optional<FundEstimateSnapshot> getCachedEstimate(
-            String fundCode, Map<String, FundEstimateSnapshot> batchEstimates) {
+    private Optional<MarketEstimateApi.Snapshot> getCachedEstimate(
+            String fundCode, Map<String, MarketEstimateApi.Snapshot> batchEstimates) {
         if (fundCode == null || fundCode.isBlank()) {
             return Optional.empty();
         }
-        Map<String, FundEstimateSnapshot> estimates = batchEstimates != null
-                ? batchEstimates : marketRealtimeCache.getEstimates(List.of(fundCode));
+        Map<String, MarketEstimateApi.Snapshot> estimates = batchEstimates != null
+                ? batchEstimates : marketEstimates.getEstimates(List.of(fundCode));
         return Optional.ofNullable(estimates.get(fundCode));
     }
 
-    private EstimateStatus getEstimateStatus(String fundCode, Map<String, EstimateStatus> batchStatuses) {
+    private MarketEstimateApi.Status getEstimateStatus(String fundCode,
+                                                       Map<String, MarketEstimateApi.Status> batchStatuses) {
         if (fundCode == null || fundCode.isBlank()) {
-            return EstimateStatus.NOT_ATTEMPTED;
+            return MarketEstimateApi.Status.NOT_ATTEMPTED;
         }
         if (batchStatuses != null && batchStatuses.containsKey(fundCode)) {
             return batchStatuses.get(fundCode);
         }
-        EstimateStatus status = marketRealtimeCache.getEstimateStatus(fundCode);
-        if (status != null) {
-            return status;
-        }
-        return marketRealtimeCache.hasEstimateFetchFailed(fundCode)
-                ? EstimateStatus.TIMEOUT : EstimateStatus.NOT_ATTEMPTED;
+        return marketEstimates.getEstimateStatus(fundCode);
     }
 
     /** 当日净值是否已落库:最近一期 navDate 是否达到北京时间今天对应的 UTC 日期标签。 */
@@ -311,7 +305,7 @@ public class FundPnlService {
     }
 
     private Pnl emptyPnl() {
-        return new Pnl(null, false, false, EstimateStatus.NOT_ATTEMPTED, null, null, null, null,
+        return new Pnl(null, false, false, MarketEstimateApi.Status.NOT_ATTEMPTED, null, null, null, null,
                 null, null, null, null, null, null);
     }
 
@@ -331,7 +325,7 @@ public class FundPnlService {
             BigDecimal dailyChangePct,
             boolean isEstimated,
             boolean estimateFetchFailed,
-            EstimateStatus estimateStatus,
+            MarketEstimateApi.Status estimateStatus,
             BigDecimal holdingShares,
             BigDecimal holdingAmount,
             BigDecimal dailyPnl,

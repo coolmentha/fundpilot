@@ -6,9 +6,7 @@ import com.fundpilot.backend.fund.enums.InvestmentTarget;
 import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
 import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.EstimateStatus;
-import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
+import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +33,7 @@ class FundPnlServiceDateTest {
     @Mock FundNavHistoryRepository fundNavHistoryRepository;
     @Mock FundRepository fundRepository;
     @Mock FundTransactionRepository fundTransactionRepository;
-    @Mock MarketRealtimeCache marketRealtimeCache;
+    @Mock MarketEstimateApi marketEstimates;
     @Mock CurrentActorApi currentUserService;
 
     @Test
@@ -43,7 +41,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-21T00:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setInvestmentTarget(InvestmentTarget.QDII);
         List<FundNavHistoryEntity> navs = List.of(
@@ -61,7 +59,7 @@ class FundPnlServiceDateTest {
         assertThat(single.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
         assertThat(single.valuationDate()).isEqualTo(Instant.parse("2026-07-17T00:00:00Z"));
         assertThat(single.valuationFirstSeenAt()).isEqualTo(Instant.parse("2026-07-20T16:30:00Z"));
-        verifyNoInteractions(marketRealtimeCache);
+        verifyNoInteractions(marketEstimates);
 
         FundNavHistoryRepository.LatestNavProjection latest = projection(1L, navs.get(0));
         FundNavHistoryRepository.LatestNavProjection previous = projection(1L, navs.get(1));
@@ -71,8 +69,8 @@ class FundPnlServiceDateTest {
                 .thenReturn(List.of(latest, previous));
         when(fundTransactionRepository.aggregateConfirmedShares(List.of(1L)))
                 .thenReturn(List.of(holdingShares));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
-        when(marketRealtimeCache.getEstimateStatuses(List.of("510300"))).thenReturn(Map.of());
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketEstimates.getEstimateStatuses(List.of("510300"))).thenReturn(Map.of());
 
         FundPnlService.Pnl batch = service.computeForFunds(List.of(fund)).get(1L);
 
@@ -86,7 +84,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-21T08:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setInvestmentTarget(InvestmentTarget.QDII);
         fund.setCostPerShare(new BigDecimal("1.00"));
@@ -106,9 +104,9 @@ class FundPnlServiceDateTest {
                 .thenReturn(List.of(latest, previous));
         when(fundTransactionRepository.aggregateConfirmedShares(List.of(1L)))
                 .thenReturn(List.of(holdingShares));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
-        when(marketRealtimeCache.getEstimateStatuses(List.of("510300")))
-                .thenReturn(Map.of("510300", EstimateStatus.NOT_ATTEMPTED));
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketEstimates.getEstimateStatuses(List.of("510300")))
+                .thenReturn(Map.of("510300", MarketEstimateApi.Status.NOT_ATTEMPTED));
         FundPnlService.Pnl batch = service.computeForFunds(List.of(fund)).get(1L);
 
         assertThat(single.dailyChangePct()).isZero();
@@ -127,7 +125,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-06T16:30:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = new FundEntity();
         fund.setId(1L);
         fund.setFundCode("510300");
@@ -136,14 +134,14 @@ class FundPnlServiceDateTest {
         FundNavHistoryEntity previous = nav("2026-07-03T00:00:00Z", "1.10");
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(yesterday, previous));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of(
-                "510300", new FundEstimateSnapshot(new BigDecimal("0.01"),
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of(
+                "510300", new MarketEstimateApi.Snapshot(new BigDecimal("0.01"),
                         "2026-07-07 00:30", "2026-07-06")));
-        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.AVAILABLE);
+        when(marketEstimates.getEstimateStatus("510300")).thenReturn(MarketEstimateApi.Status.AVAILABLE);
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
 
-        verify(marketRealtimeCache).getEstimates(List.of("510300"));
+        verify(marketEstimates).getEstimates(List.of("510300"));
         assertThat(pnl.isEstimated()).isTrue();
         assertThat(pnl.dailyChangePct()).isEqualByComparingTo("0.01");
     }
@@ -153,16 +151,16 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         FundNavHistoryEntity yesterday = nav("2026-07-09T00:00:00Z", "1.20");
         FundNavHistoryEntity previous = nav("2026-07-08T00:00:00Z", "1.10");
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(yesterday, previous));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of(
-                "510300", new FundEstimateSnapshot(new BigDecimal("0.0123"),
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of(
+                "510300", new MarketEstimateApi.Snapshot(new BigDecimal("0.0123"),
                         "2026-07-10 15:00", "2026-07-09")));
-        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.AVAILABLE);
+        when(marketEstimates.getEstimateStatus("510300")).thenReturn(MarketEstimateApi.Status.AVAILABLE);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
@@ -180,14 +178,14 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(
                         nav("2026-07-09T00:00:00Z", "1.20"),
                         nav("2026-07-08T00:00:00Z", "1.10")));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
-        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.UNAVAILABLE);
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketEstimates.getEstimateStatus("510300")).thenReturn(MarketEstimateApi.Status.UNAVAILABLE);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
@@ -201,15 +199,15 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T00:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setCostPerShare(new BigDecimal("1.10"));
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
                 .thenReturn(List.of(
                         nav("2026-07-09T00:00:00Z", "1.20"),
                         nav("2026-07-08T00:00:00Z", "1.10")));
-        when(marketRealtimeCache.getEstimates(List.of("510300"))).thenReturn(Map.of());
-        when(marketRealtimeCache.getEstimateStatus("510300")).thenReturn(EstimateStatus.STALE);
+        when(marketEstimates.getEstimates(List.of("510300"))).thenReturn(Map.of());
+        when(marketEstimates.getEstimateStatus("510300")).thenReturn(MarketEstimateApi.Status.STALE);
         when(fundPositionService.getHoldingShares(1L)).thenReturn(new BigDecimal("100"));
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
@@ -228,7 +226,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-09T00:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setCostPerShare(new BigDecimal("1.00"));
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
@@ -247,7 +245,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-09T00:00:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setCostPerShare(new BigDecimal("1.00"));
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
@@ -267,7 +265,7 @@ class FundPnlServiceDateTest {
         Clock clock = Clock.fixed(Instant.parse("2026-07-10T07:20:00Z"), ZoneOffset.UTC);
         FundPnlService service = new FundPnlService(
                 fundPositionService, fundNavHistoryRepository, fundRepository,
-                fundTransactionRepository, marketRealtimeCache, clock, currentUserService);
+                fundTransactionRepository, marketEstimates, clock, currentUserService);
         FundEntity fund = fund();
         fund.setInvestmentTarget(InvestmentTarget.MONEY_MARKET);
         when(fundNavHistoryRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(1L))
@@ -276,9 +274,9 @@ class FundPnlServiceDateTest {
 
         FundPnlService.Pnl pnl = service.computeForFund(fund);
 
-        assertThat(pnl.estimateStatus()).isEqualTo(EstimateStatus.UNAVAILABLE);
+        assertThat(pnl.estimateStatus()).isEqualTo(MarketEstimateApi.Status.UNAVAILABLE);
         assertThat(pnl.dailyChangePct()).isNull();
-        verifyNoInteractions(marketRealtimeCache);
+        verifyNoInteractions(marketEstimates);
     }
 
     private static FundEntity fund() {
