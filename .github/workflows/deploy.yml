@@ -578,7 +578,7 @@ jobs:
             }
 
             # 镜像拉取不需要停写；完成后再进入有硬上限的维护阶段。
-            timeout --foreground --kill-after=5s 300s docker pull "$BACKEND_IMAGE" &
+            timeout --foreground --kill-after=5s 900s docker pull "$BACKEND_IMAGE" &
             backend_pull_pid=$!
             timeout --foreground --kill-after=5s 300s docker pull "$FRONTEND_IMAGE" &
             frontend_pull_pid=$!
