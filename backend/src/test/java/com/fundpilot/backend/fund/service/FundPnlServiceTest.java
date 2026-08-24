@@ -11,6 +11,7 @@ import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.fund.repository.FundTransactionRepository;
 import com.fundpilot.backend.fund.service.support.PortfolioSummary;
 import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.MarketEstimateApi;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeRedisStore;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,9 @@ class FundPnlServiceTest extends AbstractIntegrationTest {
 
     @MockitoBean
     Clock clock;
+
+    @MockitoBean
+    MarketRealtimeRedisStore marketRealtimeRedisStore;
 
     @Autowired FundPnlService fundPnlService;
     @Autowired FundRepository fundRepository;
