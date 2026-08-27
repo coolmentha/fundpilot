@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
-- **Last Active**: 2026-08-21
+- **Total Sessions**: 18
+- **Last Active**: 2026-08-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~524 | Active |
+| `journal-1.md` | ~545 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-08-27 | 限制 K 线展示条数 | `422674b` | `hotfix/kline-visible-window` |
 | 17 | 2026-08-21 | 修复手工成本价重算并完成发布验证 | `8e0fdcd`, `d8e384f`, `18a960e` | `hotfix/cost-basis-reset` |
 | 16 | 2026-08-18 | 详情页行情指标优先展示 | `22bbc24` | `feature/fund-detail-market-metrics-first-column` |
 | 15 | 2026-08-13 | 修正智能定投涨跌幅净值口径 | `a248b2d` | `feature/smart-dca` |

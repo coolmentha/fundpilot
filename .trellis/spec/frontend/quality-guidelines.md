@@ -20,12 +20,12 @@ Applies to JavaScript and JSX under `frontend/src`.
 - Fund market charts use the shared ECharts lifecycle helpers in the chart components; every initialized instance must register resize handling and be disposed on unmount or chart-type replacement.
 - `FundIntradayChart` consumes the existing `baseNav`, `points`, and `tradingSessions` payload. Future category slots remain `null`, lunch breaks do not become categories, and percentage mode sets explicit symmetric bounds around zero instead of relying on a library default percentage axis.
 - K-line data is passed to a candlestick series as `[open, close, low, high]`. MA, VOL, and MACD/DIF/DEA are derived in one frontend calculation module so toolbar and tooltip values use the same result.
-- K-line data remains fully available, but the initial viewport shows a period-specific recent window (daily 120 bars, weekly 104 bars, monthly 60 bars); users can still zoom to older data.
+- K-line chart options contain at most the latest 120 daily, 104 weekly, or 60 monthly bars. Older bars may be used to warm up MA and MACD calculations, but must not appear in any x-axis or series and cannot be recovered through `dataZoom`.
 - Chart options must use theme-aware colors and keep the existing loading, error, empty-data, and NAV fallback states. Do not add direct external market-data requests from chart components.
 
 ### Chart Tests
 
-- Component tests inspect `setOption` output rather than chart-library internals. Cover symmetric positive/negative bounds, all-positive values, future `null` slots, skipped lunch categories, candlestick ordering, indicator switching, NAV fallback, and instance disposal.
+- Component tests inspect `setOption` output rather than chart-library internals. Cover symmetric positive/negative bounds, all-positive values, future `null` slots, skipped lunch categories, candlestick ordering, indicator switching, NAV fallback, and instance disposal. For K-line limits, use over-limit input and assert every x-axis and series length plus the earliest retained date.
 - Pure indicator helpers cover normal, warm-up, zero, and invalid-value boundaries.
 
 ## Forbidden Patterns
