@@ -522,3 +522,24 @@ QDII 今日收益改为按最新净值 firstSeenAt 的北京时间当天结算�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 18: 限制 K 线展示条数
+
+**Date**: 2026-08-27
+**Task**: 限制 K 线展示条数
+**Branch**: `hotfix/kline-visible-window`
+
+### Summary
+
+日K、周K、月K仅向 ECharts 输出最近 120、104、60 条数据，保留完整历史用于 MA 和 MACD 预热；前端 lint、121 项测试及生产构建通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `422674b` | (see git log) |
+
+### Status
+
+[OK] **Completed**
