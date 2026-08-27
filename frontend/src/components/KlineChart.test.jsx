@@ -95,23 +95,38 @@ describe('KlineChart', () => {
         root = null;
     });
 
-    it('按日周月周期定位最近的K线窗口', async () => {
+    it('按日周月周期只向图表传入最近的K线', async () => {
         useFundKline.mockReturnValue({data: makeKline('kline', 400), isLoading: false, isError: false, refetch: vi.fn()});
         container = document.createElement('div');
         document.body.appendChild(container);
         root = createRoot(container);
 
         await act(async () => root.render(<KlineChart portfolioFundId={1} fundSubType="ETF"/>));
-        expect(chart.setOption.mock.lastCall[0].dataZoom[0]).toMatchObject({startValue: 280, endValue: 399});
+        const dailyOption = chart.setOption.mock.lastCall[0];
+        expect(dailyOption.xAxis.every((axis) => axis.data.length === 120)).toBe(true);
+        expect(dailyOption.xAxis[0].data[0]).toBe('2026-10-08T00:00:00.000Z');
+        expect(dailyOption.xAxis[0].axisLabel.formatter(dailyOption.xAxis[0].data[10], 0)).toBe('2026-10-18');
+        expect(dailyOption.series.every((series) => series.data.length === 120)).toBe(true);
+        expect(Number.isFinite(dailyOption.series.find((series) => series.name === 'MA30').data[0])).toBe(true);
+        expect(dailyOption.tooltip.formatter([{dataIndex: 0}])).toContain('2026-10-08');
+        expect(dailyOption.dataZoom[0]).toMatchObject({startValue: 0, endValue: 119});
 
         const weekly = [...container.querySelectorAll('.ant-segmented-item')]
             .find((item) => item.textContent.includes('周K'));
         await act(async () => weekly.click());
-        expect(chart.setOption.mock.lastCall[0].dataZoom[0]).toMatchObject({startValue: 296, endValue: 399});
+        const weeklyOption = chart.setOption.mock.lastCall[0];
+        expect(weeklyOption.xAxis.every((axis) => axis.data.length === 104)).toBe(true);
+        expect(weeklyOption.xAxis[0].data[0]).toBe('2026-10-24T00:00:00.000Z');
+        expect(weeklyOption.series.every((series) => series.data.length === 104)).toBe(true);
+        expect(weeklyOption.dataZoom[0]).toMatchObject({startValue: 0, endValue: 103});
 
         const monthly = [...container.querySelectorAll('.ant-segmented-item')]
             .find((item) => item.textContent.includes('月K'));
         await act(async () => monthly.click());
-        expect(chart.setOption.mock.lastCall[0].dataZoom[0]).toMatchObject({startValue: 340, endValue: 399});
+        const monthlyOption = chart.setOption.mock.lastCall[0];
+        expect(monthlyOption.xAxis.every((axis) => axis.data.length === 60)).toBe(true);
+        expect(monthlyOption.xAxis[0].data[0]).toBe('2026-12-07T00:00:00.000Z');
+        expect(monthlyOption.series.every((series) => series.data.length === 60)).toBe(true);
+        expect(monthlyOption.dataZoom[0]).toMatchObject({startValue: 0, endValue: 59});
     });
 });

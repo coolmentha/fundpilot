@@ -7,7 +7,7 @@ import QueryErrorState from './QueryErrorState.jsx';
 import {disposeChart, initChart, observeChartResize} from './chartUtils.js';
 import {calculateMacd, getChartColors, LINE_COLORS, MA_PERIODS, movingAverage} from './chartMath.js';
 
-const KLINE_VISIBLE_BARS = {daily: 120, weekly: 104, monthly: 60};
+const KLINE_MAX_BARS = {daily: 120, weekly: 104, monthly: 60};
 
 function finiteOr(value, fallback) {
     const number = Number(value);
@@ -47,7 +47,7 @@ function dateAxis(dates, colors, gridIndex = 0, showLabel = true) {
             show: showLabel,
             color: colors.text,
             interval,
-            formatter: (value, index) => formatDate(dates[index] || value),
+            formatter: (value) => formatDate(value),
         },
     };
 }
@@ -96,9 +96,9 @@ function buildNavOption(bars, colors) {
     };
 }
 
-function buildKlineTooltip(bars, periods, sub, macd, params) {
+function buildKlineTooltip(bars, periods, sub, macd, dataOffset, params) {
     const item = Array.isArray(params) ? params.find((entry) => entry.dataIndex !== undefined) : params;
-    const index = item?.dataIndex;
+    const index = item?.dataIndex === undefined ? undefined : item.dataIndex + dataOffset;
     const bar = index === undefined ? null : bars[index];
     if (!bar) return '';
     const lines = [
@@ -116,12 +116,10 @@ function buildKlineTooltip(bars, periods, sub, macd, params) {
     return lines.join('<br/>');
 }
 
-function initialKlineStartValue(period, length) {
-    return Math.max(0, length - (KLINE_VISIBLE_BARS[period] || KLINE_VISIBLE_BARS.daily));
-}
-
 function buildKlineOption(bars, period, maSelected, sub, colors) {
-    const dates = bars.map((bar) => bar.date);
+    const dataOffset = Math.max(0, bars.length - (KLINE_MAX_BARS[period] || KLINE_MAX_BARS.daily));
+    const visibleBars = bars.slice(dataOffset);
+    const dates = visibleBars.map((bar) => bar.date);
     const closes = bars.map((bar) => bar.close);
     const periods = [...maSelected].sort((a, b) => a - b);
     const showSub = sub !== 'NONE';
@@ -144,7 +142,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
         name: 'K线',
         type: 'candlestick',
         large: false,
-        data: bars.map((bar) => [bar.open, bar.close, bar.low, bar.high]),
+        data: visibleBars.map((bar) => [bar.open, bar.close, bar.low, bar.high]),
         itemStyle: {
             color: colors.up,
             color0: colors.down,
@@ -156,7 +154,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
         series.push({
             name: `MA${period}`,
             type: 'line',
-            data: movingAverage(closes, period),
+            data: movingAverage(closes, period).slice(dataOffset),
             showSymbol: false,
             connectNulls: false,
             lineStyle: {color: LINE_COLORS[MA_PERIODS.indexOf(period) % LINE_COLORS.length], width: 1},
@@ -170,7 +168,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
             type: 'bar',
             xAxisIndex: 1,
             yAxisIndex: 1,
-            data: bars.map((bar) => ({
+            data: visibleBars.map((bar) => ({
                 value: bar.volume,
                 itemStyle: {color: bar.close >= bar.open ? colors.up : colors.down},
             })),
@@ -183,13 +181,13 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
                 type: 'bar',
                 xAxisIndex: 1,
                 yAxisIndex: 1,
-                data: macd.histogram.map((value) => ({
+                data: macd.histogram.slice(dataOffset).map((value) => ({
                     value,
                     itemStyle: {color: Number(value) >= 0 ? colors.up : colors.down},
                 })),
             },
-            {name: 'DIF', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: macd.dif, showSymbol: false, lineStyle: {color: '#F59E0B'}},
-            {name: 'DEA', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: macd.dea, showSymbol: false, lineStyle: {color: '#3B82F6'}},
+            {name: 'DIF', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: macd.dif.slice(dataOffset), showSymbol: false, lineStyle: {color: '#F59E0B'}},
+            {name: 'DEA', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: macd.dea.slice(dataOffset), showSymbol: false, lineStyle: {color: '#3B82F6'}},
         );
     }
     return {
@@ -201,7 +199,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
             backgroundColor: colors.tooltipBackground,
             borderColor: colors.tooltipBorder,
             textStyle: {color: colors.strongText},
-            formatter: (params) => buildKlineTooltip(bars, periods, sub, macd, params),
+            formatter: (params) => buildKlineTooltip(bars, periods, sub, macd, dataOffset, params),
         },
         axisPointer: {link: [{xAxisIndex: 'all'}]},
         xAxis: xAxes,
@@ -210,7 +208,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
             type: 'inside',
             xAxisIndex: showSub ? [0, 1] : [0],
             filterMode: 'none',
-            startValue: initialKlineStartValue(period, dates.length),
+            startValue: 0,
             endValue: dates.length - 1,
         }],
         series,
