@@ -3,7 +3,7 @@ package com.fundpilot.backend.fund.service.support;
 import java.math.BigDecimal;
 
 /**
- * 组合仓位与盈亏汇总结果(issue #18 概览页盈亏 KPI,CONTEXT.md「概览页盈亏 KPI」)。
+ * 组合仓位与盈亏汇总结果(issue #18 概览页盈亏 KPI,工作台领域上下文「概览页盈亏 KPI」)。
  * <p>上涨/下跌与盈利/亏损是两个独立维度(故事 24):
  * <ul>
  *   <li>rising/falling 按今日涨跌幅符号(今日视角)</li>

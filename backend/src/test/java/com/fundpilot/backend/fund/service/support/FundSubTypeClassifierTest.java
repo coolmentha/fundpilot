@@ -52,7 +52,7 @@ class FundSubTypeClassifierTest {
     void 兴全合宜混合LOF_A_识别为_ACTIVE_默认指数_000300() {
         FundSubTypeResult r = FundSubTypeClassifier.classify("兴全合宜混合(LOF)A");
         assertThat(r.fundSubType()).isEqualTo(FundSubType.ACTIVE);
-        // ACTIVE 默认填沪深300(CONTEXT.md 明确,逻辑止损不使用)
+        // ACTIVE 默认填沪深300(工作台领域上下文明确,逻辑止损不使用)
         assertThat(r.benchmarkIndexCode()).isEqualTo("000300.SH");
     }
 

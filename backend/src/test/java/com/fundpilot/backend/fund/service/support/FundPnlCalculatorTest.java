@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * issue #18 盈亏/涨跌纯算术单测(CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
+ * issue #18 盈亏/涨跌纯算术单测(工作台领域上下文「今日涨跌/今日盈亏/总盈亏」)。
  * <p>所有计算统一用累计净值 accumulatedNav(分红除权不会让跌幅"虚高")。
  */
 class FundPnlCalculatorTest {

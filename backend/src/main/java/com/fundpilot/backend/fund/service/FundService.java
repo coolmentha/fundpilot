@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 /**
  * 基金服务(issue #16 + ADR-0005):基金 CRUD 业务逻辑,Controller 只做 HTTP 路由,逻辑下沉到本层。
  * <p>新建时类型字段(fundSubType/fundCategory/benchmarkIndexCode)优先用前端从字典搜索带入的值;
- * 缺省时后端按 fundName 兜底跑 {@link FundTypeClassifier} 识别(尽力填+可覆盖,CONTEXT.md「基金类型自动识别」)。
+ * 缺省时后端按 fundName 兜底跑 {@link FundTypeClassifier} 识别(尽力填+可覆盖,工作台领域上下文「基金类型自动识别」)。
  * 产品身份由 ProductCatalog 统一登记，legacy 字段仅在后续切片完成前双写。
  * 返回 {@link FundView} DTO,不直接暴露 {@link FundEntity}。
  */
@@ -88,7 +88,7 @@ public class FundService {
 
     /**
      * 新建基金;类型字段优先用请求带入值,缺省时按 fundName 兜底识别。
-     * <p>fundCode/fundName 二选一即可(CONTEXT.md「基金字典搜索」);两者都缺 → 业务异常。
+     * <p>fundCode/fundName 二选一即可(工作台领域上下文「基金字典搜索」);两者都缺 → 业务异常。
      * <p><b>初始持仓录入(ADR-0012)</b>:initialHoldingShares 有值时走建仓路径——FundStatus→HOLDING、
      * openedAt=now、写一条 INCREASE 交易并用最近一期净值同步确认,
      * 对齐建议回应的状态流转,但确认时机尊重已有持仓盘点语义

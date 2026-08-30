@@ -5,7 +5,7 @@ import java.math.MathContext;
 import java.util.List;
 
 /**
- * 盈亏与涨跌纯算术计算器(issue #18,CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
+ * 盈亏与涨跌纯算术计算器(issue #18,工作台领域上下文「今日涨跌/今日盈亏/总盈亏」)。
  * <p>无 Spring/DB 依赖,所有外部值由调用方(Service)预注入,便于单测构造数值覆盖各分支。
  * <p>统一用累计净值 accumulatedNav——分红除权会让单位净值跌幅"虚高"。
  * 入参为 null 或上一期净值为零(除零)时返回 null,对应 View 字段可空。

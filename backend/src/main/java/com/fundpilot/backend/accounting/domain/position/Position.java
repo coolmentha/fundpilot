@@ -71,7 +71,7 @@ public final class Position {
      * 买入确认后加权更新成本单价（ADR-0013）。
      * <p>新单价 = (旧单价 × 有成本旧份额 + 本次实际投入金额) / (全部旧份额 + 本次份额)。卖出不改单价；
      * 清仓再入场时旧份额为零，自然覆盖为本次单价。
-     * <p>{@code ADJUST_IN} 的零成本份额只稀释分母、不参与分子加权（CONTEXT.md 账实修正零成本语义）。
+     * <p>{@code ADJUST_IN} 的零成本份额只稀释分母、不参与分子加权（工作台领域上下文中的账实修正零成本语义）。
      *
      * @param sharesAfter     本次确认后的 CONFIRMED 净份额
      * @param acquiredShares  本次买入份额

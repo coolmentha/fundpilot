@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * issue #18 组合盈亏聚合纯函数单测(CONTEXT.md「概览页盈亏 KPI」)。
+ * issue #18 组合盈亏聚合纯函数单测(工作台领域上下文「概览页盈亏 KPI」)。
  * <p>故事 24 核心:上涨/下跌(按今日涨跌幅符号)与盈利/亏损(按总盈亏符号)是两个独立维度——
  * 一只基金可能今日上涨但整体亏损,两者独立计数不混用。
  */

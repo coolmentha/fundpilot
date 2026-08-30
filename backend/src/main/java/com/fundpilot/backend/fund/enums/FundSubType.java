@@ -9,7 +9,7 @@ package com.fundpilot.backend.fund.enums;
  *   <li>{@link #ACTIVE}：主动管理，无跟踪指数</li>
  * </ul>
  * 决定行情数据源选择和逻辑止损判定路径（ETF/INDEX/INDEX_ENHANCED 走指数 K 线量能；
- * ACTIVE 走单周跌幅）。详见 ADR-0002 与 CONTEXT.md。
+ * ACTIVE 走单周跌幅）。详见 ADR-0002 与工作台领域上下文。
  */
 public enum FundSubType {
     ETF,

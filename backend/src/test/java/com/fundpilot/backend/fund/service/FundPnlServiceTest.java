@@ -31,7 +31,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
 /**
- * issue #18 盈亏/涨跌多表聚合集成测试(CONTEXT.md「今日涨跌/今日盈亏/总盈亏」)。
+ * issue #18 盈亏/涨跌多表聚合集成测试(工作台领域上下文「今日涨跌/今日盈亏/总盈亏」)。
  * <p>落 fund_nav_history 最近两期累计净值 + CONFIRMED 交易,验证 FundPnlService 聚合。
  * 算术委托 {@link com.fundpilot.backend.fund.service.support.FundPnlCalculator},本类只验多表拼装。
  */

@@ -176,4 +176,4 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 - ADR-0019：单位净值用于账目，累计净值用于复权分析。
 - ADR-0021：月度定投预算和仓位提醒替代硬资金池限制。
 
-领域术语与边界以根目录 `CONTEXT.md` 为准；技术实现细节以 `.trellis/spec/`、ADR 和当前代码为准。
+领域术语与边界以外部工作台维护的领域上下文为准；技术实现细节以 `.trellis/spec/`、ADR 和当前代码为准。

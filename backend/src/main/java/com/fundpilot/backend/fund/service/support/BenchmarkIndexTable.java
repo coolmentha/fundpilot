@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  * 指数关键词 → 业绩比较基准指数代码映射(issue #8 §benchmarkIndexCode 处理)。
  * <p>覆盖宽基/主流指数(.SH/.SZ)与行业主题指数(.CSI → secid 2.,如人工智能/半导体/光伏等)。
- * 代码格式 {@code XXXXXX.SH/SZ/CSI}(人类可读、与 CONTEXT.md 一致)。
+ * 代码格式 {@code XXXXXX.SH/SZ/CSI}(人类可读、与工作台领域上下文一致)。
  * {@code MarketDataFetchService} 调 {@link EastmoneyClient#fetchIndexKline} 前会把此格式转成
  * 东方财富 secid 格式 {@code 1.000300}。
  * <p>用 {@link LinkedHashMap} 保序,长关键词优先匹配(如「沪深300」先于「沪深」),避免短词误命中。

@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * 基金新建/更新请求 DTO(issue #16 + ADR-0005 + ADR-0013)。
  * <p>新建时 fundCode/fundName/fundSubType/fundCategory/benchmarkIndexCode 由前端从字典搜索候选带入
- * (CONTEXT.md「基金字典搜索」)。fundCode/fundName 二选一即可,
+ * (工作台领域上下文「基金字典搜索」)。fundCode/fundName 二选一即可,
  * 其余类型字段可缺省(尽力填+可覆盖,缺省时由后端兜底)。
  *
  * <p>金字塔加仓机制移除后不再有 plannedTotalAmount 字段——买入完全由用户手动/定投决定。

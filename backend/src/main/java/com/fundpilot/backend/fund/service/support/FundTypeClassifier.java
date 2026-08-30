@@ -4,7 +4,7 @@ import com.fundpilot.backend.fund.enums.FundCategory;
 import com.fundpilot.backend.fund.enums.FundSubType;
 
 /**
- * 基金类型统一识别器:按基金名称一次性识别两个正交维度的分类(CONTEXT.md「基金类型自动识别」)。
+ * 基金类型统一识别器:按基金名称一次性识别两个正交维度的分类(工作台领域上下文「基金类型自动识别」)。
  * <p>组合 {@link FundSubTypeClassifier}(数据源维度)与 {@link FundCategoryClassifier}(策略参数维度),
  * 落 {@code fund_dict} 表时调用,搜索返回的候选自带分类,避免运行时重复识别。
  *
@@ -16,7 +16,7 @@ import com.fundpilot.backend.fund.enums.FundSubType;
  *       (宽基/行业/主动/混合)</li>
  * </ol>
  * 两个分类器共用 {@link BenchmarkIndexTable} 的宽基指数词,但 fundCategory 额外引入行业词表,
- * 与 fundSubType 的识别规则正交(见 CONTEXT.md「基金子类型」的 _Avoid_:两者不可合并)。
+ * 与 fundSubType 的识别规则正交(见工作台领域上下文「基金子类型」的 _Avoid_:两者不可合并)。
  */
 public final class FundTypeClassifier {
 

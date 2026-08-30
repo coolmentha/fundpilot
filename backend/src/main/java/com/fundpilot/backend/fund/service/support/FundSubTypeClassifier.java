@@ -12,7 +12,7 @@ import java.util.Optional;
  *   <li>名称含「ETF」→ {@link FundSubType#ETF};从名称提取跟踪指数</li>
  *   <li>名称含「指数增强」或「增强」→ {@link FundSubType#INDEX_ENHANCED};从名称提取跟踪指数</li>
  *   <li>名称含「指数」或命中 {@link BenchmarkIndexTable} 指数关键词 → {@link FundSubType#INDEX};提取指数代码</li>
- *   <li>兜底 → {@link FundSubType#ACTIVE};默认填沪深300 {@code 000300.SH}(CONTEXT.md 明确,逻辑止损不使用)</li>
+ *   <li>兜底 → {@link FundSubType#ACTIVE};默认填沪深300 {@code 000300.SH}(工作台领域上下文明确,逻辑止损不使用)</li>
  * </ol>
  *
  * <h3>benchmarkIndexCode 填充策略</h3>
@@ -25,7 +25,7 @@ import java.util.Optional;
  */
 public final class FundSubTypeClassifier {
 
-    /** ACTIVE 类型默认业绩比较基准——沪深300(CONTEXT.md 明确,逻辑止损不使用)。 */
+    /** ACTIVE 类型默认业绩比较基准——沪深300(工作台领域上下文明确,逻辑止损不使用)。 */
     public static final String ACTIVE_DEFAULT_BENCHMARK = "000300.SH";
 
     private FundSubTypeClassifier() {
