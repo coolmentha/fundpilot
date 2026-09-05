@@ -22,6 +22,9 @@ import java.time.Instant;
 @Service
 @RequiredArgsConstructor
 public class PortfolioCorrectionCommandHandler {
+    private static final int NUMERIC_PRECISION = 19;
+    private static final int NUMERIC_SCALE = 8;
+
     private final CorrectablePortfolioFundGateway portfolioFunds;
     private final PositionRepository positions;
     private final TransactionRepository transactions;
@@ -41,12 +44,11 @@ public class PortfolioCorrectionCommandHandler {
                     PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
                     "组合基金不存在: " + portfolioFundId);
         }
-        BigDecimal normalizedCost = costPerShare == null ? null
-                : costPerShare.setScale(8, RoundingMode.HALF_UP);
-        if (normalizedCost == null || normalizedCost.signum() <= 0) {
+        BigDecimal normalizedCost = normalizePositiveNumeric(costPerShare);
+        if (normalizedCost == null) {
             throw new PortfolioCorrectionFailure(
                     PortfolioCorrectionFailure.Code.COST_PER_SHARE_INVALID,
-                    "成本单价必须大于 0");
+                    "成本单价必须大于 0 且不超过数据库可表示范围");
         }
         var position = positions.findByPortfolioFund(portfolioFundId)
                 .filter(existing -> existing.ownerId() == ownerId
@@ -61,10 +63,22 @@ public class PortfolioCorrectionCommandHandler {
                     PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_OPEN,
                     "当前确认持仓份额无效，不能修改成本单价");
         }
+        BigDecimal storedAmount = normalizePositiveNumeric(holdingShares.multiply(normalizedCost));
+        if (storedAmount == null) {
+            throw new PortfolioCorrectionFailure(
+                    PortfolioCorrectionFailure.Code.COST_PER_SHARE_INVALID,
+                    "成本总额不在数据库可表示范围");
+        }
+        BigDecimal persistedCost = LedgerTransaction.costPerShareFromStoredAmount(storedAmount, holdingShares);
+        if (normalizePositiveNumeric(persistedCost) == null) {
+            throw new PortfolioCorrectionFailure(
+                    PortfolioCorrectionFailure.Code.COST_PER_SHARE_INVALID,
+                    "成本单价不在数据库可表示范围");
+        }
         Instant correctedAt = clock.instant();
         LedgerTransaction reset = LedgerTransaction.recordCostBasisReset(
                 portfolioFundId, ownerId, holdingShares, normalizedCost, correctedAt);
-        position.correctCostPerShare(normalizedCost);
+        position.correctCostPerShare(persistedCost);
         LedgerTransaction savedReset = transactions.save(reset);
         var saved = positions.save(position);
         events.publishCreated(new TransactionCreated(savedReset.id(), savedReset.portfolioFundId(),
@@ -82,7 +96,7 @@ public class PortfolioCorrectionCommandHandler {
                     "必须明确确认作废操作");
         }
         String normalizedReason = requireReason(reason);
-        var portfolioFund = portfolioFunds.findOwned(ownerId, portfolioFundId)
+        var portfolioFund = portfolioFunds.findOwnedForUpdate(ownerId, portfolioFundId)
                 .orElseThrow(() -> new PortfolioCorrectionFailure(
                         PortfolioCorrectionFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
                         "组合基金不存在: " + portfolioFundId));
@@ -110,6 +124,15 @@ public class PortfolioCorrectionCommandHandler {
                     "作废原因不能为空");
         }
         return reason.trim();
+    }
+
+    private static BigDecimal normalizePositiveNumeric(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+        BigDecimal normalized = value.setScale(NUMERIC_SCALE, RoundingMode.HALF_UP);
+        return normalized.signum() > 0 && normalized.precision() <= NUMERIC_PRECISION
+                ? normalized : null;
     }
 
     private PortfolioCorrectionFailure mapRejected(

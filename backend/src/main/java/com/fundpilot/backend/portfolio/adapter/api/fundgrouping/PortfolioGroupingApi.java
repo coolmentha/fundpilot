@@ -1,6 +1,7 @@
 package com.fundpilot.backend.portfolio.adapter.api.fundgrouping;
 
 import com.fundpilot.backend.portfolio.application.command.fundgrouping.FundGroupingCommandHandler;
+import com.fundpilot.backend.portfolio.application.command.fundgrouping.FundGroupingFailure;
 import com.fundpilot.backend.portfolio.application.query.fundgrouping.FundGroupingQueryHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,14 @@ public class PortfolioGroupingApi {
     private final FundGroupingQueryHandler queries;
 
     public void assignByNames(AssignByNames request) {
-        commands.assignByNames(request.ownerId(), request.portfolioFundId(), request.names());
+        if (request.names() == null) {
+            return;
+        }
+        try {
+            commands.assignByNames(request.ownerId(), request.portfolioFundId(), request.names());
+        } catch (FundGroupingFailure failure) {
+            throw new Failure(Code.valueOf(failure.code().name()), failure.getMessage());
+        }
     }
 
     public List<GroupMembership> memberships(long ownerId) {
@@ -27,5 +35,25 @@ public class PortfolioGroupingApi {
     }
 
     public record GroupMembership(long portfolioFundId, long groupId, String groupName) {
+    }
+
+    public static final class Failure extends RuntimeException {
+        private final Code code;
+
+        private Failure(Code code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        public Code code() {
+            return code;
+        }
+    }
+
+    public enum Code {
+        FUND_GROUP_NAME_INVALID,
+        FUND_GROUP_NAME_DUPLICATE,
+        FUND_GROUP_NOT_FOUND,
+        PORTFOLIO_FUND_NOT_FOUND
     }
 }

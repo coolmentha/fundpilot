@@ -9,6 +9,7 @@ public interface PublishedNavRepository {
     Optional<PublishedNav> findLatestByProductId(long fundProductId);
     List<PublishedNav> findLatestByProductIds(Set<Long> fundProductIds);
     List<PublishedNav> findLatestTwoByProductIds(Set<Long> fundProductIds);
+    List<PublishedNav> findLatestTwoByProductIdsAt(Set<Long> fundProductIds, Instant endExclusive);
     List<PublishedNav> findByProductIdAndDateRange(long fundProductId, Instant startInclusive,
                                                    Instant endExclusive);
     Optional<java.math.BigDecimal> findPeakAccumulatedNav(long fundProductId, Instant startInclusive);

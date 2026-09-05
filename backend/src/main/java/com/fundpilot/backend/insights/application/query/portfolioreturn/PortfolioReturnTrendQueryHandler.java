@@ -37,6 +37,8 @@ public class PortfolioReturnTrendQueryHandler {
         var first = rows.getFirst();
         var last = rows.getLast();
         var start = baseline != null ? baseline : first;
+        List<String> missingFundCodes = rows.stream()
+                .flatMap(row -> split(row.missingFundCodes()).stream()).distinct().sorted().toList();
         BigDecimal intervalReturn = last.totalReturn().subtract(start.totalReturn());
         BigDecimal invested = last.investedAmount().subtract(start.investedAmount());
         BigDecimal redeemed = last.redeemedAmount().subtract(start.redeemedAmount());
@@ -50,7 +52,7 @@ public class PortfolioReturnTrendQueryHandler {
         }
         return new TrendResult(first.businessDate(), last.businessDate(), baseline != null,
                 rows.stream().allMatch(PortfolioReturnSnapshot::valuationComplete),
-                split(last.missingFundCodes()), intervalReturn,
+                missingFundCodes, intervalReturn,
                 denominator.signum() > 0 ? intervalReturn.divide(denominator, MATH) : null,
                 invested, redeemed, fees,
                 rows.stream().map(PortfolioReturnSnapshot::totalReturn)

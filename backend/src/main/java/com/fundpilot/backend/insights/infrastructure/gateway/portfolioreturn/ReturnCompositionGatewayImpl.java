@@ -41,11 +41,26 @@ public class ReturnCompositionGatewayImpl implements ReturnCompositionGateway {
     }
 
     @Override
+    public List<Position> findPositionsAt(long ownerId, java.time.Instant endExclusive) {
+        return positions.findByOwnerAt(ownerId, endExclusive).stream().map(value -> new Position(
+                value.portfolioFundId(), value.status().name(), value.openedAt(), value.costPerShare(),
+                value.confirmedShares())).toList();
+    }
+
+    @Override
     public List<ReturnFact> findReturnFacts(long ownerId) {
         return returns.findByOwner(ownerId).stream().map(value -> new ReturnFact(value.portfolioFundId(),
                 value.investedAmount(), value.redeemedAmount(), value.externalInvestedAmount(),
                 value.externalRedeemedAmount(), value.feeAmount(), value.realizedPnl(), value.realizedComplete()))
                 .toList();
+    }
+
+    @Override
+    public List<ReturnFact> findReturnFactsAt(long ownerId, java.time.Instant endExclusive) {
+        return returns.findByOwnerAt(ownerId, endExclusive).stream().map(value -> new ReturnFact(
+                value.portfolioFundId(), value.investedAmount(), value.redeemedAmount(),
+                value.externalInvestedAmount(), value.externalRedeemedAmount(), value.feeAmount(),
+                value.realizedPnl(), value.realizedComplete())).toList();
     }
 
     @Override
@@ -61,6 +76,13 @@ public class ReturnCompositionGatewayImpl implements ReturnCompositionGateway {
     public List<Nav> findLatestTwoNavs(Set<Long> productIds) {
         return navs.latestTwoByProductIds(productIds).stream().map(value -> new Nav(value.fundProductId(),
                 value.navDate(), value.unitNav(), value.accumulatedNav(), value.firstSeenAt())).toList();
+    }
+
+    @Override
+    public List<Nav> findLatestTwoNavsAt(Set<Long> productIds, java.time.Instant endExclusive) {
+        return navs.latestTwoByProductIdsAt(productIds, endExclusive).stream().map(value -> new Nav(
+                value.fundProductId(), value.navDate(), value.unitNav(), value.accumulatedNav(),
+                value.firstSeenAt())).toList();
     }
 
     @Override

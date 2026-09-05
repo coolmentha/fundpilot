@@ -59,6 +59,35 @@ class PortfolioFundCommandHandlerTest {
     }
 
     @Test
+    void configuresWarningForOwnedTrackedPortfolioFund() {
+        InMemoryRepository repository = new InMemoryRepository();
+        PortfolioFundCommandHandler handler = handler(repository);
+        long portfolioFundId = handler.track(101L, 3L, 5L, true, new BigDecimal("0.30")).id();
+
+        var result = handler.configureWarning(3L, portfolioFundId, false, new BigDecimal("0.25"));
+
+        assertThat(result.id()).isEqualTo(portfolioFundId);
+        assertThat(result.positionWarningEnabled()).isFalse();
+        assertThat(result.positionWarningRatio()).isEqualByComparingTo("0.25");
+    }
+
+    @Test
+    void rejectsMissingOrOutOfRangeWarningRatio() {
+        InMemoryRepository repository = new InMemoryRepository();
+        PortfolioFundCommandHandler handler = handler(repository);
+        long portfolioFundId = handler.track(101L, 3L, 5L, true, new BigDecimal("0.30")).id();
+
+        assertThatThrownBy(() -> handler.configureWarning(3L, portfolioFundId, true, null))
+                .isInstanceOfSatisfying(PortfolioFundFailure.class, failure ->
+                        assertThat(failure.code()).isEqualTo(
+                                PortfolioFundFailure.Code.POSITION_WARNING_INVALID));
+        assertThatThrownBy(() -> handler.configureWarning(3L, portfolioFundId, true, BigDecimal.ONE.add(BigDecimal.ONE)))
+                .isInstanceOfSatisfying(PortfolioFundFailure.class, failure ->
+                        assertThat(failure.code()).isEqualTo(
+                                PortfolioFundFailure.Code.POSITION_WARNING_INVALID));
+    }
+
+    @Test
     void publishesCompleteVoidedEventOnlyForFirstVoid() {
         InMemoryRepository repository = new InMemoryRepository();
         List<Object> published = new ArrayList<>();
@@ -120,6 +149,15 @@ class PortfolioFundCommandHandlerTest {
                             && item.fundProductId() == fundProductId
                             && item.validity().name().equals("TRACKED"))
                     .findFirst();
+        }
+
+        @Override
+        public Optional<PortfolioFund> saveTrackedIfAbsent(PortfolioFund portfolioFund) {
+            if (findTrackedByOwnerIdAndFundProductId(portfolioFund.ownerId(), portfolioFund.fundProductId())
+                    .isPresent()) {
+                return Optional.empty();
+            }
+            return Optional.of(save(portfolioFund));
         }
 
         @Override

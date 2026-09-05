@@ -15,6 +15,7 @@ public class Pbkdf2PasswordHashGateway implements PasswordHashGateway {
     private static final int ITERATIONS = 210_000;
     private static final int KEY_BITS = 256;
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String UNKNOWN_USER_HASH = encode(new byte[16], new byte[KEY_BITS / Byte.SIZE]);
 
     @Override
     public String hash(String password) {
@@ -38,7 +39,12 @@ public class Pbkdf2PasswordHashGateway implements PasswordHashGateway {
         }
     }
 
-    private String encode(byte[] salt, byte[] hash) {
+    @Override
+    public boolean matchesUnknown(String password) {
+        return matches(password, UNKNOWN_USER_HASH);
+    }
+
+    private static String encode(byte[] salt, byte[] hash) {
         return "pbkdf2$" + Base64.getUrlEncoder().withoutPadding().encodeToString(salt)
                 + "$" + Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
     }

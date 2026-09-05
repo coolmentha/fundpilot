@@ -4,7 +4,7 @@ import {UndoOutlined} from '@ant-design/icons';
 import {labels} from '../constants.js';
 
 const FIELDS = [
-    {key: 'profitActivationPercent', label: '止盈启动收益率', min: 0.01, max: 100},
+    {key: 'profitActivationPercent', label: '止盈启动收益率', min: 0.01, max: 99.99},
     {key: 'stopLossPullbackPercent', label: '高点回撤确认', min: 0.01, max: 99.99},
     {key: 'profitHarvestPercent', label: '浮盈收割比例', min: 0.01, max: 100},
     {key: 'minimumHoldingPercent', label: '最低保留仓位', min: 0, max: 99.99},
@@ -24,7 +24,7 @@ const toPercentValues = (source) => {
 const toPayload = (values, recommendation, customized) => {
     const payload = {};
     FIELDS.forEach(({key}) => {
-        payload[key] = Number(values[key]) / 100;
+        payload[key] = Number((Number(values[key]) / 100).toFixed(4));
     });
     payload.cooldownTradingDays = values.cooldownTradingDays;
     payload.presetFundCategory = recommendation?.fundCategory ?? null;
@@ -58,10 +58,7 @@ export default function StrategyFormModal({open, editing, recommendation, onOk, 
             .some((key) => Number(current[key]) !== Number(recommendedFormValues[key]));
     }, [current, recommendedFormValues]);
 
-    const handleOk = async () => {
-        const values = await form.validateFields();
-        onOk(toPayload(values, recommendation, customized));
-    };
+    const handleOk = () => form.submit();
 
     const restoreRecommendation = () => {
         if (recommendedFormValues) form.setFieldsValue(recommendedFormValues);
@@ -71,7 +68,8 @@ export default function StrategyFormModal({open, editing, recommendation, onOk, 
         <Modal title={editing ? '编辑定投止盈策略' : '新建定投止盈策略'} open={open} onCancel={onCancel}
                onOk={handleOk} confirmLoading={confirmLoading} destroyOnHidden width={640}
                styles={{body: {maxHeight: 'calc(100vh - 230px)', overflowY: 'auto', paddingRight: 4}}}>
-            <Form form={form} layout="vertical">
+            <Form form={form} layout="vertical"
+                  onFinish={(values) => onOk(toPayload(values, recommendation, customized))}>
                 <Space className="full-width" style={{justifyContent: 'space-between', marginBottom: 12}}>
                     <Space>
                         <Tag color="blue">{labels[recommendation?.fundCategory] || '-'}</Tag>
@@ -88,16 +86,14 @@ export default function StrategyFormModal({open, editing, recommendation, onOk, 
                                        {type: 'number', min: field.min, max: field.max,
                                            message: `请输入 ${field.min}% - ${field.max}%`},
                                    ]}>
-                            <InputNumber min={field.min} max={field.max} step={0.5} precision={2}
-                                         addonAfter="%" className="full-width"/>
+                            <InputNumber step={0.5} precision={2} addonAfter="%" className="full-width"/>
                         </Form.Item>
                     ))}
                     <Form.Item label="止盈后冷静期" name="cooldownTradingDays"
                                rules={[{required: true, message: '请填写'}, {
                                    type: 'number', min: 0, max: 250, message: '请输入 0 - 250 个交易日',
                                }]}>
-                        <InputNumber min={0} max={250} step={1} precision={0}
-                                     addonAfter="交易日" className="full-width"/>
+                        <InputNumber step={1} precision={0} addonAfter="交易日" className="full-width"/>
                     </Form.Item>
                 </div>
                 <Descriptions size="small" column={2} bordered>

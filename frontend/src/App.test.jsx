@@ -22,6 +22,7 @@ vi.mock('./pages/SignalsPage.jsx', () => ({default: () => <div>advice</div>}));
 vi.mock('./pages/ConfirmPage.jsx', () => ({default: () => <div>confirm</div>}));
 vi.mock('./pages/SettingsPage.jsx', () => ({default: () => <div>settings</div>}));
 vi.mock('./pages/AdminPage.jsx', () => ({default: () => <div>admin</div>}));
+vi.mock('./components/PortfolioReturns.jsx', () => ({default: () => <div>portfolio-returns</div>}));
 
 import App from './App.jsx';
 
@@ -64,5 +65,11 @@ describe('App routes', () => {
         await renderAt('/unknown');
 
         expect(container.textContent).toContain('market-home');
+    });
+
+    it('renders the portfolio return view from its public route', async () => {
+        await renderAt('/returns');
+
+        expect(container.textContent).toContain('portfolio-returns');
     });
 });

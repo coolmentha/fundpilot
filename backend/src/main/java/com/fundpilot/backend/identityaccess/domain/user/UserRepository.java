@@ -13,6 +13,8 @@ public interface UserRepository {
 
     Optional<User> findFirstEnabledByRole(UserRole role);
 
+    Optional<User> lockFirstEnabledByRole(UserRole role);
+
     long countEnabledByRole(UserRole role);
 
     User save(User user);

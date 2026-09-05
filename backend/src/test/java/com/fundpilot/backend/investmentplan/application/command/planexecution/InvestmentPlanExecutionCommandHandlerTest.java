@@ -37,6 +37,8 @@ class InvestmentPlanExecutionCommandHandlerTest {
         PlanTradingCalendarGateway calendar = mock(PlanTradingCalendarGateway.class);
         PlanTransactionGateway transactions = mock(PlanTransactionGateway.class);
         PlanPortfolioFundGateway portfolioFunds = mock(PlanPortfolioFundGateway.class);
+        InvestmentPlanExecutionRepository executions = mock(InvestmentPlanExecutionRepository.class);
+        when(executions.insert(any())).thenReturn(true);
         when(plans.findById(7L)).thenReturn(Optional.of(plan()));
         when(portfolioFunds.findTrackedForExecution(3L, 11L))
                 .thenReturn(Optional.of(new PlanPortfolioFundGateway.PortfolioFund(11L, 101L)));
@@ -44,12 +46,17 @@ class InvestmentPlanExecutionCommandHandlerTest {
         when(transactions.occurrences(3L, Instant.parse("2026-07-01T00:00:00Z"),
                 Instant.parse("2026-08-01T00:00:00Z"))).thenReturn(List.of());
 
-        boolean created = handler(plans, calendar, transactions, portfolioFunds)
+        boolean created = handler(plans, calendar, transactions, portfolioFunds, executions)
                 .execute(7L, MONDAY);
 
         assertThat(created).isTrue();
         verify(transactions).createPending(3L, 11L, new BigDecimal("100.00"),
                 Instant.parse("2026-07-27T00:00:00Z"), 7L);
+        ArgumentCaptor<InvestmentPlanExecution> record = ArgumentCaptor.forClass(InvestmentPlanExecution.class);
+        verify(executions).insert(record.capture());
+        assertThat(record.getValue().result()).isEqualTo(InvestmentPlanExecution.Result.EXECUTED);
+        assertThat(record.getValue().actualAmount()).isEqualByComparingTo("100");
+        assertThat(record.getValue().reasonCode()).isEqualTo("FIXED");
     }
 
     @Test
@@ -193,6 +200,28 @@ class InvestmentPlanExecutionCommandHandlerTest {
     }
 
     @Test
+    void 固定计划已有同日结果时复用结果不重复创建交易() {
+        InvestmentPlanRepository plans = mock(InvestmentPlanRepository.class);
+        PlanTradingCalendarGateway calendar = mock(PlanTradingCalendarGateway.class);
+        PlanTransactionGateway transactions = mock(PlanTransactionGateway.class);
+        PlanPortfolioFundGateway portfolioFunds = mock(PlanPortfolioFundGateway.class);
+        InvestmentPlanExecutionRepository executions = mock(InvestmentPlanExecutionRepository.class);
+        stubReady(plans, calendar, transactions, portfolioFunds, executions, plan());
+        when(executions.find(7L, Instant.parse("2026-07-27T00:00:00Z"))).thenReturn(Optional.of(
+                new InvestmentPlanExecution(1L, 7L, Instant.parse("2026-07-27T00:00:00Z"),
+                        InvestmentPlanAmountStrategy.FIXED, SmartInvestmentAmountPolicy.RULE_VERSION,
+                        InvestmentPlanExecution.Result.EXECUTED, "FIXED", "按规则执行",
+                        new BigDecimal("100"), new BigDecimal("100"), BigDecimal.ONE, null,
+                        null, null, null, null)));
+
+        assertThat(handler(plans, calendar, transactions, portfolioFunds, executions)
+                .execute(7L, MONDAY)).isFalse();
+
+        verify(transactions, never()).createPending(anyLong(), anyLong(), any(), any(), anyLong());
+        verify(executions, never()).insert(any());
+    }
+
+    @Test
     void 月计划已有跳过决策后本月不补投() {
         InvestmentPlanRepository plans = mock(InvestmentPlanRepository.class);
         PlanTradingCalendarGateway calendar = mock(PlanTradingCalendarGateway.class);
@@ -236,6 +265,7 @@ class InvestmentPlanExecutionCommandHandlerTest {
         when(transactions.occurrences(3L, Instant.parse("2026-07-01T00:00:00Z"),
                 Instant.parse("2026-08-01T00:00:00Z"))).thenReturn(List.of());
         when(executions.find(7L, Instant.parse("2026-07-27T00:00:00Z"))).thenReturn(Optional.empty());
+        when(executions.insert(any())).thenReturn(true);
     }
 
     private static InvestmentPlanExecutionCommandHandler smartHandler(
@@ -250,7 +280,15 @@ class InvestmentPlanExecutionCommandHandlerTest {
                                                                   PlanTradingCalendarGateway calendar,
                                                                   PlanTransactionGateway transactions,
                                                                   PlanPortfolioFundGateway portfolioFunds) {
+        return handler(plans, calendar, transactions, portfolioFunds, mock(InvestmentPlanExecutionRepository.class));
+    }
+
+    private static InvestmentPlanExecutionCommandHandler handler(InvestmentPlanRepository plans,
+                                                                  PlanTradingCalendarGateway calendar,
+                                                                  PlanTransactionGateway transactions,
+                                                                  PlanPortfolioFundGateway portfolioFunds,
+                                                                  InvestmentPlanExecutionRepository executions) {
         return new InvestmentPlanExecutionCommandHandler(plans, calendar, transactions, portfolioFunds,
-                mock(InvestmentPlanExecutionRepository.class), mock(PlanInvestmentFactsGateway.class));
+                executions, mock(PlanInvestmentFactsGateway.class));
     }
 }

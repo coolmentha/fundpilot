@@ -3,6 +3,7 @@ package com.fundpilot.backend.discipline.infrastructure.gateway.strategymanageme
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fundpilot.backend.platform.web.error.BusinessException;
@@ -27,6 +28,29 @@ class StrategyPortfolioFundGatewayImplTest {
         when(funds.findOwned(3L, 7L)).thenReturn(Optional.of(voidedFund()));
 
         assertVoided(() -> new StrategyPortfolioFundGatewayImpl(funds).requireTracked(3L, 7L));
+    }
+
+    @Test
+    void 写入入口使用行锁并校验所有者() {
+        PortfolioFundApi funds = mock(PortfolioFundApi.class);
+        when(funds.findForUpdate(7L)).thenReturn(Optional.of(voidedFund()));
+
+        assertVoided(() -> new StrategyPortfolioFundGatewayImpl(funds)
+                .requireTrackedForUpdate(3L, 7L));
+        verify(funds).findForUpdate(7L);
+    }
+
+    @Test
+    void 写入入口隐藏他人的组合基金() {
+        PortfolioFundApi funds = mock(PortfolioFundApi.class);
+        var foreign = new PortfolioFundApi.PortfolioFund(7L, 41L, 4L, 101L,
+                PortfolioFundApi.Validity.TRACKED, true, new BigDecimal("0.30"), null, null, null);
+        when(funds.findForUpdate(7L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> new StrategyPortfolioFundGatewayImpl(funds)
+                .requireTrackedForUpdate(3L, 7L))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo("ENTITY_NOT_FOUND"));
     }
 
     private static void assertVoided(Runnable action) {

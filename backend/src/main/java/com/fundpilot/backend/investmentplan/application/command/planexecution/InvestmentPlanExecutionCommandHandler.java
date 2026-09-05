@@ -38,13 +38,13 @@ public class InvestmentPlanExecutionCommandHandler {
         if (plan == null || !calendar.isTradingDay(businessDate)) return false;
         var tracked = portfolioFunds.findTrackedForExecution(plan.ownerId(), plan.portfolioFundId());
         if (tracked.isEmpty()) return false;
+        if (executions.find(plan.id(), businessDate).isPresent()) return false;
         boolean alreadyExecutedThisMonth = hasAnyOccurrenceThisMonth(plan, businessDate);
         Instant latestTradingDayBefore = calendar.latestBefore(businessDate).orElse(null);
         if (!plan.executableOn(businessDate, alreadyExecutedThisMonth, latestTradingDayBefore)) return false;
         if (plan.amountStrategy() == InvestmentPlanAmountStrategy.FIXED) {
             return createFixed(plan, businessDate);
         }
-        if (executions.find(plan.id(), businessDate).isPresent()) return false;
 
         var facts = factsGateway.load(plan, tracked.get(), businessDate).orElseGet(() ->
                 new PlanInvestmentFactsGateway.Facts(SmartInvestmentAmountPolicy.Facts.empty(), null,
@@ -55,9 +55,9 @@ public class InvestmentPlanExecutionCommandHandler {
             executions.insert(record);
             return false;
         }
+        if (!executions.insert(record)) return false;
         try {
             transactions.createPending(plan.ownerId(), plan.portfolioFundId(), decision.amount(), businessDate, plan.id());
-            executions.insert(record);
             return true;
         } catch (PlanTransactionGateway.AlreadyExecuted ignored) {
             return false;
@@ -65,6 +65,12 @@ public class InvestmentPlanExecutionCommandHandler {
     }
 
     private boolean createFixed(InvestmentPlan plan, Instant businessDate) {
+        var decision = POLICY.calculate(InvestmentPlanAmountStrategy.FIXED, plan.amount(),
+                SmartInvestmentAmountPolicy.Facts.empty());
+        var record = decisionRecord(plan, businessDate,
+                new PlanInvestmentFactsGateway.Facts(SmartInvestmentAmountPolicy.Facts.empty(), null, null, null),
+                decision);
+        if (!executions.insert(record)) return false;
         try {
             transactions.createPending(plan.ownerId(), plan.portfolioFundId(), plan.amount(), businessDate, plan.id());
             return true;

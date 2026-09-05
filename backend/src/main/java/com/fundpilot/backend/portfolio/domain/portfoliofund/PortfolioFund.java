@@ -1,11 +1,15 @@
 package com.fundpilot.backend.portfolio.domain.portfoliofund;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
 public final class PortfolioFund {
+    private static final int POSITION_WARNING_RATIO_SCALE = 8;
+    private static final int POSITION_WARNING_RATIO_PRECISION = 19;
+
     private final Long id;
     private final Long legacyFundId;
     private final long ownerId;
@@ -102,11 +106,17 @@ public final class PortfolioFund {
     }
 
     private static BigDecimal requireWarningRatio(BigDecimal value) {
-        Objects.requireNonNull(value, "仓位提醒比例不能为空");
+        if (value == null) {
+            throw new IllegalArgumentException("仓位提醒比例不能为空");
+        }
         if (value.signum() <= 0 || value.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException("仓位提醒比例必须大于 0 且不超过 1");
         }
-        return value;
+        BigDecimal normalized = value.setScale(POSITION_WARNING_RATIO_SCALE, RoundingMode.HALF_UP);
+        if (normalized.signum() <= 0 || normalized.precision() > POSITION_WARNING_RATIO_PRECISION) {
+            throw new IllegalArgumentException("仓位提醒比例必须大于 0 且不超过 1");
+        }
+        return normalized;
     }
 
     private static String requireReason(String value) {

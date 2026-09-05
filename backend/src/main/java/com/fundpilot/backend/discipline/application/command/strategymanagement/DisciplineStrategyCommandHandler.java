@@ -24,7 +24,7 @@ public class DisciplineStrategyCommandHandler {
 
     @Transactional
     public Result createForPortfolioFund(long ownerId, long portfolioFundId, Input input) {
-        funds.requireTracked(ownerId, portfolioFundId);
+        funds.requireTrackedForUpdate(ownerId, portfolioFundId);
         try {
             return from(strategies.save(DisciplineStrategy.create(portfolioFundId, ownerId, input.toDomain())));
         } catch (IllegalArgumentException exception) {
@@ -74,7 +74,7 @@ public class DisciplineStrategyCommandHandler {
         if (value.ownerId() != ownerId) {
             throw new BusinessException(ErrorCode.STRATEGY_NOT_FOUND, "策略不存在");
         }
-        funds.requireTracked(ownerId, value.portfolioFundId());
+        funds.requireTrackedForUpdate(ownerId, value.portfolioFundId());
         return value;
     }
 
@@ -88,7 +88,7 @@ public class DisciplineStrategyCommandHandler {
     public record Input(BigDecimal profitActivationPercent, BigDecimal stopLossPullbackPercent,
                         BigDecimal profitHarvestPercent, BigDecimal minimumHoldingPercent,
                         BigDecimal maxSingleSellPercent, Integer cooldownTradingDays, String presetFundCategory,
-                        Integer presetVersion, boolean customized) {
+                        Integer presetVersion, Boolean customized) {
         public Input(BigDecimal profitActivationPercent, BigDecimal stopLossPullbackPercent,
                      BigDecimal profitHarvestPercent, BigDecimal minimumHoldingPercent,
                      BigDecimal maxSingleSellPercent, Integer cooldownTradingDays) {
@@ -97,6 +97,9 @@ public class DisciplineStrategyCommandHandler {
         }
 
         DisciplineStrategy.Input toDomain() {
+            if (customized == null) {
+                throw new IllegalArgumentException("自定义参数标志不能为空");
+            }
             return new DisciplineStrategy.Input(profitActivationPercent, stopLossPullbackPercent,
                     profitHarvestPercent, minimumHoldingPercent, maxSingleSellPercent, cooldownTradingDays,
                     presetFundCategory, presetVersion, customized);

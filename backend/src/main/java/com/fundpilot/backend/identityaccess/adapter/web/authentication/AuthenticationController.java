@@ -1,6 +1,7 @@
 package com.fundpilot.backend.identityaccess.adapter.web.authentication;
 
 import com.fundpilot.backend.identityaccess.application.command.authentication.AuthenticationCommandHandler;
+import com.fundpilot.backend.identityaccess.application.gateway.authentication.LoginClientAddressResolver;
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.application.query.authentication.AuthenticationQueryHandler;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +28,7 @@ public class AuthenticationController {
     private final AuthenticationCommandHandler commands;
     private final AuthenticationQueryHandler queries;
     private final SessionTokenGateway sessions;
+    private final LoginClientAddressResolver clientAddresses;
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
@@ -33,7 +36,9 @@ public class AuthenticationController {
                                                    HttpServletRequest request,
                                                    HttpServletResponse response) {
         var result = commands.login(login == null ? null : login.username(),
-                login == null ? null : login.password(), request.getHeader(AuthenticationFilter.HEADER_NAME));
+                login == null ? null : login.password(), request.getHeader(AuthenticationFilter.HEADER_NAME),
+                clientAddresses.resolve(request.getRemoteAddr(),
+                        request.getHeader(LoginClientAddressResolver.FORWARDED_FOR_HEADER)));
         response.addHeader(HttpHeaders.SET_COOKIE,
                 sessionCookie(request, result.sessionToken()).build().toString());
         return IdentityApiResponse.ok(new AuthUserView(result.userId(), result.username(), result.role().name()));
@@ -45,6 +50,18 @@ public class AuthenticationController {
         RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
         var actor = queries.requireActive(identity.userId());
         return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name()));
+    }
+
+    @PutMapping("/password")
+    @Operation(summary = "修改当前用户密码")
+    public IdentityApiResponse<Boolean> changePassword(@RequestBody PasswordChangeRequest passwordChange,
+                                                       HttpServletRequest request,
+                                                       HttpServletResponse response) {
+        RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
+        boolean changed = commands.changePassword(identity.userId(), passwordChange.currentPassword(),
+                passwordChange.newPassword());
+        response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(request, "").maxAge(0).build().toString());
+        return IdentityApiResponse.ok(changed);
     }
 
     @PostMapping("/logout")
@@ -69,6 +86,9 @@ public class AuthenticationController {
     public record LoginRequest(
             @Schema(description = "用户名", example = "zhangsan") String username,
             @Schema(description = "密码", example = "P@ssw0rd123") String password) {
+    }
+
+    public record PasswordChangeRequest(String currentPassword, String newPassword) {
     }
 
     @Schema(description = "当前登录用户视图")

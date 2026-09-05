@@ -32,6 +32,12 @@ public class NavHistoryQueryHandler {
     }
 
     @Transactional(readOnly = true)
+    public List<NavResult> latestTwoByProductIdsAt(Set<Long> fundProductIds, Instant endExclusive) {
+        return navs.findLatestTwoByProductIdsAt(fundProductIds, endExclusive).stream()
+                .map(NavResult::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<NavResult> history(long fundProductId, Instant startInclusive, Instant endExclusive) {
         return navs.findByProductIdAndDateRange(fundProductId, startInclusive, endExclusive)
                 .stream().map(NavResult::from).toList();

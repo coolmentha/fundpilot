@@ -80,8 +80,9 @@ class AuthenticationIntegrationTest extends AbstractIntegrationTest {
     @Test
     void signedSessionReachesBusinessApiAndActuatorRemainsPublic() throws Exception {
         mockMvc.perform(get("/api/funds").cookie(new Cookie(AuthenticationFilter.COOKIE_NAME,
-                        sessions.issue(admin.id(), UserRole.ADMIN))))
+                        sessions.issue(admin.id(), UserRole.ADMIN, 0L))))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
     }
+
 }

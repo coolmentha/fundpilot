@@ -36,6 +36,36 @@ class PortfolioFundRepositoryImpl implements PortfolioFundRepository {
     }
 
     @Override
+    public Optional<PortfolioFund> saveTrackedIfAbsent(PortfolioFund portfolioFund) {
+        if (portfolioFund.id() != null) {
+            return Optional.of(save(portfolioFund));
+        }
+        Long legacyFundId = portfolioFund.legacyFundId();
+        boolean bridgeCreated = false;
+        if (legacyFundId == null) {
+            legacyFundId = createLegacyBridge(portfolioFund.ownerId(), portfolioFund.fundProductId());
+            bridgeCreated = true;
+        }
+        List<Long> ids = jdbcTemplate.query("""
+                INSERT INTO portfolio_fund
+                    (version, created_date, updated_date, owner_id, fund_product_id, legacy_fund_id,
+                     validity, position_warning_enabled, position_warning_ratio)
+                VALUES (0, now(), now(), ?, ?, ?, 'TRACKED', ?, ?)
+                ON CONFLICT (owner_id, fund_product_id) WHERE validity = 'TRACKED' DO NOTHING
+                RETURNING id
+                """, (rs, rowNum) -> rs.getLong("id"), portfolioFund.ownerId(),
+                portfolioFund.fundProductId(), legacyFundId, portfolioFund.positionWarningEnabled(),
+                portfolioFund.positionWarningRatio());
+        if (ids.isEmpty()) {
+            if (bridgeCreated) {
+                jdbcTemplate.update("DELETE FROM fund WHERE id = ?", legacyFundId);
+            }
+            return Optional.empty();
+        }
+        return findById(ids.getFirst());
+    }
+
+    @Override
     public Optional<PortfolioFund> findByLegacyFundId(long legacyFundId) {
         return repository.findByLegacyFundId(legacyFundId)
                 .map(PortfolioFundPersistenceMapper::toDomain);

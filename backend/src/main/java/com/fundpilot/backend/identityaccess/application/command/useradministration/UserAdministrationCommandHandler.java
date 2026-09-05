@@ -1,6 +1,7 @@
 package com.fundpilot.backend.identityaccess.application.command.useradministration;
 
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.PasswordHashGateway;
+import com.fundpilot.backend.identityaccess.application.command.authentication.PasswordPolicy;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.CurrentActor;
 import com.fundpilot.backend.identityaccess.domain.user.User;
 import com.fundpilot.backend.identityaccess.domain.user.UserRepository;
@@ -15,14 +16,16 @@ public class UserAdministrationCommandHandler {
 
     private final UserRepository users;
     private final PasswordHashGateway passwords;
+    private final PasswordPolicy passwordPolicy;
 
     @Transactional
     public UserResult create(CurrentActor actor, String username, String password, Role role) {
         requireAdmin(actor);
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
-            throw invalid("用户名和密码不能为空");
+        if (username == null || username.isBlank()) {
+            throw invalid("用户名不能为空");
         }
         String normalized = username.trim();
+        passwordPolicy.validate(normalized, password, null);
         if (users.findByUsername(normalized).isPresent()) {
             throw invalid("用户名已存在");
         }
@@ -32,14 +35,14 @@ public class UserAdministrationCommandHandler {
 
     @Transactional
     public UserResult ensureBootstrapAdmin(String username, String password) {
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
-            throw invalid("初始管理员用户名和密码不能为空");
+        if (username == null || username.isBlank()) {
+            throw invalid("初始管理员用户名不能为空");
         }
         String normalized = username.trim();
-        return users.findByUsername(normalized)
-                .map(UserResult::from)
-                .orElseGet(() -> UserResult.from(users.save(User.create(normalized,
-                        passwords.hash(password), UserRole.ADMIN))));
+        return users.findByUsername(normalized).map(UserResult::from).orElseGet(() -> {
+            passwordPolicy.validate(normalized, password, null);
+            return UserResult.from(users.save(User.create(normalized, passwords.hash(password), UserRole.ADMIN)));
+        });
     }
 
     @Transactional
@@ -71,10 +74,12 @@ public class UserAdministrationCommandHandler {
 
     private void ensureAdminRemains(User user, boolean enabled, UserRole role) {
         if (user.enabled() && user.role() == UserRole.ADMIN
-                && (!enabled || role != UserRole.ADMIN)
-                && users.countEnabledByRole(UserRole.ADMIN) <= 1) {
-            throw new UserAdministrationFailure(UserAdministrationFailure.Code.ADMIN_FORBIDDEN,
-                    "不能移除最后一个管理员");
+                && (!enabled || role != UserRole.ADMIN)) {
+            users.lockFirstEnabledByRole(UserRole.ADMIN);
+            if (users.countEnabledByRole(UserRole.ADMIN) <= 1) {
+                throw new UserAdministrationFailure(UserAdministrationFailure.Code.ADMIN_FORBIDDEN,
+                        "不能移除最后一个管理员");
+            }
         }
     }
 

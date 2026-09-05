@@ -2,6 +2,8 @@ package com.fundpilot.backend.marketdata.infrastructure.persistence.publishednav
 
 import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNav;
 import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNavRepository;
+import com.fundpilot.backend.sharedkernel.BusinessDay;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,7 +22,8 @@ class PublishedNavRepositoryImpl implements PublishedNavRepository {
 
     @Override
     public Optional<PublishedNav> findLatestByProductId(long fundProductId) {
-        return repository.findFirstByFundProductIdOrderByNavDateDesc(fundProductId)
+        return repository.findFirstByFundProductIdAndNavIsNotNullAndNavGreaterThanOrderByNavDateDesc(
+                        fundProductId, BigDecimal.ZERO)
                 .map(PublishedNavPersistenceMapper::toDomain);
     }
 
@@ -34,6 +37,15 @@ class PublishedNavRepositoryImpl implements PublishedNavRepository {
     public List<PublishedNav> findLatestTwoByProductIds(Set<Long> fundProductIds) {
         return fundProductIds.isEmpty() ? List.of() : repository.findLatestTwoByFundProductIds(fundProductIds)
                 .stream().map(PublishedNavPersistenceMapper::toDomain).toList();
+    }
+
+    @Override
+    public List<PublishedNav> findLatestTwoByProductIdsAt(Set<Long> fundProductIds, Instant businessDate) {
+        return fundProductIds.isEmpty() ? List.of()
+                : repository.findLatestTwoByFundProductIdsAt(fundProductIds,
+                        BusinessDay.toDateLabel(businessDate).plus(1, java.time.temporal.ChronoUnit.DAYS),
+                        BusinessDay.endExclusive(businessDate))
+                        .stream().map(PublishedNavPersistenceMapper::toDomain).toList();
     }
 
     @Override

@@ -25,6 +25,12 @@ public final class BusinessDay {
                 .toInstant();
     }
 
+    /** 日期标签所代表的北京时间自然日结束时刻（不含）。 */
+    public static Instant endExclusive(Instant dateLabel) {
+        return toDateLabel(dateLabel).atZone(ZoneOffset.UTC).toLocalDate().plusDays(1)
+                .atStartOfDay(ZONE).toInstant();
+    }
+
     /** 两个时刻之间相差的北京时间自然日天数。 */
     public static long daysBetween(Instant fromInclusive, Instant toInclusive) {
         return ChronoUnit.DAYS.between(toDateLabel(fromInclusive), toDateLabel(toInclusive));

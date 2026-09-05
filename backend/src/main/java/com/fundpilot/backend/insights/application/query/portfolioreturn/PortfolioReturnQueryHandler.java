@@ -25,20 +25,35 @@ public class PortfolioReturnQueryHandler {
 
     @Transactional(readOnly = true)
     public PortfolioReturnResult findByOwner(long ownerId) {
+        return findByOwner(ownerId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PortfolioReturnResult findByOwnerAt(long ownerId, Instant businessDate) {
+        return findByOwner(ownerId, Objects.requireNonNull(businessDate));
+    }
+
+    private PortfolioReturnResult findByOwner(long ownerId, Instant businessDate) {
+        Instant endExclusive = businessDate == null ? null : businessDate.plus(java.time.Duration.ofDays(1));
         List<ReturnCompositionGateway.PortfolioFund> funds = facts.findPortfolioFunds(ownerId).stream()
                 .filter(ReturnCompositionGateway.PortfolioFund::tracked).toList();
-        Map<Long, ReturnCompositionGateway.Position> positions = facts.findPositions(ownerId).stream()
+        Map<Long, ReturnCompositionGateway.Position> positions = (businessDate == null
+                ? facts.findPositions(ownerId) : facts.findPositionsAt(ownerId, endExclusive)).stream()
                 .collect(Collectors.toMap(ReturnCompositionGateway.Position::portfolioFundId, Function.identity()));
-        Map<Long, ReturnCompositionGateway.ReturnFact> returns = facts.findReturnFacts(ownerId).stream()
+        Map<Long, ReturnCompositionGateway.ReturnFact> returns = (businessDate == null
+                ? facts.findReturnFacts(ownerId) : facts.findReturnFactsAt(ownerId, endExclusive)).stream()
                 .collect(Collectors.toMap(ReturnCompositionGateway.ReturnFact::portfolioFundId, Function.identity()));
         Map<Long, ReturnCompositionGateway.Product> products = facts.findProducts(funds.stream()
                         .map(ReturnCompositionGateway.PortfolioFund::fundProductId).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(ReturnCompositionGateway.Product::id, Function.identity()));
-        Map<Long, List<ReturnCompositionGateway.Nav>> navs = facts.findLatestTwoNavs(products.keySet()).stream()
+        Map<Long, List<ReturnCompositionGateway.Nav>> navs = (businessDate == null
+                ? facts.findLatestTwoNavs(products.keySet())
+                : facts.findLatestTwoNavsAt(products.keySet(), businessDate)).stream()
                 .collect(Collectors.groupingBy(ReturnCompositionGateway.Nav::fundProductId));
-        Map<String, ReturnCompositionGateway.RealtimeValuation> valuations = facts.findRealtimeValuations(
-                        products.values().stream().map(ReturnCompositionGateway.Product::fundCode)
-                                .collect(Collectors.toSet())).stream()
+        Map<String, ReturnCompositionGateway.RealtimeValuation> valuations = (businessDate == null
+                ? facts.findRealtimeValuations(products.values().stream().map(
+                        ReturnCompositionGateway.Product::fundCode).collect(Collectors.toSet()))
+                : List.<ReturnCompositionGateway.RealtimeValuation>of()).stream()
                 .collect(Collectors.toMap(ReturnCompositionGateway.RealtimeValuation::fundCode, Function.identity()));
         Map<Long, List<FundGroup>> groups = facts.findGroupMemberships(ownerId).stream()
                 .collect(Collectors.groupingBy(ReturnCompositionGateway.GroupMembership::portfolioFundId,
@@ -53,7 +68,8 @@ public class PortfolioReturnQueryHandler {
                 navs.getOrDefault(fund.fundProductId(), List.of()),
                 valuations.get(products.get(fund.fundProductId()) == null ? null
                         : products.get(fund.fundProductId()).fundCode()),
-                groups.getOrDefault(fund.id(), List.of()), classifications.get(fund.id()), clock.instant())).toList();
+                groups.getOrDefault(fund.id(), List.of()), classifications.get(fund.id()),
+                businessDate == null ? clock.instant() : businessDate)).toList();
         BigDecimal invested = rows.stream().map(FundReturnResult::externalInvestedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal redeemed = rows.stream().map(FundReturnResult::externalRedeemedAmount)

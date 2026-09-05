@@ -1,5 +1,6 @@
 package com.fundpilot.backend.discipline.domain.strategy;
 
+import com.fundpilot.backend.discipline.domain.classification.DisciplineCategory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
@@ -46,6 +47,8 @@ public final class DisciplineStrategy {
         this.cooldownStartedAt = cooldownStartedAt;
     }
     public static DisciplineStrategy create(long portfolioFundId, long ownerId, Input input) {
+        validateRequestActivation(input.activation());
+        validatePreset(input.presetCategory(), input.presetVersion());
         return new DisciplineStrategy(null, portfolioFundId, ownerId, StrategyParamStatus.PENDING_CALIBRATION,
                 input.activation(), input.pullback(), input.harvest(), input.minimumHolding(), input.maxSingleSell(),
                 input.cooldownDays(), input.presetCategory(), input.presetVersion(), input.customized(),
@@ -67,12 +70,15 @@ public final class DisciplineStrategy {
     }
     public void update(Input input) {
         if (status == StrategyParamStatus.EFFECTIVE) throw new IllegalStateException("请先停用策略再编辑");
+        validateRequestActivation(input.activation());
+        validatePreset(input.presetCategory(), input.presetVersion());
         apply(input.activation(), input.pullback(), input.harvest(), input.minimumHolding(), input.maxSingleSell(), input.cooldownDays());
         presetCategory = input.presetCategory();
         presetVersion = input.presetVersion();
         customized = input.customized();
     }
     public void activate() {
+        if (status == StrategyParamStatus.EFFECTIVE) return;
         status = StrategyParamStatus.EFFECTIVE;
         positionOpened();
     }
@@ -177,6 +183,21 @@ public final class DisciplineStrategy {
         if (cooldownDays == null || cooldownDays < 0 || cooldownDays > 250) throw new IllegalArgumentException("冷静期交易日必须在 0 到 250 之间");
         this.activation = activation; this.pullback = pullback; this.harvest = harvest;
         this.minimumHolding = minimumHolding; this.maxSingleSell = maxSingleSell; this.cooldownDays = cooldownDays;
+    }
+    private static void validateRequestActivation(BigDecimal activation) {
+        ratio("止盈启动收益率", activation, false, false);
+    }
+    private static void validatePreset(String category, Integer version) {
+        if (category != null) {
+            try {
+                DisciplineCategory.valueOf(category);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException("预设基金类别不存在");
+            }
+        }
+        if (version != null && version != 1) {
+            throw new IllegalArgumentException("预设策略版本不存在");
+        }
     }
     private static void ratio(String label, BigDecimal value, boolean zero, boolean one) {
         if (value == null || (zero ? value.signum() < 0 : value.signum() <= 0)

@@ -8,6 +8,7 @@ import com.fundpilot.backend.identityaccess.domain.user.UserRepository;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.ActorRole;
 import java.util.Optional;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +42,10 @@ public class AuthenticationQueryHandler {
     }
 
     private Optional<AuthenticatedActor> activeUser(SessionTokenGateway.SessionIdentity identity) {
-        return users.findById(identity.userId()).filter(User::enabled).map(this::actor);
+        return users.findById(identity.userId())
+                .filter(User::enabled)
+                .filter(user -> Objects.equals(user.version(), identity.userVersion()))
+                .map(this::actor);
     }
 
     private AuthenticatedActor actor(User user) {

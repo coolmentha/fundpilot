@@ -36,6 +36,11 @@ public class PublishedNavApi {
         return queries.latestTwoByProductIds(fundProductIds).stream().map(PublishedNavApi::from).toList();
     }
 
+    public List<PublishedNav> latestTwoByProductIdsAt(Set<Long> fundProductIds, Instant endExclusive) {
+        return queries.latestTwoByProductIdsAt(fundProductIds, endExclusive).stream()
+                .map(PublishedNavApi::from).toList();
+    }
+
     public List<PublishedNav> history(long fundProductId, Instant startInclusive, Instant endExclusive) {
         return queries.history(fundProductId, startInclusive, endExclusive).stream()
                 .map(PublishedNavApi::from).toList();

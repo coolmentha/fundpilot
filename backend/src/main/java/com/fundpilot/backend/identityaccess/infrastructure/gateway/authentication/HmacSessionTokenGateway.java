@@ -33,14 +33,14 @@ public class HmacSessionTokenGateway implements SessionTokenGateway {
     }
 
     @Override
-    public String issue(long userId, UserRole role) {
+    public String issue(long userId, UserRole role, long userVersion) {
         if (userId <= 0) {
             throw new IllegalArgumentException("会话必须关联真实用户");
         }
         long expiresAt = clock.instant().plus(MAX_AGE).getEpochSecond();
         byte[] nonce = new byte[18];
         RANDOM.nextBytes(nonce);
-        String payload = expiresAt + "." + userId + "." + role.name() + "."
+        String payload = expiresAt + "." + userId + "." + role.name() + "." + userVersion + "."
                 + Base64.getUrlEncoder().withoutPadding().encodeToString(nonce);
         return payload + "." + sign(payload);
     }
@@ -50,8 +50,8 @@ public class HmacSessionTokenGateway implements SessionTokenGateway {
         if (token == null || token.isBlank() || signingSecret() == null) {
             return Optional.empty();
         }
-        String[] parts = token.split("\\.", 5);
-        if (parts.length != 5) {
+        String[] parts = token.split("\\.", 6);
+        if (parts.length != 6) {
             return Optional.empty();
         }
         try {
@@ -59,16 +59,16 @@ public class HmacSessionTokenGateway implements SessionTokenGateway {
             if (expiresAt <= clock.instant().getEpochSecond()) {
                 return Optional.empty();
             }
-            String payload = String.join(".", parts[0], parts[1], parts[2], parts[3]);
+            String payload = String.join(".", parts[0], parts[1], parts[2], parts[3], parts[4]);
             if (!MessageDigest.isEqual(sign(payload).getBytes(StandardCharsets.US_ASCII),
-                    parts[4].getBytes(StandardCharsets.US_ASCII))) {
+                    parts[5].getBytes(StandardCharsets.US_ASCII))) {
                 return Optional.empty();
             }
             long userId = Long.parseLong(parts[1]);
             if (userId <= 0) {
                 return Optional.empty();
             }
-            return Optional.of(new SessionIdentity(userId, UserRole.valueOf(parts[2])));
+            return Optional.of(new SessionIdentity(userId, UserRole.valueOf(parts[2]), Long.parseLong(parts[3])));
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }

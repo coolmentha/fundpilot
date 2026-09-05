@@ -1,9 +1,12 @@
 package com.fundpilot.backend.accounting.application.query.transactionhistory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
+import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
 import com.fundpilot.backend.accounting.application.gateway.transactionconfirmation.SettlementFeeGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionconfirmation.SettlementNavGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradedPortfolioFundGateway;
@@ -73,6 +76,17 @@ class TransactionQueryHandlerTest {
         when(transactions.findByStatusOrderByTradeDateDesc(TransactionStatus.PENDING)).thenReturn(List.of(transaction));
 
         assertThat(handler().findPendingByOwner(7L)).isEmpty();
+    }
+
+    @Test
+    void 查询不存在或非当前用户组合基金的交易不能静默返回空列表() {
+        when(portfolioFunds.findOwned(7L, 41L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> handler().findByPortfolioFund(7L, 41L))
+                .isInstanceOf(TransactionLedgerFailure.class)
+                .extracting(error -> ((TransactionLedgerFailure) error).code())
+                .isEqualTo(TransactionLedgerFailure.Code.PORTFOLIO_FUND_NOT_FOUND);
+        org.mockito.Mockito.verify(transactions, never()).findByPortfolioFundOrderByTradeDateDesc(41L);
     }
 
     @Test

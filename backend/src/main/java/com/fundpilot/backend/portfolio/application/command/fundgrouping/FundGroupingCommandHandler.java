@@ -52,11 +52,12 @@ public class FundGroupingCommandHandler {
     }
 
     @Transactional
-    public void assignByNames(long ownerId, long portfolioFundId, List<String> requestedNames) {
+    public List<GroupResult> assignByNames(long ownerId, long portfolioFundId, List<String> requestedNames) {
         if (requestedNames == null) {
-            return;
+            throw new FundGroupingFailure(FundGroupingFailure.Code.FUND_GROUP_NAME_INVALID,
+                    "分组列表不能为空");
         }
-        var portfolioFund = portfolioFunds.findById(portfolioFundId)
+        var portfolioFund = portfolioFunds.findByIdForUpdate(portfolioFundId)
                 .filter(item -> item.ownerId() == ownerId
                         && item.validity() == PortfolioFundValidity.TRACKED)
                 .orElseThrow(() -> new FundGroupingFailure(
@@ -69,6 +70,10 @@ public class FundGroupingCommandHandler {
                     "分组名称不能重复");
         }
         groups.assignByNames(ownerId, portfolioFundId, portfolioFund.legacyFundId(), names);
+        return groups.memberships(ownerId).stream()
+                .filter(item -> item.portfolioFundId() == portfolioFundId)
+                .map(item -> new GroupResult(item.groupId(), item.groupName(), item.sortOrder()))
+                .toList();
     }
 
     private String normalizeName(String name) {

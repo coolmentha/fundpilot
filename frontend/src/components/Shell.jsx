@@ -28,6 +28,7 @@ const PAGE_META = {
     '/dashboard': {title: '策略概览', subtitle: '账户全局与今日待办(旧)'},
     '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
     '/dca': {title: '定投管理', subtitle: '计划配置与本月剩余预计'},
+    '/returns': {title: '累计收益', subtitle: '已实现、未实现与历史趋势'},
     '/advice': {title: '纪律建议', subtitle: '查看今日与历史建议'},
     '/confirm': {title: '操作确认', subtitle: '处理所有待确认交易'},
     '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
@@ -48,6 +49,7 @@ const NAV_GROUPS = [
             {key: '/confirm', icon: <ThunderboltOutlined/>, label: '操作确认', badge: true},
             {key: '/funds', icon: <FundOutlined/>, label: '我的基金'},
             {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
+            {key: '/returns', icon: <LineChartOutlined/>, label: '累计收益'},
         ],
     },
     {
@@ -69,6 +71,7 @@ const BOTTOM_NAV = [
 ];
 const BOTTOM_MORE = [
     {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
+    {key: '/returns', icon: <LineChartOutlined/>, label: '累计收益'},
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
     {key: '/help', icon: <QuestionCircleOutlined/>, label: '使用帮助'},

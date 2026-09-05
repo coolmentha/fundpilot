@@ -11,6 +11,8 @@ public interface PortfolioFundRepository {
 
     Optional<PortfolioFund> findTrackedByOwnerIdAndFundProductId(long ownerId, long fundProductId);
 
+    Optional<PortfolioFund> saveTrackedIfAbsent(PortfolioFund portfolioFund);
+
     Optional<PortfolioFund> findByLegacyFundId(long legacyFundId);
 
     List<PortfolioFund> findByOwnerId(long ownerId);

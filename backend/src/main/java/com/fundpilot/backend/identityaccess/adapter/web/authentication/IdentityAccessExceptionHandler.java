@@ -4,6 +4,7 @@ import com.fundpilot.backend.identityaccess.application.command.authentication.A
 import com.fundpilot.backend.identityaccess.application.command.useradministration.UserAdministrationFailure;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -18,9 +19,15 @@ class IdentityAccessExceptionHandler {
             case ADMIN_UNAUTHORIZED -> 401;
             case ADMIN_FORBIDDEN -> 403;
             case ADMIN_AUTH_NOT_CONFIGURED -> 503;
+            case AUTH_RATE_LIMITED -> 429;
+            case PASSWORD_POLICY_VIOLATION -> 400;
+            case CURRENT_PASSWORD_INVALID -> 401;
         };
-        return ResponseEntity.status(status)
-                .body(IdentityApiResponse.error(failure.code().name(), failure.getMessage()));
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
+        if (failure.code() == AuthenticationFailure.Code.AUTH_RATE_LIMITED) {
+            response.header(HttpHeaders.RETRY_AFTER, Long.toString(failure.retryAfterSeconds()));
+        }
+        return response.body(IdentityApiResponse.error(failure.code().name(), failure.getMessage()));
     }
 
     @ExceptionHandler(UserAdministrationFailure.class)

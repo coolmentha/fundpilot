@@ -1,6 +1,6 @@
 import {Skeleton} from 'antd';
 import {BarChartOutlined, PercentageOutlined, RiseOutlined, WalletOutlined} from '@ant-design/icons';
-import {useMarketBreadth, usePortfolioSummary} from '../api/hooks.js';
+import {useFunds, useMarketBreadth, usePortfolioSummary} from '../api/hooks.js';
 import {money, pnlColor, signedMoney, signedPercent} from '../constants.js';
 import QueryErrorState from './QueryErrorState.jsx';
 
@@ -9,6 +9,7 @@ import QueryErrorState from './QueryErrorState.jsx';
  */
 export default function PortfolioOverview() {
     const {data: summary, isLoading, isError, refetch} = usePortfolioSummary();
+    const {data: funds} = useFunds();
     const {data: breadth, isError: isBreadthError} = useMarketBreadth();
 
     if (isLoading && !summary) {
@@ -36,6 +37,10 @@ export default function PortfolioOverview() {
     const holdingFundCount = summary?.holdingFundCount ?? 0;
     const coveredFundCount = summary?.dailyCoveredFundCount ?? 0;
     const missingEstimateCount = Math.max(holdingFundCount - coveredFundCount, estimateFetchFailedCount);
+    const missingFundLabels = (funds || []).filter((fund) => fund.positionStatus === 'OPEN'
+            && (fund.dailyPnl == null || fund.unrealizedPnl == null))
+        .map((fund) => fund.fundCode || fund.fundName);
+    const missingCoverageCount = Math.max(missingEstimateCount, missingFundLabels.length);
     const risingStockCount = breadth?.risingCount;
     const flatStockCount = breadth?.flatCount;
     const fallingStockCount = breadth?.fallingCount;
@@ -60,10 +65,11 @@ export default function PortfolioOverview() {
 
     return (
         <>
-            {missingEstimateCount > 0 && (
+            {missingCoverageCount > 0 && (
                 <div className="valuation-notice" role="status">
-                    <strong>{missingEstimateCount} 只基金暂无当日估值</strong>
-                    <span>今日收益与涨跌幅按其余 {coveredFundCount} 只计算；总持仓使用最近确认净值。</span>
+                    <strong>{missingCoverageCount} 只基金收益未完全覆盖</strong>
+                    <span>今日涨跌已覆盖 {coveredFundCount} / {holdingFundCount} 只
+                        {missingFundLabels.length > 0 && `；未覆盖：${missingFundLabels.join('、')}`}。</span>
                 </div>
             )}
         <div className="portfolio-overview-grid" role="list" aria-label="组合收益与市场宽度总览">
@@ -81,7 +87,7 @@ export default function PortfolioOverview() {
                     <span>今日收益</span>
                 </div>
                 <div className="overview-value" style={{color: pnlColor(dailyPnlTotal)}}>{signedMoney(dailyPnlTotal)}</div>
-                <div className="overview-hint muted">已覆盖 {coveredFundCount} / {holdingFundCount} 只</div>
+                <div className="overview-hint muted">上涨 {summary?.risingFundCount ?? 0} · 下跌 {summary?.fallingFundCount ?? 0} · 已覆盖 {coveredFundCount} / {holdingFundCount} 只</div>
             </div>
             <div className="portfolio-overview-card down" role="listitem">
                 <div className="overview-label">
@@ -98,7 +104,7 @@ export default function PortfolioOverview() {
                 <div className="overview-value" style={{color: pnlColor(summary?.totalPnlTotal)}}>
                     {signedMoney(summary?.totalPnlTotal)}
                 </div>
-                <div className="overview-hint muted">按全部可计算持仓</div>
+                <div className="overview-hint muted">盈利 {summary?.profitableFundCount ?? 0} · 亏损 {summary?.losingFundCount ?? 0}</div>
             </div>
             <div className="portfolio-overview-card breadth" role="listitem">
                 <div className="overview-label">

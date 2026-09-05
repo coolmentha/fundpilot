@@ -80,4 +80,12 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.message").exists());
     }
+
+    @Test
+    void missingRouteReturns404InsteadOfInternalError() throws Exception {
+        mockMvc.perform(get("/test/errors/missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
 }

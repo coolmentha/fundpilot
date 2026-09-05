@@ -4,6 +4,7 @@ import com.fundpilot.backend.accounting.application.command.fundonboarding.Portf
 import com.fundpilot.backend.accounting.application.command.fundonboarding.PortfolioFundOnboardingFailure;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +18,7 @@ public class PortfolioFundOnboardingApi {
         try {
             var result = commands.onboard(request.legacyFundId(), request.ownerId(), request.fundProductId(),
                     request.positionWarningEnabled(), request.positionWarningRatio(),
-                    request.initialHoldingShares(), request.costPerShare(), request.openedAt());
+                    request.initialHoldingShares(), request.costPerShare(), request.openedAt(), request.groupNames());
             return new OnboardingResult(result.portfolioFundId(), result.initialTransactionId());
         } catch (PortfolioFundOnboardingFailure failure) {
             throw new Failure(Code.valueOf(failure.code().name()), failure.getMessage());
@@ -27,7 +28,14 @@ public class PortfolioFundOnboardingApi {
     public record OnboardPortfolioFund(Long legacyFundId, long ownerId, long fundProductId,
                                        boolean positionWarningEnabled, BigDecimal positionWarningRatio,
                                        BigDecimal initialHoldingShares, BigDecimal costPerShare,
-                                       Instant openedAt) {
+                                       Instant openedAt, List<String> groupNames) {
+        public OnboardPortfolioFund(Long legacyFundId, long ownerId, long fundProductId,
+                                    boolean positionWarningEnabled, BigDecimal positionWarningRatio,
+                                    BigDecimal initialHoldingShares, BigDecimal costPerShare,
+                                    Instant openedAt) {
+            this(legacyFundId, ownerId, fundProductId, positionWarningEnabled, positionWarningRatio,
+                    initialHoldingShares, costPerShare, openedAt, List.of());
+        }
     }
 
     public record OnboardingResult(long portfolioFundId, Long initialTransactionId) {
@@ -53,6 +61,10 @@ public class PortfolioFundOnboardingApi {
         INITIAL_HOLDING_SHARES_INVALID,
         COST_PER_SHARE_INVALID,
         OPENED_AT_IN_FUTURE,
-        NAV_UNAVAILABLE
+        NAV_UNAVAILABLE,
+        FUND_GROUP_NAME_INVALID,
+        FUND_GROUP_NAME_DUPLICATE,
+        FUND_GROUP_NOT_FOUND,
+        PORTFOLIO_FUND_NOT_FOUND
     }
 }

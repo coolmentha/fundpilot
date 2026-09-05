@@ -11,35 +11,41 @@ export default function PortfolioReturns() {
     const [period, setPeriod] = useState('30D');
     const [customRange, setCustomRange] = useState([null, null]);
     const {data, isLoading, isError, refetch} = usePortfolioReturns();
-    const {data: trend} = usePortfolioReturnTrends(period, customRange[0], customRange[1]);
+    const {data: trend, isLoading: trendLoading, isError: trendError,
+        refetch: refetchTrend} = usePortfolioReturnTrends(period, customRange[0], customRange[1]);
     if (isLoading && !data) return <Skeleton active paragraph={{rows: 3}}/>;
     if (isError) return <QueryErrorState onRetry={refetch} description="累计收益加载失败"/>;
 
     const columns = [
         {title: '基金', dataIndex: 'fundName', ellipsis: true,
-            render: (value, row) => <Link to={`/funds/${row.fundId}`}>{value}</Link>},
+            render: (value, row) => <Link to={`/funds/${row.id}`}>{value}</Link>},
         {title: '投入', dataIndex: 'investedAmount', align: 'right', render: money},
         {title: '赎回净额', dataIndex: 'redeemedAmount', align: 'right', render: money},
         {title: '手续费', dataIndex: 'feeAmount', align: 'right', render: money},
         {title: '已实现盈亏', dataIndex: 'realizedPnl', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
-        {title: '浮动盈亏', dataIndex: 'unrealizedPnl', align: 'right',
+        {title: '未实现盈亏', dataIndex: 'unrealizedPnl', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
         {title: '累计收益', dataIndex: 'totalReturn', align: 'right',
             render: (value) => <span style={{color: pnlColor(value)}}>{signedMoney(value)}</span>},
         {title: '收益率', dataIndex: 'returnRate', align: 'right', render: percent},
     ];
+    const missingCurrentFunds = (data?.funds || [])
+        .filter((fund) => fund.open && fund.unrealizedPnl == null);
 
     return (
         <div>
             {!data?.realizedComplete && <Alert type="warning" showIcon style={{marginBottom: 16}}
                 message="部分历史卖出缺少完整 FIFO 成本，已实现盈亏暂不可用"/>}
+            {missingCurrentFunds.length > 0 && <Alert type="warning" showIcon style={{marginBottom: 16}}
+                message={`${missingCurrentFunds.length} 只基金当前净值未覆盖：${missingCurrentFunds
+                    .map((fund) => fund.fundCode || fund.fundName).join('、')}`}/>}
             <Row gutter={[16, 16]} style={{marginBottom: 16}}>
                 <Col xs={12} md={6}><Statistic title="累计总收益" value={data?.totalReturn}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.totalReturn)}}/></Col>
                 <Col xs={12} md={6}><Statistic title="已实现盈亏" value={data?.realizedPnl}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.realizedPnl)}}/></Col>
-                <Col xs={12} md={6}><Statistic title="浮动盈亏" value={data?.unrealizedPnl}
+                <Col xs={12} md={6}><Statistic title="未实现盈亏" value={data?.unrealizedPnl}
                     formatter={(value) => signedMoney(value)} valueStyle={{color: pnlColor(data?.unrealizedPnl)}}/></Col>
                 <Col xs={12} md={6}><Statistic title="累计收益率" value={data?.returnRate}
                     formatter={(value) => percent(value)} valueStyle={{color: pnlColor(data?.returnRate)}}/></Col>
@@ -55,9 +61,11 @@ export default function PortfolioReturns() {
                     setCustomRange(values.map((value) => `${value.format('YYYY-MM-DD')}T00:00:00Z`));
                 }}/>
             </div>
-            {!trend?.valuationComplete && <Alert type="warning" showIcon style={{marginTop: 12}}
+            {!trendLoading && !trendError && trend && !trend.valuationComplete && <Alert type="warning" showIcon style={{marginTop: 12}}
                 message={`${trend?.missingFundCodes?.length || 0} 只基金净值未覆盖本区间，曲线按可用净值计算`}/>}
-            {trend?.points?.length ? <>
+            {trendLoading && !trend ? <div aria-label="历史趋势加载中"><Skeleton active paragraph={{rows: 2}}/></div>
+                : trendError ? <QueryErrorState onRetry={refetchTrend} description="历史趋势加载失败"/>
+                : trend?.points?.length ? <>
                 {!trend.dataSufficient && <Alert type="info" showIcon style={{marginTop: 12}}
                     message={`历史数据从 ${date(trend.dataStartDate)} 开始，当前区间暂无完整基线`}/>}
                 <Row gutter={[16, 12]} className="portfolio-trend-stats">
@@ -72,7 +80,7 @@ export default function PortfolioReturns() {
                 </Row>
                 <ReturnTrendChart points={trend.points}/>
             </> : <div className="portfolio-trend-empty">趋势数据将在首个净值确认快照后显示</div>}
-            <Table rowKey="fundId" size="small" style={{marginTop: 16}} dataSource={data?.funds || []}
+            <Table rowKey="portfolioFundId" size="small" style={{marginTop: 16}} dataSource={data?.funds || []}
                    columns={columns} pagination={false} scroll={{x: 980}}/>
         </div>
     );

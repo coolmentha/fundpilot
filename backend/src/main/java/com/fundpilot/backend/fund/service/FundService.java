@@ -140,12 +140,10 @@ public class FundService {
             onboarding = onboardingApi.onboard(new PortfolioFundOnboardingApi.OnboardPortfolioFund(
                     saved.getId(), userId, Objects.requireNonNull(saved.getProductId()),
                     saved.isPositionWarningEnabled(), saved.getPositionWarningRatio(), initialHoldingShares,
-                    request.costPerShare(), request.openedAt()));
+                    request.costPerShare(), request.openedAt(), request.groupNames()));
         } catch (PortfolioFundOnboardingApi.Failure failure) {
             throw onboardingFailure(failure);
         }
-        portfolioGroupingApi.assignByNames(new PortfolioGroupingApi.AssignByNames(
-                userId, onboarding.portfolioFundId(), request.groupNames()));
         disciplineClassifications.set(new DisciplineClassificationApi.SetClassification(
                 userId, onboarding.portfolioFundId(),
                 DisciplineClassificationApi.Category.valueOf(saved.getFundCategory().name()),
@@ -271,6 +269,10 @@ public class FundService {
             case COST_PER_SHARE_INVALID -> ErrorCode.COST_PER_SHARE_INVALID;
             case OPENED_AT_IN_FUTURE -> ErrorCode.OPENED_AT_IN_FUTURE;
             case NAV_UNAVAILABLE -> ErrorCode.NAV_HISTORY_EMPTY;
+            case FUND_GROUP_NAME_INVALID -> ErrorCode.FUND_GROUP_NAME_INVALID;
+            case FUND_GROUP_NAME_DUPLICATE -> ErrorCode.FUND_GROUP_NAME_DUPLICATE;
+            case FUND_GROUP_NOT_FOUND -> ErrorCode.FUND_GROUP_NOT_FOUND;
+            case PORTFOLIO_FUND_NOT_FOUND -> ErrorCode.FUND_NOT_FOUND;
             case PRODUCT_NOT_FOUND, PORTFOLIO_FUND_ALREADY_TRACKED, POSITION_WARNING_INVALID ->
                     ErrorCode.FUND_NOT_FOUND;
         };

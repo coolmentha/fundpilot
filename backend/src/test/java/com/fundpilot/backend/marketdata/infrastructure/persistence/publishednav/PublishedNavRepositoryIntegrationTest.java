@@ -63,6 +63,36 @@ class PublishedNavRepositoryIntegrationTest extends AbstractIntegrationTest {
                         org.assertj.core.groups.Tuple.tuple(secondProductId, BASE_TIME.plus(5, ChronoUnit.DAYS)));
     }
 
+    @Test
+    void latestTwoAtExcludesFutureNavDatesAndFactsDiscoveredLater() {
+        long productId = createProduct("historical");
+        navs.saveAll(List.of(
+                nav(productId, "historical", 1),
+                nav(productId, "historical", 2, BASE_TIME.plus(4, ChronoUnit.DAYS)),
+                nav(productId, "historical", 3)));
+
+        assertThat(navs.findLatestTwoByProductIdsAt(Set.of(productId),
+                BASE_TIME.plus(2, ChronoUnit.DAYS)))
+                .extracting(PublishedNav::navDate)
+                .containsExactly(BASE_TIME.plus(1, ChronoUnit.DAYS));
+    }
+
+    @Test
+    void latestTwoAtUsesBeijingBusinessDayEndForFirstSeenFacts() {
+        long includedProductId = createProduct("seen-before-end");
+        long excludedProductId = createProduct("seen-at-end");
+        navs.saveAll(List.of(
+                PublishedNav.publish(null, includedProductId, "included", BASE_TIME,
+                        BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-30T15:59:59Z")),
+                PublishedNav.publish(null, excludedProductId, "excluded", BASE_TIME,
+                        BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-30T16:00:00Z"))));
+
+        assertThat(navs.findLatestTwoByProductIdsAt(
+                Set.of(includedProductId, excludedProductId), BASE_TIME))
+                .extracting(PublishedNav::fundProductId)
+                .containsExactly(includedProductId);
+    }
+
     private long createProduct(String prefix) {
         String suffix = Long.toUnsignedString(System.nanoTime(), 36);
         return products.ensure(new FundProductApi.EnsureProduct(
@@ -73,5 +103,10 @@ class PublishedNavRepositoryIntegrationTest extends AbstractIntegrationTest {
     private static PublishedNav nav(long productId, String code, int daysAfterBase) {
         Instant navDate = BASE_TIME.plus(daysAfterBase, ChronoUnit.DAYS);
         return PublishedNav.publish(null, productId, code, navDate, BigDecimal.ONE, BigDecimal.ONE, navDate);
+    }
+
+    private static PublishedNav nav(long productId, String code, int daysAfterBase, Instant firstSeenAt) {
+        Instant navDate = BASE_TIME.plus(daysAfterBase, ChronoUnit.DAYS);
+        return PublishedNav.publish(null, productId, code, navDate, BigDecimal.ONE, BigDecimal.ONE, firstSeenAt);
     }
 }

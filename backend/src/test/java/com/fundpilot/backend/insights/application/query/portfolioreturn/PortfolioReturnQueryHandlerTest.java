@@ -2,7 +2,10 @@ package com.fundpilot.backend.insights.application.query.portfolioreturn;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.fundpilot.backend.insights.application.gateway.portfolioreturn.ReturnCompositionGateway;
 import java.math.BigDecimal;
@@ -211,6 +214,36 @@ class PortfolioReturnQueryHandlerTest {
         assertThat(fund.holdingAmount()).isEqualByComparingTo("120");
         assertThat(fund.estimateFetchFailed()).isFalse();
         assertThat(fund.valuationSource()).isEqualTo("LATEST_CONFIRMED_NAV");
+    }
+
+    @Test
+    void historicalQueryUsesOnlyAsOfFactsAndNeverRealtimeValuation() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        Instant businessDate = Instant.parse("2026-07-29T00:00:00Z");
+        Instant endExclusive = Instant.parse("2026-07-30T00:00:00Z");
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true,
+                        new BigDecimal("0.3"))));
+        when(facts.findPositionsAt(7L, endExclusive)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100"))));
+        when(facts.findReturnFactsAt(7L, endExclusive)).thenReturn(List.of());
+        when(facts.findProducts(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "QDII 基金", "ACTIVE", "QDII", null,
+                        "ACTIVE")));
+        when(facts.findLatestTwoNavsAt(Set.of(31L), businessDate)).thenReturn(List.of(
+                new ReturnCompositionGateway.Nav(31L, businessDate, new BigDecimal("1.2"),
+                        new BigDecimal("1.2"), Instant.parse("2026-07-29T08:00:00Z")),
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-28T00:00:00Z"),
+                        BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-28T08:00:00Z"))));
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
+
+        var fund = handler(facts).findByOwnerAt(7L, businessDate).funds().getFirst();
+
+        assertThat(fund.dailyChangePct()).isEqualByComparingTo("0.2");
+        assertThat(fund.holdingAmount()).isEqualByComparingTo("120");
+        verify(facts, never()).findRealtimeValuations(any());
     }
 
     private static ReturnCompositionGateway openFundFacts(String investmentTarget, Instant firstSeenAt) {

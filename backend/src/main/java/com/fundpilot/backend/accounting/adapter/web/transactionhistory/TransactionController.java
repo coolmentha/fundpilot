@@ -28,26 +28,6 @@ public class TransactionController {
     private final TransactionConfirmationCommandHandler confirmationCommands;
     private final TransactionQueryHandler queries;
 
-    @GetMapping("/api/funds/{legacyFundId}/transactions")
-    @Operation(summary = "查询基金交易流水")
-    public Response<List<TransactionView>> list(
-            @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-            @PathVariable long legacyFundId) {
-        return Response.ok(queries.findByLegacyFund(ownerId, legacyFundId).stream()
-                .map(TransactionView::from).toList());
-    }
-
-    @PostMapping("/api/funds/{legacyFundId}/transactions")
-    @Operation(summary = "登记基金手动交易")
-    public Response<TransactionView> record(
-            @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-            @PathVariable long legacyFundId,
-            @RequestBody ManualTransactionRequest request) {
-        var result = ledgerCommands.recordManualForLegacyFund(ownerId, legacyFundId, request.source(),
-                request.amount(), request.shares(), request.tradeDate(), request.targetFundId());
-        return Response.ok(view(ownerId, result.transactionId()));
-    }
-
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
     @Operation(summary = "查询组合基金交易流水")
     public Response<List<TransactionView>> listPortfolioFund(
@@ -116,7 +96,6 @@ public class TransactionController {
             @Schema(description = "交易来源，枚举（INCREASE 增加 / DECREASE 减少 / TRANSFER_IN 转入 / TRANSFER_OUT 转出 / INVEST 定投 / ADJUST_IN 调整转入 / ADJUST_OUT 调整转出 / COST_BASIS_RESET 成本基准重置）", example = "INVEST") TransactionLedgerCommandHandler.Source source,
             @Schema(description = "交易金额", example = "1000.00") BigDecimal amount,
             @Schema(description = "交易份额", example = "500.00") BigDecimal shares,
-            @Schema(description = "目标基金ID（legacy），按基金记账时填写", example = "3001") Long targetFundId,
             @Schema(description = "目标组合基金ID，按组合基金记账时填写", example = "4001") Long targetPortfolioFundId,
             @Schema(description = "交易日期", example = "2026-08-20T08:00:00Z") Instant tradeDate) {
     }

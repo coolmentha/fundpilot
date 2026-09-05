@@ -8,10 +8,10 @@ public interface SessionTokenGateway {
 
     Duration maxAge();
 
-    String issue(long userId, UserRole role);
+    String issue(long userId, UserRole role, long userVersion);
 
     Optional<SessionIdentity> parse(String token);
 
-    record SessionIdentity(long userId, UserRole role) {
+    record SessionIdentity(long userId, UserRole role, long userVersion) {
     }
 }

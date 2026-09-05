@@ -5,4 +5,6 @@ public interface PasswordHashGateway {
     String hash(String password);
 
     boolean matches(String password, String encoded);
+
+    boolean matchesUnknown(String password);
 }

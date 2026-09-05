@@ -121,6 +121,7 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
     }
 
     private Cookie cookie(UserResult user) {
-        return new Cookie(AuthenticationFilter.COOKIE_NAME, sessions.issue(user.id(), UserRole.USER));
+        return new Cookie(AuthenticationFilter.COOKIE_NAME,
+                sessions.issue(user.id(), UserRole.USER, 0L));
     }
 }

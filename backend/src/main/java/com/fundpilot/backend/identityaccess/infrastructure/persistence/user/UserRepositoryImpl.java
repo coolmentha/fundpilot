@@ -6,6 +6,7 @@ import com.fundpilot.backend.identityaccess.domain.user.UserRole;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -33,6 +34,12 @@ class UserRepositoryImpl implements UserRepository {
     public Optional<User> findFirstEnabledByRole(UserRole role) {
         return repository.findFirstByRoleAndEnabledTrueOrderByIdAsc(role)
                 .map(SiteUserPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public Optional<User> lockFirstEnabledByRole(UserRole role) {
+        return repository.lockEnabledByRole(role, PageRequest.of(0, 1)).stream()
+                .findFirst().map(SiteUserPersistenceMapper::toDomain);
     }
 
     @Override

@@ -30,10 +30,6 @@ public class PortfolioFundCommandHandler {
             throw new PortfolioFundFailure(PortfolioFundFailure.Code.PRODUCT_NOT_FOUND,
                     "基金产品不存在: " + fundProductId);
         }
-        if (portfolioFunds.findTrackedByOwnerIdAndFundProductId(ownerId, fundProductId).isPresent()) {
-            throw new PortfolioFundFailure(PortfolioFundFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED,
-                    "该基金已在当前组合中");
-        }
         PortfolioFund portfolioFund;
         try {
             portfolioFund = PortfolioFund.createTracked(
@@ -42,7 +38,10 @@ public class PortfolioFundCommandHandler {
             throw new PortfolioFundFailure(PortfolioFundFailure.Code.POSITION_WARNING_INVALID,
                     exception.getMessage());
         }
-        PortfolioFund saved = portfolioFunds.save(portfolioFund);
+        PortfolioFund saved = portfolioFunds.saveTrackedIfAbsent(portfolioFund)
+                .orElseThrow(() -> new PortfolioFundFailure(
+                        PortfolioFundFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED,
+                        "该基金已在当前组合中"));
         events.publishTracked(new PortfolioFundTrackedEvent(
                 saved.id(), saved.ownerId(), saved.fundProductId(), clock.instant()));
         return PortfolioFundResult.from(saved);
@@ -50,9 +49,12 @@ public class PortfolioFundCommandHandler {
 
     @Transactional
     public PortfolioFundResult configureWarning(long ownerId, long portfolioFundId,
-                                                boolean enabled, BigDecimal ratio) {
+                                                Boolean enabled, BigDecimal ratio) {
         PortfolioFund portfolioFund = ownedPortfolioFund(ownerId, portfolioFundId);
         try {
+            if (enabled == null) {
+                throw new IllegalArgumentException("仓位提醒启用状态不能为空");
+            }
             portfolioFund.configurePositionWarning(enabled, ratio);
         } catch (IllegalArgumentException exception) {
             throw new PortfolioFundFailure(PortfolioFundFailure.Code.POSITION_WARNING_INVALID,
@@ -88,7 +90,7 @@ public class PortfolioFundCommandHandler {
     }
 
     private PortfolioFund ownedPortfolioFund(long ownerId, long portfolioFundId) {
-        return portfolioFunds.findById(portfolioFundId)
+        return portfolioFunds.findByIdForUpdate(portfolioFundId)
                 .filter(portfolioFund -> portfolioFund.ownerId() == ownerId)
                 .orElseThrow(() -> new PortfolioFundFailure(
                         PortfolioFundFailure.Code.PORTFOLIO_FUND_NOT_FOUND,

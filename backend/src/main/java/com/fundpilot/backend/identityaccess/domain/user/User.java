@@ -5,13 +5,15 @@ import java.util.Objects;
 public final class User {
 
     private final Long id;
+    private final Long version;
     private final String username;
-    private final String passwordHash;
+    private String passwordHash;
     private UserRole role;
     private boolean enabled;
 
-    private User(Long id, String username, String passwordHash, UserRole role, boolean enabled) {
+    private User(Long id, Long version, String username, String passwordHash, UserRole role, boolean enabled) {
         this.id = id;
+        this.version = version;
         this.username = Objects.requireNonNull(username);
         this.passwordHash = Objects.requireNonNull(passwordHash);
         this.role = Objects.requireNonNull(role);
@@ -19,12 +21,17 @@ public final class User {
     }
 
     public static User create(String username, String passwordHash, UserRole role) {
-        return new User(null, username, passwordHash, role, true);
+        return new User(null, null, username, passwordHash, role, true);
     }
 
     public static User rehydrate(Long id, String username, String passwordHash,
                                  UserRole role, boolean enabled) {
-        return new User(id, username, passwordHash, role, enabled);
+        return rehydrate(id, 0L, username, passwordHash, role, enabled);
+    }
+
+    public static User rehydrate(Long id, Long version, String username, String passwordHash,
+                                 UserRole role, boolean enabled) {
+        return new User(id, version, username, passwordHash, role, enabled);
     }
 
     public void changeRole(UserRole role) {
@@ -35,8 +42,16 @@ public final class User {
         this.enabled = enabled;
     }
 
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = Objects.requireNonNull(passwordHash);
+    }
+
     public Long id() {
         return id;
+    }
+
+    public Long version() {
+        return version;
     }
 
     public String username() {

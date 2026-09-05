@@ -6,6 +6,7 @@ import com.fundpilot.backend.insights.domain.portfolioreturn.PortfolioReturnSnap
 import com.fundpilot.backend.insights.domain.portfolioreturn.PortfolioReturnSnapshotRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.math.BigDecimal;
 import com.fundpilot.backend.sharedkernel.BusinessDay;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,20 +36,31 @@ public class PortfolioReturnSnapshotCommandHandler {
     }
 
     @Transactional
+    public void recaptureExistingFrom(long ownerId, Instant fromBusinessDate) {
+        snapshots.between(ownerId, fromBusinessDate, BusinessDay.toDateLabel(clock.instant())).stream()
+                .map(PortfolioReturnSnapshot::businessDate)
+                .forEach(businessDate -> capture(ownerId, businessDate));
+    }
+
+    @Transactional
     public void capture(long ownerId, Instant businessDate) {
-        var result = returns.findByOwner(ownerId);
-        if (result.holdingAmount() == null) {
-            // 持仓市值未知(估值拉取失败等)时按 CONTEXT 不拿旧净值冒充，跳过快照避免写 NOT NULL 违约(issue #182)
-            log.warn("持仓市值未知，跳过快照 owner={} date={}", ownerId, businessDate);
-            return;
-        }
+        var result = returns.findByOwnerAt(ownerId, businessDate);
         var missing = result.funds().stream()
-                .filter(fund -> fund.investedAmount().signum() > 0 && fund.unrealizedPnl() == null)
-                .map(PortfolioReturnQueryHandler.FundReturnResult::fundCode).sorted().toList();
+                .filter(fund -> fund.open() && fund.unrealizedPnl() == null)
+                .map(PortfolioReturnQueryHandler.FundReturnResult::fundCode)
+                .filter(java.util.Objects::nonNull).sorted().toList();
+        BigDecimal holding = result.holdingAmount() == null ? result.funds().stream()
+                .map(PortfolioReturnQueryHandler.FundReturnResult::holdingAmount)
+                .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : result.holdingAmount();
+        BigDecimal totalReturn = result.totalReturn() == null ? result.funds().stream()
+                .map(PortfolioReturnQueryHandler.FundReturnResult::totalReturn)
+                .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : result.totalReturn();
         Long id = snapshots.find(ownerId, businessDate).map(PortfolioReturnSnapshot::id).orElse(null);
         Instant now = clock.instant();
         snapshots.save(new PortfolioReturnSnapshot(id, ownerId, businessDate, result.investedAmount(),
-                result.redeemedAmount(), result.feeAmount(), result.holdingAmount(), result.realizedPnl(),
-                result.unrealizedPnl(), result.totalReturn(), missing.isEmpty(), String.join(",", missing), now));
+                result.redeemedAmount(), result.feeAmount(), holding, result.realizedPnl(),
+                result.unrealizedPnl(), totalReturn, missing.isEmpty(), String.join(",", missing), now));
     }
 }

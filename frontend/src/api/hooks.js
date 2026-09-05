@@ -59,6 +59,50 @@ export function useSaveFund() {
     });
 }
 
+export function updatePortfolioFundWarning({portfolioFundId, body}) {
+    return put(`/api/portfolio-funds/${portfolioFundId}/position-warning`, body);
+}
+
+export function replacePortfolioFundGroups({portfolioFundId, body}) {
+    return put(`/api/portfolio-funds/${portfolioFundId}/groups`, body);
+}
+
+export function updatePortfolioFundCostBasis({portfolioFundId, body}) {
+    return put(`/api/portfolio-funds/${portfolioFundId}/cost-basis`, body);
+}
+
+export function useUpdatePortfolioFundWarning() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: updatePortfolioFundWarning,
+        onSuccess: () => qc.invalidateQueries({queryKey: ['funds']}),
+    });
+}
+
+export function useReplacePortfolioFundGroups() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: replacePortfolioFundGroups,
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-groups']});
+        },
+    });
+}
+
+export function useUpdatePortfolioFundCostBasis() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: updatePortfolioFundCostBasis,
+        onSuccess: () => {
+            qc.invalidateQueries({queryKey: ['funds']});
+            qc.invalidateQueries({queryKey: ['fund-transactions']});
+            qc.invalidateQueries({queryKey: ['portfolio-summary']});
+            qc.invalidateQueries({queryKey: ['portfolio-returns']});
+        },
+    });
+}
+
 export function useVoidPortfolioFund() {
     const qc = useQueryClient();
     return useMutation({
@@ -126,14 +170,20 @@ const useInvalidateStrategies = (fundId) => {
         qc.invalidateQueries({queryKey: ['strategy-active', fundId]});
     };
 };
+export function createStrategy({portfolioFundId, body}) {
+    return post(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}`, body);
+}
 export function useCreateStrategy(portfolioFundId) {
     const onSuccess = useInvalidateStrategies(portfolioFundId);
-    return useMutation({mutationFn: (body) => post(`/api/discipline/strategies/portfolio-funds/${portfolioFundId}`, body), onSuccess});
+    return useMutation({mutationFn: (body) => createStrategy({portfolioFundId, body}), onSuccess});
+}
+export function updateStrategy({strategyId, body}) {
+    return put(`/api/discipline/strategies/${strategyId}`, body);
 }
 export function useUpdateStrategy(fundId) {
     const onSuccess = useInvalidateStrategies(fundId);
     return useMutation({
-        mutationFn: ({id, body}) => put(`/api/discipline/strategies/${id}`, body),
+        mutationFn: ({id, body}) => updateStrategy({strategyId: id, body}),
         onSuccess,
     });
 }
@@ -296,9 +346,12 @@ export function useIgnoreSignal() {
 export function useFundTransactions(portfolioFundId) {
     return useQuery({
         queryKey: ['fund-transactions', portfolioFundId],
-        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/transactions`),
+        queryFn: () => getPortfolioFundTransactions(portfolioFundId),
         enabled: !!portfolioFundId,
     });
+}
+export function getPortfolioFundTransactions(portfolioFundId) {
+    return get(`/api/portfolio-funds/${portfolioFundId}/transactions`);
 }
 export function usePendingTransactions() {
     return useQuery({
@@ -362,7 +415,7 @@ export function updatePendingTransaction(id, body) {
 export function useCreateManualTransaction(portfolioFundId) {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (body) => post(`/api/portfolio-funds/${portfolioFundId}/transactions`, body),
+        mutationFn: (body) => createManualTransaction({portfolioFundId, body}),
         onSuccess: (_data, body) => {
             // 转换模式会在另一只基金建转入腿,需刷新目标基金流水与全部基金摘要;非转换也刷新当前基金流水
             qc.invalidateQueries({queryKey: ['fund-transactions', portfolioFundId]});
@@ -373,6 +426,9 @@ export function useCreateManualTransaction(portfolioFundId) {
             invalidateDcaBudgetSummary(qc);
         },
     });
+}
+export function createManualTransaction({portfolioFundId, body}) {
+    return post(`/api/portfolio-funds/${portfolioFundId}/transactions`, body);
 }
 
 // ===== MarketData 关注指数 =====

@@ -3,7 +3,10 @@ package com.fundpilot.backend.accounting.application.query.positiontracking;
 import com.fundpilot.backend.accounting.domain.position.Position;
 import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.accounting.domain.lot.LotRepository;
+import com.fundpilot.backend.accounting.domain.ledgerreplay.LedgerReplay;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
+import com.fundpilot.backend.sharedkernel.BusinessDay;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
@@ -29,6 +32,22 @@ public class PositionQueryHandler {
         Map<Long, BigDecimal> shares = confirmedShares(owned.stream().map(Position::portfolioFundId).toList());
         return owned.stream().map(position -> PositionResult.from(position,
                 shares.getOrDefault(position.portfolioFundId(), BigDecimal.ZERO))).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PositionResult> findByOwnerAt(long ownerId, Instant endExclusive) {
+        List<Position> owned = positions.findByOwner(ownerId);
+        List<com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction> ledger =
+                transactions.findByPortfolioFundIdsAndStatus(
+                                owned.stream().map(Position::portfolioFundId).toList(), TransactionStatus.CONFIRMED)
+                        .stream().filter(transaction -> BusinessDay.toDateLabel(
+                                transaction.effectiveTradeDate(transaction.confirmTime()))
+                                .isBefore(endExclusive)).toList();
+        Map<Long, List<com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction>> byFund = ledger.stream()
+                .collect(Collectors.groupingBy(
+                        com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction::portfolioFundId));
+        return owned.stream().map(position -> historical(position,
+                byFund.getOrDefault(position.portfolioFundId(), List.of()))).toList();
     }
 
     @Transactional(readOnly = true)
@@ -65,5 +84,14 @@ public class PositionQueryHandler {
         return transactions.aggregateConfirmedShares(portfolioFundIds).stream()
                 .collect(Collectors.toMap(TransactionRepository.HoldingShares::portfolioFundId,
                         TransactionRepository.HoldingShares::holdingShares));
+    }
+
+    private static PositionResult historical(Position position,
+            List<com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction> ledger) {
+        BigDecimal shares = LedgerReplay.netShares(ledger);
+        String status = ledger.isEmpty() ? "EMPTY" : shares.signum() > 0 ? "OPEN" : "CLEARED";
+        return new PositionResult(position.portfolioFundId(), position.ownerId(), status,
+                LedgerReplay.latestInflowAt(ledger, null),
+                LedgerReplay.replayHistoricalCostPerShare(ledger).orElse(null), shares);
     }
 }

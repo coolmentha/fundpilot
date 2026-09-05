@@ -8,8 +8,10 @@ import com.fundpilot.backend.accounting.domain.position.PositionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
+import com.fundpilot.backend.sharedkernel.BusinessDay;
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -29,10 +31,22 @@ public class AccountingReturnQueryHandler {
 
     @Transactional(readOnly = true)
     public List<ReturnFact> findByOwner(long ownerId) {
+        return findByOwner(ownerId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReturnFact> findByOwnerAt(long ownerId, Instant endExclusive) {
+        return findByOwner(ownerId, java.util.Objects.requireNonNull(endExclusive));
+    }
+
+    private List<ReturnFact> findByOwner(long ownerId, Instant endExclusive) {
         List<Position> owned = positions.findByOwner(ownerId);
         List<Long> portfolioFundIds = owned.stream().map(Position::portfolioFundId).toList();
         List<LedgerTransaction> ledger = transactions.findByPortfolioFundIdsAndStatus(
-                portfolioFundIds, TransactionStatus.CONFIRMED);
+                portfolioFundIds, TransactionStatus.CONFIRMED).stream()
+                .filter(transaction -> endExclusive == null || BusinessDay.toDateLabel(
+                        transaction.effectiveTradeDate(transaction.confirmTime())).isBefore(endExclusive))
+                .toList();
         List<Lot> ownerLots = lots.findByPortfolioFundIds(portfolioFundIds);
         Map<Long, Lot> lotsById = ownerLots.stream().collect(Collectors.toMap(Lot::id, lot -> lot));
         Map<Long, List<LotRedemption>> redemptionsBySale = lots.findRedemptionsBySellTransactionIds(

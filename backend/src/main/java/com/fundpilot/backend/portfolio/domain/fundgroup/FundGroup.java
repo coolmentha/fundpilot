@@ -13,8 +13,8 @@ public record FundGroup(Long id, long ownerId, String name, int sortOrder) {
     }
 
     public static String normalizeName(String name) {
-        String value = name == null ? "" : name.trim();
-        if (value.isEmpty() || value.length() > MAX_NAME_LENGTH
+        String value = name == null ? "" : name.strip();
+        if (value.isEmpty() || value.codePointCount(0, value.length()) > MAX_NAME_LENGTH
                 || value.codePoints().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("分组名称长度必须为 1-20 个字符且不能包含控制字符");
         }

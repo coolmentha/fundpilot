@@ -9,9 +9,12 @@ import java.util.Set;
 public interface ReturnCompositionGateway {
     List<PortfolioFund> findPortfolioFunds(long ownerId);
     List<Position> findPositions(long ownerId);
+    List<Position> findPositionsAt(long ownerId, Instant endExclusive);
     List<ReturnFact> findReturnFacts(long ownerId);
+    List<ReturnFact> findReturnFactsAt(long ownerId, Instant endExclusive);
     List<Product> findProducts(Set<Long> productIds);
     List<Nav> findLatestTwoNavs(Set<Long> productIds);
+    List<Nav> findLatestTwoNavsAt(Set<Long> productIds, Instant endExclusive);
     List<RealtimeValuation> findRealtimeValuations(Set<String> fundCodes);
     List<GroupMembership> findGroupMemberships(long ownerId);
     List<DisciplineClassification> findDisciplineClassifications(long ownerId, Set<Long> portfolioFundIds);

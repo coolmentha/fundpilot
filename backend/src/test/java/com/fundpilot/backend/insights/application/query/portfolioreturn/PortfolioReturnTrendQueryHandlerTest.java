@@ -35,9 +35,33 @@ class PortfolioReturnTrendQueryHandlerTest {
         assertThat(result.dataSufficient()).isTrue();
     }
 
+    @Test
+    void aggregatesMissingFundsAcrossTheWholeInterval() {
+        var snapshots = mock(PortfolioReturnSnapshotRepository.class);
+        Instant from = Instant.parse("2026-07-01T00:00:00Z");
+        Instant to = Instant.parse("2026-07-02T00:00:00Z");
+        when(snapshots.between(7L, from, to)).thenReturn(List.of(
+                incompleteSnapshot(1L, from, "100", "1000", "000001"),
+                snapshot(2L, to, "110", "1010")));
+        when(snapshots.latestBefore(7L, from)).thenReturn(Optional.empty());
+
+        var result = new PortfolioReturnTrendQueryHandler(snapshots,
+                Clock.fixed(to, ZoneOffset.UTC)).find(7L, "30D", from, to);
+
+        assertThat(result.valuationComplete()).isFalse();
+        assertThat(result.missingFundCodes()).containsExactly("000001");
+    }
+
     private static PortfolioReturnSnapshot snapshot(long id, Instant date, String totalReturn, String holding) {
         return new PortfolioReturnSnapshot(id, 7L, date, new BigDecimal("1000"), BigDecimal.ZERO,
                 BigDecimal.ZERO, new BigDecimal(holding), BigDecimal.ZERO, BigDecimal.ZERO,
                 new BigDecimal(totalReturn), true, "", date);
+    }
+
+    private static PortfolioReturnSnapshot incompleteSnapshot(long id, Instant date, String totalReturn,
+                                                                String holding, String missingFundCodes) {
+        return new PortfolioReturnSnapshot(id, 7L, date, new BigDecimal("1000"), BigDecimal.ZERO,
+                BigDecimal.ZERO, new BigDecimal(holding), BigDecimal.ZERO, null,
+                new BigDecimal(totalReturn), false, missingFundCodes, date);
     }
 }

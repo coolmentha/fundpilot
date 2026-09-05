@@ -1,6 +1,7 @@
 package com.fundpilot.backend.accounting.application.query.transactionhistory;
 
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerCommandHandler;
+import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
 import com.fundpilot.backend.accounting.application.gateway.transactionconfirmation.SettlementFeeGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionconfirmation.SettlementNavGateway;
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.TradedPortfolioFundGateway;
@@ -33,26 +34,15 @@ public class TransactionQueryHandler {
     @Transactional(readOnly = true)
     public List<TransactionLedgerCommandHandler.LedgerResult> findByPortfolioFund(long ownerId,
                                                                                    long portfolioFundId) {
-        if (portfolioFunds.findOwned(ownerId, portfolioFundId)
-                .filter(TradedPortfolioFundGateway.TradedPortfolioFund::tradable).isEmpty()) {
-            return List.of();
-        }
+        portfolioFunds.findOwned(ownerId, portfolioFundId)
+                .filter(TradedPortfolioFundGateway.TradedPortfolioFund::tradable)
+                .orElseThrow(() -> new TransactionLedgerFailure(
+                        TransactionLedgerFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
+                        "组合基金不存在: " + portfolioFundId));
         return transactions.findByPortfolioFundOrderByTradeDateDesc(portfolioFundId).stream()
                 .filter(transaction -> transaction.ownerId() == ownerId)
                 .map(TransactionLedgerCommandHandler.LedgerResult::from)
                 .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<TransactionViewResult> findByLegacyFund(long ownerId, long legacyFundId) {
-        return portfolioFunds.findByLegacyFundId(legacyFundId)
-                .filter(fund -> fund.ownerId() == ownerId && fund.tradable())
-                .map(fund -> transactions.findByPortfolioFundOrderByTradeDateDesc(fund.portfolioFundId()).stream()
-                        .filter(transaction -> transaction.ownerId() == ownerId)
-                        .map(transaction -> new TransactionViewResult(
-                                TransactionLedgerCommandHandler.LedgerResult.from(transaction), legacyFundId))
-                        .toList())
-                .orElse(List.of());
     }
 
     @Transactional(readOnly = true)

@@ -29,11 +29,6 @@ public class TradedPortfolioFundGatewayImpl implements TradedPortfolioFundGatewa
     }
 
     @Override
-    public Optional<TradedPortfolioFund> findByLegacyFundId(long legacyFundId) {
-        return portfolioFunds.findByLegacyFundId(legacyFundId).map(TradedPortfolioFundGatewayImpl::from);
-    }
-
-    @Override
     public List<TradedPortfolioFund> findTradableByOwner(long ownerId) {
         return portfolioFunds.findByOwner(ownerId).stream()
                 .map(TradedPortfolioFundGatewayImpl::from)

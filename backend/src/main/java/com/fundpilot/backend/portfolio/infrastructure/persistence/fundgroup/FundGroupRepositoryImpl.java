@@ -46,13 +46,7 @@ class FundGroupRepositoryImpl implements FundGroupRepository {
         List<FundGroup> saved = new ArrayList<>();
         for (FundGroup group : requested) {
             if (group.id() == null) {
-                Long id = jdbc.queryForObject("""
-                        INSERT INTO fund_group
-                            (version, created_date, updated_date, owner_id, name, sort_order)
-                        VALUES (0, now(), now(), ?, ?, ?)
-                        RETURNING id
-                        """, Long.class, ownerId, group.name(), group.sortOrder());
-                saved.add(new FundGroup(id, ownerId, group.name(), group.sortOrder()));
+                saved.add(insertOrReuse(ownerId, group.name(), group.sortOrder()));
             } else {
                 int updated = jdbc.update("""
                         UPDATE fund_group
@@ -109,13 +103,7 @@ class FundGroupRepositoryImpl implements FundGroupRepository {
             String key = name.toLowerCase(java.util.Locale.ROOT);
             FundGroup group = existingByKey.get(key);
             if (group == null) {
-                Long id = jdbc.queryForObject("""
-                        INSERT INTO fund_group
-                            (version, created_date, updated_date, owner_id, name, sort_order)
-                        VALUES (0, now(), now(), ?, ?, ?)
-                        RETURNING id
-                        """, Long.class, ownerId, name, nextOrder++);
-                group = new FundGroup(id, ownerId, name, nextOrder - 1);
+                group = insertOrReuse(ownerId, name, nextOrder++);
                 existingByKey.put(key, group);
             }
             groupIds.add(group.id());
@@ -141,6 +129,19 @@ class FundGroupRepositoryImpl implements FundGroupRepository {
                         """, legacyFundId, groupId);
             }
         }
+    }
+
+    private FundGroup insertOrReuse(long ownerId, String name, int sortOrder) {
+        return jdbc.query("""
+                INSERT INTO fund_group
+                    (version, created_date, updated_date, owner_id, name, sort_order)
+                VALUES (0, now(), now(), ?, ?, ?)
+                ON CONFLICT (owner_id, lower(name)) WHERE deleted_date IS NULL
+                DO UPDATE SET name = fund_group.name
+                RETURNING id, owner_id, name, sort_order
+                """, FundGroupRepositoryImpl::mapGroup, ownerId, name, sortOrder)
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("分组创建或复用失败: " + name));
     }
 
     private void deleteGroups(long ownerId, List<Long> deletedIds) {

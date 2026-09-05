@@ -13,6 +13,7 @@ const SettingsPage = React.lazy(() => import('./pages/SettingsPage.jsx'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage.jsx'));
 const DcaManagementPage = React.lazy(() => import('./pages/DcaManagementPage.jsx'));
 const HelpPage = React.lazy(() => import('./pages/HelpPage.jsx'));
+const PortfolioReturns = React.lazy(() => import('./components/PortfolioReturns.jsx'));
 
 function AdminRoute() {
     const {user} = useSiteAuth();
@@ -29,6 +30,7 @@ export default function App() {
                     <Route path="/funds" element={<FundsPage/>}/>
                     <Route path="/funds/:fundId" element={<FundDetailPage/>}/>
                     <Route path="/dca" element={<DcaManagementPage/>}/>
+                    <Route path="/returns" element={<PortfolioReturns/>}/>
                     <Route path="/advice" element={<SignalsPage/>}/>
                     <Route path="/confirm" element={<ConfirmPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>

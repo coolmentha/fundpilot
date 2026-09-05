@@ -59,6 +59,16 @@ public final class LedgerReplay {
      * 重置前的买入成本被丢弃，重置后的 ADJUST_IN 保留零成本份额语义。
      */
     public static Optional<BigDecimal> replayCostPerShare(List<LedgerTransaction> confirmed) {
+        return replayCostPerShare(confirmed, true);
+    }
+
+    /** 历史观察点按当时账本重放成本，不读取后来更新的当前持仓。 */
+    public static Optional<BigDecimal> replayHistoricalCostPerShare(List<LedgerTransaction> confirmed) {
+        return replayCostPerShare(confirmed, false);
+    }
+
+    private static Optional<BigDecimal> replayCostPerShare(List<LedgerTransaction> confirmed,
+                                                            boolean requireReset) {
         boolean resetSeen = false;
         BigDecimal shares = BigDecimal.ZERO;
         BigDecimal untracked = BigDecimal.ZERO;
@@ -71,8 +81,8 @@ public final class LedgerReplay {
                             || transactionShares.signum() <= 0) {
                         throw new IllegalStateException("成本基准重置缺少有效成本快照 tx=" + transaction.id());
                     }
-                    costPerShare = transaction.amount().divide(transactionShares,
-                            java.math.MathContext.DECIMAL64);
+                    costPerShare = LedgerTransaction.costPerShareFromStoredAmount(
+                            transaction.amount(), transactionShares);
                     // 快照反映写入时已确认份额；晚确认但业务日期更早的流水已经重放到 shares，不能丢掉。
                     shares = shares.signum() > 0 ? shares : transactionShares;
                     untracked = BigDecimal.ZERO;
@@ -82,7 +92,8 @@ public final class LedgerReplay {
                     BigDecimal previousShares = shares;
                     if (previousShares.signum() <= 0 || costPerShare == null) {
                         costPerShare = transaction.amount() == null || transactionShares.signum() <= 0
-                                ? null : transaction.amount().divide(transactionShares,
+                                ? null : transaction.amount().divide(
+                                previousShares.signum() > 0 ? previousShares.add(transactionShares) : transactionShares,
                                 java.math.MathContext.DECIMAL64);
                     } else {
                         BigDecimal trackedPrevious = previousShares.subtract(untracked).max(BigDecimal.ZERO);
@@ -106,7 +117,7 @@ public final class LedgerReplay {
                 }
             }
         }
-        return resetSeen ? Optional.ofNullable(costPerShare) : Optional.empty();
+        return !requireReset || resetSeen ? Optional.ofNullable(costPerShare) : Optional.empty();
     }
 
     /** 最近一笔正向 CONFIRMED 流水的交易时间，用于重建建仓时间。 */

@@ -4,8 +4,11 @@ import {App} from 'antd';
 import {MemoryRouter} from 'react-router-dom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-const {saveFund, state} = vi.hoisted(() => ({
+const {saveFund, updateWarning, replaceGroups, updateCostBasis, state} = vi.hoisted(() => ({
     saveFund: vi.fn(),
+    updateWarning: vi.fn(),
+    replaceGroups: vi.fn(),
+    updateCostBasis: vi.fn(),
     state: {funds: []},
 }));
 
@@ -18,6 +21,9 @@ vi.mock('../api/hooks.js', () => ({
     useDcaBudgetSummary: () => ({data: null, isLoading: false, isError: false, refetch: vi.fn()}),
     useFundSearch: () => ({data: [], isFetching: false}),
     useSaveFund: () => ({mutateAsync: saveFund, isPending: false}),
+    useUpdatePortfolioFundWarning: () => ({mutateAsync: updateWarning, isPending: false}),
+    useReplacePortfolioFundGroups: () => ({mutateAsync: replaceGroups, isPending: false}),
+    useUpdatePortfolioFundCostBasis: () => ({mutateAsync: updateCostBasis, isPending: false}),
     useVoidPortfolioFund: () => ({mutateAsync: vi.fn(), isPending: false}),
 }));
 
@@ -42,6 +48,9 @@ describe('FundsPage', () => {
 
     beforeEach(() => {
         saveFund.mockReset();
+        updateWarning.mockReset();
+        replaceGroups.mockReset();
+        updateCostBasis.mockReset();
         state.funds = [{
             id: 1, portfolioFundId: 11, fundCode: '000001', fundName: '测试基金',
             fundCategory: 'INDEX', fundSubType: 'INDEX', benchmarkIndexCode: '000300',
@@ -89,9 +98,32 @@ describe('FundsPage', () => {
             await new Promise((resolve) => window.setTimeout(resolve, 0));
         });
 
-        expect(saveFund).toHaveBeenCalledWith({
-            id: 1,
-            body: expect.objectContaining({costPerShare: 1.25}),
+        expect(updateCostBasis).toHaveBeenCalledWith({
+            portfolioFundId: 11,
+            body: {costPerShare: 1.25},
+        });
+    });
+
+    it('编辑配置时按 portfolioFundId 更新提醒和分组', async () => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(
+            <MemoryRouter initialEntries={['/funds?editId=1']}><App><FundsPage/></App></MemoryRouter>,
+        ));
+        await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
+        await act(async () => {
+            document.querySelector('.ant-modal-footer .ant-btn-primary').click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+
+        expect(updateWarning).toHaveBeenCalledWith({
+            portfolioFundId: 11,
+            body: {enabled: true, ratio: 0.3},
+        });
+        expect(replaceGroups).toHaveBeenCalledWith({
+            portfolioFundId: 11,
+            body: {groupNames: []},
         });
     });
 
@@ -108,10 +140,7 @@ describe('FundsPage', () => {
             await new Promise((resolve) => window.setTimeout(resolve, 0));
         });
 
-        expect(saveFund).toHaveBeenCalledWith({
-            id: 1,
-            body: expect.objectContaining({costPerShare: null}),
-        });
+        expect(updateCostBasis).not.toHaveBeenCalled();
     });
 
     it('空仓基金编辑时不显示成本价输入框', async () => {

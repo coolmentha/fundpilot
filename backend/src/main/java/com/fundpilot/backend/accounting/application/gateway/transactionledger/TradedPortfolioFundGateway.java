@@ -15,9 +15,6 @@ public interface TradedPortfolioFundGateway {
 
     Optional<TradedPortfolioFund> findOwned(long ownerId, long portfolioFundId);
 
-    /** 扩展期按 legacy fund id 定位，供尚未迁移的入口复用。 */
-    Optional<TradedPortfolioFund> findByLegacyFundId(long legacyFundId);
-
     java.util.List<TradedPortfolioFund> findTradableByOwner(long ownerId);
 
     /**

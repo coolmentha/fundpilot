@@ -5,7 +5,17 @@ import {App} from 'antd';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
 import {Link, useSearchParams} from 'react-router-dom';
-import {useDcaBudgetSummary, useFundGroups, useFunds, useFundSearch, useSaveFund, useVoidPortfolioFund} from '../api/hooks.js';
+import {
+    useDcaBudgetSummary,
+    useFundGroups,
+    useFunds,
+    useFundSearch,
+    useReplacePortfolioFundGroups,
+    useSaveFund,
+    useUpdatePortfolioFundCostBasis,
+    useUpdatePortfolioFundWarning,
+    useVoidPortfolioFund,
+} from '../api/hooks.js';
 import {date, datetime, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import {estimateStatusText} from '../querySafety.js';
@@ -34,6 +44,9 @@ export default function FundsPage() {
         refetch: refetchDcaBudget,
     } = useDcaBudgetSummary();
     const saveFund = useSaveFund();
+    const updateWarning = useUpdatePortfolioFundWarning();
+    const replaceGroups = useReplacePortfolioFundGroups();
+    const updateCostBasis = useUpdatePortfolioFundCostBasis();
     const voidPortfolioFund = useVoidPortfolioFund();
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -136,7 +149,27 @@ export default function FundsPage() {
             const body = values.openedAt
                 ? {...normalized, openedAt: `${dayjs(values.openedAt).utcOffset(8).format('YYYY-MM-DD')}T00:00:00+08:00`}
                 : {...normalized, openedAt: null};
-            await saveFund.mutateAsync({id: editing?.id, body});
+            if (editing) {
+                const portfolioFundId = editing.portfolioFundId;
+                await updateWarning.mutateAsync({
+                    portfolioFundId,
+                    body: {enabled: requestValues.positionWarningEnabled, ratio: positionWarningRatioPct / 100},
+                });
+                await replaceGroups.mutateAsync({
+                    portfolioFundId,
+                    body: {groupNames: requestValues.groupNames || []},
+                });
+                if (Number(editing.holdingShares) > 0) {
+                    if (requestValues.costPerShare != null) {
+                        await updateCostBasis.mutateAsync({
+                            portfolioFundId,
+                            body: {costPerShare: requestValues.costPerShare},
+                        });
+                    }
+                }
+            } else {
+                await saveFund.mutateAsync({id: editing?.id, body});
+            }
             message.success(editing ? '基金已更新' : '基金已新建');
             setOpen(false);
         } catch (e) {
@@ -250,7 +283,10 @@ export default function FundsPage() {
                        pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
-                   onOk={submit} confirmLoading={saveFund.isPending} destroyOnHidden width={560}>
+                   onOk={submit}
+                   confirmLoading={saveFund.isPending || updateWarning.isPending || replaceGroups.isPending
+                       || updateCostBasis.isPending}
+                   destroyOnHidden width={560}>
                 <Form form={form} layout="vertical">
                     {editing ? (
                         // 编辑:基金身份只读展示

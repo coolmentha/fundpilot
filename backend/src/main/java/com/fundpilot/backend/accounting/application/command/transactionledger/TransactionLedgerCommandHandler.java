@@ -61,18 +61,6 @@ public class TransactionLedgerCommandHandler {
                 amount, shares, tradeDate, targetPortfolioFundId);
     }
 
-    @Transactional
-    public LedgerResult recordManualForLegacyFund(long ownerId, long legacyFundId, Source source,
-                                                   BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                                   Long targetLegacyFundId) {
-        long portfolioFundId = requireTradableLegacyFund(ownerId, legacyFundId);
-        Long targetPortfolioFundId = targetLegacyFundId == null ? null
-                : requireTradableLegacyFund(ownerId, targetLegacyFundId);
-        return recordManualInternal(ownerId, portfolioFundId,
-                source == null ? null : TransactionSource.valueOf(source.name()),
-                amount, shares, tradeDate, targetPortfolioFundId);
-    }
-
     private LedgerResult recordManualInternal(long ownerId, long portfolioFundId, TransactionSource source,
                                               BigDecimal amount, BigDecimal shares, Instant tradeDate,
                                               Long targetPortfolioFundId) {
@@ -82,6 +70,10 @@ public class TransactionLedgerCommandHandler {
         if (source.isCostBasisReset()) {
             throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED,
                     "成本基准重置只能通过成本修正入口创建");
+        }
+        if (targetPortfolioFundId != null && source != TransactionSource.TRANSFER_OUT) {
+            throw failure(TransactionLedgerFailure.Code.TRANSACTION_INPUT_REQUIRED,
+                    "目标基金仅适用于转出交易");
         }
         requireTradable(ownerId, portfolioFundId);
         Instant now = clock.instant();
@@ -346,14 +338,6 @@ public class TransactionLedgerCommandHandler {
 
     private static TransactionLedgerFailure failure(TransactionLedgerFailure.Code code, String message) {
         return new TransactionLedgerFailure(code, message);
-    }
-
-    private long requireTradableLegacyFund(long ownerId, long legacyFundId) {
-        return portfolioFunds.findByLegacyFundId(legacyFundId)
-                .filter(fund -> fund.ownerId() == ownerId && fund.tradable())
-                .map(TradedPortfolioFundGateway.TradedPortfolioFund::portfolioFundId)
-                .orElseThrow(() -> failure(TransactionLedgerFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
-                        "基金不存在: " + legacyFundId));
     }
 
     public record LedgerResult(long transactionId, long portfolioFundId, long ownerId, String source,

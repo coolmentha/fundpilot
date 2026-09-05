@@ -9,7 +9,10 @@ vi.mock('./client.js', () => ({
 
 import {del, get, post, put} from './client.js';
 import {
+    createManualTransaction,
     deleteDcaPlan,
+    createStrategy,
+    getPortfolioFundTransactions,
     getFundFeeRates,
     getWatchedIndices,
     invalidateDcaBudgetSummary,
@@ -18,10 +21,27 @@ import {
     invalidateSignalQueries,
     requestAdminAction,
     replaceWatchedIndices,
+    replacePortfolioFundGroups,
     saveAdminUser,
+    updatePortfolioFundCostBasis,
+    updatePortfolioFundWarning,
+    updateStrategy,
     updatePendingTransaction,
     voidPortfolioFund,
 } from './hooks.js';
+
+describe('portfolio fund transaction routes', () => {
+    it('lists and records transactions with portfolio fund identifiers', () => {
+        const body = {source: 'TRANSFER_OUT', shares: 10, targetPortfolioFundId: 42};
+
+        getPortfolioFundTransactions(41);
+        createManualTransaction({portfolioFundId: 41, body});
+
+        expect(get).toHaveBeenLastCalledWith('/api/portfolio-funds/41/transactions');
+        expect(post).toHaveBeenLastCalledWith('/api/portfolio-funds/41/transactions', body);
+        expect(body).not.toHaveProperty('targetFundId');
+    });
+});
 
 describe('portfolio fund voiding', () => {
     it('posts the reason and explicit irreversible confirmation', () => {
@@ -31,6 +51,51 @@ describe('portfolio fund voiding', () => {
             reason: '基金代码录入错误',
             confirmed: true,
         });
+    });
+});
+
+describe('portfolio fund configuration', () => {
+    it('updates warning through the portfolio fund endpoint', () => {
+        updatePortfolioFundWarning({portfolioFundId: 41, body: {enabled: true, ratio: 0.25}});
+
+        expect(put).toHaveBeenCalledWith('/api/portfolio-funds/41/position-warning', {
+            enabled: true,
+            ratio: 0.25,
+        });
+    });
+
+    it('replaces groups through the portfolio fund endpoint', () => {
+        replacePortfolioFundGroups({portfolioFundId: 41, body: {groupNames: ['核心', '卫星']}});
+
+        expect(put).toHaveBeenCalledWith('/api/portfolio-funds/41/groups', {
+            groupNames: ['核心', '卫星'],
+        });
+    });
+
+    it('updates cost basis through the dedicated portfolio fund endpoint', () => {
+        updatePortfolioFundCostBasis({portfolioFundId: 41, body: {costPerShare: 3.4}});
+
+        expect(put).toHaveBeenCalledWith('/api/portfolio-funds/41/cost-basis', {
+            costPerShare: 3.4,
+        });
+    });
+});
+
+describe('discipline strategy routes', () => {
+    it('creates a strategy under the portfolio fund endpoint', () => {
+        const body = {profitActivationPercent: 0.15, customized: false};
+
+        createStrategy({portfolioFundId: 41, body});
+
+        expect(post).toHaveBeenLastCalledWith('/api/discipline/strategies/portfolio-funds/41', body);
+    });
+
+    it('updates a strategy by strategy id while retaining portfolio scope in the caller', () => {
+        const body = {profitActivationPercent: 0.20, customized: true};
+
+        updateStrategy({strategyId: 7, body});
+
+        expect(put).toHaveBeenLastCalledWith('/api/discipline/strategies/7', body);
     });
 });
 

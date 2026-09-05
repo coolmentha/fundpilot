@@ -18,6 +18,10 @@ public class PositionApi {
         return queries.findByOwner(ownerId).stream().map(PositionApi::from).toList();
     }
 
+    public List<Position> findByOwnerAt(long ownerId, Instant endExclusive) {
+        return queries.findByOwnerAt(ownerId, endExclusive).stream().map(PositionApi::from).toList();
+    }
+
     public Optional<Position> findOwned(long ownerId, long portfolioFundId) {
         return queries.findOwned(ownerId, portfolioFundId).map(PositionApi::from);
     }

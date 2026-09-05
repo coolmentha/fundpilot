@@ -52,6 +52,12 @@ fundpilot:
     bootstrap:
       username: ${FUNDPILOT_BOOTSTRAP_USERNAME:}
       password: ${FUNDPILOT_BOOTSTRAP_PASSWORD:}
+    login:
+      max-attempts: ${FUNDPILOT_AUTH_LOGIN_MAX_ATTEMPTS:5}
+      window: ${FUNDPILOT_AUTH_LOGIN_WINDOW:PT1M}
+      max-entries: ${FUNDPILOT_AUTH_LOGIN_MAX_ENTRIES:10000}
+      # 仅配置明确可信的反向代理地址后才读取 X-Forwarded-For。
+      trusted-proxies: ${FUNDPILOT_AUTH_TRUSTED_PROXIES:}
   deployment:
     # 候选发布阶段关闭定时任务与启动写监听器；正常运行必须为 false。
     validation-mode: ${DEPLOYMENT_VALIDATION_MODE:false}

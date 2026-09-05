@@ -13,6 +13,8 @@ import java.util.Objects;
  */
 public final class LedgerTransaction {
 
+    private static final int PERSISTED_DECIMAL_SCALE = 8;
+
     private final Long id;
     private final long portfolioFundId;
     private final long ownerId;
@@ -174,10 +176,15 @@ public final class LedgerTransaction {
         }
         Instant timestamp = Objects.requireNonNull(occurredAt, "修正时间不能为空");
         BigDecimal totalCost = normalizedShares.multiply(costPerShare)
-                .setScale(8, RoundingMode.HALF_UP);
+                .setScale(PERSISTED_DECIMAL_SCALE, RoundingMode.HALF_UP);
         return new LedgerTransaction(null, portfolioFundId, ownerId, TransactionSource.COST_BASIS_RESET,
                 TransactionStatus.CONFIRMED, totalCost, normalizedShares, null, null, null,
                 timestamp, timestamp, null, null, null, null, null, null, null);
+    }
+
+    /** 从已按持久化精度保存的成本总额还原可重放的成本单价。 */
+    public static BigDecimal costPerShareFromStoredAmount(BigDecimal amount, BigDecimal shares) {
+        return amount.divide(shares, PERSISTED_DECIMAL_SCALE, RoundingMode.HALF_UP);
     }
 
     /** 录入一笔期初持仓流水，创建即确认，按用户输入成本建立后续 FIFO 所需 lot。 */
