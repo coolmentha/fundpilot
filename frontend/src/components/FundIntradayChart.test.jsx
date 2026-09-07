@@ -25,6 +25,21 @@ describe('FundIntradayChart', () => {
     let container;
     let root;
 
+    it('查询失败明确显示错误并可重试，不伪装为无行情', async () => {
+        const refetch = vi.fn();
+        useFundIntraday.mockReturnValue({data: null, isLoading: false, isError: true,
+            error: new Error('组合基金不可用'), refetch});
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(<FundIntradayChart portfolioFundId={41}/>));
+        expect(useFundIntraday).toHaveBeenCalledWith(41);
+        expect(container.textContent).toContain('组合基金不可用');
+        expect(container.textContent).not.toContain('暂无当日分时数据');
+        await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent.includes('重试')).click());
+        expect(refetch).toHaveBeenCalledOnce();
+    });
+
     afterEach(async () => {
         if (root) await act(async () => root.unmount());
         container?.remove();

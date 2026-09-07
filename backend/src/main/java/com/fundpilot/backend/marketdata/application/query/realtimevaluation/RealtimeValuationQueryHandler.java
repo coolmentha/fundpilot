@@ -2,6 +2,8 @@ package com.fundpilot.backend.marketdata.application.query.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
 import com.fundpilot.backend.marketdata.application.gateway.portfoliofund.OwnedFundProductGateway;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -27,8 +29,9 @@ public class RealtimeValuationQueryHandler {
     }
 
     public Optional<IntradayResult> findIntradayForPortfolioFund(long portfolioFundId) {
-        return products.findOwnedByPortfolioFundId(portfolioFundId)
-                .flatMap(product -> cache.findIntraday(product.fundCode()))
+        var product = products.findOwnedByPortfolioFundId(portfolioFundId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "组合基金不存在或已作废"));
+        return cache.findIntraday(product.fundCode())
                 .map(RealtimeValuationQueryHandler::toIntradayResult);
     }
 

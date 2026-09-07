@@ -120,6 +120,33 @@ class YangjibaoImportCommandHandlerTest {
     }
 
     @Test
+    void retryRetainsPreviouslyCompletedResults() {
+        connectedHolding();
+        when(source.holdings("token", "a")).thenReturn(List.of(
+                new YangjibaoSourceGateway.Holding("h", "017093", "成功基金", BigDecimal.TEN, BigDecimal.ONE),
+                new YangjibaoSourceGateway.Holding("h2", "017094", "重试基金", BigDecimal.TEN, BigDecimal.ONE)));
+        when(holdings.create(eq(1L), eq("017093"), anyString(), any(), any(), any()))
+                .thenReturn(new ImportedHoldingGateway.ImportedHolding(9L, 19L));
+        when(holdings.create(eq(1L), eq("017094"), anyString(), any(), any(), any()))
+                .thenThrow(new RuntimeException("temporary failure"))
+                .thenReturn(new ImportedHoldingGateway.ImportedHolding(10L, 20L));
+        String id = handler.create().sessionId();
+        handler.state(id);
+        var preview = handler.preview(id);
+        handler.startImport(id, preview.stream().map(item ->
+                new YangjibaoImportCommandHandler.Selection(item.itemId(), null)).toList());
+        assertThat(handler.importStatus(id).succeeded()).isEqualTo(1);
+
+        var retried = handler.retryFailed(id);
+
+        assertThat(retried.total()).isEqualTo(2);
+        assertThat(retried.succeeded()).isEqualTo(2);
+        assertThat(retried.results()).extracting(YangjibaoImportCommandHandler.ImportResult::itemId)
+                .containsExactlyInAnyOrder("a:h", "a:h2");
+        verify(holdings, times(1)).create(eq(1L), eq("017093"), anyString(), any(), any(), any());
+    }
+
+    @Test
     void rejectsSessionOwnedByAnotherUser() {
         when(source.createQrCode()).thenReturn(new YangjibaoSourceGateway.QrCode("qr", "https://qr"));
         String id = handler.create().sessionId();

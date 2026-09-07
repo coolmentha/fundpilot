@@ -15,6 +15,8 @@ import com.fundpilot.backend.marketdata.application.query.indexvaluation.IndexVa
 import com.fundpilot.backend.marketdata.domain.indicator.VolumeState;
 import com.fundpilot.backend.marketdata.domain.indicator.WeeklyMacdState;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Clock;
@@ -61,8 +63,8 @@ public class MarketIndicatorRefreshCommandHandler {
     private final IndexValuationQueryHandler valuationQueries;
 
     public void refreshBatch(int batchNumber) {
-        refresh(products.findAll().stream().filter(product -> product.legacyFundId() != null
-                && Math.floorMod(product.legacyFundId().hashCode(), TOTAL_BATCHES) == batchNumber).toList());
+        refresh(products.findAll().stream().filter(product ->
+                Math.floorMod(Long.hashCode(product.fundProductId()), TOTAL_BATCHES) == batchNumber).toList());
     }
 
     public void refreshAll() {
@@ -75,8 +77,13 @@ public class MarketIndicatorRefreshCommandHandler {
     }
 
     public void refreshOneForPortfolioFund(long portfolioFundId) {
-        products.findByPortfolioFundId(portfolioFundId).ifPresent(product ->
-                refreshOne(product, new HashMap<>(), new HashSet<>(), new HashSet<>()));
+        var product = products.findByPortfolioFundId(portfolioFundId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "组合基金不存在或已作废"));
+        if (!supportsStandardNav(product)) {
+            throw new BusinessException(ErrorCode.MARKET_DATA_ALL_SOURCES_FAILED,
+                    "该产品不支持标准净值行情刷新");
+        }
+        refreshOne(product, new HashMap<>(), new HashSet<>(), new HashSet<>(), true);
     }
 
     public void refreshBatchAndPublishCompletion(int batchNumber) {
@@ -113,6 +120,12 @@ public class MarketIndicatorRefreshCommandHandler {
     private void refreshOne(TrackedNavProductGateway.TrackedProduct target,
                             Map<String, PublishedIndexKlineSourceGateway.IndexKline> klineCache,
                             Set<String> persistedKlines, Set<String> refreshedValuations) {
+        refreshOne(target, klineCache, persistedKlines, refreshedValuations, false);
+    }
+
+    private void refreshOne(TrackedNavProductGateway.TrackedProduct target,
+                            Map<String, PublishedIndexKlineSourceGateway.IndexKline> klineCache,
+                            Set<String> persistedKlines, Set<String> refreshedValuations, boolean failOnPartialRefresh) {
         if (!supportsStandardNav(target)) return;
         List<PublishedNavSourceGateway.NavSnapshot> history = navSource.fetchHistory(target.fundCode());
         if (history == null || history.isEmpty()) {
@@ -136,6 +149,7 @@ public class MarketIndicatorRefreshCommandHandler {
                 kline = klineCache.computeIfAbsent(indexCode,
                         key -> klineSource.fetch(toSecid(key), limit));
             } catch (RuntimeException ex) {
+                if (failOnPartialRefresh) throw ex;
                 log.warn("产品 {} 指数 K 线拉取失败，volumeState 留空", target.fundProductId(), ex);
             }
         }
@@ -147,8 +161,8 @@ public class MarketIndicatorRefreshCommandHandler {
                     new IndexKlineCommandHandler.Bar(bar.tradeDate(), bar.open(), bar.high(), bar.low(),
                             bar.close(), bar.volume())).toList());
         }
-        refreshValuation(indexCode, refreshedValuations);
-        volumeState = volumeStateFromStored(indexCode);
+        refreshValuation(indexCode, refreshedValuations, failOnPartialRefresh);
+        volumeState = volumeStateFromStored(indexCode, failOnPartialRefresh);
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());
         indicators.upsert(target.legacyFundId(), target.fundProductId(), target.fundCode(), today,
                 latest.accumulatedNav(), yearLine.map(YearLine::above).orElse(null),
@@ -157,7 +171,7 @@ public class MarketIndicatorRefreshCommandHandler {
     }
 
     /** 估值请求在任何写事务外完成；失败只影响低估策略，不影响既有行情指标刷新。 */
-    private void refreshValuation(String indexCode, Set<String> refreshedValuations) {
+    private void refreshValuation(String indexCode, Set<String> refreshedValuations, boolean failOnPartialRefresh) {
         if (indexCode == null || indexCode.isBlank()) return;
         if (!refreshedValuations.add(indexCode)) return;
         String source = "CSINDEX_INDEX_CSI_DS_PE_PEG";
@@ -175,6 +189,7 @@ public class MarketIndicatorRefreshCommandHandler {
                         value.tradeDate(), value.peRatio(), source)).toList());
             }
         } catch (RuntimeException ex) {
+            if (failOnPartialRefresh) throw ex;
             log.warn("指数 {} PE 历史刷新失败，低估策略本期可能跳过", indexCode, ex);
         }
     }
@@ -257,13 +272,14 @@ public class MarketIndicatorRefreshCommandHandler {
     }
 
     /** 基于已落库完整 K 线序列计算成交量状态，避免增量刷新 10 根窗口不足被覆盖为 null。 */
-    private Optional<VolumeState> volumeStateFromStored(String indexCode) {
+    private Optional<VolumeState> volumeStateFromStored(String indexCode, boolean failOnPartialRefresh) {
         if (indexCode == null || indexCode.isBlank()) return Optional.empty();
         try {
             List<IndexKlineQueryHandler.Bar> stored = klineQueries.findAll(indexCode);
             return volumeState(stored.stream().map(bar -> new BarInput(bar.open(), bar.close(),
                     bar.volume())).toList());
         } catch (RuntimeException ex) {
+            if (failOnPartialRefresh) throw ex;
             log.warn("指数 {} 本地 K 线读取失败，volumeState 留空", indexCode, ex);
             return Optional.empty();
         }

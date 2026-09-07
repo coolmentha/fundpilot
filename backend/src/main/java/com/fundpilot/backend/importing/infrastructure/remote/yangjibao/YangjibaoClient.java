@@ -27,6 +27,9 @@ public class YangjibaoClient {
                            @Value("${fundpilot.yangjibao.base-url}") String baseUrl,
                            @Value("${fundpilot.yangjibao.secret}") String secret,
                            @Value("${fundpilot.yangjibao.timeout:PT15S}") Duration timeout) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("Missing required configuration: fundpilot.yangjibao.secret");
+        }
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(timeout);
         requestFactory.setReadTimeout(timeout);

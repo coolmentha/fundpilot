@@ -72,6 +72,6 @@ fundpilot:
       enabled: ${FLYWAY_REPAIR_LEGACY_V7:false}
   yangjibao:
     base-url: ${YANGJIBAO_BASE_URL:http://browser-plug-api.yangjibao.com}
-    secret: ${YANGJIBAO_SECRET:YxmKSrQR4uoJ5lOoWIhcbd7SlUEh9OOc}
+    secret: ${YANGJIBAO_SECRET:}
     session-ttl: ${YANGJIBAO_SESSION_TTL:PT30M}
     timeout: ${YANGJIBAO_TIMEOUT:PT15S}

@@ -1,4 +1,9 @@
 # Test profile:使用独立 fundpilot_test schema，禁止连接或清理业务 public schema。
+fundpilot:
+  yangjibao:
+    # 仅测试夹具，不用于真实第三方请求；生产资源不包含此值。
+    secret: test-only-yangjibao-signing-secret
+
 spring:
   data:
     redis:

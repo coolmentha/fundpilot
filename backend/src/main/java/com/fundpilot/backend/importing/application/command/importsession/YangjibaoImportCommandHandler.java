@@ -100,7 +100,9 @@ public class YangjibaoImportCommandHandler {
                     .filter(selection -> failedIds.contains(selection.itemId())).toList();
             Map<String, PreviewItem> byId = new HashMap<>();
             session.preview.forEach(item -> byId.put(item.itemId(), item));
-            session.job = new ImportJob(retry);
+            session.job.results.removeIf(result -> failedIds.contains(result.itemId()));
+            session.job.processed = session.job.results.size();
+            session.job.status = ImportStatus.PROCESSING;
             applicationTaskExecutor.execute(() -> actors.runAsOwner(session.ownerId,
                     () -> process(id, session, byId, retry)));
             return session.job.view();
@@ -113,7 +115,7 @@ public class YangjibaoImportCommandHandler {
             if (sessions.get(id) != session) return;
             PreviewItem item = byId.get(selection.itemId());
             ImportResult result;
-            try { result = importOne(item, selection.existingMode()); }
+            try { result = importOne(id, session.ownerId, item, selection.existingMode()); }
             catch (Exception e) { result = new ImportResult(item.itemId(), item.fundCode(), "FAILED", e.getMessage()); }
             synchronized (session) {
                 session.job.results.add(result);
@@ -147,25 +149,12 @@ public class YangjibaoImportCommandHandler {
         });
     }
 
-    private ImportResult importOne(PreviewItem item, ExistingMode mode) {
-        Optional<ImportedHoldingGateway.LocalHolding> existing = holdings.find(
-                actors.currentOwnerId(), item.fundCode());
-        if (existing.isEmpty()) {
-            holdings.create(actors.currentOwnerId(), item.fundCode(), item.fundName(), item.yangjibaoShares(),
-                    item.costPerShare(), List.of(item.accountName()));
-            return new ImportResult(item.itemId(), item.fundCode(), "CREATED", "已新增基金");
-        }
-        if (mode == null) {
-            throw new YangjibaoImportFailure(YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_INVALID,
-                    "请选择已有基金的处理方式");
-        }
-        if (mode != ExistingMode.SYNC_TARGET) {
-            return new ImportResult(item.itemId(), item.fundCode(), "SKIPPED", "以本系统份额为准");
-        }
-        boolean adjusted = holdings.synchronize(actors.currentOwnerId(), existing.get().portfolioFundId(),
-                item.yangjibaoShares());
-        return new ImportResult(item.itemId(), item.fundCode(), adjusted ? "ADJUSTED" : "SKIPPED",
-                adjusted ? "已按目标份额调整" : "份额一致");
+    private ImportResult importOne(String sessionId, long ownerId, PreviewItem item, ExistingMode mode) {
+        var result = holdings.importItem(new ImportedHoldingGateway.ItemRequest(ownerId, sessionId, item.itemId(),
+                item.fundCode(), item.fundName(), item.yangjibaoShares(), item.costPerShare(),
+                List.of(item.accountName()), mode == null ? null
+                        : ImportedHoldingGateway.ExistingMode.valueOf(mode.name())));
+        return new ImportResult(item.itemId(), item.fundCode(), result.status().name(), result.message());
     }
 
     private List<PreviewItem> loadPreview(String token) {

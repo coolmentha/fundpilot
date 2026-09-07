@@ -4,6 +4,7 @@ import {useFundIntraday} from '../api/hooks.js';
 import {ThemeModeContext} from '../themeMode.js';
 import {disposeChart, initChart, observeChartResize} from './chartUtils.js';
 import {getChartColors, symmetricPercentBound} from './chartMath.js';
+import QueryErrorState from './QueryErrorState.jsx';
 
 function minuteOf(time) {
     const match = /^(\d{2}):([0-5]\d)$/.exec(time || '');
@@ -114,7 +115,7 @@ export default function FundIntradayChart({portfolioFundId}) {
     const chartRef = useRef(null);
     const [metric, setMetric] = useState('percent');
     const {themeMode} = useContext(ThemeModeContext);
-    const {data: intraday, isLoading} = useFundIntraday(portfolioFundId);
+    const {data: intraday, isLoading, isError, error, refetch} = useFundIntraday(portfolioFundId);
     const pointCount = intraday?.points?.length ?? 0;
     const baseNav = Number(intraday?.baseNav);
     const usePercentAxis = metric === 'percent' && Number.isFinite(baseNav) && baseNav > 0;
@@ -162,7 +163,8 @@ export default function FundIntradayChart({portfolioFundId}) {
 
     const empty = !isLoading && pointCount < 2;
     return <>
-        {!empty && <div className="kline-toolbar">
+        {isError && <QueryErrorState onRetry={refetch} description={error?.message || '分时估值加载失败'}/>}
+        {!empty && !isError && <div className="kline-toolbar">
             <Segmented size="small" value={metric} onChange={setMetric} options={[
                 {label: '涨跌幅', value: 'percent'},
                 {label: '净值', value: 'nav'},
@@ -170,8 +172,8 @@ export default function FundIntradayChart({portfolioFundId}) {
         </div>}
         <div className="intraday-chart-scroll">
             <div ref={containerRef} className="intraday-chart-container"
-                 style={empty ? {display: 'none'} : undefined}/>
+                 style={empty || isError ? {display: 'none'} : undefined}/>
         </div>
-        {empty && <Empty description="暂无当日分时数据"/>}
+        {empty && !isError && <Empty description="暂无当日分时数据"/>}
     </>;
 }
