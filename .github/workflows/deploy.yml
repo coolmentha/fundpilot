@@ -1,8 +1,8 @@
 # CD:打 tag v* 时构建镜像推 GHCR,SSH 到 VPS 拉镜像重启。
 # 需配置仓库 Secrets:VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PATH /
 # DB_USERNAME / DB_PASSWORD / PUBLIC_URL /
-# FUNDPILOT_SESSION_SECRET / FUNDPILOT_BOOTSTRAP_USERNAME / FUNDPILOT_BOOTSTRAP_PASSWORD
-# VPS 须先 docker login ghcr.io(拉私有镜像)并在 .env 配置 YANGJIBAO_SECRET；clone 与其余环境项由本工作流处理
+# FUNDPILOT_SESSION_SECRET / FUNDPILOT_BOOTSTRAP_USERNAME / FUNDPILOT_BOOTSTRAP_PASSWORD / YANGJIBAO_SECRET
+# VPS 须先 docker login ghcr.io(拉私有镜像)；YANGJIBAO_SECRET 优先使用仓库 Secret，兼容已有 VPS .env
 name: Deploy
 
 on:
@@ -149,6 +149,7 @@ jobs:
       DB_USERNAME: ${{ secrets.DB_USERNAME }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       FUNDPILOT_SESSION_SECRET: ${{ secrets.FUNDPILOT_SESSION_SECRET }}
+      YANGJIBAO_SECRET: ${{ secrets.YANGJIBAO_SECRET }}
       FUNDPILOT_BOOTSTRAP_USERNAME: ${{ secrets.FUNDPILOT_BOOTSTRAP_USERNAME }}
       FUNDPILOT_BOOTSTRAP_PASSWORD: ${{ secrets.FUNDPILOT_BOOTSTRAP_PASSWORD }}
       DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -160,7 +161,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 80m
-          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,DEPLOYMENT_TOKEN
+          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,YANGJIBAO_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,DEPLOYMENT_TOKEN
           script: |
             set -Eeuo pipefail
             umask 077
@@ -313,8 +314,11 @@ jobs:
               target_tag=$1
               target_backend_image=${2:-}
               target_frontend_image=${3:-}
-              yangjibao_secret=$(sed -n 's/^YANGJIBAO_SECRET=//p' .env 2>/dev/null | head -n 1 | tr -d '\r\n') || yangjibao_secret=
-              [ -n "$yangjibao_secret" ] || { echo "YANGJIBAO_SECRET is required in VPS .env" >&2; return 1; }
+              yangjibao_secret=${YANGJIBAO_SECRET:-}
+              if [ -z "$yangjibao_secret" ]; then
+                yangjibao_secret=$(sed -n 's/^YANGJIBAO_SECRET=//p' .env 2>/dev/null | head -n 1 | tr -d '\r\n') || yangjibao_secret=
+              fi
+              [ -n "$yangjibao_secret" ] || { echo "YANGJIBAO_SECRET is required in GitHub Secrets or VPS .env" >&2; return 1; }
               {
                 printf 'DB_USERNAME=%s\n' "$DB_USERNAME"
                 printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"

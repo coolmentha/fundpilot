@@ -17,6 +17,7 @@ for fixture in missing unreadable; do
   set +e
   (
     cd "$case_dir"
+    unset YANGJIBAO_SECRET
     eval "$write_env"
     set -Eeuo pipefail
     write_env v0.0.0
@@ -25,6 +26,30 @@ for fixture in missing unreadable; do
   set -e
 
   [ "$status" -ne 0 ]
-  grep -Fxq 'YANGJIBAO_SECRET is required in VPS .env' "$case_dir/stderr"
+  grep -Fxq 'YANGJIBAO_SECRET is required in GitHub Secrets or VPS .env' "$case_dir/stderr"
   [ ! -e "$case_dir/.env.tmp" ]
+done
+
+for fixture in github legacy override; do
+  case_dir="$test_root/$fixture"
+  mkdir -p "$case_dir"
+  (
+    cd "$case_dir"
+    DB_USERNAME=test DB_PASSWORD=test FUNDPILOT_SESSION_SECRET=test
+    FUNDPILOT_BOOTSTRAP_USERNAME=test FUNDPILOT_BOOTSTRAP_PASSWORD=test
+    if [ "$fixture" != github ]; then
+      printf 'YANGJIBAO_SECRET=test-only-legacy\n' > .env
+    fi
+    if [ "$fixture" = legacy ]; then
+      unset YANGJIBAO_SECRET
+      expected=test-only-legacy
+    else
+      export YANGJIBAO_SECRET=test-only-github
+      expected=test-only-github
+    fi
+    eval "$write_env"
+    write_env v0.0.0
+    grep -Fxq "YANGJIBAO_SECRET=$expected" .env
+    [ ! -e .env.tmp ]
+  )
 done

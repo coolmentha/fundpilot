@@ -89,7 +89,9 @@ jobs:
         run: npm run test:coverage
 
       - name: Release gate tests
-        run: node --test ../deploy/*.test.mjs
+        run: |
+          node --test ../deploy/*.test.mjs
+          bash ../deploy/test-write-env-secret.sh
 
       - name: Build
         run: npm run build
