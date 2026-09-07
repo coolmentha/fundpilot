@@ -85,7 +85,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
+      # Owner 于 2026-09-07 要求暂缓前端测试和覆盖率；恢复时移除此条件。
+      - name: Test (temporarily paused by owner)
+        if: ${{ false }}
         run: npm run test:coverage
 
       - name: Release gate tests
