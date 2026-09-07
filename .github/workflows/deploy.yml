@@ -662,11 +662,17 @@ jobs:
             # 镜像拉取不需要停写；完成后再进入有硬上限的维护阶段。
             timeout --foreground --kill-after=5s 900s docker pull "$BACKEND_IMAGE" &
             backend_pull_pid=$!
-            timeout --foreground --kill-after=5s 300s docker pull "$FRONTEND_IMAGE" &
+            timeout --foreground --kill-after=5s 900s docker pull "$FRONTEND_IMAGE" &
             frontend_pull_pid=$!
             pull_status=0
-            wait "$backend_pull_pid" || pull_status=1
-            wait "$frontend_pull_pid" || pull_status=1
+            wait "$backend_pull_pid" || {
+              pull_status=$?
+              echo "backend image pull failed: exit=$pull_status, timeout=900s (124 means timeout)" >&2
+            }
+            wait "$frontend_pull_pid" || {
+              pull_status=$?
+              echo "frontend image pull failed: exit=$pull_status, timeout=900s (124 means timeout)" >&2
+            }
             [ "$pull_status" -eq 0 ] || exit "$pull_status"
             timeout --foreground --kill-after=5s 30s docker network inspect fundpilot_default >/dev/null
             timeout --foreground --kill-after=5s 30s docker inspect fundpilot-db fundpilot-redis >/dev/null
