@@ -10,7 +10,7 @@
 
 - **A. 保留 @SoftDelete,所有关联改 EAGER**。语义完整,但 FundPilot 几乎所有实体被 LAZY 关联(FundTransaction→Fund、SignalLog→Fund、FundStrategy→Fund…),全 EAGER 会让仓位聚合等查询 N+1 爆炸,生产不可用。
 - **B. 改用 @SQLRestriction("deleted_date IS NULL") + @SQLDelete(已采纳)**。`@SQLRestriction` 让 Hibernate 自动给所有查询追加 `WHERE deleted_date IS NULL` 过滤,`@SQLDelete` 把 `remove()` 重定向为 `UPDATE ... SET deleted_date = now()`。软删语义与 §0「归档=软删除,与持仓状态正交」完全一致,且不触发 LAZY 限制。
-- **C. 去掉软删机制,归档直接物理删**。偏离 CONTEXT.md §硬性原则「归档=软删除」,且无法满足「任意 FundStatus 可归档,关联数据一起隐藏」。
+- **C. 去掉软删机制,归档直接物理删**。偏离工作台领域上下文中的硬性原则「归档=软删除」,且无法满足「任意 FundStatus 可归档,关联数据一起隐藏」。
 
 ## Consequences
 

@@ -46,4 +46,4 @@ openedAt 须 ≤ 今天（防手滑填未来，抛 `OPENED_AT_IN_FUTURE`）。
 初始持仓录入 ≠ 手动交易。手动交易是已建仓后的资金动作（NavConfirmJob 异步确认）；
 初始持仓录入是建仓本身（同步确认）。两者都复用 FundTransactionEntity、signalLog=null，
 但触发点（新建 vs 详情页）、确认时机（同步 vs 异步）、语义（建仓 vs 资金动作）不同。
-详见 CONTEXT.md「初始持仓录入」「手动交易」。
+详见工作台领域上下文「初始持仓录入」「手动交易」。

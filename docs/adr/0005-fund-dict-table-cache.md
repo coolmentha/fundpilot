@@ -21,7 +21,7 @@ fundCategory/benchmarkIndexCode 一次性回填。字典数据来自东方财富
 4. 重启不丢——进程内缓存重启需重拉全量字典，落库则数据持久。
 
 代价是多一张表 + 一个定时同步任务 + 迁移脚本。但 `fund_dict` 本质是外部字典的本地镜像，写入只发生在
-同步任务，读多写少，PostgreSQL 完全胜任，不需要 Redis（CONTEXT.md 已明确本期不引入 Redis）。
+同步任务，读多写少，PostgreSQL 完全胜任，不需要 Redis（工作台领域上下文已明确本期不引入 Redis）。
 
 ## 与现有架构的关系
 

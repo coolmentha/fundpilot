@@ -14,7 +14,7 @@ Issues 与 PRD 通过 `gh` CLI 写入 GitHub 仓库 `coolmentha/fundpilot` 的 I
 
 ### Domain docs
 
-领域术语与核心契约见根目录 `CONTEXT.md`，当前业务流程见 `docs/business/`，决策记录见 `docs/adr/`。详见 `docs/agents/domain.md`。
+领域术语与核心契约由外部工作台维护，当前业务流程见 `docs/business/`，决策记录见 `docs/adr/`。详见 `docs/agents/domain.md`。
 
 ### Coding standards
 
