@@ -35,7 +35,7 @@ export default function FundWatchlist() {
             ellipsis: true,
             render: (value, row) => (
                 <span className="watchlist-name-cell">
-                    <Link className="watchlist-name-text" title={value} to={`/funds/${row.id}`}>
+                    <Link className="watchlist-name-text" title={value} to={`/funds/${row.portfolioFundId}`}>
                         <strong>{value}</strong><small>{row.fundCode} · {text(row.fundSubType)}</small>
                     </Link>
                 </span>

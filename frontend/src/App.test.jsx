@@ -13,8 +13,8 @@ vi.mock('./pages/FundsPage.jsx', () => ({
 }));
 vi.mock('./pages/FundDetailPage.jsx', () => ({
     default: function FundDetailPageMock() {
-        const {fundId} = useParams();
-        return <div>fund-detail-{fundId}</div>;
+        const {portfolioFundId} = useParams();
+        return <div>fund-detail-{portfolioFundId}</div>;
     },
 }));
 vi.mock('./pages/DcaManagementPage.jsx', () => ({default: () => <div>dca</div>}));

@@ -22,6 +22,14 @@ public class YangjibaoImportController {
         return ImportingApiResponse.ok(commands.create());
     }
 
+    @GetMapping("/sessions")
+    @Operation(summary = "查询当前用户的导入会话")
+    public ImportingApiResponse<List<YangjibaoImportSessionView>> list() {
+        return ImportingApiResponse.ok(commands.listSessions().stream()
+                .map(YangjibaoImportSessionView::from)
+                .toList());
+    }
+
     @GetMapping("/sessions/{id}")
     @Operation(summary = "查询导入会话状态")
     public ImportingApiResponse<YangjibaoImportCommandHandler.SessionView> state(@PathVariable String id) {

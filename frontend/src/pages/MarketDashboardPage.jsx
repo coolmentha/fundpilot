@@ -67,7 +67,7 @@ function ContributionItem({title, fund}) {
             <span className="muted">{title}</span>
             {fund ? (
                 <div>
-                    <Link to={`/funds/${fund.id}`}>{fund.fundName}</Link>
+                    <Link to={`/funds/${fund.portfolioFundId}`}>{fund.fundName}</Link>
                     <strong style={{color: pnlColor(fund.dailyPnl)}}>{signedMoney(fund.dailyPnl)}</strong>
                 </div>
             ) : <strong className="muted">-</strong>}

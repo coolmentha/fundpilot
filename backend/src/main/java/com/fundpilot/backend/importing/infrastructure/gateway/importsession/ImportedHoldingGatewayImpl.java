@@ -41,8 +41,14 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
     public ItemResult importItem(ItemRequest request) {
         var completed = receipts.find(request);
         if (completed.isPresent()) return completed.get();
-        var candidates = find(request.ownerId(), request.fundCode()).isEmpty()
-                ? navPrefetch.fetch(request.fundCode()) : List.<PublishedNavApi.NavCandidate>of();
+        List<PublishedNavApi.NavCandidate> candidates;
+        try {
+            candidates = find(request.ownerId(), request.fundCode()).isEmpty()
+                    ? navPrefetch.fetch(request.fundCode()) : List.of();
+        } catch (RuntimeException failure) {
+            throw new YangjibaoImportFailure(YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_DEPENDENCY_FAILED,
+                    "行情依赖暂时不可用", failure);
+        }
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         transaction.setTimeout(30);
         return transaction.execute(status -> {
@@ -52,16 +58,26 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
             var existing = find(request.ownerId(), request.fundCode());
             ItemResult result;
             if (existing.isEmpty()) {
-                var created = createLocal(request.ownerId(), request.fundCode(), request.fundName(),
-                        request.shares(), request.costPerShare(), request.groupNames(), candidates);
-                result = new ItemResult(ItemStatus.CREATED, "已新增基金", created.portfolioFundId());
+                long portfolioFundId;
+                try {
+                    portfolioFundId = createLocal(request.ownerId(), request.fundCode(), request.fundName(),
+                            request.shares(), request.costPerShare(), request.groupNames(), candidates);
+                } catch (PortfolioFundOnboardingApi.Failure failure) {
+                    throw classify(failure);
+                } catch (PortfolioGroupingApi.Failure failure) {
+                    throw new YangjibaoImportFailure(
+                            YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_VALIDATION_FAILED,
+                            "导入分组无效", failure);
+                }
+                result = new ItemResult(ItemStatus.CREATED, "已新增基金", portfolioFundId);
             } else if (request.mode() == null) {
-                throw new YangjibaoImportFailure(YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_INVALID,
+                throw new YangjibaoImportFailure(YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_CONFLICT,
                         "请选择已有基金的处理方式");
             } else if (request.mode() == ExistingMode.KEEP_LOCAL) {
                 result = new ItemResult(ItemStatus.SKIPPED, "以本系统份额为准", existing.get().portfolioFundId());
             } else {
-                synchronize(request.ownerId(), existing.get().portfolioFundId(), request.shares());
+                transactions.adjustToHoldingShares(new TransactionApi.AdjustToHoldingShares(
+                        request.ownerId(), existing.get().portfolioFundId(), request.shares()));
                 result = new ItemResult(ItemStatus.ADJUSTED, "已按目标份额调整", existing.get().portfolioFundId());
             }
             receipts.save(request, result);
@@ -79,30 +95,28 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
                                 .orElse(BigDecimal.ZERO))));
     }
 
-    @Override
-    public ImportedHolding create(long ownerId, String fundCode, String fundName, BigDecimal shares,
-                                  BigDecimal costPerShare, List<String> groupNames) {
-        var candidates = navPrefetch.fetch(fundCode);
-        return new TransactionTemplate(transactionManager).execute(status ->
-                createLocal(ownerId, fundCode, fundName, shares, costPerShare, groupNames, candidates));
-    }
-
-    private ImportedHolding createLocal(long ownerId, String fundCode, String fundName, BigDecimal shares,
-                                        BigDecimal costPerShare, List<String> groupNames,
-                                        List<PublishedNavApi.NavCandidate> candidates) {
+    private long createLocal(long ownerId, String fundCode, String fundName, BigDecimal shares,
+                             BigDecimal costPerShare, List<String> groupNames,
+                             List<PublishedNavApi.NavCandidate> candidates) {
         var product = products.ensure(new FundProductApi.EnsureProduct(fundCode, fundName, fundName, null));
         publishedNavs.publishNewer(new PublishedNavApi.PublishNavs(null, product.id(), fundCode, candidates));
         var result = onboarding.onboard(new PortfolioFundOnboardingApi.OnboardPortfolioFund(null, ownerId,
                 product.id(), true, DEFAULT_WARNING_RATIO, shares, costPerShare, null));
         groups.assignByNames(new PortfolioGroupingApi.AssignByNames(ownerId, result.portfolioFundId(), groupNames));
-        return portfolioFunds.findOwned(ownerId, result.portfolioFundId())
-                .map(fund -> new ImportedHolding(fund.id(), fund.legacyFundId()))
-                .orElseThrow();
+        return result.portfolioFundId();
     }
 
-    @Override
-    public boolean synchronize(long ownerId, long portfolioFundId, BigDecimal targetShares) {
-        return transactions.adjustToHoldingShares(new TransactionApi.AdjustToHoldingShares(
-                ownerId, portfolioFundId, targetShares)).transaction() != null;
+    private YangjibaoImportFailure classify(PortfolioFundOnboardingApi.Failure failure) {
+        var code = switch (failure.code()) {
+            case POSITION_WARNING_INVALID, INITIAL_HOLDING_SHARES_INVALID, COST_PER_SHARE_INVALID,
+                    OPENED_AT_IN_FUTURE, FUND_GROUP_NAME_INVALID, FUND_GROUP_NAME_DUPLICATE ->
+                    YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_VALIDATION_FAILED;
+            case PORTFOLIO_FUND_ALREADY_TRACKED -> YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_CONFLICT;
+            case PRODUCT_NOT_FOUND, NAV_UNAVAILABLE ->
+                    YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_DEPENDENCY_FAILED;
+            default -> null;
+        };
+        if (code == null) throw failure;
+        return new YangjibaoImportFailure(code, "导入条目处理失败", failure);
     }
 }

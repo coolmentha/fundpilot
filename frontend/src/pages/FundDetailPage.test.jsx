@@ -6,7 +6,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 vi.mock('../api/hooks.js', () => ({
     useFund: () => ({
         data: {
-            id: 1, fundCode: '000001', fundName: '测试基金', fundCategory: 'INDEX', fundSubType: 'INDEX', status: 'HOLDING',
+            id: 1, portfolioFundId: 11, fundCode: '000001', fundName: '测试基金', fundCategory: 'INDEX', fundSubType: 'INDEX', status: 'HOLDING',
             holdingShares: 100, holdingAmount: 80, totalPnl: -20, dailyPnl: 1.5, dailyChangePct: 0.02,
             valuationSource: 'CONFIRMED_NAV',
             valuationDate: '2026-07-24T00:00:00Z', valuationNav: 1, positionWarningEnabled: true,
@@ -19,12 +19,12 @@ vi.mock('../api/hooks.js', () => ({
             redemptionLadder: [{maxDays: 7, rate: 0.015}, {maxDays: null, rate: 0}],
         },
     }),
-    usePendingTransactions: () => ({data: [{id: 1, fundId: 1}, {id: 2, fundId: 1}, {id: 3, fundId: 2}]}),
-    usePendingSignals: () => ({data: [{id: 1, fundId: 1}, {id: 2, fundId: 2}]}),
+    usePendingTransactions: () => ({data: [{id: 1, fundId: 1, portfolioFundId: 11}, {id: 2, fundId: 1, portfolioFundId: 11}, {id: 3, fundId: 2, portfolioFundId: 12}]}),
+    usePendingSignals: () => ({data: [{id: 1, fundId: 1, portfolioFundId: 11}, {id: 2, fundId: 2, portfolioFundId: 12}]}),
 }));
 vi.mock('./FundTransactionTab.jsx', () => ({default: () => <div>交易流水内容</div>}));
 vi.mock('./FundStrategyTab.jsx', () => ({default: () => <div>策略参数内容</div>}));
-vi.mock('./FundSignalTab.jsx', () => ({default: () => <div>纪律建议内容</div>}));
+vi.mock('./FundSignalTab.jsx', () => ({default: ({portfolioFundId}) => <div>纪律建议内容 {portfolioFundId}</div>}));
 vi.mock('./FundMarketTab.jsx', () => ({default: () => <div>行情指标内容</div>}));
 vi.mock('./FundDcaTab.jsx', () => ({default: () => <div>定投计划内容</div>}));
 
@@ -58,8 +58,8 @@ describe('FundDetailPage', () => {
         document.body.appendChild(container);
         root = createRoot(container);
         await act(async () => root.render(
-            <MemoryRouter initialEntries={['/funds/1']}>
-                <Routes><Route path="/funds/:fundId" element={<FundDetailPage/>}/></Routes>
+            <MemoryRouter initialEntries={['/funds/11']}>
+                <Routes><Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/></Routes>
             </MemoryRouter>,
         ));
 
@@ -80,8 +80,11 @@ describe('FundDetailPage', () => {
         ]);
         expect(container.querySelector('.ant-tabs-tab-active')?.textContent).toBe('行情指标');
         expect(container.textContent).toContain('行情指标内容');
+        await act(async () => [...container.querySelectorAll('.ant-tabs-tab-btn')]
+            .find((tab) => tab.textContent === '纪律建议').click());
+        expect(container.textContent).toContain('纪律建议内容 11');
         expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
-            '/confirm?fundId=1', '/advice?fundId=1', '/funds?editId=1',
+            '/confirm?portfolioFundId=11', '/advice?portfolioFundId=11', '/funds?editPortfolioFundId=11',
         ]));
     });
 });

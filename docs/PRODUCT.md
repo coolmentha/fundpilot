@@ -33,13 +33,13 @@ FundPilot 解决三个问题：
 
 ### 2.1 基金与事实持仓
 
-`FundEntity` 保存基金身份、分类、单基金仓位提醒和 legacy 生命周期字段；当前成本单价由 Accounting `Position` 独占。仓位提醒默认开启、提醒线为 30%，每只基金可在 1% 至 100% 间调整或关闭。提醒替代旧版硬上限且有意不阻止交易。事实持仓不存冗余金额，始终由 CONFIRMED 交易份额聚合：
+Product Catalog `FundProduct` 保存基金身份、类型和公开费率，Portfolio `PortfolioFund` 保存用户跟踪关系、有效性和仓位提醒，Accounting `Position` 独占事实份额与当前成本单价。仓位提醒默认开启、提醒线为 30%，每只组合基金可在 1% 至 100% 间调整或关闭。提醒替代旧版硬上限且有意不阻止交易。事实持仓不存冗余金额，始终由 CONFIRMED 交易份额聚合：
 
-- `PENDING_HOLDING`：没有已确认交易。
-- `HOLDING`：CONFIRMED 净份额大于零。
+- `EMPTY`：没有已确认交易。
+- `OPEN`：CONFIRMED 净份额大于零。
 - `CLEARED`：曾有交易但净份额已归零。
 
-`fundCategory` 用于推荐定投止盈参数；`fundSubType` 用于决定行情和逻辑止损路径，两者不可合并。
+产品类型用于决定行情和逻辑止损路径；产品默认纪律分类用于推荐参数，两者不可合并。
 
 ### 2.2 交易账本
 
@@ -158,12 +158,13 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 
 | 模块 | 接口 |
 |---|---|
-| 基金 | `/api/funds`、`/api/funds/{id}`、`/api/funds/search` |
-| 策略 | `/api/funds/{id}/strategies`、`/api/strategies/{id}/activate` |
-| 定投 | `/api/dca-plans`、`/api/funds/{id}/dca-plans`、`/api/dca-plans/{id}/activate`、`/api/dca/budget-summary` |
-| 信号 | `/api/funds/{id}/signals/today`、`/api/signals/pending` |
-| 信号回应 | `/api/funds/{id}/operations`、`/api/funds/{id}/signals/{signalId}/ignore` |
-| 交易 | `/api/funds/{id}/transactions`、`/api/transactions/{id}/confirm` |
+| 产品目录 | `/api/products`、`/api/products/{fundCode}/fees` |
+| 组合基金 | `/api/portfolio-funds`、`/api/portfolio-funds/{portfolioFundId}` |
+| 纪律策略 | `/api/discipline/strategies/portfolio-funds/{portfolioFundId}`、`/api/discipline/strategies/{strategyId}` |
+| 定投 | `/api/investment-plans/portfolio-funds/{portfolioFundId}`、`/api/investment-plans/{planId}` |
+| 纪律建议 | `/api/discipline/advice/portfolio-funds/{portfolioFundId}`、`/api/discipline/advice/pending` |
+| 交易 | `/api/portfolio-funds/{portfolioFundId}/transactions`、`/api/transactions/{transactionId}` |
+| 收益 | `/api/insights/portfolio/**` |
 | 行情 | `/api/market/indices/realtime`、`/api/market/breadth`、`/api/market/volume-price`、`/api/market/sectors` |
 | 配置 | `/api/user-config` |
 | 管理 | `/api/admin/**` |

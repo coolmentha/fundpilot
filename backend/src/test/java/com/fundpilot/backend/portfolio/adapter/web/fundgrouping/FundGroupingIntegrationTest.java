@@ -1,8 +1,5 @@
 package com.fundpilot.backend.portfolio.adapter.web.fundgrouping;
 
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
@@ -26,6 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -37,7 +35,6 @@ import java.util.concurrent.TimeUnit;
 @TestPropertySource(properties = "fundpilot.admin.api-key=test-admin-key")
 class FundGroupingIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
-    @Autowired FundRepository fundRepository;
     @Autowired FundProductApi productCatalogApi;
     @Autowired PortfolioFundApi portfolioFundApi;
     @Autowired PortfolioGroupingApi portfolioGroupingApi;
@@ -46,20 +43,12 @@ class FundGroupingIntegrationTest extends AbstractIntegrationTest {
     @Autowired PlatformTransactionManager transactionManager;
 
     @Test
-    void webEntryOwnsGroupsAndKeepsBothMembershipProjectionsConsistent() throws Exception {
+    void webEntryOwnsGroupsAndKeepsPortfolioMembershipConsistent() throws Exception {
         long ownerId = testActorId();
         var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
                 "510300", "沪深300ETF", null, null));
-        FundEntity fund = new FundEntity();
-        fund.setOwnerId(ownerId);
-        fund.setProductId(product.id());
-        fund.setFundCode("510300");
-        fund.setFundName("沪深300ETF");
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        fund = fundRepository.saveAndFlush(fund);
         var portfolioFund = portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
-                fund.getId(), ownerId, product.id(), fund.isPositionWarningEnabled(),
-                fund.getPositionWarningRatio()));
+                null, ownerId, product.id(), true, new BigDecimal("0.30")));
         Cookie actor = new Cookie(AuthenticationFilter.COOKIE_NAME,
                 sessions.issue(ownerId, UserRole.ADMIN, 0L));
 
@@ -81,17 +70,14 @@ class FundGroupingIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data[0].fundCount").value(1));
         assertThat(countMembership("portfolio_fund_group_member", "portfolio_fund_id",
                 portfolioFund.id())).isEqualTo(1);
-        assertThat(countMembership("fund_group_member", "fund_id", fund.getId())).isEqualTo(1);
 
         mockMvc.perform(put("/api/fund-groups").cookie(actor)
                         .contentType("application/json").content("{\"groups\":[]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));
 
-        assertThat(fundRepository.findById(fund.getId())).isPresent();
         assertThat(countMembership("portfolio_fund_group_member", "portfolio_fund_id",
                 portfolioFund.id())).isZero();
-        assertThat(countMembership("fund_group_member", "fund_id", fund.getId())).isZero();
     }
 
     @Test
@@ -147,16 +133,8 @@ class FundGroupingIntegrationTest extends AbstractIntegrationTest {
         String suffix = Long.toUnsignedString(System.nanoTime(), 36);
         var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
                 "G" + suffix, prefix + " ETF", null, FundProductApi.InvestmentTarget.STOCK));
-        FundEntity fund = new FundEntity();
-        fund.setOwnerId(ownerId);
-        fund.setProductId(product.id());
-        fund.setFundCode(product.fundCode());
-        fund.setFundName(prefix + " ETF");
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        fund = fundRepository.saveAndFlush(fund);
         return portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
-                fund.getId(), ownerId, product.id(), fund.isPositionWarningEnabled(),
-                fund.getPositionWarningRatio()));
+                null, ownerId, product.id(), true, new BigDecimal("0.30")));
     }
 
     private int countMembership(String table, String ownerColumn, long ownerId) {

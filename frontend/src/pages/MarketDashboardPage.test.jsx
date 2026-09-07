@@ -34,8 +34,8 @@ describe('MarketDashboardPage', () => {
             marketState: 'CLOSED', updatedAt: '2026-08-11T07:00:08Z',
         }});
         useFunds.mockReturnValue({data: [
-            {id: 1, fundName: '贡献基金', status: 'HOLDING', holdingAmount: 100, dailyPnl: 12.3},
-            {id: 2, fundName: '拖累基金', status: 'HOLDING', holdingAmount: 100, dailyPnl: -8.2},
+            {id: 1, portfolioFundId: 11, fundName: '贡献基金', status: 'HOLDING', holdingAmount: 100, dailyPnl: 12.3},
+            {id: 2, portfolioFundId: 12, fundName: '拖累基金', status: 'HOLDING', holdingAmount: 100, dailyPnl: -8.2},
         ]});
         container = document.createElement('div');
         document.body.appendChild(container);

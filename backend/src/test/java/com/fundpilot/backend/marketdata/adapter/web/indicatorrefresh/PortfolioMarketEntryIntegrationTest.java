@@ -12,7 +12,12 @@ import com.fundpilot.backend.identityaccess.adapter.web.authentication.Authentic
 import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi.Actor;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi.ActorRole;
+import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexKlineSourceGateway;
+import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexValuationSourceGateway;
+import com.fundpilot.backend.marketdata.application.gateway.klinequery.IndexKlineSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
+import com.fundpilot.backend.marketdata.application.gateway.realtimevaluation.RealtimeValuationCacheGateway;
+import com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation.MarketRealtimeCache;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
@@ -20,6 +25,8 @@ import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,7 +35,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
-@SpringBootTest(classes = FundPilotBackendApplication.class)
+@SpringBootTest(classes = FundPilotBackendApplication.class,
+        properties = "fundpilot.admin.session-secret=test-only-market-entry-session-secret")
 class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired FundProductApi products;
@@ -36,6 +44,20 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     @Autowired SessionTokenGateway sessions;
     @Autowired UserAdministrationApi users;
     @MockitoBean PublishedNavSourceGateway source;
+    @MockitoBean PublishedIndexKlineSourceGateway klineSource;
+    @MockitoBean PublishedIndexValuationSourceGateway valuationSource;
+    @MockitoBean IndexKlineSourceGateway onDemandKlineSource;
+    @MockitoBean RealtimeValuationCacheGateway realtimeCache;
+    @MockitoBean MarketRealtimeCache marketRealtimeCache;
+
+    @BeforeEach
+    void isolateExternalMarketSources() {
+        when(klineSource.fetch(anyString(), anyString()))
+                .thenReturn(new PublishedIndexKlineSourceGateway.IndexKline(List.of()));
+        when(valuationSource.fetch(anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(onDemandKlineSource.fetch(anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(realtimeCache.findIntraday(anyString())).thenReturn(Optional.empty());
+    }
 
     @Test
     void portfolioWithoutLegacyIdCanRefreshPublishedNavAndReadMarketData() throws Exception {
@@ -45,7 +67,10 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
         mvc.perform(post("/api/portfolio-funds/{id}/market-data/refresh", id).cookie(cookie()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.portfolioFundId").value(id));
         mvc.perform(get("/api/portfolio-funds/{id}/market-indicators/today", id).cookie(cookie()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.currentNav").value(2.40));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.portfolioFundId").value(id))
+                .andExpect(jsonPath("$.data.fundId").doesNotExist())
+                .andExpect(jsonPath("$.data.currentNav").value(2.40));
         mvc.perform(get("/api/portfolio-funds/{id}/kline", id).cookie(cookie()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.chartType").value("nav"));
         mvc.perform(get("/api/portfolio-funds/{id}/intraday", id).cookie(cookie()))
@@ -99,10 +124,13 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     }
 
     private long create(long ownerId) {
-        var product = products.ensure(new FundProductApi.EnsureProduct("MKT" + System.nanoTime(),
+        var product = products.ensure(new FundProductApi.EnsureProduct("MKT" + Long.toString(System.nanoTime(), 36),
                 "行情测试基金", null, FundProductApi.InvestmentTarget.STOCK));
-        return portfolios.track(new PortfolioFundApi.TrackPortfolioFund(null, ownerId, product.id(),
+        long id = portfolios.track(new PortfolioFundApi.TrackPortfolioFund(null, ownerId, product.id(),
                 true, new BigDecimal("0.30"))).id();
+        verify(source, timeout(5_000)).fetchHistory(anyString());
+        clearInvocations(source);
+        return id;
     }
 
     private Cookie cookie() {

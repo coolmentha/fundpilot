@@ -1,6 +1,8 @@
 package com.fundpilot.backend.architecture;
 
 import com.fundpilot.backend.FundPilotBackendApplication;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 import org.springframework.modulith.docs.Documenter;
@@ -48,9 +50,21 @@ class SpringModulithStructureTest {
     void 旧Mvc顶层包不被误识别为应用模块() {
         ApplicationModules modules = ApplicationModules.of(FundPilotBackendApplication.class);
 
-        assertThat(Set.of("admin", "common", "config", "dca", "exception", "fund",
+        assertThat(Set.of("admin", "common", "config", "dca", "exception",
                 "integration", "metrics", "signal", "strategy", "user"))
                 .allSatisfy(name -> assertThat(modules.getModuleByName(name)).isEmpty());
+    }
+
+    @Test
+    void 旧基金包已经退休() {
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.fundpilot.backend");
+
+        assertThat(classes.stream()
+                .filter(type -> type.getPackageName().startsWith("com.fundpilot.backend.fund"))
+                .map(type -> type.getName()))
+                .isEmpty();
     }
 
     @Test

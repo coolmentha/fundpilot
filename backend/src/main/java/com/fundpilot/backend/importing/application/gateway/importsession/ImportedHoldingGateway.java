@@ -7,12 +7,8 @@ import java.util.Optional;
 public interface ImportedHoldingGateway {
     ItemResult importItem(ItemRequest request);
     Optional<LocalHolding> find(long ownerId, String fundCode);
-    ImportedHolding create(long ownerId, String fundCode, String fundName, BigDecimal shares,
-                           BigDecimal costPerShare, List<String> groupNames);
-    boolean synchronize(long ownerId, long portfolioFundId, BigDecimal targetShares);
 
     record LocalHolding(long portfolioFundId, Long legacyFundId, BigDecimal shares) {}
-    record ImportedHolding(long portfolioFundId, Long legacyFundId) {}
     record ItemRequest(long ownerId, String sessionId, String itemId, String fundCode, String fundName,
                        BigDecimal shares, BigDecimal costPerShare, List<String> groupNames, ExistingMode mode) {
         public ItemRequest { groupNames = List.copyOf(groupNames); }

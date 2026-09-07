@@ -22,12 +22,6 @@ public class InvestmentPlanCommandHandler {
     private final PlanPortfolioFundGateway portfolioFunds;
 
     @Transactional
-    public PlanResult create(long ownerId, long legacyFundId, PlanInput input) {
-        var fund = portfolioFunds.requireTrackedByLegacyFund(ownerId, legacyFundId);
-        return createForPortfolioFund(ownerId, fund.id(), input);
-    }
-
-    @Transactional
     public PlanResult createForPortfolioFund(long ownerId, long portfolioFundId, PlanInput input) {
         var tracked = portfolioFunds.requireTracked(ownerId, portfolioFundId);
         InvestmentPlan plan;

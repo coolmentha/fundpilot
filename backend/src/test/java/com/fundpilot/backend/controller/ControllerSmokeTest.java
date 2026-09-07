@@ -20,7 +20,13 @@ class ControllerSmokeTest extends AbstractIntegrationTest {
     void allControllersLoaded() {
         // 当前 Controller 应作为 bean 加载(路径/依赖注入无误即通过)
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.fund.controller.FundController.class)).isNotNull();
+                com.fundpilot.backend.productcatalog.adapter.web.productsearch.ProductSearchController.class))
+                .isNotNull();
+        assertThat(applicationContext.getBean(
+                com.fundpilot.backend.portfolio.adapter.web.fundtracking.PortfolioFundController.class)).isNotNull();
+        assertThat(applicationContext.getBean(
+                com.fundpilot.backend.accounting.adapter.web.fundonboarding.PortfolioFundOnboardingController.class))
+                .isNotNull();
         assertThat(applicationContext.getBean(
                 com.fundpilot.backend.accounting.adapter.web.transactionhistory.TransactionController.class))
                 .isNotNull();

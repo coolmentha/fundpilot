@@ -74,4 +74,5 @@ fundpilot:
     base-url: ${YANGJIBAO_BASE_URL:http://browser-plug-api.yangjibao.com}
     secret: ${YANGJIBAO_SECRET:}
     session-ttl: ${YANGJIBAO_SESSION_TTL:PT30M}
+    session-retention: ${YANGJIBAO_SESSION_RETENTION:P7D}
     timeout: ${YANGJIBAO_TIMEOUT:PT15S}

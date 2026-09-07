@@ -26,7 +26,7 @@ const transactionSourceOptions = [
  * 列出该基金全部交易(按时间倒序),PENDING 行内嵌撤单;"手动录入"弹窗支持交易来源,
  * 买入类填金额、卖出类填份额(份额/金额等净值确认后回填),手动卖出不卡 7 天硬约束。
  */
-export default function FundTransactionTab({fundId, portfolioFundId}) {
+export default function FundTransactionTab({portfolioFundId}) {
     const {data: transactions, isLoading} = useFundTransactions(portfolioFundId);
     const {data: funds} = useFunds();
     const cancelTx = useCancelTransaction();
@@ -40,7 +40,7 @@ export default function FundTransactionTab({fundId, portfolioFundId}) {
     const isSell = source && SELL_SOURCES.has(source);
     const isAdjustTarget = source === ADJUST_TARGET_SOURCE;
     const isTransferOut = source === 'TRANSFER_OUT';
-    const currentFund = funds?.find((fund) => fund.id === fundId);
+    const currentFund = funds?.find((fund) => fund.portfolioFundId === portfolioFundId);
     const currentHoldingShares = Number(currentFund?.holdingShares ?? 0);
     const {data: feeRates} = useFundFeeRates(currentFund?.fundCode);
     const redemptionHint = redemptionLadderText(feeRates?.redemptionLadder);

@@ -7,6 +7,7 @@ import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActo
 import com.fundpilot.backend.marketdata.adapter.web.indicatorrefresh.PortfolioMarketRefreshController;
 import com.fundpilot.backend.marketdata.application.command.indicatorrefresh.*;
 import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -67,6 +68,18 @@ class PortfolioMarketRefreshControllerTest {
     void externalFailureDoesNotExposeInternalDetailsOrClaimSuccess() throws Exception {
         owned(PortfolioFundApi.Validity.TRACKED);
         doThrow(new IllegalStateException("private upstream detail")).when(refresh).refreshOneForPortfolioFund(41L);
+        mvc.perform(post("/api/portfolio-funds/41/market-data/refresh"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("MARKET_DATA_ALL_SOURCES_FAILED"))
+                .andExpect(jsonPath("$.message").value("行情刷新失败，请稍后重试"));
+    }
+
+    @Test
+    void businessSourceFailureDoesNotExposeInternalDetails() throws Exception {
+        owned(PortfolioFundApi.Validity.TRACKED);
+        doThrow(new BusinessException(ErrorCode.MARKET_DATA_ALL_SOURCES_FAILED,
+                "所有数据源均失败 fetchNavHistory code=private"))
+                .when(refresh).refreshOneForPortfolioFund(41L);
         mvc.perform(post("/api/portfolio-funds/41/market-data/refresh"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("MARKET_DATA_ALL_SOURCES_FAILED"))

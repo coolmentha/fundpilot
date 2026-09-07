@@ -1,6 +1,5 @@
 package com.fundpilot.backend.marketdata.infrastructure.cache.realtimevaluation;
 
-import com.fundpilot.backend.fund.enums.FundStatus;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.TrackedNavProductGateway;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.EastmoneyPush2Client;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundEstimateSnapshot;
@@ -55,7 +54,7 @@ class MarketRealtimeCacheTest {
                 Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE))));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
-                mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore, mock(ThsIndexFlashClient.class));
+                mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore, mock(ThsIndexFlashClient.class), false);
 
         cache.restoreFromRedis();
 
@@ -72,7 +71,7 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
                 mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore,
-                mock(ThsIndexFlashClient.class));
+                mock(ThsIndexFlashClient.class), false);
 
         cache.restoreFromRedis();
 
@@ -99,7 +98,7 @@ class MarketRealtimeCacheTest {
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), indexFlashClient);
+                mock(MarketRealtimeRedisStore.class), indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
 
@@ -137,7 +136,7 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, mock(FundEstimateService.class), watchedIndices,
                 mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), indexFlash);
+                mock(MarketRealtimeRedisStore.class), indexFlash, false);
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -167,7 +166,7 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, mock(FundEstimateService.class), watchedIndices,
                 mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), clock,
-                mock(MarketRealtimeRedisStore.class), indexFlash);
+                mock(MarketRealtimeRedisStore.class), indexFlash, false);
 
         cache.refreshRealtimeWithoutEstimates();
         Instant firstCompleteRefresh = clock.instant();
@@ -202,7 +201,7 @@ class MarketRealtimeCacheTest {
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), indexFlashClient);
+                mock(MarketRealtimeRedisStore.class), indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -227,7 +226,7 @@ class MarketRealtimeCacheTest {
         when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
-                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class), indexFlashClient);
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class), indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
         cache.refreshRealtimeWithoutEstimates();
@@ -243,8 +242,8 @@ class MarketRealtimeCacheTest {
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
         when(userConfigService.findAllForRefresh()).thenReturn(List.of());
 
-        TrackedNavProductGateway.TrackedProduct holding = fund("510300", FundStatus.HOLDING);
-        TrackedNavProductGateway.TrackedProduct watching = fund("159825", FundStatus.PENDING_HOLDING);
+        TrackedNavProductGateway.TrackedProduct holding = fund("510300");
+        TrackedNavProductGateway.TrackedProduct watching = fund("159825");
         when(products.findAll()).thenReturn(List.of(holding, watching));
         when(estimateService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("510300"), any(Instant.class), anySet()))
                 .thenReturn(FundEstimateResult.unavailable());
@@ -252,7 +251,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshAll();
 
@@ -267,13 +266,13 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("270042", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("270042");
         when(products.findAll()).thenReturn(List.of(fund));
         when(estimateService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("270042"), any(Instant.class), anySet()))
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshFundEstimates();
 
@@ -306,7 +305,7 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), estimateService, mock(WatchedIndicesApi.class), products,
                 mock(MarketDataMetrics.class), CLOCK, redisStore,
-                mock(ThsIndexFlashClient.class));
+                mock(ThsIndexFlashClient.class), false);
         cache.restoreFromRedis();
 
         cache.refreshFundEstimates();
@@ -336,7 +335,7 @@ class MarketRealtimeCacheTest {
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), estimateService, mock(WatchedIndicesApi.class), products,
                 mock(MarketDataMetrics.class), clock, mock(MarketRealtimeRedisStore.class),
-                mock(ThsIndexFlashClient.class));
+                mock(ThsIndexFlashClient.class), false);
 
         cache.refreshFundEstimates();
         verify(estimateService, never()).fetchEstimateResult(
@@ -353,7 +352,7 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("270042", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("270042");
         MutableClock clock = new MutableClock(Instant.parse("2026-07-10T05:30:00Z"));
         FundEstimateSnapshot recovered = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
@@ -363,7 +362,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(recovered));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), clock,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshFundEstimates();
         cache.refreshFundEstimates();
@@ -390,7 +389,7 @@ class MarketRealtimeCacheTest {
         when(userConfigService.findAllForRefresh()).thenReturn(List.of());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         assertThat(MarketRealtimeCache.class.getDeclaredMethod("onApplicationReady")
                 .isAnnotationPresent(Async.class)).isTrue();
@@ -406,7 +405,7 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("510300", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("510300");
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 15:00", "2026-07-09");
         when(products.findAll()).thenReturn(List.of(fund));
@@ -414,7 +413,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(snapshot));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         var method = MarketRealtimeCache.class.getMethod("warmFundEstimatesAfterReady");
 
@@ -425,12 +424,30 @@ class MarketRealtimeCacheTest {
     }
 
     @Test
+    void validationModeSkipsStartupRefreshes() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        FundEstimateService estimateService = mock(FundEstimateService.class);
+        WatchedIndicesApi watchedIndices = mock(WatchedIndicesApi.class);
+        TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
+        MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, estimateService, watchedIndices, products, mock(MarketDataMetrics.class), CLOCK,
+                redisStore, mock(ThsIndexFlashClient.class), true);
+
+        cache.onApplicationReady();
+        cache.warmFundEstimatesAfterReady();
+
+        org.mockito.Mockito.verifyNoInteractions(
+                push2Client, estimateService, watchedIndices, products, redisStore);
+    }
+
+    @Test
     void refreshAll_成功后空响应会删除旧估值并标记不可用() {
         EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("510300", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("510300");
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(userConfigService.findAllForRefresh()).thenReturn(List.of());
@@ -440,7 +457,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshAll();
         cache.refreshAll();
@@ -456,7 +473,7 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("510300", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("510300");
         FundEstimateSnapshot estimate = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         FundIntradayChart chart = new FundIntradayChart("2026-07-10", "2026-07-09", new BigDecimal("1.0000"), List.of(
@@ -468,7 +485,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(estimate));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshFundEstimates();
         assertThat(cache.getIntraday("510300")).isEqualTo(chart);
@@ -483,7 +500,7 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("510300", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("510300");
         FundEstimateSnapshot snapshot = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(userConfigService.findAllForRefresh()).thenReturn(List.of());
@@ -493,7 +510,7 @@ class MarketRealtimeCacheTest {
                 .thenThrow(new IllegalStateException("timeout"));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshAll();
         cache.refreshAll();
@@ -508,7 +525,7 @@ class MarketRealtimeCacheTest {
         FundEstimateService estimateService = mock(FundEstimateService.class);
         WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
         TrackedNavProductGateway products = mock(TrackedNavProductGateway.class);
-        TrackedNavProductGateway.TrackedProduct fund = fund("510300", FundStatus.HOLDING);
+        TrackedNavProductGateway.TrackedProduct fund = fund("510300");
         FundEstimateSnapshot stale = new FundEstimateSnapshot(
                 new BigDecimal("0.0100"), "2026-07-09 15:00", "2026-07-08");
         FundEstimateSnapshot current = new FundEstimateSnapshot(
@@ -520,7 +537,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn(FundEstimateResult.available(current));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshAll();
 
@@ -547,7 +564,7 @@ class MarketRealtimeCacheTest {
         when(products.findAll()).thenReturn(List.of(fund));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class));
+                mock(MarketRealtimeRedisStore.class), mock(ThsIndexFlashClient.class), false);
 
         cache.refreshAll();
 
@@ -575,7 +592,7 @@ class MarketRealtimeCacheTest {
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                redisStore, indexFlashClient);
+                redisStore, indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
         assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001");
@@ -610,7 +627,7 @@ class MarketRealtimeCacheTest {
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                redisStore, indexFlashClient);
+                redisStore, indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
         assertThat(cache.getIndices()).extracting("secid").containsExactly("1.000001", "0.399001");
@@ -639,7 +656,7 @@ class MarketRealtimeCacheTest {
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                mock(MarketRealtimeRedisStore.class), indexFlashClient);
+                mock(MarketRealtimeRedisStore.class), indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
 
@@ -666,7 +683,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn("{\"data\":{\"diff\":[]}}");
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 push2Client, estimateService, userConfigService, products, mock(MarketDataMetrics.class), CLOCK,
-                redisStore, indexFlashClient);
+                redisStore, indexFlashClient, false);
 
         cache.refreshRealtimeWithoutEstimates();
         assertThat(cache.getSectors()).extracting("sectorCode").containsExactly("BK0001");
@@ -677,7 +694,7 @@ class MarketRealtimeCacheTest {
         verify(redisStore, times(1)).save(org.mockito.ArgumentMatchers.any());
     }
 
-    private static TrackedNavProductGateway.TrackedProduct fund(String code, FundStatus ignoredStatus) {
+    private static TrackedNavProductGateway.TrackedProduct fund(String code) {
         return new TrackedNavProductGateway.TrackedProduct(null, 1L, code, null, null, null);
     }
 

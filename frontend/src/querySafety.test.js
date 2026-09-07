@@ -10,6 +10,28 @@ import {
 } from './querySafety.js';
 
 describe('query safety guards', () => {
+    it('多个无旧标识基金在排序和更新后保持组合基金身份', () => {
+        const funds = [
+            {id: null, portfolioFundId: 12, fundCode: '000012', dailyPnl: -2},
+            {id: null, portfolioFundId: 11, fundCode: '000011', dailyPnl: 3},
+        ];
+
+        const sorted = buildFundWatchlistRows(funds, {}, {
+            estimatesFetched: false,
+            estimatesError: false,
+        }).sort((left, right) => right.dailyPnl - left.dailyPnl);
+        const updated = buildFundWatchlistRows([
+            {...funds[0], dailyPnl: 5},
+            funds[1],
+        ], {}, {estimatesFetched: false, estimatesError: false});
+
+        expect(sorted.map((row) => [row.key, row.id, row.portfolioFundId])).toEqual([
+            [11, 11, 11],
+            [12, 12, 12],
+        ]);
+        expect(updated.map((row) => row.key)).toEqual([12, 11]);
+    });
+
     it('我的持仓只保留有正持仓的 HOLDING 基金', () => {
         expect(selectHoldingRows([
             {id: 1, status: 'HOLDING', holdingAmount: 100},

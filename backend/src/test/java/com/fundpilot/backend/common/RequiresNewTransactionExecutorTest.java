@@ -1,9 +1,5 @@
 package com.fundpilot.backend.platform.transaction;
 
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.enums.FundStatus;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -19,40 +15,38 @@ class RequiresNewTransactionExecutorTest extends AbstractIntegrationTest {
     RequiresNewTransactionExecutor executor;
 
     @Autowired
-    FundRepository fundRepository;
-
-    @Autowired
     JdbcTemplate jdbcTemplate;
 
     @AfterEach
     void cleanUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE fund CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE fund_product CASCADE");
     }
 
     @Test
     void 失败单元回滚后_后续独立单元仍可提交() {
-        FundEntity fund = new FundEntity();
-        fund.setFundCode("TX" + System.nanoTime());
-        fund.setFundName("原名称");
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        fund.setStatus(FundStatus.PENDING_HOLDING);
-        Long fundId = fundRepository.save(fund).getId();
+        Long productId = jdbcTemplate.queryForObject("""
+                INSERT INTO fund_product (fund_code, fund_name)
+                VALUES (?, '原名称')
+                RETURNING id
+                """, Long.class, "TX" + Long.toUnsignedString(System.nanoTime(), 36));
 
         assertThatThrownBy(() -> executor.execute(() -> {
-            FundEntity current = fundRepository.findById(fundId).orElseThrow();
-            current.setFundName("应回滚");
-            fundRepository.saveAndFlush(current);
+            jdbcTemplate.update("UPDATE fund_product SET fund_name = '应回滚' WHERE id = ?", productId);
             throw new IllegalStateException("模拟单基金失败");
         })).isInstanceOf(IllegalStateException.class);
 
-        assertThat(fundRepository.findById(fundId).orElseThrow().getFundName()).isEqualTo("原名称");
+        assertThat(nameOf(productId)).isEqualTo("原名称");
 
         executor.execute(() -> {
-            FundEntity current = fundRepository.findById(fundId).orElseThrow();
-            current.setFundName("已提交");
-            return fundRepository.save(current);
+            jdbcTemplate.update("UPDATE fund_product SET fund_name = '已提交' WHERE id = ?", productId);
+            return null;
         });
 
-        assertThat(fundRepository.findById(fundId).orElseThrow().getFundName()).isEqualTo("已提交");
+        assertThat(nameOf(productId)).isEqualTo("已提交");
+    }
+
+    private String nameOf(long productId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT fund_name FROM fund_product WHERE id = ?", String.class, productId);
     }
 }

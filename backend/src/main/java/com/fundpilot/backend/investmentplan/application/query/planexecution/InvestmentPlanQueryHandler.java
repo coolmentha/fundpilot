@@ -37,24 +37,12 @@ public class InvestmentPlanQueryHandler {
     }
 
     @Transactional(readOnly = true)
-    public List<InvestmentPlanCommandHandler.PlanResult> listByLegacyFund(long ownerId, long legacyFundId) {
-        var fund = portfolioFunds.requireTrackedByLegacyFund(ownerId, legacyFundId);
-        return listByPortfolioFund(ownerId, fund.id());
-    }
-
-    @Transactional(readOnly = true)
     public List<InvestmentPlanCommandHandler.PlanResult> listByPortfolioFund(long ownerId, long portfolioFundId) {
         portfolioFunds.requireTracked(ownerId, portfolioFundId);
         var values = plans.findByPortfolioFundId(portfolioFundId);
         Map<Long, InvestmentPlanExecution> latest = latest(values);
         return values.stream().map(plan -> InvestmentPlanCommandHandler.from(plan)
                 .withLatestDecision(toLatest(latest.get(plan.id())))).toList();
-    }
-
-    @Transactional(readOnly = true)
-    public InvestmentPlanCommandHandler.PlanResult activeByLegacyFund(long ownerId, long legacyFundId) {
-        var fund = portfolioFunds.requireTrackedByLegacyFund(ownerId, legacyFundId);
-        return activeByPortfolioFund(ownerId, fund.id());
     }
 
     @Transactional(readOnly = true)

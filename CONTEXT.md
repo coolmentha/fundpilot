@@ -55,22 +55,22 @@ _Avoid_: DECREASE（DECREASE 是账目方向，不是策略意图）
 _Avoid_: BUY / SELL（语义已被 SignalType 占用，避免歧义）
 
 **信号回应（Signal Response）**:
-路径 `fundId` 必须与 `signalLogId` 所属基金一致；同一 SignalLog 最多生成一笔未软删交易。回应只创建 PENDING 交易，
-不提前修改 `FundStatus`；交易确认或撤销后再按全部 CONFIRMED 交易的事实净份额统一重算状态。SELL 交易同样保留 `signalLogId`。
-_Avoid_: 仅相信请求路径基金；创建 PENDING 时提前切到 HOLDING/CLEARED；SELL 丢失 SignalLog 关联
+路径 `portfolioFundId` 必须与 `disciplineAdviceId` 所属组合基金一致；同一 DisciplineAdvice 最多生成一笔未软删交易。回应只创建 PENDING 交易，
+不提前修改 `PositionStatus`；交易确认或撤销后再按全部 CONFIRMED 交易的事实净份额统一重算状态。卖出交易同样保留 `disciplineAdviceId`。
+_Avoid_: 仅相信请求路径组合基金；创建 PENDING 时提前切到 OPEN/CLEARED；卖出丢失 DisciplineAdvice 关联
 
 ## 回撤基准
 
 **前高（peakNav）**:
 基金历史最高累计净值，逻辑止损回撤判定的参考。**不存字段，实时派生**——`max(fund_nav_history.accumulated_nav)`，配
 `(fund_id, nav_date)` 索引毫秒级返回。净值修正、补录历史、job 异常都不会导致失真。
-_Avoid_: 在 `FundEntity` 上存 `peakNav` 字段（派生值落库会失真，见 ADR-0001）
+_Avoid_: 在领域实体上存 `peakNav` 字段（派生值落库会失真，见 ADR-0001）
 
 **持有期高点（holdingPeriodPeakNav）**:
 建仓后该基金出现的最高累计净值，是持仓期行情分析指标。**不存字段，实时派生**——
-`max(fund_nav_history.accumulated_nav) WHERE nav_date >= fund.openedAt`。`FundStatus = HOLDING` 时才有意义；
-`CLEARED → PENDING_HOLDING` 时因字段不存在，自然无需清理。
-_Avoid_: 在 `FundEntity` 上存 `holdingPeriodPeakNav` 字段（同前高，派生值落库会失真）
+`max(fund_nav_history.accumulated_nav) WHERE nav_date >= position.openedAt`。`PositionStatus = OPEN` 时才有意义；
+清仓后重新开放持仓会更新 `openedAt`，派生值无需清理。
+_Avoid_: 在领域实体上存 `holdingPeriodPeakNav` 字段（同前高，派生值落库会失真）
 
 ## 卖出纪律
 
@@ -92,13 +92,13 @@ _Avoid_: 用负数表达回撤；把推荐值当强制值；基金类型变化�
 _Avoid_: 最近一次定投锁住全部历史持仓；止盈突破最低保留仓位；绕过 FIFO lot 直接假设所有份额都可低费赎回
 
 **逻辑破坏止损（Logic-Broken Stop-Loss）**:
-趋势死亡型止损，和移动止盈完全不同——不分档、一次清空全部持仓。触发后 `FundStatus → CLEARED`，**突破 7 天内不赎回硬约束**
+趋势死亡型止损，和移动止盈完全不同——不分档、一次清空全部持仓。确认后 `PositionStatus → CLEARED`，**突破 7 天内不赎回硬约束**
 （豁免 MIN_HOLD_DAYS）。两类基金判定条件不同（按 `fundSubType` 分派）。
 _Avoid_: 用基本面突变（基金经理变更等）判定——本期无公告数据源，等下一期接公告源再做
 
 **逻辑止损 · ETF/指数/指数增强基金判定**:
 三个条件**同时**命中才触发：① 净值跌破年线（最近累计净值 < 250 日累计净值均线）② 周 MACD 绿柱扩大 ③ **跟踪指数**
-放量下跌（当日成交量 > 20 日均量 × 1.5 且当日收盘跌）。跟踪指数取 `FundEntity.benchmarkIndexCode`。
+放量下跌（当日成交量 > 20 日均量 × 1.5 且当日收盘跌）。跟踪指数取 `FundProduct.benchmarkIndexCode`。
 _Avoid_: 用基金自身净值算量能——基金没有成交量
 
 **逻辑止损 · 主动/混合基金判定**:
@@ -128,7 +128,7 @@ _Avoid_: 用最近一次买入时间锁住整仓；用自然日近似交易日�
 金字塔退场 + 回测/寻优移除后，状态机简化为：`PENDING_CALIBRATION` --activate--> `EFFECTIVE` --retire--> `PENDING_CALIBRATION`。
 不再有 `calibrate` 动作和 `CALIBRATED`/`CALIBRATION_FAILED` 流转——回测本身是金字塔寻优配套，金字塔没了回测无意义，
 移动止盈阈值无需回测验证。`CALIBRATED`/`CALIBRATION_FAILED` 枚举值保留供存量数据兼容。同基金同时最多一份 `EFFECTIVE`
-（数据库 `uq_fund_strategy_effective` 兜底）。`CLEARED → PENDING_HOLDING` 时全员回退 `PENDING_CALIBRATION`。
+（数据库 `uq_fund_strategy_effective` 兜底）。持仓从 `OPEN → CLEARED` 时全员回退 `PENDING_CALIBRATION`。
 `FundStrategyEntity` 同时保存定投止盈配置版本与该版本运行时周期：推荐参数、`customized`、`TakeProfitPhase`、周期高点和冷静期时间。
 
 ## 开发顺序
@@ -154,7 +154,7 @@ A），未命中兜底为 ACTIVE（方法 C）；**不做持仓股票与指数�
 _Avoid_: 把 `fundSubType` 和 `FundCategory` 合并（用途不同：前者决定数据源和逻辑止损判定路径，后者决定定投止盈推荐参数）
 
 **跟踪/基准指数代码（benchmarkIndexCode）**:
-`FundEntity` 上的可空字段。指数/ETF/指数增强基金填实际跟踪指数（如 `000300.SH`）；主动/混合基金不要求跟踪指数，逻辑止损只使用年线与周 MACD。识别流程：名称关键词命中 → 命中失败兜底为 ACTIVE（方法 A + C）。指数类空值降级时逻辑止损不出信号（
+`FundProduct` 上的可空字段。指数/ETF/指数增强基金填实际跟踪指数（如 `000300.SH`）；主动/混合基金不要求跟踪指数，逻辑止损只使用年线与周 MACD。识别流程：名称关键词命中 → 命中失败兜底为 ACTIVE（方法 A + C）。指数类空值降级时逻辑止损不出信号（
 `signalType=NONE, reason=INSUFFICIENT_MARKET_DATA`）。漏网指数基金由用户手动补 `benchmarkIndexCode`。
 _Avoid_: 主动基金强制要求填跟踪指数（主动基金本质上没有跟踪标的）；本期做持仓股票重合度反推（方法 B，复杂度高，留给将来）
 
@@ -256,28 +256,28 @@ _Avoid_: 用今日涨跌判断盈亏基金（今日涨不代表整体赚）
 _Avoid_: 将预算当可用现金、将提醒线变成 `BusinessException`、用 PENDING 或未来计划计算当前仓位比例。
 
 **手动交易（Manual Transaction）**:
-不经过信号、用户直接录入的交易。复用 `FundTransactionEntity`，`signalLog = null`（由信号触发的交易才填该字段）。支持全部 7 类来源：
+不经过纪律建议、用户直接录入的交易。复用 Accounting `LedgerTransaction`，`disciplineAdviceId = null`（由建议触发的交易才填该字段）。支持全部 7 类来源：
 加仓（INCREASE）/减仓（DECREASE）/转入（TRANSFER_IN）/转出（TRANSFER_OUT）/定投（INVEST）/调增（ADJUST_IN）/调减（ADJUST_OUT）。买入写 amount、卖出写 shares，
 走 NavConfirmJob 回填另一侧。与信号触发交易共用同一套账目和持仓聚合。手动卖出不经过 `evaluateSignal`，不卡 7 天硬约束（前端可提示）。
 ADJUST 只修正事实份额：ADJUST_OUT 按 FIFO 缩减 open lot；ADJUST_IN 不建收费 lot，后续卖出未被 lot 覆盖的事实份额按零赎回费降级。
-`FundTransactionEntity.tradeDate` 是业务交易发生时间，`createdDate` 仅是 Spring 审计创建时间。手动交易允许填写 `tradeDate`，
+`LedgerTransaction.tradeDate` 是业务交易发生时间，`createdDate` 仅是审计创建时间。手动交易允许填写 `tradeDate`，
 不填默认当前时间，未来时间拒绝；转换两腿必须使用同一 `tradeDate`。手动确认和自动确认都按 `tradeDate` 对应的北京时间自然日选择单位净值，
 仅存量记录 `tradeDate` 为空时才回退 `createdDate`。
 入口在基金详情页"交易流水" Tab 的"手动录入"按钮。
-_Avoid_: 为手动交易单独建表（复用 FundTransactionEntity 即可，signalLog=null 已是领域模型预留的手动标识）；
+_Avoid_: 为手动交易单独建表（复用 Accounting `LedgerTransaction`，纪律建议关联为空即可）；
 用审计字段 `createdDate` 表示用户选择的交易发生日（保存时会被审计机制覆盖）
 
 **初始持仓录入（Existing Position Onboarding）**:
-新建基金时录入已有持仓的建仓动作。`FundCreateRequest.initialMarketValue` 有值即触发——状态流转对齐 BUILD 信号确认
-（`FundStatus → HOLDING`、写 INCREASE 交易），但确认时机同步：`shares = initialMarketValue / T-1净值`，置 CONFIRMED，
-不等 NavConfirmJob。`initialMarketValue` 是**入仓市值**（"现在值多少钱"），净值用 T-1（最近一期已公布）反算份额。
-`costPerShare` 可选填（成本单价，不填默认 T-1 净值），>0 校验，存入 Accounting `Position.costPerShare` 作为当前成本基准；`FundEntity.costPerShare` 仅保留为 legacy 兼容字段，不再作为当前事实来源。
-交易 `amount` 写 `initialMarketValue`（市值口径）。`openedAt` 用户可填（大致建仓时点，影响移动止盈持仓期高点起算），
+将产品加入组合时录入已有持仓的建仓动作。`PortfolioFundOnboardingController.CreateRequest.initialHoldingShares` 有值即触发——
+同步写入 CONFIRMED 的 INCREASE 账目并将 Accounting `PositionStatus` 置为 `OPEN`，不等待后续净值确认任务。
+`initialHoldingShares` 是**事实份额**；交易金额按份额与最近一期已公布净值核算。
+`costPerShare` 可选填（成本单价，不填默认使用该已公布净值），>0 校验，存入 Accounting `Position.costPerShare` 作为当前成本基准。
+`openedAt` 用户可填（大致建仓时点，影响移动止盈持仓期高点起算），
 不填用 now，须 ≤ 今天。与手动交易的本质区别：手动交易是已建仓后的资金动作（走 NavConfirmJob 异步确认），
 初始持仓录入是建仓本身（同步确认）。交易来源用 INCREASE（对齐 handleBuild 建仓语义，不用 TRANSFER_IN——建仓是首笔买入非转入），
 同步创建一条可供后续 FIFO 赎回的 open lot，但不重复扣申购费。`confirmTime` 与最终 `openedAt` 一致且不得为空。
-无净值历史可反算时抛 `NAV_HISTORY_EMPTY` 不让建（同步确认的硬前提）；openedAt 晚于今天抛 `OPENED_AT_IN_FUTURE`；
-`initialMarketValue` ≤ 0 或 `costPerShare` ≤ 0 抛参数校验错。
+无已公布净值时抛 `NAV_UNAVAILABLE` 不让建（同步确认的硬前提）；openedAt 晚于当前时刻抛 `OPENED_AT_IN_FUTURE`；
+`initialHoldingShares` ≤ 0 或 `costPerShare` ≤ 0 抛参数校验错。
 _Avoid_: 用昨日净值（语义模糊，最近一期已公布净值更准）；openedAt 用历史净值日期反算份额（金额是当前市值口径，
 历史净值反算会让份额与当前市值对不上——openedAt 只标时间，不影响净值反算）
 

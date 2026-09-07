@@ -84,7 +84,7 @@ describe('FundTransactionTab', () => {
         container = document.createElement('div');
         document.body.appendChild(container);
         root = createRoot(container);
-        await act(async () => root.render(<FundTransactionTab fundId={1} portfolioFundId={101}/>));
+        await act(async () => root.render(<FundTransactionTab portfolioFundId={101}/>));
         await click([...container.querySelectorAll('button')]
             .find((button) => button.textContent.includes('手动录入')));
         const modals = document.body.querySelectorAll('.ant-modal');

@@ -9,11 +9,8 @@ import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserA
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
-import com.fundpilot.backend.fund.repository.FundRepository;
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNav;
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNavRepository;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
@@ -38,8 +35,7 @@ import org.springframework.http.MediaType;
 class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired UserAdministrationApi users;
-    @Autowired FundRepository fundRepository;
-    @Autowired FundNavHistoryRepository navRepository;
+    @Autowired PublishedNavRepository navRepository;
     @Autowired SessionTokenGateway sessions;
     @Autowired FundProductApi productCatalogApi;
     @Autowired PortfolioFundApi portfolioFundApi;
@@ -50,26 +46,30 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
         Actor adminActor = new Actor(admin.id(), ActorRole.ADMIN, true);
         UserResult alice = user(adminActor, "isolation-alice");
         UserResult bob = user(adminActor, "isolation-bob");
-        FundEntity aliceFund = fund(alice.id(), "000001", "Alice Fund");
-        FundEntity bobFund = fund(bob.id(), "000001", "Bob Fund");
-        FundNavHistoryEntity nav = new FundNavHistoryEntity();
-        nav.setFundEntity(aliceFund);
-        nav.setFundCode("000001");
-        nav.setNavDate(Instant.parse("2026-07-21T00:00:00Z"));
-        nav.setNav(new BigDecimal("1.23"));
-        nav.setAccumulatedNav(new BigDecimal("2.34"));
-        navRepository.save(nav);
+        var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
+                "000001", "Shared Fund", null, null));
+        var aliceFund = fund(alice.id(), product.id());
+        var bobFund = fund(bob.id(), product.id());
+        Instant navDate = Instant.parse("2026-07-21T00:00:00Z");
+        PublishedNav nav = navRepository.saveAll(java.util.List.of(PublishedNav.publish(
+                null, product.id(), product.fundCode(), navDate,
+                new BigDecimal("1.23"), new BigDecimal("2.34"), navDate))).getFirst();
 
-        mockMvc.perform(get("/api/funds").cookie(cookie(alice)))
+        mockMvc.perform(get("/api/portfolio-funds").cookie(cookie(alice)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].id").value(aliceFund.getId()));
-        mockMvc.perform(get("/api/funds/" + aliceFund.getId()).cookie(cookie(bob)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("FUND_NOT_FOUND"));
+                .andExpect(jsonPath("$.data[0].portfolioFundId").value(aliceFund.id()));
+        mockMvc.perform(get("/api/portfolio-funds/{portfolioFundId}", aliceFund.id()).cookie(cookie(bob)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PORTFOLIO_FUND_NOT_FOUND"));
 
-        assertThat(navRepository.findTop2ByFundEntity_IdOrderByNavDateDesc(bobFund.getId()))
-                .extracting(FundNavHistoryEntity::getId).containsExactly(nav.getId());
+        assertThat(navRepository.findLatestByProductId(bobFund.fundProductId())).get().satisfies(sharedNav -> {
+            assertThat(sharedNav.fundProductId()).isEqualTo(nav.fundProductId());
+            assertThat(sharedNav.fundCode()).isEqualTo(nav.fundCode());
+            assertThat(sharedNav.navDate()).isEqualTo(nav.navDate());
+            assertThat(sharedNav.unitNav()).isEqualByComparingTo(nav.unitNav());
+            assertThat(sharedNav.accumulatedNav()).isEqualByComparingTo(nav.accumulatedNav());
+        });
     }
 
     @Test
@@ -104,20 +104,9 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
         return users.create(admin, new CreateUserRequest(username, "test-password", Role.USER));
     }
 
-    private FundEntity fund(Long ownerId, String code, String name) {
-        FundEntity fund = new FundEntity();
-        fund.setOwnerId(ownerId);
-        fund.setFundCode(code);
-        fund.setFundName(name);
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        var product = productCatalogApi.ensure(new FundProductApi.EnsureProduct(
-                code, name, null, null));
-        fund.setProductId(product.id());
-        FundEntity saved = fundRepository.save(fund);
-        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
-                saved.getId(), ownerId, product.id(), saved.isPositionWarningEnabled(),
-                saved.getPositionWarningRatio()));
-        return saved;
+    private PortfolioFundApi.PortfolioFund fund(long ownerId, long productId) {
+        return portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(
+                null, ownerId, productId, true, new BigDecimal("0.30")));
     }
 
     private Cookie cookie(UserResult user) {

@@ -18,10 +18,6 @@ import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionSource;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.enums.FundSubType;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
 import com.fundpilot.backend.platform.transaction.RequiresNewTransactionExecutor;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
@@ -51,7 +47,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest
+@SpringBootTest(properties = "fundpilot.yangjibao.secret=test-only-yangjibao-signing-secret")
 @Testcontainers
 class TransactionConfirmationConcurrencyIntegrationTest {
 
@@ -67,8 +63,6 @@ class TransactionConfirmationConcurrencyIntegrationTest {
     private UserAdministrationApi users;
     @Autowired
     private FundProductApi products;
-    @Autowired
-    private FundRepository funds;
     @Autowired
     private PortfolioFundApi portfolioFunds;
     @Autowired
@@ -308,16 +302,8 @@ class TransactionConfirmationConcurrencyIntegrationTest {
         return new TransactionTemplate(transactionManager).execute(status -> {
             FundProductApi.ProductReference product = products.ensure(new FundProductApi.EnsureProduct(
                     "T" + suffix, "并发确认测试基金", null, null));
-            FundEntity fund = new FundEntity();
-            fund.setOwnerId(ownerId);
-            fund.setProductId(product.id());
-            fund.setFundCode(product.fundCode());
-            fund.setFundName("并发确认测试基金");
-            fund.setFundCategory(FundCategory.BROAD_BASE);
-            fund.setFundSubType(FundSubType.INDEX);
-            FundEntity savedFund = funds.save(fund);
             PortfolioFundApi.PortfolioFund portfolioFund = portfolioFunds.track(
-                    new PortfolioFundApi.TrackPortfolioFund(savedFund.getId(), ownerId, product.id(),
+                    new PortfolioFundApi.TrackPortfolioFund(null, ownerId, product.id(),
                             true, new BigDecimal("0.30")));
 
             LedgerTransaction initial = transactions.save(LedgerTransaction.recordExistingPosition(
@@ -368,16 +354,8 @@ class TransactionConfirmationConcurrencyIntegrationTest {
     private TrackedFund createTrackedFund(long ownerId, String suffix) {
         FundProductApi.ProductReference product = products.ensure(new FundProductApi.EnsureProduct(
                 "T" + suffix, "多基金确认测试" + suffix, null, null));
-        FundEntity fund = new FundEntity();
-        fund.setOwnerId(ownerId);
-        fund.setProductId(product.id());
-        fund.setFundCode(product.fundCode());
-        fund.setFundName("多基金确认测试" + suffix);
-        fund.setFundCategory(FundCategory.BROAD_BASE);
-        fund.setFundSubType(FundSubType.INDEX);
-        FundEntity savedFund = funds.save(fund);
         long portfolioFundId = portfolioFunds.track(new PortfolioFundApi.TrackPortfolioFund(
-                savedFund.getId(), ownerId, product.id(), true, new BigDecimal("0.30"))).id();
+                null, ownerId, product.id(), true, new BigDecimal("0.30"))).id();
         return new TrackedFund(product.id(), portfolioFundId);
     }
 

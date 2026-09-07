@@ -16,7 +16,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest
+@SpringBootTest(properties = "fundpilot.yangjibao.secret=test-only-yangjibao-signing-secret")
 @Testcontainers
 class EventPublicationRegistryIntegrationTest {
     @Container

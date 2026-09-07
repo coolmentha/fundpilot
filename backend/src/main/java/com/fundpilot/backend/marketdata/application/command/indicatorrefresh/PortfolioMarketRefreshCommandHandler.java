@@ -20,8 +20,6 @@ public class PortfolioMarketRefreshCommandHandler {
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "组合基金不存在或已作废"));
         try {
             refresh.refreshOneForPortfolioFund(portfolioFundId);
-        } catch (BusinessException ex) {
-            throw ex;
         } catch (RuntimeException ex) {
             log.warn("组合基金 {} 行情刷新失败", portfolioFundId, ex);
             throw new BusinessException(ErrorCode.MARKET_DATA_ALL_SOURCES_FAILED, "行情刷新失败，请稍后重试");

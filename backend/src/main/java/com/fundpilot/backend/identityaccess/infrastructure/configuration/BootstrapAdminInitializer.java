@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +19,7 @@ record BootstrapAdminProperties(String username, String password) {}
 class UserAuthConfiguration {}
 
 @Component
+@ConditionalOnProperty(name = "fundpilot.deployment.validation-mode", havingValue = "false", matchIfMissing = true)
 @RequiredArgsConstructor
 public class BootstrapAdminInitializer implements ApplicationRunner {
     private final UserAdministrationCommandHandler users;

@@ -108,9 +108,9 @@ public class PortfolioReturnQueryHandler {
     }
 
     @Transactional(readOnly = true)
-    public FundReturnResult fund(long ownerId, long legacyFundId) {
+    public FundReturnResult fund(long ownerId, long portfolioFundId) {
         return findByOwner(ownerId).funds().stream()
-                .filter(fund -> fund.legacyFundId() != null && fund.legacyFundId() == legacyFundId)
+                .filter(fund -> fund.portfolioFundId() == portfolioFundId)
                 .findFirst().orElse(null);
     }
 

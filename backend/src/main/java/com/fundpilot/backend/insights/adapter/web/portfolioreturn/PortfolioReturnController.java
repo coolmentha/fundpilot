@@ -42,11 +42,11 @@ public class PortfolioReturnController {
         return InsightsApiResponse.ok(queries.clearedFunds(ownerId).stream().map(FundReturnView::from).toList());
     }
 
-    @GetMapping("/funds/{legacyFundId}")
+    @GetMapping("/funds/{portfolioFundId}")
     public InsightsApiResponse<FundReturnView> fund(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-            @org.springframework.web.bind.annotation.PathVariable long legacyFundId) {
-        var fund = queries.fund(ownerId, legacyFundId);
+            @org.springframework.web.bind.annotation.PathVariable long portfolioFundId) {
+        var fund = queries.fund(ownerId, portfolioFundId);
         return InsightsApiResponse.ok(fund == null ? null : FundReturnView.from(fund));
     }
 

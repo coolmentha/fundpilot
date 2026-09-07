@@ -51,14 +51,14 @@ export default function SignalsPage() {
     const {message} = App.useApp();
     const navigate = useNavigate();
     const [params, setParams] = useSearchParams();
-    const fundIdParam = params.get('fundId');
-    const fundId = fundIdParam ? Number(fundIdParam) : null;
+    const portfolioFundIdParam = params.get('portfolioFundId');
+    const portfolioFundId = portfolioFundIdParam ? Number(portfolioFundIdParam) : null;
     const {data: funds, isLoading: fundsLoading, isError: fundsError} = useFunds();
     const {data: pendingSignals, isLoading: pendingLoading, isError: pendingError,
         refetch: refetchPending} = usePendingSignals();
     const [modal, setModal] = useState({open: false, signal: null});
     const [form] = Form.useForm();
-    const confirmOp = useConfirmOperation(modal.signal?.fundId);
+    const confirmOp = useConfirmOperation(modal.signal?.portfolioFundId);
     const ignoreSignal = useIgnoreSignal();
     const fundsReady = isQueryDataReady({data: funds, isLoading: fundsLoading, isError: fundsError});
     const {
@@ -66,7 +66,7 @@ export default function SignalsPage() {
         isLoading: todayLoading,
         isError: todayError,
         refetch: refetchToday,
-    } = useSignalsToday(fundId);
+    } = useSignalsToday(portfolioFundId);
     const [range, setRange] = useState(null);
     const from = range?.[0]?.format('YYYY-MM-DD');
     const to = range?.[1]?.format('YYYY-MM-DD');
@@ -75,18 +75,18 @@ export default function SignalsPage() {
         isLoading: rangeLoading,
         isError: rangeError,
         refetch: refetchRange,
-    } = useSignalsRange(fundId, from, to);
+    } = useSignalsRange(portfolioFundId, from, to);
 
-    const fundOptions = (funds || []).map((f) => ({
-        value: String(f.id),
-        label: `${f.fundCode} · ${f.fundName}`,
+    const fundOptions = (funds || []).map((fund) => ({
+        value: String(fund.portfolioFundId),
+        label: `${fund.fundCode} · ${fund.fundName}`,
     }));
-    const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
-    const holdingShares = (id) => Number(funds?.find((fund) => fund.id === id)?.holdingShares || 0);
+    const fundName = (id) => funds?.find((fund) => fund.portfolioFundId === id)?.fundName || `基金 #${id}`;
+    const holdingShares = (id) => Number(funds?.find((fund) => fund.portfolioFundId === id)?.holdingShares || 0);
     const openConfirm = (signal) => {
         const isSell = signal.action === 'SELL';
         const isLogicBroken = isSell && signal.reason === 'LOGIC_BROKEN';
-        const maxShares = holdingShares(signal.fundId);
+        const maxShares = holdingShares(signal.portfolioFundId);
         setModal({open: true, signal});
         form.setFieldsValue({
             actualAmount: isSell ? undefined : signal.suggestedMeasure?.value,
@@ -123,11 +123,11 @@ export default function SignalsPage() {
     };
     const isSell = modal.signal?.action === 'SELL';
     const isLogicBroken = isSell && modal.signal?.reason === 'LOGIC_BROKEN';
-    const currentHoldingShares = holdingShares(modal.signal?.fundId);
+    const currentHoldingShares = holdingShares(modal.signal?.portfolioFundId);
     const transactionColumn = {
         title: '交易', width: 120, render: (_, signal) => signal.relatedTransactionId ? (
             <Space direction="vertical" size={0}>
-                <Link to={`/funds/${signal.fundId}?transactionId=${signal.relatedTransactionId}`}>查看交易</Link>
+                <Link to={`/funds/${signal.portfolioFundId}?transactionId=${signal.relatedTransactionId}`}>查看交易</Link>
                 <Text type="secondary">{text(signal.relatedTransactionStatus)}</Text>
             </Space>
         ) : '-',
@@ -140,7 +140,7 @@ export default function SignalsPage() {
                 {pendingError ? <QueryErrorState onRetry={refetchPending} description="待回应建议加载失败"/> : (
                     <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pendingSignals || []}
                            columns={[
-                               {title: '基金', width: 180, render: (_, row) => fundName(row.fundId)},
+                               {title: '基金', width: 180, render: (_, row) => fundName(row.portfolioFundId)},
                                ...signalColumns(pendingActionColumn),
                            ]}
                            pagination={false} scroll={{x: 1050}}
@@ -152,13 +152,13 @@ export default function SignalsPage() {
                 <Space style={{marginBottom: 16}}>
                     <Text type="secondary">基金：</Text>
                     <Select showSearch optionFilterProp="label" placeholder="选择基金"
-                            value={fundIdParam || undefined} style={{width: 280}}
+                            value={portfolioFundIdParam || undefined} style={{width: 280}}
                             options={fundOptions} allowClear
-                            onChange={(v) => setParams(v ? {fundId: v} : {})}/>
+                            onChange={(v) => setParams(v ? {portfolioFundId: v} : {})}/>
                 </Space>
-                {fundId && todayError ? (
+                {portfolioFundId && todayError ? (
                     <QueryErrorState onRetry={refetchToday} description="今日建议加载失败"/>
-                ) : fundId ? (
+                ) : portfolioFundId ? (
                     <Table rowKey="id" size="small" loading={todayLoading}
                            dataSource={todaySignal ? [todaySignal] : []}
                            columns={signalColumns(transactionColumn)} pagination={false}
@@ -167,7 +167,7 @@ export default function SignalsPage() {
                     <EmptyState description="选择基金查看今日建议"/>
                 )}
             </Card>
-            {fundId && (
+            {portfolioFundId && (
                 <Card title="历史建议查询">
                     <Space style={{marginBottom: 16}}>
                         <RangePicker value={range} onChange={setRange}/>

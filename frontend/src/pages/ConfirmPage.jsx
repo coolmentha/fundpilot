@@ -27,11 +27,13 @@ export default function ConfirmPage() {
     const [params, setParams] = useSearchParams();
     const targetSignalId = Number(params.get('signalId'));
     const targetTransactionId = Number(params.get('transactionId'));
-    const fundIdParam = params.get('fundId');
-    const fundId = fundIdParam ? Number(fundIdParam) : null;
-    const fundName = (id) => funds?.find((fund) => fund.id === id)?.fundName || `基金 #${id}`;
-    const isQdii = (row) => funds?.find((fund) => fund.id === row.fundId)?.investmentTarget === 'QDII';
-    const visibleTransactions = fundId ? (transactions || []).filter((transaction) => transaction.fundId === fundId) : transactions || [];
+    const portfolioFundIdParam = params.get('portfolioFundId');
+    const portfolioFundId = portfolioFundIdParam ? Number(portfolioFundIdParam) : null;
+    const fundName = (id) => funds?.find((fund) => fund.portfolioFundId === id)?.fundName || `基金 #${id}`;
+    const isQdii = (row) => funds?.find((fund) => fund.portfolioFundId === row.portfolioFundId)?.investmentTarget === 'QDII';
+    const visibleTransactions = portfolioFundId ? (transactions || []).filter(
+        (transaction) => transaction.portfolioFundId === portfolioFundId,
+    ) : transactions || [];
 
     const confirm = async (id) => {
         await confirmTx.mutateAsync(id);
@@ -45,7 +47,7 @@ export default function ConfirmPage() {
     const columns = [
         {title: '交易日期', dataIndex: 'tradeDate', width: 170, render: datetime},
         {title: '基金', width: 220, render: (_, row) => (
-            <Link to={`/funds/${row.fundId}`}>{fundName(row.fundId)}</Link>
+            <Link to={`/funds/${row.portfolioFundId}`}>{fundName(row.portfolioFundId)}</Link>
         )},
         {title: '来源', dataIndex: 'source', width: 110, render: (value) => <StatusTag value={value}/>},
         {title: '金额', dataIndex: 'amount', width: 140, align: 'right',
@@ -62,7 +64,7 @@ export default function ConfirmPage() {
                 {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
                 {isQdii(row) && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
-                {row.signalLogId && <Link to={`/advice?fundId=${row.fundId}`}>来源建议 #{row.signalLogId}</Link>}
+                {row.signalLogId && <Link to={`/advice?portfolioFundId=${row.portfolioFundId}`}>来源建议 #{row.signalLogId}</Link>}
                 {row.signalReason && labels[row.signalReason] && <Text type="secondary">
                     {labels[row.signalReason]}
                 </Text>}
@@ -90,12 +92,12 @@ export default function ConfirmPage() {
     return (
         <Card title={<Title level={4}>操作确认</Title>} extra={
             <Space>
-                {fundId && <Button type="link" onClick={() => setParams({})}>查看全部</Button>}
+                {portfolioFundId && <Button type="link" onClick={() => setParams({})}>查看全部</Button>}
                 <Button icon={<ReloadOutlined/>} onClick={() => refetch()}>刷新</Button>
             </Space>
         }>
             <Text type="secondary" style={{display: 'block', marginBottom: 16}}>
-                {fundId ? `仅显示 ${fundName(fundId)} 的待净值确认交易。` : '汇总所有基金待净值确认的交易，可手动确认或撤销。'}
+                {portfolioFundId ? `仅显示 ${fundName(portfolioFundId)} 的待净值确认交易。` : '汇总所有基金待净值确认的交易，可手动确认或撤销。'}
             </Text>
             {isError ? <QueryErrorState onRetry={refetch} description="待处理交易加载失败"/> : (
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={visibleTransactions}
@@ -106,7 +108,7 @@ export default function ConfirmPage() {
             )}
             {editing && (
                 <PendingTransactionEditModal transaction={editing}
-                                             holdingShares={funds?.find((fund) => fund.id === editing.fundId)?.holdingShares}
+                                             holdingShares={funds?.find((fund) => fund.portfolioFundId === editing.portfolioFundId)?.holdingShares}
                                              onClose={() => setEditing(null)}/>
             )}
         </Card>

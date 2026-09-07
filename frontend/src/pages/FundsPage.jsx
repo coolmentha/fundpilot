@@ -7,16 +7,16 @@ import utc from 'dayjs/plugin/utc.js';
 import {Link, useSearchParams} from 'react-router-dom';
 import {
     useDcaBudgetSummary,
+    useCreatePortfolioFund,
     useFundGroups,
     useFunds,
     useFundSearch,
     useReplacePortfolioFundGroups,
-    useSaveFund,
     useUpdatePortfolioFundCostBasis,
     useUpdatePortfolioFundWarning,
     useVoidPortfolioFund,
 } from '../api/hooks.js';
-import {date, datetime, fundCategoryOptions, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
+import {date, datetime, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import {estimateStatusText} from '../querySafety.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
@@ -29,7 +29,7 @@ const {Title} = Typography;
 dayjs.extend(utc);
 
 // 新建表单初始值:基金身份由搜索框选中后带入。已有持仓字段默认空。
-const emptyForm = {fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
+const emptyForm = {fundProductId: null, fundCode: '', fundName: '', fundCategory: null, fundSubType: null,
     benchmarkIndexCode: '', positionWarningEnabled: true, positionWarningRatioPct: 30,
     initialHoldingShares: null, costPerShare: null, openedAt: null, groupNames: []};
 
@@ -43,7 +43,7 @@ export default function FundsPage() {
         isError: isDcaBudgetError,
         refetch: refetchDcaBudget,
     } = useDcaBudgetSummary();
-    const saveFund = useSaveFund();
+    const createPortfolioFund = useCreatePortfolioFund();
     const updateWarning = useUpdatePortfolioFundWarning();
     const replaceGroups = useReplacePortfolioFundGroups();
     const updateCostBasis = useUpdatePortfolioFundCostBasis();
@@ -110,9 +110,9 @@ export default function FundsPage() {
     }, [form]);
 
     useEffect(() => {
-        const editId = Number(params.get('editId'));
-        if (!editId || !funds) return;
-        const fund = funds.find((item) => item.id === editId);
+        const editPortfolioFundId = Number(params.get('editPortfolioFundId'));
+        if (!editPortfolioFundId || !funds) return;
+        const fund = funds.find((item) => item.portfolioFundId === editPortfolioFundId);
         if (!fund) return;
         const timer = window.setTimeout(() => {
             openEdit(fund);
@@ -128,6 +128,7 @@ export default function FundsPage() {
             return;
         }
         form.setFieldsValue({
+            fundProductId: c.id,
             fundCode: c.fundCode,
             fundName: c.fundName,
             fundCategory: c.defaultDisciplineCategory,
@@ -140,15 +141,10 @@ export default function FundsPage() {
     const submit = async () => {
         try {
             const values = await form.validateFields();
-            // openedAt:DatePicker 返回 dayjs,按北京时区零点转 ISO 提交(后端 Instant 解析);未选则不传(后端用 now)
             const {positionWarningRatioPct, ...requestValues} = values;
             if (editing && Number(requestValues.costPerShare) === Number(editing.costPerShare)) {
                 requestValues.costPerShare = null;
             }
-            const normalized = {...requestValues, positionWarningRatio: positionWarningRatioPct / 100};
-            const body = values.openedAt
-                ? {...normalized, openedAt: `${dayjs(values.openedAt).utcOffset(8).format('YYYY-MM-DD')}T00:00:00+08:00`}
-                : {...normalized, openedAt: null};
             if (editing) {
                 const portfolioFundId = editing.portfolioFundId;
                 await updateWarning.mutateAsync({
@@ -168,7 +164,18 @@ export default function FundsPage() {
                     }
                 }
             } else {
-                await saveFund.mutateAsync({id: editing?.id, body});
+                await createPortfolioFund.mutateAsync({
+                    fundProductId: requestValues.fundProductId,
+                    positionWarningEnabled: requestValues.positionWarningEnabled,
+                    positionWarningRatio: positionWarningRatioPct / 100,
+                    initialHoldingShares: requestValues.initialHoldingShares ?? null,
+                    costPerShare: requestValues.costPerShare ?? null,
+                    // DatePicker 返回 dayjs，按北京时区零点转为后端 Instant。
+                    openedAt: requestValues.openedAt
+                        ? `${dayjs(requestValues.openedAt).utcOffset(8).format('YYYY-MM-DD')}T00:00:00+08:00`
+                        : null,
+                    groupNames: requestValues.groupNames || [],
+                });
             }
             message.success(editing ? '基金已更新' : '基金已新建');
             setOpen(false);
@@ -198,7 +205,7 @@ export default function FundsPage() {
     const columns = [
         {title: '代码', dataIndex: 'fundCode', width: 96},
         {title: '名称', dataIndex: 'fundName', width: 180, ellipsis: true,
-            render: (v, r) => <Link to={`/funds/${r.id}`}>{v}</Link>},
+            render: (v, r) => <Link to={`/funds/${r.portfolioFundId}`}>{v}</Link>},
         {title: '类型', dataIndex: 'fundCategory', width: 88, responsive: ['md'], render: (v) => <StatusTag value={v}/>},
         {title: '子类', dataIndex: 'fundSubType', width: 96, responsive: ['lg'], render: (v) => text(v)},
         {title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag value={v}/>},
@@ -255,8 +262,8 @@ export default function FundsPage() {
         {
             title: '操作', width: 168, render: (_, row) => (
                 <Space size="small" wrap>
-                    <Link to={`/funds/${row.id}`}>详情</Link>
-                    <Link to={`/advice?fundId=${row.id}`}>建议</Link>
+                    <Link to={`/funds/${row.portfolioFundId}`}>详情</Link>
+                    <Link to={`/advice?portfolioFundId=${row.portfolioFundId}`}>建议</Link>
                     <a onClick={() => openEdit(row)}>编辑</a>
                     <a className="danger-link" onClick={() => openVoid(row)}><DeleteOutlined/> 作废</a>
                 </Space>
@@ -279,12 +286,12 @@ export default function FundsPage() {
                     setActiveGroup(groupKey);
                     storeFundGroup(groupKey);
                 }}/>
-                <Table rowKey="id" size="small" loading={isLoading} dataSource={displayRows} columns={columns}
+                <Table rowKey="portfolioFundId" size="small" loading={isLoading} dataSource={displayRows} columns={columns}
                        pagination={false} scroll={{x: 'max-content'}}/>
             </Card>
             <Modal title={editing ? '编辑基金' : '新建基金'} open={open} onCancel={() => setOpen(false)}
                    onOk={submit}
-                   confirmLoading={saveFund.isPending || updateWarning.isPending || replaceGroups.isPending
+                   confirmLoading={createPortfolioFund.isPending || updateWarning.isPending || replaceGroups.isPending
                        || updateCostBasis.isPending}
                    destroyOnHidden width={560}>
                 <Form form={form} layout="vertical">
@@ -329,13 +336,18 @@ export default function FundsPage() {
                         </Form.Item>
                     )}
                     {/* 隐藏字段:搜索框选中后 setFieldsValue 写入,需注册 name 才能被 validateFields 返回 */}
+                    <Form.Item name="fundProductId" hidden rules={editing ? [] : [{required: true}]}><Input/></Form.Item>
                     <Form.Item name="fundCode" hidden><Input/></Form.Item>
                     <Form.Item name="fundName" hidden><Input/></Form.Item>
                     <Form.Item name="fundSubType" hidden><Input/></Form.Item>
                     <Form.Item name="benchmarkIndexCode" hidden><Input/></Form.Item>
-                    <Form.Item label="基金类型" name="fundCategory"
-                               help="自动识别,可手动调整">
-                        <Select options={fundCategoryOptions} allowClear placeholder="自动识别,可调整"/>
+                    <Form.Item label={editing ? '纪律分类' : '默认纪律分类'}
+                               help={editing
+                                   ? '来自纪律配置；如需调整，请在基金详情的纪律策略中操作'
+                                   : '来自产品目录的默认建议；创建后在纪律策略中确认或调整'}>
+                        {form.getFieldValue('fundCategory')
+                            ? <StatusTag value={form.getFieldValue('fundCategory')}/>
+                            : <span className="muted">-</span>}
                     </Form.Item>
                     <Form.Item label="分组" name="groupNames" help="可选择多个分组，输入新名称后回车即可创建">
                         <Select mode="tags" maxLength={20} tokenSeparators={[',']} placeholder="可选"

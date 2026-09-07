@@ -73,8 +73,7 @@ public class YangjibaoClient {
         } catch (YangjibaoRemoteException e) {
             throw e;
         } catch (HttpStatusCodeException e) {
-            throw new YangjibaoRemoteException(
-                    "养基宝接口调用失败: " + path + " HTTP " + e.getStatusCode().value());
+            throw new YangjibaoRemoteException("养基宝接口调用失败: HTTP " + e.getStatusCode().value());
         } catch (Exception e) {
             throw new YangjibaoRemoteException("养基宝接口调用失败: " + e.getClass().getSimpleName());
         }

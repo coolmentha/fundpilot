@@ -28,7 +28,7 @@ export default function App() {
                     <Route index element={<MarketDashboardPage/>}/>
                     <Route path="/dashboard" element={<DashboardPage/>}/>
                     <Route path="/funds" element={<FundsPage/>}/>
-                    <Route path="/funds/:fundId" element={<FundDetailPage/>}/>
+                    <Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/>
                     <Route path="/dca" element={<DcaManagementPage/>}/>
                     <Route path="/returns" element={<PortfolioReturns/>}/>
                     <Route path="/advice" element={<SignalsPage/>}/>

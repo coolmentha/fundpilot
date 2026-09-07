@@ -27,9 +27,9 @@ public class FundMarketIndicatorController {
 
     @Operation(summary = "查询组合基金当日行情指标")
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/market-indicators/today")
-    public ApiResponse<MarketIndicatorSnapshotView> portfolioFundToday(@PathVariable long portfolioFundId) {
+    public ApiResponse<PortfolioMarketIndicatorSnapshotView> portfolioFundToday(@PathVariable long portfolioFundId) {
         return ApiResponse.ok(queries.findForPortfolioFund(portfolioFundId)
-                .map(value -> MarketIndicatorSnapshotView.from(portfolioFundId, value)).orElse(null));
+                .map(value -> PortfolioMarketIndicatorSnapshotView.from(portfolioFundId, value)).orElse(null));
     }
 
     @Schema(description = "行情指标快照视图")
@@ -39,6 +39,19 @@ public class FundMarketIndicatorController {
                                               BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
         static MarketIndicatorSnapshotView from(long fundId, MarketIndicatorTodayQueryHandler.Snapshot value) {
             return new MarketIndicatorSnapshotView(fundId, value.fundCode(), value.snapshotDate(),
+                    value.currentNav(), value.priceAboveYearLine(), value.yearLineRising(),
+                    value.weeklyMacdState(), value.volumeState(), value.weeklyDropPercent(), value.sixtyDayHigh());
+        }
+    }
+
+    @Schema(description = "组合基金行情指标快照视图")
+    public record PortfolioMarketIndicatorSnapshotView(Long portfolioFundId, String fundCode, Instant snapshotDate,
+                                                       BigDecimal currentNav, Boolean priceAboveYearLine,
+                                                       boolean yearLineRising, String weeklyMacdState, String volumeState,
+                                                       BigDecimal weeklyDropPercent, boolean sixtyDayHigh) {
+        static PortfolioMarketIndicatorSnapshotView from(long portfolioFundId,
+                                                         MarketIndicatorTodayQueryHandler.Snapshot value) {
+            return new PortfolioMarketIndicatorSnapshotView(portfolioFundId, value.fundCode(), value.snapshotDate(),
                     value.currentNav(), value.priceAboveYearLine(), value.yearLineRising(),
                     value.weeklyMacdState(), value.volumeState(), value.weeklyDropPercent(), value.sixtyDayHigh());
         }

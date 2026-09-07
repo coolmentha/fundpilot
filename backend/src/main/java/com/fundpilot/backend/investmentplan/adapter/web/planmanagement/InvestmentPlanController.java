@@ -37,26 +37,11 @@ public class InvestmentPlanController {
         return ApiResponse.ok(queries.list(ownerId).stream().map(PlanView::from).toList());
     }
 
-    @GetMapping("/funds/{legacyFundId}")
-    @Operation(summary = "按基金查询定投计划列表")
-    public ApiResponse<List<PlanView>> listByFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-                                               @PathVariable long legacyFundId) {
-        return ApiResponse.ok(queries.listByLegacyFund(ownerId, legacyFundId).stream().map(PlanView::from).toList());
-    }
-
     @GetMapping("/portfolio-funds/{portfolioFundId}")
     @Operation(summary = "按组合基金查询定投计划列表")
     public ApiResponse<List<PlanView>> listByPortfolioFund(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                         @PathVariable long portfolioFundId) {
         return ApiResponse.ok(queries.listByPortfolioFund(ownerId, portfolioFundId).stream().map(PlanView::from).toList());
-    }
-
-    @GetMapping("/funds/{legacyFundId}/active")
-    @Operation(summary = "查询基金生效中的定投计划")
-    public ApiResponse<PlanView> active(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-                                     @PathVariable long legacyFundId) {
-        var plan = queries.activeByLegacyFund(ownerId, legacyFundId);
-        return ApiResponse.ok(plan == null ? null : PlanView.from(plan));
     }
 
     @GetMapping("/portfolio-funds/{portfolioFundId}/active")
@@ -65,13 +50,6 @@ public class InvestmentPlanController {
                                                    @PathVariable long portfolioFundId) {
         var plan = queries.activeByPortfolioFund(ownerId, portfolioFundId);
         return ApiResponse.ok(plan == null ? null : PlanView.from(plan));
-    }
-
-    @PostMapping("/funds/{legacyFundId}")
-    @Operation(summary = "创建定投计划")
-    public ApiResponse<PlanView> create(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
-                                     @PathVariable long legacyFundId, @RequestBody Request request) {
-        return ApiResponse.ok(PlanView.from(commands.create(ownerId, legacyFundId, request.toInput())));
     }
 
     @PostMapping("/portfolio-funds/{portfolioFundId}")

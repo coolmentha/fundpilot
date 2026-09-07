@@ -34,8 +34,9 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             || estimateStatus === 'STALE'
             || estimateStatus === 'NOT_ATTEMPTED';
         return {
-            key: fund.id,
-            id: fund.id,
+            key: fund.portfolioFundId,
+            id: fund.portfolioFundId,
+            portfolioFundId: fund.portfolioFundId,
             fundCode: fund.fundCode,
             fundName: fund.fundName,
             fundSubType: fund.fundSubType,

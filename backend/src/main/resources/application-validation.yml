@@ -1,0 +1,10 @@
+spring:
+  flyway:
+    enabled: false
+  modulith:
+    events:
+      republish-outstanding-events-on-restart: false
+
+fundpilot:
+  deployment:
+    validation-mode: true

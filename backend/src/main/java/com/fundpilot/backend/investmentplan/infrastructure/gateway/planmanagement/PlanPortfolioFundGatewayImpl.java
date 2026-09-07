@@ -20,13 +20,6 @@ public class PlanPortfolioFundGatewayImpl implements PlanPortfolioFundGateway {
     private final FundProductApi products;
 
     @Override
-    public PortfolioFund requireTrackedByLegacyFund(long ownerId, long legacyFundId) {
-        var fund = portfolioFunds.findOwnedByLegacyFundId(ownerId, legacyFundId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "组合基金不存在"));
-        return requireTracked(fund);
-    }
-
-    @Override
     public PortfolioFund requireTracked(long ownerId, long portfolioFundId) {
         var fund = portfolioFunds.findOwned(ownerId, portfolioFundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "组合基金不存在"));

@@ -21,11 +21,13 @@ export default function DashboardPage() {
     const estimateFetchFailedCount = summary?.estimateFetchFailedCount ?? 0;
     const estimateFetchFailed = estimateFetchFailedCount > 0;
 
-    const fundName = (id) => funds?.find((f) => f.id === id)?.fundName || `基金 #${id}`;
+    const fundName = (portfolioFundId) => funds?.find(
+        (fund) => fund.portfolioFundId === portfolioFundId,
+    )?.fundName || `基金 #${portfolioFundId}`;
 
     const pendingColumns = [
         {title: '基金', width: 160, render: (_, r) => (
-            <Link to={`/funds/${r.fundId}`}>{fundName(r.fundId)}</Link>
+            <Link to={`/funds/${r.portfolioFundId}`}>{fundName(r.portfolioFundId)}</Link>
         )},
         {title: '类型', dataIndex: 'action', width: 90, render: (v) => <StatusTag value={v}/>},
         {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
@@ -36,7 +38,7 @@ export default function DashboardPage() {
         {title: '建议时间', dataIndex: 'signalDate', width: 170, render: datetime},
         {
             title: '', width: 100, render: (_, r) => r.action !== 'NONE' && (
-                <Button type="primary" size="small" onClick={() => navigate(`/advice?fundId=${r.fundId}`)}>去回应</Button>
+                <Button type="primary" size="small" onClick={() => navigate(`/advice?portfolioFundId=${r.portfolioFundId}`)}>去回应</Button>
             ),
         },
     ];
@@ -44,11 +46,11 @@ export default function DashboardPage() {
     const holdingColumns = [
         {title: '代码', dataIndex: 'fundCode', width: 110},
         {title: '名称', dataIndex: 'fundName', ellipsis: true,
-            render: (v, r) => <Link to={`/funds/${r.id}`}>{v}</Link>},
+            render: (v, r) => <Link to={`/funds/${r.portfolioFundId}`}>{v}</Link>},
         {title: '类型', dataIndex: 'fundCategory', width: 90, render: (v) => <StatusTag value={v}/>},
         {
             title: '', width: 90, render: (_, r) => (
-                <Link to={`/funds/${r.id}`}>详情</Link>
+                <Link to={`/funds/${r.portfolioFundId}`}>详情</Link>
             ),
         },
     ];
@@ -125,7 +127,7 @@ export default function DashboardPage() {
             {/* 持仓基金 */}
             <Card title={<Title level={4}>持仓基金</Title>}
                   extra={<Link to="/funds">全部基金 →</Link>}>
-                <Table rowKey="id" size="small" loading={fundsLoading} dataSource={holdingFunds} columns={holdingColumns}
+                <Table rowKey="portfolioFundId" size="small" loading={fundsLoading} dataSource={holdingFunds} columns={holdingColumns}
                        pagination={false} scroll={{x: 600}}
                        locale={{emptyText: <EmptyState description="暂无持仓基金"/>}}/>
             </Card>

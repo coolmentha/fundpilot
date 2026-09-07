@@ -7,6 +7,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 const signal = {
     id: 11,
     fundId: 1,
+    portfolioFundId: 11,
     action: 'SELL',
     reason: 'LOGIC_BROKEN',
     responseStatus: 'PENDING',
@@ -15,7 +16,7 @@ const signal = {
 
 vi.mock('../api/hooks.js', () => ({
     useFunds: () => ({
-        data: [{id: 1, fundCode: '000001', fundName: '测试基金', holdingShares: 100}],
+        data: [{id: 1, portfolioFundId: 11, fundCode: '000001', fundName: '测试基金', holdingShares: 100}],
         isLoading: false,
         isError: false,
     }),

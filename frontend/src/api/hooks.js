@@ -27,13 +27,16 @@ export function useSaveFundGroups() {
     });
 }
 
-export function useFund(id) {
+export function useFund(portfolioFundId) {
     return useQuery({
-        queryKey: ['funds', id],
-        queryFn: () => get(`/api/insights/portfolio/funds/${id}`),
-        enabled: !!id,
+        queryKey: ['funds', portfolioFundId],
+        queryFn: () => getPortfolioInsightFund(portfolioFundId),
+        enabled: !!portfolioFundId,
         ...realtimeQueryOptions,
     });
+}
+export function getPortfolioInsightFund(portfolioFundId) {
+    return get(`/api/insights/portfolio/funds/${portfolioFundId}`);
 }
 
 /** 产品目录搜索:新建组合基金时提供自动补全候选。 */
@@ -45,10 +48,14 @@ export function useFundSearch(query) {
     });
 }
 
-export function useSaveFund() {
+export function createPortfolioFund(body) {
+    return post('/api/portfolio-funds', body);
+}
+
+export function useCreatePortfolioFund() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({id, body}) => id ? put(`/api/funds/${id}`, body) : post('/api/funds', body),
+        mutationFn: createPortfolioFund,
         onSuccess: () => {
             qc.invalidateQueries({queryKey: ['funds']});
             qc.invalidateQueries({queryKey: ['fund-groups']});
@@ -119,26 +126,6 @@ export function useVoidPortfolioFund() {
 
 export function voidPortfolioFund({portfolioFundId, reason}) {
     return post(`/api/portfolio-funds/${portfolioFundId}/void`, {reason, confirmed: true});
-}
-export function useCreateFund() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: (body) => post('/api/funds', body),
-        onSuccess: () => {
-            qc.invalidateQueries({queryKey: ['funds']});
-            qc.invalidateQueries({queryKey: ['fund-groups']});
-        },
-    });
-}
-export function useUpdateFund() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: ({id, body}) => put(`/api/funds/${id}`, body),
-        onSuccess: () => {
-            qc.invalidateQueries({queryKey: ['funds']});
-            qc.invalidateQueries({queryKey: ['fund-groups']});
-        },
-    });
 }
 
 // ===== 策略 =====
@@ -228,7 +215,10 @@ const useInvalidateDcaPlans = () => {
 };
 export function useCreateDcaPlan(portfolioFundId) {
     const onSuccess = useInvalidateDcaPlans();
-    return useMutation({mutationFn: (body) => post(`/api/investment-plans/portfolio-funds/${portfolioFundId}`, body), onSuccess});
+    return useMutation({mutationFn: (body) => createDcaPlan({portfolioFundId, body}), onSuccess});
+}
+export function createDcaPlan({portfolioFundId, body}) {
+    return post(`/api/investment-plans/portfolio-funds/${portfolioFundId}`, body);
 }
 export function useUpdateDcaPlan(fundId) {
     const onSuccess = useInvalidateDcaPlans(fundId);
@@ -280,20 +270,26 @@ export function invalidateDcaBudgetSummary(queryClient) {
 }
 
 // ===== 信号 =====
-export function useSignalsToday(fundId) {
+export function useSignalsToday(portfolioFundId) {
     return useQuery({
-        queryKey: ['signals-today', fundId],
-        queryFn: () => get(`/api/discipline/advice/funds/${fundId}/latest`),
-        enabled: !!fundId,
+        queryKey: ['signals-today', portfolioFundId],
+        queryFn: () => getPortfolioFundLatestAdvice(portfolioFundId),
+        enabled: !!portfolioFundId,
         ...realtimeQueryOptions,
     });
 }
-export function useSignalsRange(fundId, from, to) {
+export function getPortfolioFundLatestAdvice(portfolioFundId) {
+    return get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}/latest`);
+}
+export function useSignalsRange(portfolioFundId, from, to) {
     return useQuery({
-        queryKey: ['signals-range', fundId, from, to],
-        queryFn: () => get(`/api/discipline/advice/funds/${fundId}?from=${from}&to=${to}`),
-        enabled: !!fundId && !!from && !!to,
+        queryKey: ['signals-range', portfolioFundId, from, to],
+        queryFn: () => getPortfolioFundAdviceRange(portfolioFundId, from, to),
+        enabled: !!portfolioFundId && !!from && !!to,
     });
+}
+export function getPortfolioFundAdviceRange(portfolioFundId, from, to) {
+    return get(`/api/discipline/advice/portfolio-funds/${portfolioFundId}?from=${from}&to=${to}`);
 }
 export function usePendingSignals() {
     return useQuery({queryKey: ['signals-pending'], queryFn: () => get('/api/discipline/advice/pending'), ...realtimeQueryOptions});
@@ -460,6 +456,7 @@ export function replaceWatchedIndices(indexCodes) {
 
 // ===== 养基宝持仓导入 =====
 export const createYangjibaoSession = () => post('/api/imports/yangjibao/sessions');
+export const getYangjibaoSessions = () => get('/api/imports/yangjibao/sessions');
 export const getYangjibaoSession = (id) => get(`/api/imports/yangjibao/sessions/${id}`);
 export const getYangjibaoPreview = (id) => get(`/api/imports/yangjibao/sessions/${id}/preview`);
 export const getYangjibaoImportStatus = (id) => get(`/api/imports/yangjibao/sessions/${id}/import`);

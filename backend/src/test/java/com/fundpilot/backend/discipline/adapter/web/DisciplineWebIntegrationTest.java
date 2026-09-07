@@ -8,10 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fundpilot.backend.discipline.domain.advice.AdviceAction;
 import com.fundpilot.backend.discipline.domain.advice.AdviceRepository;
-import com.fundpilot.backend.fund.controller.FundCreateRequest;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.enums.FundSubType;
-import com.fundpilot.backend.fund.service.FundService;
+import com.fundpilot.backend.discipline.adapter.api.classification.DisciplineClassificationApi;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
@@ -33,11 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 @TestPropertySource(properties = "fundpilot.admin.api-key=test-admin-key")
 class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
-    @Autowired FundService funds;
     @Autowired AdviceRepository advice;
     @Autowired PortfolioFundApi portfolioFunds;
     @Autowired UserAdministrationApi users;
     @Autowired FundProductApi products;
+    @Autowired DisciplineClassificationApi classifications;
 
     private static final String VALID_STRATEGY_BODY = """
             {"profitActivationPercent":0.20,"stopLossPullbackPercent":0.08,
@@ -48,17 +45,16 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void exposesDisciplineStrategyAndAdviceResponseContracts() throws Exception {
-        var fund = funds.create(new FundCreateRequest(
-                "009998", "纪律接口测试基金", FundCategory.SECTOR, FundSubType.INDEX, null));
+        var fund = track("009998", "纪律接口测试基金");
 
-        mockMvc.perform(get("/api/discipline/strategies/funds/{fundId}/recommendation", fund.id())
+        mockMvc.perform(get("/api/discipline/strategies/portfolio-funds/{portfolioFundId}/recommendation", fund.id())
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.fundCategory").value("SECTOR"))
                 .andExpect(jsonPath("$.data.profitActivationPercent").value(0.20));
 
         long strategyId = ((Number) com.jayway.jsonpath.JsonPath.read(mockMvc.perform(
-                        post("/api/discipline/strategies/funds/{fundId}", fund.id())
+                        post("/api/discipline/strategies/portfolio-funds/{portfolioFundId}", fund.id())
                                 .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
@@ -69,9 +65,7 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
                                         """))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id")).longValue();
 
-        long portfolioFundId = portfolioFunds.findOwnedByLegacyFundId(testActorId(), fund.id())
-                .orElseThrow().id();
-        advice.replaceGenerated(portfolioFundId, testActorId(), strategyId,
+        advice.replaceGenerated(fund.id(), testActorId(), strategyId,
                 Instant.parse("2026-07-29T00:00:00Z"), AdviceAction.BUILD, 1, BigDecimal.ONE,
                 new BigDecimal("100.00"), "AMOUNT", "DRAWDOWN_TIER", null, null);
 
@@ -94,10 +88,7 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void strategyCreateRejectsMissingRequiredCustomizedFlag() throws Exception {
-        var fund = funds.create(new FundCreateRequest(
-                "009997", "策略参数校验测试基金", FundCategory.SECTOR, FundSubType.INDEX, null));
-        long portfolioFundId = portfolioFunds.findOwnedByLegacyFundId(testActorId(), fund.id())
-                .orElseThrow().id();
+        long portfolioFundId = track("009997", "策略参数校验测试基金").id();
 
         mockMvc.perform(post("/api/discipline/strategies/portfolio-funds/{portfolioFundId}", portfolioFundId)
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
@@ -114,10 +105,7 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void strategyPortfolioFundCreateUpdateAndActivationUsePortfolioFundScope() throws Exception {
-        var fund = funds.create(new FundCreateRequest(
-                "009996", "策略创建更新测试基金", FundCategory.SECTOR, FundSubType.INDEX, null));
-        long portfolioFundId = portfolioFunds.findOwnedByLegacyFundId(testActorId(), fund.id())
-                .orElseThrow().id();
+        long portfolioFundId = track("009996", "策略创建更新测试基金").id();
 
         String created = mockMvc.perform(post("/api/discipline/strategies/portfolio-funds/{portfolioFundId}", portfolioFundId)
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
@@ -197,10 +185,7 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("ENTITY_NOT_FOUND"));
 
-        var ownFund = funds.create(new FundCreateRequest(
-                "009994", "策略作废边界测试基金", FundCategory.SECTOR, FundSubType.INDEX, null));
-        long ownPortfolioFundId = portfolioFunds.findOwnedByLegacyFundId(testActorId(), ownFund.id())
-                .orElseThrow().id();
+        long ownPortfolioFundId = track("009994", "策略作废边界测试基金").id();
         String created = mockMvc.perform(post("/api/discipline/strategies/portfolio-funds/{portfolioFundId}", ownPortfolioFundId)
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -225,5 +210,16 @@ class DisciplineWebIntegrationTest extends AbstractIntegrationTest {
                         .content(VALID_STRATEGY_BODY))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("ILLEGAL_STATE_TRANSITION"));
+    }
+
+    private PortfolioFundApi.PortfolioFund track(String code, String name) {
+        var product = products.ensure(new FundProductApi.EnsureProduct(
+                code, name, null, FundProductApi.InvestmentTarget.STOCK));
+        var fund = portfolioFunds.track(new PortfolioFundApi.TrackPortfolioFund(
+                null, testActorId(), product.id(), true, new BigDecimal("0.30")));
+        classifications.set(new DisciplineClassificationApi.SetClassification(
+                testActorId(), fund.id(), DisciplineClassificationApi.Category.SECTOR,
+                DisciplineClassificationApi.Source.USER_CONFIRMED));
+        return fund;
     }
 }

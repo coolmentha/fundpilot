@@ -1,12 +1,10 @@
 package com.fundpilot.backend.marketdata.application.command.navpublishing;
 
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.entity.FundNavHistoryEntity;
-import com.fundpilot.backend.fund.repository.FundNavHistoryRepository;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
 import com.fundpilot.backend.marketdata.application.command.indicatorrefresh.MarketIndicatorRefreshCommandHandler;
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNav;
+import com.fundpilot.backend.marketdata.domain.publishednav.PublishedNavRepository;
 import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
 import com.fundpilot.backend.productcatalog.adapter.api.product.FundProductApi;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
@@ -41,10 +39,7 @@ class DailyNavPublishingCommandHandlerTest extends AbstractIntegrationTest {
     DailyNavPublishingCommandHandler navPublishing;
 
     @Autowired
-    FundRepository fundRepository;
-
-    @Autowired
-    FundNavHistoryRepository fundNavHistoryRepository;
+    PublishedNavRepository publishedNavRepository;
 
     @Autowired
     FundProductApi productCatalogApi;
@@ -57,17 +52,17 @@ class DailyNavPublishingCommandHandlerTest extends AbstractIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE fund CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE fund_product CASCADE");
     }
 
     @Test
     void 远端存在更新日期_增量落库累计净值() {
         String fundCode = uniqueCode();
-        FundEntity fund = persistFund(fundCode);
+        FundProductApi.ProductReference product = trackProduct(fundCode);
         // 已落库净值最近一期 = 昨天(未确认今天)
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
-        persistNav(fund, yesterday, "1.0000");
+        persistNav(product, yesterday, "1.0000");
         when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
                 new PublishedNavSourceGateway.NavSnapshot(yesterday, new BigDecimal("1.0000"), new BigDecimal("1.0000")),
                 new PublishedNavSourceGateway.NavSnapshot(today, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
@@ -75,47 +70,49 @@ class DailyNavPublishingCommandHandlerTest extends AbstractIntegrationTest {
         navPublishing.publishToday();
 
         // 今日累计净值已落库
-        List<FundNavHistoryEntity> navs = fundNavHistoryRepository.findByFundEntity_Id(fund.getId());
-        assertThat(navs).extracting(FundNavHistoryEntity::getAccumulatedNav)
-                .anyMatch(value -> value.compareTo(new BigDecimal("1.0100")) == 0);
-        assertThat(navs).filteredOn(nav -> nav.getNavDate().equals(today))
-                .extracting(FundNavHistoryEntity::getFirstSeenAt).doesNotContainNull();
+        assertThat(publishedNavRepository.findLatestByProductId(product.id())).get().satisfies(nav -> {
+            assertThat(nav.accumulatedNav()).isEqualByComparingTo("1.0100");
+            assertThat(nav.navDate()).isEqualTo(today);
+            assertThat(nav.firstSeenAt()).isNotNull();
+        });
     }
 
     @Test
     void 已确认基金_指定日期已存在_跳过不重复拉取() {
         String fundCode = uniqueCode();
-        FundEntity fund = persistFund(fundCode);
+        FundProductApi.ProductReference product = trackProduct(fundCode);
         // 已落库今日净值(已确认)
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
-        persistNav(fund, today, "1.0200");
+        persistNav(product, today, "1.0200");
         navPublishing.publishToday();
 
         verify(navSource, never()).fetchHistory(fundCode);
-        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId())).hasSize(1);
+        assertThat(publishedNavRepository.findLatestByProductId(product.id())).get()
+                .extracting(PublishedNav::unitNav)
+                .satisfies(unitNav -> assertThat(unitNav).isEqualByComparingTo("1.0200"));
     }
 
     @Test
     void QDII远端最新日期滞后于今天但晚于本地_仍按真实日期入库() {
         String fundCode = uniqueCode();
-        FundEntity fund = persistFund(fundCode);
+        FundProductApi.ProductReference product = trackProduct(fundCode);
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         Instant twoDaysAgo = today.minus(2, java.time.temporal.ChronoUnit.DAYS);
         Instant yesterday = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
-        persistNav(fund, twoDaysAgo, "1.0000");
+        persistNav(product, twoDaysAgo, "1.0000");
         when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
                 new PublishedNavSourceGateway.NavSnapshot(yesterday, new BigDecimal("1.0100"), new BigDecimal("1.0100"))));
 
         navPublishing.publishToday();
 
-        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
-                .extracting(FundNavHistoryEntity::getNavDate).contains(yesterday);
+        assertThat(publishedNavRepository.findLatestByProductId(product.id())).get()
+                .extracting(PublishedNav::navDate).isEqualTo(yesterday);
     }
 
     @Test
     void 缺失上一交易日净值_按指定日期补拉并落库() {
         String fundCode = uniqueCode();
-        FundEntity fund = persistFund(fundCode);
+        FundProductApi.ProductReference product = trackProduct(fundCode);
         Instant today = ChinaTradingDate.toUtcDate(Instant.now());
         Instant previousTradingDay = today.minus(1, java.time.temporal.ChronoUnit.DAYS);
         when(navSource.fetchHistory(fundCode)).thenReturn(List.of(
@@ -124,33 +121,22 @@ class DailyNavPublishingCommandHandlerTest extends AbstractIntegrationTest {
 
         navPublishing.publishForDate(previousTradingDay);
 
-        assertThat(fundNavHistoryRepository.findByFundEntity_Id(fund.getId()))
-                .extracting(FundNavHistoryEntity::getNavDate)
-                .contains(previousTradingDay);
+        assertThat(publishedNavRepository.findLatestByProductId(product.id())).get()
+                .extracting(PublishedNav::navDate).isEqualTo(previousTradingDay);
     }
 
-    private FundEntity persistFund(String code) {
+    private FundProductApi.ProductReference trackProduct(String code) {
         FundProductApi.ProductReference product = productCatalogApi.ensure(
                 new FundProductApi.EnsureProduct(code, "测试基金", null, null));
-        FundEntity fund = new FundEntity();
-        fund.setProductId(product.id());
-        fund.setFundCode(code);
-        fund.setFundName("测试基金");
-        FundEntity saved = fundRepository.save(fund);
-        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(saved.getId(), testActorId(),
+        portfolioFundApi.track(new PortfolioFundApi.TrackPortfolioFund(null, testActorId(),
                 product.id(), true, new BigDecimal("0.30")));
-        return saved;
+        return product;
     }
 
-    private void persistNav(FundEntity fund, Instant date, String nav) {
-        FundNavHistoryEntity entity = new FundNavHistoryEntity();
-        entity.setFundEntity(fund);
-        entity.setNavDate(date);
-        entity.setNav(new BigDecimal(nav));
-        entity.setAccumulatedNav(new BigDecimal(nav));
-        FundNavHistoryEntity saved = fundNavHistoryRepository.save(entity);
-        jdbcTemplate.update("UPDATE fund_nav_history SET fund_product_id = ? WHERE id = ?",
-                fund.getProductId(), saved.getId());
+    private void persistNav(FundProductApi.ProductReference product, Instant date, String nav) {
+        BigDecimal value = new BigDecimal(nav);
+        publishedNavRepository.saveAll(List.of(PublishedNav.publish(
+                null, product.id(), product.fundCode(), date, value, value, date)));
     }
 
     private String uniqueCode() {

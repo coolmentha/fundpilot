@@ -2,7 +2,7 @@
 # 需配置仓库 Secrets:VPS_HOST / VPS_USER / VPS_SSH_KEY / VPS_PATH /
 # DB_USERNAME / DB_PASSWORD / PUBLIC_URL /
 # FUNDPILOT_SESSION_SECRET / FUNDPILOT_BOOTSTRAP_USERNAME / FUNDPILOT_BOOTSTRAP_PASSWORD
-# VPS 须先 docker login ghcr.io(拉私有镜像);clone 仓库与 .env 由本工作流自动完成
+# VPS 须先 docker login ghcr.io(拉私有镜像)并在 .env 配置 YANGJIBAO_SECRET；clone 与其余环境项由本工作流处理
 name: Deploy
 
 on:
@@ -14,15 +14,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Git tag 不绑定分支；仅当 tag 指向 main 上的提交时才发布。
-  # GitHub 事件级无法按「tag 是否指向 main」过滤，只能先跑轻量判断，非 main 时构建/部署 job 直接跳过(不失败)。
+  # Git tag 不绑定分支；tag 不在 main 或缺少同提交完整 CI 时，整个发布失败。
   verify-tag-on-main:
     name: Check tag points to main
     runs-on: ubuntu-latest
     outputs:
       on_main: ${{ steps.check.outputs.on_main }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
       - name: Check tag target is on main
@@ -34,13 +33,28 @@ jobs:
             echo "tag $GITHUB_REF_NAME points to main; deploy will proceed"
           else
             echo "on_main=false" >> "$GITHUB_OUTPUT"
-            echo "tag $GITHUB_REF_NAME does not point to main; deploy skipped"
+            echo "tag $GITHUB_REF_NAME does not point to main; deploy rejected" >&2
+            exit 1
           fi
+
+  release-gate:
+    name: Require same-commit CI
+    needs: verify-tag-on-main
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Verify same-commit CI results
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node deploy/verify-release-gate.mjs
 
   build-backend:
     name: Build backend image
-    needs: verify-tag-on-main
-    if: needs.verify-tag-on-main.outputs.on_main == 'true'
+    needs: [verify-tag-on-main, release-gate]
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -48,11 +62,11 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # 使用固定 Maven/JDK 构建镜像，宿主 Maven 缓存挂载到容器内复用。
       - name: Cache Maven repository
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-3.9.11-${{ hashFiles('backend/pom.xml') }}
@@ -69,10 +83,10 @@ jobs:
             maven:3.9.11-eclipse-temurin-25 \
             mvn -B package -Dmaven.test.skip=true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -80,7 +94,7 @@ jobs:
 
       - name: Build & push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: backend
           push: true
@@ -90,8 +104,7 @@ jobs:
 
   build-frontend:
     name: Build frontend image
-    needs: verify-tag-on-main
-    if: needs.verify-tag-on-main.outputs.on_main == 'true'
+    needs: [verify-tag-on-main, release-gate]
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -99,12 +112,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -112,7 +125,7 @@ jobs:
 
       - name: Build & push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: frontend
           push: true
@@ -141,7 +154,7 @@ jobs:
       DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: SSH deploy
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
@@ -300,13 +313,17 @@ jobs:
               target_tag=$1
               target_backend_image=${2:-}
               target_frontend_image=${3:-}
+              yangjibao_secret=$(sed -n 's/^YANGJIBAO_SECRET=//p' .env 2>/dev/null | head -n 1 | tr -d '\r\n') || yangjibao_secret=
+              [ -n "$yangjibao_secret" ] || { echo "YANGJIBAO_SECRET is required in VPS .env" >&2; return 1; }
               {
                 printf 'DB_USERNAME=%s\n' "$DB_USERNAME"
                 printf 'DB_PASSWORD=%s\n' "$DB_PASSWORD"
+                printf 'YANGJIBAO_SECRET=%s\n' "$yangjibao_secret"
                 printf 'FUNDPILOT_SESSION_SECRET=%s\n' "$FUNDPILOT_SESSION_SECRET"
                 printf 'FUNDPILOT_BOOTSTRAP_USERNAME=%s\n' "$FUNDPILOT_BOOTSTRAP_USERNAME"
                 printf 'FUNDPILOT_BOOTSTRAP_PASSWORD=%s\n' "$FUNDPILOT_BOOTSTRAP_PASSWORD"
                 printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
+                printf 'DEPLOYMENT_VALIDATION_MODE=false\n'
                 printf 'TAG=%s\n' "$target_tag"
                 if [ -n "$target_backend_image" ]; then
                   printf 'BACKEND_IMAGE=%s\n' "$target_backend_image"
@@ -398,6 +415,67 @@ jobs:
               run_before_total_deadline 15 "${COMPOSE[@]}" exec -T backend \
                 wget -q -T 5 -O - http://127.0.0.1:8080/actuator/health |
                 grep -q '"status":"UP"'
+            }
+
+            validate_candidate_backend() {
+              candidate=fundpilot-backend-candidate
+              report_dir="$VPS_PATH/candidate-validation"
+              mkdir -p "$report_dir"
+              for attempt in 1 2; do
+                report="$report_dir/$RELEASE_TAG-attempt-$attempt.log"
+                if timeout --foreground --kill-after=5s 30s \
+                    docker container inspect "$candidate" >/dev/null 2>&1; then
+                  timeout --foreground --kill-after=5s 30s docker rm -f "$candidate" >/dev/null
+                fi
+                {
+                  printf 'release=%s\n' "$RELEASE_TAG"
+                  printf 'image=%s\n' "$BACKEND_IMAGE"
+                  printf 'attempt=%s\n' "$attempt"
+                  printf 'started_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  printf 'mode=validation flyway=disabled database=read-only\n'
+                } > "$report"
+                if ! timeout --foreground --kill-after=5s 120s docker run -d --rm \
+                    --name "$candidate" --network fundpilot_default --read-only \
+                    --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+                    -e SPRING_PROFILES_ACTIVE=validation \
+                    -e 'DB_URL=jdbc:postgresql://fundpilot-db:5432/fundpilot?options=-c%20default_transaction_read_only%3Don' \
+                    -e DB_USERNAME="$DB_USERNAME" -e DB_PASSWORD="$DB_PASSWORD" \
+                    -e REDIS_HOST=fundpilot-redis \
+                    -e YANGJIBAO_SECRET=validation-mode-no-external-use \
+                    -e FUNDPILOT_SESSION_SECRET=validation-mode-no-session-use \
+                    -e FUNDPILOT_BOOTSTRAP_USERNAME= -e FUNDPILOT_BOOTSTRAP_PASSWORD= \
+                    -e FLYWAY_REPAIR_LEGACY_V7=false "$BACKEND_IMAGE" >/dev/null; then
+                  printf 'result=start-failed\n' >> "$report"
+                  return 1
+                fi
+                candidate_ok=0
+                for i in $(seq 1 120); do
+                  if timeout --foreground --kill-after=5s 15s docker exec "$candidate" \
+                      wget -q -T 5 -O - http://127.0.0.1:8080/actuator/health |
+                      grep -q '"status":"UP"'; then
+                    candidate_ok=1
+                    break
+                  fi
+                  sleep 2
+                done
+                if ! timeout --foreground --kill-after=5s 30s \
+                    docker logs "$candidate" >> "$report" 2>&1; then
+                  printf 'result=log-failed\n' >> "$report"
+                  timeout --foreground --kill-after=5s 30s docker rm -f "$candidate" >/dev/null
+                  return 1
+                fi
+                if ! timeout --foreground --kill-after=5s 30s \
+                    docker rm -f "$candidate" >/dev/null; then
+                  printf 'result=stop-failed\n' >> "$report"
+                  return 1
+                fi
+                if [ "$candidate_ok" -ne 1 ]; then
+                  printf 'result=health-failed\n' >> "$report"
+                  return 1
+                fi
+                printf 'result=passed\nfinished_at=%s\n' \
+                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$report"
+              done
             }
 
             wait_for_backend() {
@@ -492,7 +570,7 @@ jobs:
               ROLLBACK_ACTIVE=1
               stop_maintenance_watchdog
               timeout --foreground --kill-after=5s 30s \
-                docker rm -f fundpilot-frontend-candidate 2>/dev/null || true
+                docker rm -f fundpilot-backend-candidate fundpilot-frontend-candidate 2>/dev/null || true
               rm -f .deployed-state.next
               if [ "$PREVIOUS_STATE_READY" -eq 1 ]; then
                 cp "$PREVIOUS_STATE_FILE" .deployed-state
@@ -560,7 +638,7 @@ jobs:
               set +e
               stop_maintenance_watchdog
               timeout --foreground --kill-after=5s 30s \
-                docker rm -f fundpilot-frontend-candidate 2>/dev/null || true
+                docker rm -f fundpilot-backend-candidate fundpilot-frontend-candidate 2>/dev/null || true
               timeout --foreground --kill-after=5s 120s \
                 docker stop fundpilot-backend fundpilot-frontend 2>/dev/null || true
               echo "release already committed; stopped application without restoring database" >&2
@@ -586,6 +664,9 @@ jobs:
             wait "$backend_pull_pid" || pull_status=1
             wait "$frontend_pull_pid" || pull_status=1
             [ "$pull_status" -eq 0 ] || exit "$pull_status"
+            timeout --foreground --kill-after=5s 30s docker network inspect fundpilot_default >/dev/null
+            timeout --foreground --kill-after=5s 30s docker inspect fundpilot-db fundpilot-redis >/dev/null
+            validate_candidate_backend
             now_epoch=$(date +%s)
             FORWARD_DEADLINE_EPOCH=$((now_epoch + FORWARD_MAINTENANCE_SECONDS))
             TOTAL_DEADLINE_EPOCH=$((now_epoch + TOTAL_MAINTENANCE_SECONDS))

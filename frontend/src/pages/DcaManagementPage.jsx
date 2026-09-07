@@ -113,7 +113,7 @@ export default function DcaManagementPage() {
             title: '基金', key: 'fund', width: 140,
             render: (_, plan) => (
                 <div className="dca-plan-fund">
-                    <Link to={`/funds/${plan.fundId}`}>{plan.fundName}</Link>
+                    <Link to={`/funds/${plan.portfolioFundId}`}>{plan.fundName}</Link>
                     <Text type="secondary">{plan.fundCode}</Text>
                     <Text type="secondary" className="dca-plan-mobile-status">
                         {dcaPlanState(plan).label}

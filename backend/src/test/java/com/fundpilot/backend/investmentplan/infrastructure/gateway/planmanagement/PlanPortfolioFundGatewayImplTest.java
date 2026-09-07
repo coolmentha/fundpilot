@@ -17,15 +17,6 @@ import org.junit.jupiter.api.Test;
 
 class PlanPortfolioFundGatewayImplTest {
     @Test
-    void legacyFund入口将作废基金映射为业务错误() {
-        PortfolioFundApi funds = mock(PortfolioFundApi.class);
-        when(funds.findOwnedByLegacyFundId(3L, 41L)).thenReturn(Optional.of(voidedFund()));
-
-        assertVoided(() -> gateway(funds)
-                .requireTrackedByLegacyFund(3L, 41L));
-    }
-
-    @Test
     void portfolioFund入口将作废基金映射为业务错误() {
         PortfolioFundApi funds = mock(PortfolioFundApi.class);
         when(funds.findOwned(3L, 7L)).thenReturn(Optional.of(voidedFund()));

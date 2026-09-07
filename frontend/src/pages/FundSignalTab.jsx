@@ -24,15 +24,15 @@ const signalColumns = [
 ];
 
 /**
- * 基金详情 · 建议 tab。锁定单只基金，去掉基金选择器（由父路由提供 fundId）。
+ * 基金详情 · 建议 tab。锁定单只基金，去掉基金选择器（由父路由提供 portfolioFundId）。
  */
-export default function SignalTab({fundId}) {
+export default function SignalTab({portfolioFundId}) {
     const {
         data: todaySignal,
         isLoading: todayLoading,
         isError: todayError,
         refetch: refetchToday,
-    } = useSignalsToday(fundId);
+    } = useSignalsToday(portfolioFundId);
     const [range, setRange] = useState(null);
     const from = range?.[0]?.format('YYYY-MM-DD');
     const to = range?.[1]?.format('YYYY-MM-DD');
@@ -41,7 +41,7 @@ export default function SignalTab({fundId}) {
         isLoading: rangeLoading,
         isError: rangeError,
         refetch: refetchRange,
-    } = useSignalsRange(fundId, from, to);
+    } = useSignalsRange(portfolioFundId, from, to);
 
     return (
         <Space direction="vertical" size={16} className="full-width">

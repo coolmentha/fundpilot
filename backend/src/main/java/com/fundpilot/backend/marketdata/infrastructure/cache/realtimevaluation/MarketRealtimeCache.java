@@ -17,10 +17,10 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsInde
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsJsParser;
 import com.fundpilot.backend.marketdata.adapter.api.watchedindex.WatchedIndicesApi;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -61,7 +61,6 @@ import java.util.stream.Collectors;
  * 单只拉取失败、空响应或日期过期时必须立即删除旧估值并标记失败,禁止把旧估值继续作为今日数据。
  */
 @Service
-@RequiredArgsConstructor
 public class MarketRealtimeCache {
 
     private static final Logger log = LoggerFactory.getLogger(MarketRealtimeCache.class);
@@ -83,6 +82,28 @@ public class MarketRealtimeCache {
     private final Clock clock;
     private final MarketRealtimeRedisStore redisStore;
     private final ThsIndexFlashClient thsIndexFlashClient;
+    private final boolean deploymentValidationMode;
+
+    public MarketRealtimeCache(
+            EastmoneyPush2Client push2Client,
+            FundEstimateService fundEstimateService,
+            WatchedIndicesApi watchedIndicesApi,
+            TrackedNavProductGateway products,
+            MarketDataMetrics marketDataMetrics,
+            Clock clock,
+            MarketRealtimeRedisStore redisStore,
+            ThsIndexFlashClient thsIndexFlashClient,
+            @Value("${fundpilot.deployment.validation-mode:false}") boolean deploymentValidationMode) {
+        this.push2Client = push2Client;
+        this.fundEstimateService = fundEstimateService;
+        this.watchedIndicesApi = watchedIndicesApi;
+        this.products = products;
+        this.marketDataMetrics = marketDataMetrics;
+        this.clock = clock;
+        this.redisStore = redisStore;
+        this.thsIndexFlashClient = thsIndexFlashClient;
+        this.deploymentValidationMode = deploymentValidationMode;
+    }
 
     // volatile 保证可见性;定时刷新单线程写,前端读线程只读,无需加锁
     private volatile List<IndexRealtimeSnapshot> indexCache = List.of();
@@ -247,6 +268,7 @@ public class MarketRealtimeCache {
     @EventListener(ApplicationReadyEvent.class)
     @Async
     public void onApplicationReady() {
+        if (deploymentValidationMode) return;
         try {
             refreshRealtimeWithoutEstimates();
             log.info("行情缓存启动刷新完成(指数/市场宽度/板块/资金),基金估值由后台异步预热");
@@ -262,6 +284,7 @@ public class MarketRealtimeCache {
     @Async
     @EventListener(ApplicationReadyEvent.class)
     public void warmFundEstimatesAfterReady() {
+        if (deploymentValidationMode) return;
         refreshFundEstimates();
         log.info("非QDII基金估值缓存异步启动预热完成");
     }

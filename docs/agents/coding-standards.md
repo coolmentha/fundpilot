@@ -4,12 +4,12 @@
 
 ## 1. Controller 不写业务逻辑
 
-Controller 只做 HTTP 路由:接收参数、调 Service、返回 `ApiResponse<View>`。
+Controller 只做 HTTP 路由:接收参数、调用对应应用层 Command/Query Handler、返回 `ApiResponse<View>`。
 禁止在 Controller 里 `new Entity()`、`repository.save()`、字段合并、分支判断。
 
-- 逻辑下沉到 `*Service`(`@Service`),Controller 通过构造器注入 Service。
-- 新建/更新 Entity 由 Service 负责,Controller 只传 Request DTO。
-- 示例:`FundController` 委托 `FundService`,`FundService` 负责 `new FundEntity()` + `save()`。
+- 逻辑下沉到应用层 `*CommandHandler`/`*QueryHandler`(`@Service`),Controller 通过构造器注入。
+- 新建/更新聚合由 Handler 调用领域对象和 Gateway/Repository 完成,Controller 只传 Request DTO。
+- 示例:`PortfolioFundOnboardingController` 委托 `PortfolioFundOnboardingCommandHandler` 完成组合基金开户。
 
 ## 2. 构造器注入用 @RequiredArgsConstructor
 
@@ -19,8 +19,8 @@ Controller 只做 HTTP 路由:接收参数、调 Service、返回 `ApiResponse<V
 ```java
 @Service
 @RequiredArgsConstructor
-public class FundService {
-    private final FundRepository fundRepository;
+public class PortfolioFundOnboardingCommandHandler {
+    private final OnboardedPortfolioFundGateway portfolioFunds;
     // ...
 }
 ```
@@ -64,15 +64,15 @@ API 签名、Entity 字段、DTO 字段、Service 方法参数。
 Controller 返回 View DTO(`*View` record),不返回 `*Entity`。
 View 只含业务字段,关联对象只取 id,不含 `version`/`deletedDate` 等内部字段。
 
-- View 放在 `controller/` 包,与 Request DTO 同包。
+- View 放在对应 `adapter/web/` 能力包,与 Request DTO 同包。
 - 提供 `static View from(Entity)` 工厂方法做映射。
-- 示例:`FundView.from(FundEntity)`,`FundController` 返回 `ApiResponse<FundView>`。
+- 示例:`PortfolioFundView.from(ViewResult)`,`PortfolioFundController` 返回 `ApiResponse<PortfolioFundView>`。
 
 ## 8. 减少魔法值,枚举/常量
 
 除日志外的魔法值,该用枚举用枚举,该用常量用常量:
 
-- 状态/类型码用 `enums/` 下的枚举(实现 `EnumValue`):`SignalType`/`SignalReason`/`SignalWarning`/`FundStatus` 等。
+- 状态/类型码使用所属领域的枚举，例如 `PositionStatus`、`TransactionStatus` 和 `AdviceResponseStatus`。
 - 数值常量放 `HardConstraintConfig`(`TIER_COUNT`/`MIN_HOLD_DAYS`)或 `BacktestWindow`(`BACKTEST_WINDOW_DAYS`)。
 - 信号 reason 用 `SignalReason` 枚举,持久化用 `@Enumerated(EnumType.STRING)`(name 与历史字符串一致,存量数据兼容)。
 - 信号 warning 用 `SignalWarning` 枚举 + `SignalWarningValue` record(支持 `TIER_CLEARED:1,2,3` 动态 detail)。

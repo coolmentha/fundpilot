@@ -3,6 +3,7 @@ package com.fundpilot.backend.accounting.adapter.web.fundonboarding;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -41,7 +42,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -61,7 +62,15 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
     @Autowired PortfolioFundOnboardingCommandHandler onboarding;
     @Autowired PlatformTransactionManager transactionManager;
 
-    @MockitoBean MarketIndicatorRefreshCommandHandler marketRefresh;
+    @TestBean(methodName = "failingMarketRefresh")
+    MarketIndicatorRefreshCommandHandler marketRefresh;
+
+    private static MarketIndicatorRefreshCommandHandler failingMarketRefresh() {
+        var marketRefresh = mock(MarketIndicatorRefreshCommandHandler.class);
+        doThrow(new RuntimeException("controlled refresh failure"))
+                .when(marketRefresh).refreshOneForPortfolioFund(anyLong());
+        return marketRefresh;
+    }
 
     @Test
     void onboardingPersistsAtomicPortfolioLedgerAndOwnedViewsBeforeAsyncRefreshFailure() throws Exception {
@@ -69,9 +78,6 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
         navs.saveAll(List.of(PublishedNav.publish(null, product.id(), product.fundCode(),
                 Instant.parse("2026-08-30T00:00:00Z"), new BigDecimal("3.60"),
                 new BigDecimal("4.20"), Instant.parse("2026-08-30T08:00:00Z"))));
-        doThrow(new RuntimeException("controlled refresh failure"))
-                .when(marketRefresh).refreshOneForPortfolioFund(anyLong());
-
         String response = mockMvc.perform(post("/api/portfolio-funds").cookie(ownerCookie())
                         .contentType("application/json")
                         .content("{\"fundProductId\":" + product.id()

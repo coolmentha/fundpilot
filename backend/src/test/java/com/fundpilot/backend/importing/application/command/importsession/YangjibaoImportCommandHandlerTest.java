@@ -4,16 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportActorGateway;
+import com.fundpilot.backend.importing.application.gateway.importsession.ImportSessionGateway;
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportedHoldingGateway;
 import com.fundpilot.backend.importing.application.gateway.importsession.YangjibaoSourceGateway;
 import java.math.BigDecimal;
@@ -25,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,14 +35,16 @@ class YangjibaoImportCommandHandlerTest {
     @Mock YangjibaoSourceGateway source;
     @Mock ImportedHoldingGateway holdings;
     @Mock ImportActorGateway actors;
+    ImportSessionGateway sessions;
     YangjibaoImportCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        when(actors.currentOwnerId()).thenReturn(1L);
+        lenient().when(actors.currentOwnerId()).thenReturn(1L);
         lenient().doAnswer(invocation -> { invocation.getArgument(1, Runnable.class).run(); return null; })
                 .when(actors).runAsOwner(eq(1L), any(Runnable.class));
-        handler = new YangjibaoImportCommandHandler(source, holdings, actors, Runnable::run);
+        sessions = new InMemoryImportSessionGateway();
+        handler = new YangjibaoImportCommandHandler(source, holdings, actors, Runnable::run, sessions);
         ReflectionTestUtils.setField(handler, "ttl", Duration.ofMinutes(30));
     }
 
@@ -47,6 +52,8 @@ class YangjibaoImportCommandHandlerTest {
     void importsSelectedNewFundFromServerPreviewSnapshot() {
         connectedHolding();
         when(holdings.find(1L, "017093")).thenReturn(Optional.empty());
+        when(holdings.importItem(any())).thenReturn(new ImportedHoldingGateway.ItemResult(
+                ImportedHoldingGateway.ItemStatus.CREATED, "已新增基金", 9L));
 
         String id = handler.create().sessionId();
         handler.state(id);
@@ -54,8 +61,9 @@ class YangjibaoImportCommandHandlerTest {
         handler.startImport(id, List.of(new YangjibaoImportCommandHandler.Selection(item.itemId(), null)));
 
         assertThat(handler.importStatus(id).results().getFirst().status()).isEqualTo("CREATED");
-        verify(holdings).create(1L, "017093", "示例基金", new BigDecimal("100.00"),
-                new BigDecimal("1.23"), List.of("支付宝"));
+        verify(holdings).importItem(new ImportedHoldingGateway.ItemRequest(1L, id, item.itemId(),
+                "017093", "示例基金", new BigDecimal("100.00"), new BigDecimal("1.23"),
+                List.of("支付宝"), null));
     }
 
     @Test
@@ -72,36 +80,40 @@ class YangjibaoImportCommandHandlerTest {
         assertThatThrownBy(() -> handler.startImport(id, preview.stream()
                 .map(item -> new YangjibaoImportCommandHandler.Selection(item.itemId(), null)).toList()))
                 .isInstanceOf(YangjibaoImportFailure.class);
-        verify(holdings, never()).create(eq(1L), anyString(), anyString(), any(), any(), any());
+        verify(holdings, never()).importItem(any());
     }
 
     @Test
     void retryDoesNotRepeatSuccessfulItems() {
         connectedHolding();
         when(holdings.find(1L, "017093")).thenReturn(Optional.empty());
-        when(holdings.create(eq(1L), eq("017093"), anyString(), any(), any(), any()))
+        when(holdings.importItem(any()))
                 .thenThrow(new RuntimeException("temporary failure"))
-                .thenReturn(new ImportedHoldingGateway.ImportedHolding(9L, 19L));
+                .thenReturn(new ImportedHoldingGateway.ItemResult(
+                        ImportedHoldingGateway.ItemStatus.CREATED, "已新增基金", 9L));
         String id = handler.create().sessionId(); handler.state(id); var item = handler.preview(id).getFirst();
         handler.startImport(id, List.of(new YangjibaoImportCommandHandler.Selection(item.itemId(), null)));
 
         assertThat(handler.importStatus(id).failed()).isEqualTo(1);
         assertThat(handler.retryFailed(id).failed()).isZero();
-        verify(holdings, times(2)).create(eq(1L), eq("017093"), anyString(), any(), any(), any());
+        verify(holdings, times(2)).importItem(any());
     }
 
     @Test
     void repeatedSubmissionDoesNotCreateHoldingTwice() {
         connectedHolding();
         when(holdings.find(1L, "017093")).thenReturn(Optional.empty());
+        when(holdings.importItem(any())).thenReturn(new ImportedHoldingGateway.ItemResult(
+                ImportedHoldingGateway.ItemStatus.CREATED, "已新增基金", 9L));
         String id = handler.create().sessionId(); handler.state(id); var item = handler.preview(id).getFirst();
         var selection = new YangjibaoImportCommandHandler.Selection(item.itemId(), null);
 
         var first = handler.startImport(id, List.of(selection));
         var repeated = handler.startImport(id, List.of(selection));
 
-        assertThat(repeated).isEqualTo(first);
-        verify(holdings, times(1)).create(eq(1L), eq("017093"), anyString(), any(), any(), any());
+        assertThat(first.status()).isEqualTo(YangjibaoImportCommandHandler.ImportStatus.PROCESSING);
+        assertThat(repeated.status()).isEqualTo(YangjibaoImportCommandHandler.ImportStatus.COMPLETED);
+        verify(holdings, times(1)).importItem(any());
     }
 
     @Test
@@ -109,14 +121,18 @@ class YangjibaoImportCommandHandlerTest {
         connectedHolding();
         when(holdings.find(1L, "017093")).thenReturn(Optional.of(
                 new ImportedHoldingGateway.LocalHolding(9L, 19L, BigDecimal.TEN)));
-        when(holdings.synchronize(1L, 9L, new BigDecimal("100.00"))).thenReturn(true);
+        when(holdings.importItem(any())).thenReturn(new ImportedHoldingGateway.ItemResult(
+                ImportedHoldingGateway.ItemStatus.ADJUSTED, "已按目标份额调整", 9L));
         String id = handler.create().sessionId(); handler.state(id); var item = handler.preview(id).getFirst();
 
         handler.startImport(id, List.of(new YangjibaoImportCommandHandler.Selection(item.itemId(),
                 YangjibaoImportCommandHandler.ExistingMode.SYNC_TARGET)));
 
         assertThat(handler.importStatus(id).results().getFirst().status()).isEqualTo("ADJUSTED");
-        verify(holdings).synchronize(1L, 9L, new BigDecimal("100.00"));
+        verify(holdings).importItem(argThat(request -> request.ownerId() == 1L
+                && request.sessionId().equals(id)
+                && request.itemId().equals(item.itemId())
+                && request.mode() == ImportedHoldingGateway.ExistingMode.SYNC_TARGET));
     }
 
     @Test
@@ -125,11 +141,13 @@ class YangjibaoImportCommandHandlerTest {
         when(source.holdings("token", "a")).thenReturn(List.of(
                 new YangjibaoSourceGateway.Holding("h", "017093", "成功基金", BigDecimal.TEN, BigDecimal.ONE),
                 new YangjibaoSourceGateway.Holding("h2", "017094", "重试基金", BigDecimal.TEN, BigDecimal.ONE)));
-        when(holdings.create(eq(1L), eq("017093"), anyString(), any(), any(), any()))
-                .thenReturn(new ImportedHoldingGateway.ImportedHolding(9L, 19L));
-        when(holdings.create(eq(1L), eq("017094"), anyString(), any(), any(), any()))
+        when(holdings.importItem(argThat(request -> request != null && "017093".equals(request.fundCode()))))
+                .thenReturn(new ImportedHoldingGateway.ItemResult(
+                        ImportedHoldingGateway.ItemStatus.CREATED, "已新增基金", 9L));
+        when(holdings.importItem(argThat(request -> request != null && "017094".equals(request.fundCode()))))
                 .thenThrow(new RuntimeException("temporary failure"))
-                .thenReturn(new ImportedHoldingGateway.ImportedHolding(10L, 20L));
+                .thenReturn(new ImportedHoldingGateway.ItemResult(
+                        ImportedHoldingGateway.ItemStatus.CREATED, "已新增基金", 10L));
         String id = handler.create().sessionId();
         handler.state(id);
         var preview = handler.preview(id);
@@ -143,7 +161,8 @@ class YangjibaoImportCommandHandlerTest {
         assertThat(retried.succeeded()).isEqualTo(2);
         assertThat(retried.results()).extracting(YangjibaoImportCommandHandler.ImportResult::itemId)
                 .containsExactlyInAnyOrder("a:h", "a:h2");
-        verify(holdings, times(1)).create(eq(1L), eq("017093"), anyString(), any(), any(), any());
+        verify(holdings, times(1)).importItem(argThat(request -> request != null
+                && "017093".equals(request.fundCode())));
     }
 
     @Test
@@ -163,6 +182,19 @@ class YangjibaoImportCommandHandlerTest {
         String id = handler.create().sessionId();
         handler.purgeExpiredSessions();
         assertThatThrownBy(() -> handler.state(id)).isInstanceOf(YangjibaoImportFailure.class);
+    }
+
+    @Test
+    void validationModeDoesNotQueryOrScheduleProcessingTasksOnStartup() {
+        ImportSessionGateway persistentSessions = mock(ImportSessionGateway.class);
+        TaskExecutor taskExecutor = mock(TaskExecutor.class);
+        var validationHandler = new YangjibaoImportCommandHandler(
+                source, holdings, actors, taskExecutor, persistentSessions);
+        ReflectionTestUtils.setField(validationHandler, "deploymentValidationMode", true);
+
+        validationHandler.resumeOnStartup();
+
+        verifyNoInteractions(persistentSessions, taskExecutor);
     }
 
     @Test

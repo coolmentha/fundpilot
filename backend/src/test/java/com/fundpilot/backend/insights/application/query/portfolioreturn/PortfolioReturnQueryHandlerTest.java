@@ -94,6 +94,36 @@ class PortfolioReturnQueryHandlerTest {
     }
 
     @Test
+    void fundUsesPortfolioFundIdAndKeepsMissingMarketDataUnknown() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true,
+                        new BigDecimal("0.3"))));
+        when(facts.findPositions(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        BigDecimal.ONE, new BigDecimal("100"))));
+        when(facts.findReturnFacts(7L)).thenReturn(List.of());
+        when(facts.findProducts(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "缺行情基金", "ETF", "STOCK",
+                        "000300", "BROAD_BASE")));
+        when(facts.findLatestTwoNavs(Set.of(31L))).thenReturn(List.of());
+        when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
+
+        var fund = handler(facts).fund(7L, 12L);
+
+        assertThat(fund).isNotNull();
+        assertThat(fund.portfolioFundId()).isEqualTo(12L);
+        assertThat(fund.legacyFundId()).isEqualTo(101L);
+        assertThat(fund.estimateStatus()).isEqualTo("NOT_ATTEMPTED");
+        assertThat(fund.valuationNav()).isNull();
+        assertThat(fund.dailyChangePct()).isZero();
+        assertThat(fund.dailyPnl()).isNull();
+        assertThat(handler(facts).fund(7L, 101L)).isNull();
+    }
+
+    @Test
     void qdiiWithTwoConfirmedNavsReturnsZeroWhenFirstSeenNotToday() {
         ReturnCompositionGateway facts = openFundFacts("QDII", Instant.parse("2026-07-28T15:59:00Z"));
 

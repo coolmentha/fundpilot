@@ -18,7 +18,7 @@ export default function PortfolioReturns() {
 
     const columns = [
         {title: '基金', dataIndex: 'fundName', ellipsis: true,
-            render: (value, row) => <Link to={`/funds/${row.id}`}>{value}</Link>},
+            render: (value, row) => <Link to={`/funds/${row.portfolioFundId}`}>{value}</Link>},
         {title: '投入', dataIndex: 'investedAmount', align: 'right', render: money},
         {title: '赎回净额', dataIndex: 'redeemedAmount', align: 'right', render: money},
         {title: '手续费', dataIndex: 'feeAmount', align: 'right', render: money},
@@ -31,7 +31,7 @@ export default function PortfolioReturns() {
         {title: '收益率', dataIndex: 'returnRate', align: 'right', render: percent},
     ];
     const missingCurrentFunds = (data?.funds || [])
-        .filter((fund) => fund.open && fund.unrealizedPnl == null);
+        .filter((fund) => fund.positionStatus === 'OPEN' && fund.unrealizedPnl == null);
 
     return (
         <div>

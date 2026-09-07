@@ -42,10 +42,10 @@ describe('PortfolioReturns', () => {
                 investedAmount: 100, redeemedAmount: 120, feeAmount: 1,
                 realizedPnl: 20, unrealizedPnl: 6, totalReturn: 26, returnRate: 0.26,
                 realizedComplete: true,
-                funds: [{id: 101, portfolioFundId: 12, fundName: '已清仓基金', investedAmount: 100,
+                funds: [{id: 101, portfolioFundId: 12, fundName: '已清仓基金', positionStatus: 'CLEARED', investedAmount: 100,
                     redeemedAmount: 120, feeAmount: 1, realizedPnl: 20,
                     unrealizedPnl: 0, totalReturn: 20, returnRate: 0.2},
-                    {id: 102, portfolioFundId: 13, fundCode: '000003', fundName: '缺净值基金', open: true,
+                    {id: 102, portfolioFundId: 13, fundCode: '000003', fundName: '缺净值基金', positionStatus: 'OPEN',
                         investedAmount: 100, redeemedAmount: 0, feeAmount: 0, realizedPnl: 0,
                         unrealizedPnl: null, totalReturn: null, returnRate: null}],
             },
@@ -87,7 +87,7 @@ describe('PortfolioReturns', () => {
         expect(container.textContent).toContain('1 只基金当前净值未覆盖：000003');
         expect(container.textContent).toContain('1 只基金净值未覆盖本区间');
         expect(container.querySelector('[aria-label="组合累计收益趋势"]')).not.toBeNull();
-        expect(container.querySelector('a').getAttribute('href')).toBe('/funds/101');
+        expect(container.querySelector('a').getAttribute('href')).toBe('/funds/12');
     });
 
     it('distinguishes trend loading and failure from an empty result', async () => {

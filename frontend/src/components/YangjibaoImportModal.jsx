@@ -3,13 +3,15 @@ import {Alert, Button, Checkbox, Input, Modal, Progress, QRCode, Radio, Segmente
 import {CheckCircleOutlined, QrcodeOutlined, ReloadOutlined, SearchOutlined, SwapOutlined} from '@ant-design/icons';
 import {
     cancelYangjibaoSession, createYangjibaoSession, getYangjibaoImportStatus,
-    getYangjibaoPreview, getYangjibaoSession, retryYangjibaoImport, useRunYangjibaoImport,
+    getYangjibaoPreview, getYangjibaoSession, getYangjibaoSessions, retryYangjibaoImport,
+    useRunYangjibaoImport,
 } from '../api/hooks.js';
 
 const {Text} = Typography;
 
 export default function YangjibaoImportModal({open, onClose}) {
     const [session, setSession] = useState(null);
+    const [sessions, setSessions] = useState(null);
     const [preview, setPreview] = useState(null);
     const [selected, setSelected] = useState({});
     const [modes, setModes] = useState({});
@@ -17,12 +19,20 @@ export default function YangjibaoImportModal({open, onClose}) {
     const [search, setSearch] = useState('');
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null);
+    const [restoring, setRestoring] = useState(null);
+    const [creating, setCreating] = useState(false);
     const runImport = useRunYangjibaoImport();
 
     useEffect(() => {
         if (!open) return;
         let active = true;
-        createYangjibaoSession().then(value => active && setSession(value)).catch(e => active && setError(e.message));
+        getYangjibaoSessions()
+            .then(value => active && setSessions(value || []))
+            .catch(e => {
+                if (!active) return;
+                setSessions([]);
+                setError(e.message);
+            });
         return () => { active = false; };
     }, [open]);
 
@@ -87,7 +97,23 @@ export default function YangjibaoImportModal({open, onClose}) {
     };
     const close = async () => {
         if (session && !job) await cancelYangjibaoSession(session.sessionId).catch(() => {});
-        setSession(null); setPreview(null); setSelected({}); setModes({}); setJob(null); setError(null); setSearch(''); setFilter('ALL'); onClose();
+        setSession(null); setSessions(null); setPreview(null); setSelected({}); setModes({}); setJob(null); setError(null);
+        setRestoring(null); setCreating(false); setSearch(''); setFilter('ALL'); onClose();
+    };
+    const startNew = async () => {
+        setError(null); setCreating(true);
+        try { setSession(await createYangjibaoSession()); }
+        catch (e) { setError(e.message); }
+        finally { setCreating(false); }
+    };
+    const restore = async ({sessionId}) => {
+        setError(null); setRestoring(sessionId);
+        try {
+            const value = await getYangjibaoSession(sessionId);
+            const imported = await getYangjibaoImportStatus(sessionId);
+            setSession(value); setJob(imported);
+        } catch (e) { setError(e.message); }
+        finally { setRestoring(null); }
     };
     const submit = async () => {
         const items = (preview || []).filter(x => selected[x.itemId]).map(x => ({itemId: x.itemId, existingMode: modes[x.itemId] || null}));
@@ -116,6 +142,22 @@ export default function YangjibaoImportModal({open, onClose}) {
 
     const results = job?.results || [];
     const currentStep = job ? 2 : preview ? 1 : 0;
+    const recoverableSessions = (sessions || []).filter(item => item.status === 'PROCESSING' || item.status === 'COMPLETED');
+    const sessionPicker = !session && sessions !== null && <div className="yangjibao-session-picker">
+        <Typography.Title level={4}>恢复导入任务</Typography.Title>
+        {recoverableSessions.length ? <Space direction="vertical" style={{width: '100%'}}>
+            {recoverableSessions.map(item => <div className="yangjibao-session-row" key={item.sessionId}>
+                <div>
+                    <Tag color={item.status === 'PROCESSING' ? 'processing' : 'success'}>
+                        {item.status === 'PROCESSING' ? '进行中的导入' : '已完成的导入'}
+                    </Tag>
+                    <Text type="secondary">{item.sessionId} · {item.processed} / {item.total}</Text>
+                </div>
+                <Button loading={restoring === item.sessionId} onClick={() => restore(item)}>恢复</Button>
+            </div>)}
+        </Space> : <Text type="secondary">暂无可恢复的导入任务</Text>}
+        <Button type={recoverableSessions.length ? 'default' : 'primary'} loading={creating} onClick={startNew}>新建导入</Button>
+    </div>;
     const newCount = (preview || []).filter(x => !x.localFundId).length;
     const existingCount = (preview || []).filter(x => x.localFundId).length;
     const conflictCount = (preview || []).filter(x => codeCounts.get(x.fundCode) > 1).length;
@@ -135,7 +177,8 @@ export default function YangjibaoImportModal({open, onClose}) {
             {title: '连接养基宝'}, {title: '确认持仓'}, {title: '导入结果'},
         ]}/>
         {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)}/>}
-        {!session && !error && <Spin/>}
+        {!session && sessions === null && !error && <Spin/>}
+        {sessionPicker}
         {session && !preview && !job && <div className="yangjibao-scan">
             <span className="yangjibao-state-icon"><QrcodeOutlined/></span>
             <div><Typography.Title level={4}>连接养基宝账户</Typography.Title><Text type="secondary">使用微信扫描二维码，授权后将自动读取持仓</Text></div>
@@ -193,7 +236,9 @@ export default function YangjibaoImportModal({open, onClose}) {
             <Table rowKey="itemId" size="small" pagination={{pageSize: 20, showSizeChanger: false}} dataSource={results} columns={[
                 {title: '基金代码', dataIndex: 'fundCode', width: 120, className: 'num-cell'},
                 {title: '结果', dataIndex: 'status', width: 110, render: value => <Tag color={value === 'FAILED' ? 'red' : value === 'SKIPPED' ? 'blue' : 'green'}>{value}</Tag>},
+                {title: '失败分类', width: 230, render: (_, row) => row.status === 'FAILED' ? <Text code>{row.failureCode}</Text> : '-'},
                 {title: '说明', dataIndex: 'message'},
+                {title: '关联标识', width: 280, render: (_, row) => row.status === 'FAILED' ? <Text code>{row.correlationId}</Text> : '-'},
             ]}/>
         </div>}
     </Modal>;

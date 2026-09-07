@@ -8,10 +8,6 @@ import static org.mockito.Mockito.when;
 import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
-import com.fundpilot.backend.fund.entity.FundEntity;
-import com.fundpilot.backend.fund.enums.FundCategory;
-import com.fundpilot.backend.fund.enums.FundSubType;
-import com.fundpilot.backend.fund.repository.FundRepository;
 import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanInvestmentFactsGateway;
 import com.fundpilot.backend.investmentplan.application.gateway.planexecution.PlanTradingCalendarGateway;
@@ -44,7 +40,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest
+@SpringBootTest(properties = "fundpilot.yangjibao.secret=test-only-yangjibao-signing-secret")
 @Testcontainers
 class InvestmentPlanExecutionIdempotencyIntegrationTest {
 
@@ -58,7 +54,6 @@ class InvestmentPlanExecutionIdempotencyIntegrationTest {
 
     @Autowired private UserAdministrationApi users;
     @Autowired private FundProductApi products;
-    @Autowired private FundRepository funds;
     @Autowired private PortfolioFundApi portfolioFunds;
     @Autowired private InvestmentPlanRepository plans;
     @Autowired private PlanTransactionGateway planTransactions;
@@ -153,16 +148,8 @@ class InvestmentPlanExecutionIdempotencyIntegrationTest {
         return new TransactionTemplate(transactionManager).execute(status -> {
             FundProductApi.ProductReference product = products.ensure(new FundProductApi.EnsureProduct(
                     "I" + suffix, "定投幂等测试基金", null, null));
-            FundEntity legacyFund = new FundEntity();
-            legacyFund.setOwnerId(ownerId);
-            legacyFund.setProductId(product.id());
-            legacyFund.setFundCode(product.fundCode());
-            legacyFund.setFundName("定投幂等测试基金");
-            legacyFund.setFundCategory(FundCategory.BROAD_BASE);
-            legacyFund.setFundSubType(FundSubType.INDEX);
-            FundEntity savedFund = funds.save(legacyFund);
             PortfolioFundApi.PortfolioFund portfolioFund = portfolioFunds.track(
-                    new PortfolioFundApi.TrackPortfolioFund(savedFund.getId(), ownerId, product.id(),
+                    new PortfolioFundApi.TrackPortfolioFund(null, ownerId, product.id(),
                             true, new BigDecimal("0.30")));
             InvestmentPlan plan = plans.save(InvestmentPlan.create(portfolioFund.id(), ownerId, true,
                     new BigDecimal("100.00"), InvestmentPlanFrequency.WEEKLY, 1, null));

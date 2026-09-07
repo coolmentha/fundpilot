@@ -9,11 +9,16 @@ vi.mock('./client.js', () => ({
 
 import {del, get, post, put} from './client.js';
 import {
+    createPortfolioFund,
     createManualTransaction,
     deleteDcaPlan,
     createStrategy,
     getPortfolioFundTransactions,
+    getPortfolioInsightFund,
+    getPortfolioFundLatestAdvice,
+    getPortfolioFundAdviceRange,
     getFundFeeRates,
+    getYangjibaoSessions,
     getWatchedIndices,
     invalidateDcaBudgetSummary,
     invalidateDcaPlanQueries,
@@ -29,6 +34,24 @@ import {
     updatePendingTransaction,
     voidPortfolioFund,
 } from './hooks.js';
+
+describe('portfolio fund onboarding', () => {
+    it('creates a portfolio fund through the accounting-owned endpoint', () => {
+        const body = {
+            fundProductId: 23,
+            positionWarningEnabled: true,
+            positionWarningRatio: 0.3,
+            initialHoldingShares: null,
+            costPerShare: null,
+            openedAt: null,
+            groupNames: [],
+        };
+
+        createPortfolioFund(body);
+
+        expect(post).toHaveBeenCalledWith('/api/portfolio-funds', body);
+    });
+});
 
 describe('portfolio fund transaction routes', () => {
     it('lists and records transactions with portfolio fund identifiers', () => {
@@ -99,6 +122,20 @@ describe('discipline strategy routes', () => {
     });
 });
 
+describe('portfolio fund insights routes', () => {
+    it('uses the portfolio fund identifier for return details and discipline advice', () => {
+        getPortfolioInsightFund(41);
+        getPortfolioFundLatestAdvice(41);
+        getPortfolioFundAdviceRange(41, '2026-09-01', '2026-09-07');
+
+        expect(get.mock.calls.slice(-3)).toEqual([
+            ['/api/insights/portfolio/funds/41'],
+            ['/api/discipline/advice/portfolio-funds/41/latest'],
+            ['/api/discipline/advice/portfolio-funds/41?from=2026-09-01&to=2026-09-07'],
+        ]);
+    });
+});
+
 describe('product fee rates', () => {
     it('queries fees by encoded product code', () => {
         getFundFeeRates('019736 A');
@@ -116,6 +153,14 @@ describe('watched indices', () => {
         expect(put).toHaveBeenCalledWith('/api/market-data/watched-indices', {
             indexCodes: ['1.000001', '1.000300'],
         });
+    });
+});
+
+describe('养基宝导入会话', () => {
+    it('lists the current user sessions through the importing endpoint', () => {
+        getYangjibaoSessions();
+
+        expect(get).toHaveBeenLastCalledWith('/api/imports/yangjibao/sessions');
     });
 });
 
