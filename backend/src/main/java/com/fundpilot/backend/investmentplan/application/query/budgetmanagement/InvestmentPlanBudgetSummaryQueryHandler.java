@@ -8,6 +8,8 @@ import com.fundpilot.backend.investmentplan.domain.investmentplan.InvestmentPlan
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +29,16 @@ public class InvestmentPlanBudgetSummaryQueryHandler {
         var now = clock.instant();
         var monthStart = InvestmentPlanForecastQueryHandler.monthStart(now);
         var monthEnd = InvestmentPlanForecastQueryHandler.nextMonthStart(now);
-        BigDecimal invested = transactions.investedAmount(ownerId, monthStart, monthEnd);
+        var investedAmounts = transactions.investedAmounts(ownerId, monthStart, monthEnd);
+        BigDecimal invested = investedAmounts.total();
         var activePlans = visiblePlans.findByOwner(ownerId);
         var datesByPlan = forecasts.currentMonthExecutionDates(ownerId, activePlans);
+        List<FuturePlan> futurePlans = activePlans.stream()
+                .flatMap(plan -> datesByPlan.getOrDefault(plan.id(), List.of()).stream()
+                        .map(date -> new FuturePlan(plan.id(), plan.portfolioFundId(), date, plan.amount(),
+                                plan.amount().multiply(maximumRate(plan)))))
+                .sorted(Comparator.comparing(FuturePlan::executionDate).thenComparing(FuturePlan::planId))
+                .toList();
         BigDecimal future = activePlans.stream().map(plan -> plan.amount().multiply(BigDecimal.valueOf(
                 datesByPlan.getOrDefault(plan.id(), java.util.List.of()).size())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -55,7 +64,8 @@ public class InvestmentPlanBudgetSummaryQueryHandler {
             over = difference.signum() < 0 ? difference.negate() : BigDecimal.ZERO;
         }
         return new Summary(budget, invested, future, projected, remaining, over,
-                minimumFuture, maximumFuture, minimumProjected, maximumProjected);
+                minimumFuture, maximumFuture, minimumProjected, maximumProjected,
+                investedAmounts.confirmed(), investedAmounts.pending(), futurePlans);
     }
 
     private static BigDecimal minimumRate(InvestmentPlan plan) {
@@ -78,5 +88,10 @@ public class InvestmentPlanBudgetSummaryQueryHandler {
     public record Summary(BigDecimal monthlyBudget, BigDecimal investedAmount, BigDecimal futureAmount,
                           BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount,
                           BigDecimal minimumFutureAmount, BigDecimal maximumFutureAmount,
-                          BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount) {}
+                          BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount,
+                          BigDecimal confirmedInvestedAmount, BigDecimal pendingInvestedAmount,
+                          List<FuturePlan> futurePlans) {}
+
+    public record FuturePlan(long planId, long portfolioFundId, Instant executionDate,
+                             BigDecimal amount, BigDecimal maximumAmount) {}
 }

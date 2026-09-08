@@ -12,6 +12,6 @@ public class FundFeeRefreshJob {
 
     @Scheduled(cron = "0 30 2 * * *", zone = "Asia/Shanghai")
     public void refreshDaily() {
-        commands.refreshKnownSchedules();
+        commands.refreshTrackedFunds();
     }
 }

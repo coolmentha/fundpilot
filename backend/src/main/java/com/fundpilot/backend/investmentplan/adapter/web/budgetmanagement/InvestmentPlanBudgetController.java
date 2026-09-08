@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,7 +39,8 @@ public class InvestmentPlanBudgetController {
         return Response.ok(new SummaryView(summary.monthlyBudget(), summary.investedAmount(), summary.futureAmount(),
                 summary.projectedAmount(), summary.remainingAmount(), summary.overBudgetAmount(),
                 summary.minimumFutureAmount(), summary.maximumFutureAmount(), summary.minimumProjectedAmount(),
-                summary.maximumProjectedAmount()));
+                summary.maximumProjectedAmount(), summary.confirmedInvestedAmount(), summary.pendingInvestedAmount(),
+                summary.futurePlans().stream().map(FuturePlanView::from).toList()));
     }
     @Schema(description = "月度预算设置请求")
     public record Request(@Schema(description = "月度预算金额", example = "1000.00") BigDecimal monthlyBudget) {}
@@ -47,7 +50,17 @@ public class InvestmentPlanBudgetController {
     public record SummaryView(BigDecimal monthlyBudget, BigDecimal investedAmount, BigDecimal futureAmount,
                               BigDecimal projectedAmount, BigDecimal remainingAmount, BigDecimal overBudgetAmount,
                               BigDecimal minimumFutureAmount, BigDecimal maximumFutureAmount,
-                              BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount) {}
+                              BigDecimal minimumProjectedAmount, BigDecimal maximumProjectedAmount,
+                              BigDecimal confirmedInvestedAmount, BigDecimal pendingInvestedAmount,
+                              List<FuturePlanView> futurePlans) {}
+    @Schema(description = "当月尚未生成流水的计划执行项")
+    public record FuturePlanView(long planId, long portfolioFundId, Instant executionDate,
+                                 BigDecimal amount, BigDecimal maximumAmount) {
+        static FuturePlanView from(InvestmentPlanBudgetSummaryQueryHandler.FuturePlan plan) {
+            return new FuturePlanView(plan.planId(), plan.portfolioFundId(), plan.executionDate(), plan.amount(),
+                    plan.maximumAmount());
+        }
+    }
     @Schema(description = "统一响应结果")
     record Response<T>(boolean success, T data, String code, String message) {
         static <T> Response<T> ok(T data) { return new Response<>(true, data, null, null); }

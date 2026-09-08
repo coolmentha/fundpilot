@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.fundpilot.backend.productcatalog.domain.fee.FundFeeSchedule.PurchaseStatus;
 
 /**
  * 天天基金 {@code jjfl_<code>.html} 费率页 HTML 解析器(Jsoup)。
@@ -73,7 +74,7 @@ public final class FundFeeHtmlParser {
             // C 类无 strike 也无 |,单列费率(如 "0.00%"),此时 discount = original = 该值
             if (discount == null && original == null) {
                 BigDecimal single = parsePercent(tdText);
-                return new PurchaseFeeRate(single, single);
+                return single == null ? null : new PurchaseFeeRate(single, single);
             }
             return new PurchaseFeeRate(original, discount);
         } catch (RuntimeException e) {
@@ -144,6 +145,36 @@ public final class FundFeeHtmlParser {
         }
     }
 
+    static BigDecimal parseOperationFee(String html, String label) {
+        if (html == null || html.isBlank()) return null;
+        Document doc = Jsoup.parse(html);
+        for (Element cell : doc.select("th,td")) {
+            if (!cell.text().contains(label)) continue;
+            Element next = cell.nextElementSibling();
+            if (next != null) return parsePercent(next.text());
+        }
+        return null;
+    }
+
+    static PurchaseTerms parsePurchaseTerms(String html) {
+        if (html == null || html.isBlank()) return null;
+        Document doc = Jsoup.parse(html);
+        String statusText = valueAfterLabel(doc, "申购状态");
+        String limitText = valueAfterLabel(doc, "申购限额");
+        String minimumText = firstNonBlank(valueAfterLabel(doc, "最低申购"),
+                valueAfterLabel(doc, "申购起点"), valueAfterLabel(doc, "首次购买"));
+        if (statusText == null && limitText == null && minimumText == null) return null;
+        PurchaseStatus status = null;
+        if (statusText != null) {
+            status = statusText.contains("暂停") ? PurchaseStatus.SUSPENDED
+                    : statusText.contains("限") ? PurchaseStatus.LIMITED
+                    : statusText.contains("开放") ? PurchaseStatus.OPEN : PurchaseStatus.UNKNOWN;
+        }
+        BigDecimal purchaseLimit = parseMoney(limitText);
+        if (status == PurchaseStatus.OPEN && purchaseLimit != null) status = PurchaseStatus.LIMITED;
+        return new PurchaseTerms(status, purchaseLimit, parseMoney(minimumText));
+    }
+
     /**
      * 按 h4 文本关键词定位其后的第一个 table。
      * <p>jjfl 页结构:h4.t > label.left(标题文本) → 同级 div.space0 → table.jjfl。
@@ -158,6 +189,29 @@ public final class FundFeeHtmlParser {
                 }
             }
         }
+        return null;
+    }
+
+    private static String valueAfterLabel(Document doc, String label) {
+        for (Element row : doc.select("tr")) {
+            Elements cells = row.select("th,td");
+            for (int index = 0; index < cells.size() - 1; index++) {
+                if (cells.get(index).text().contains(label)) return cells.get(index + 1).text();
+            }
+        }
+        return null;
+    }
+
+    private static BigDecimal parseMoney(String text) {
+        if (text == null) return null;
+        Matcher matcher = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)").matcher(text.replace(",", ""));
+        if (!matcher.find()) return null;
+        BigDecimal value = new BigDecimal(matcher.group(1));
+        return text.contains("万") ? value.multiply(new BigDecimal("10000")) : value;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) if (value != null && !value.isBlank()) return value;
         return null;
     }
 
@@ -192,4 +246,6 @@ public final class FundFeeHtmlParser {
 
     /** 申购费率解析结果:原费率 + 优惠费率。 */
     public record PurchaseFeeRate(BigDecimal originalRate, BigDecimal discountRate) {}
+    record PurchaseTerms(PurchaseStatus status, BigDecimal purchaseLimit,
+                         BigDecimal minimumPurchaseAmount) {}
 }

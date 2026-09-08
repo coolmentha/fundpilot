@@ -83,6 +83,7 @@ describe('PortfolioReturns', () => {
         expect(container.textContent).toContain('已实现盈亏');
         expect(container.textContent).toContain('未实现盈亏');
         expect(container.textContent).toContain('累计收益率');
+        expect(container.textContent).toContain('最大回撤（金额）');
         expect(container.textContent).toContain('已清仓基金');
         expect(container.textContent).toContain('1 只基金当前净值未覆盖：000003');
         expect(container.textContent).toContain('1 只基金净值未覆盖本区间');

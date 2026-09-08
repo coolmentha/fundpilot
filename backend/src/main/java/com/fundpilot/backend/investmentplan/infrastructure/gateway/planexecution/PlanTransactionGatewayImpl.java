@@ -33,4 +33,9 @@ public class PlanTransactionGatewayImpl implements PlanTransactionGateway {
     @Override public BigDecimal investedAmount(long ownerId, Instant startInclusive, Instant endExclusive) {
         return transactions.investedAmount(ownerId, startInclusive, endExclusive);
     }
+
+    @Override public InvestmentAmounts investedAmounts(long ownerId, Instant startInclusive, Instant endExclusive) {
+        var amounts = transactions.investedAmounts(ownerId, startInclusive, endExclusive);
+        return new InvestmentAmounts(amounts.confirmed(), amounts.pending());
+    }
 }

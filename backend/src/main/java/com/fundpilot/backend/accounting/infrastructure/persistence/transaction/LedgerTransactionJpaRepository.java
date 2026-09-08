@@ -81,6 +81,20 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
     java.math.BigDecimal sumInvestedAmount(@Param("ownerId") Long ownerId, @Param("start") Instant start,
                                            @Param("end") Instant end);
 
+    interface InvestmentAmountByStatusProjection {
+        String getStatus();
+        java.math.BigDecimal getAmount();
+    }
+
+    @Query(value = "select t.status as status, coalesce(sum(t.amount), 0) as amount from fund_transaction t "
+            + "join portfolio_fund p on p.id = t.portfolio_fund_id "
+            + "where p.owner_id = :ownerId and p.validity = 'TRACKED' and t.source = 'INVEST' "
+            + "and t.status <> 'CANCELLED' and t.trade_date >= :start and t.trade_date < :end "
+            + "and t.deleted_date is null group by t.status", nativeQuery = true)
+    List<InvestmentAmountByStatusProjection> sumInvestedAmountByStatus(@Param("ownerId") Long ownerId,
+                                                                        @Param("start") Instant start,
+                                                                        @Param("end") Instant end);
+
     boolean existsByDisciplineAdviceIdAndStatusNot(Long disciplineAdviceId, String status);
 
     @Query("select t from LedgerTransactionJpaEntity t where t.disciplineAdviceId = :disciplineAdviceId "

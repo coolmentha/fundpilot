@@ -16,8 +16,18 @@ class EastmoneyFundFeeSourceGateway implements FundFeeSourceGateway {
         FundFeeHtmlParser.PurchaseFeeRate purchase = FundFeeHtmlParser.parsePurchaseRate(html);
         List<SourceRedemptionTier> tiers = FundFeeHtmlParser.parseRedemptionLadder(html);
         var salesServiceFee = FundFeeHtmlParser.parseSalesServiceFee(html);
-        if (purchase == null && tiers.isEmpty() && salesServiceFee == null) return null;
+        var managementFee = FundFeeHtmlParser.parseOperationFee(html, "管理费率");
+        var custodyFee = FundFeeHtmlParser.parseOperationFee(html, "托管费率");
+        var terms = FundFeeHtmlParser.parsePurchaseTerms(html);
+        if (purchase == null && tiers.isEmpty() && salesServiceFee == null
+                && managementFee == null && custodyFee == null && terms == null) return null;
         return new SourceFee(purchase == null ? null : purchase.originalRate(),
-                purchase == null ? null : purchase.discountRate(), salesServiceFee, tiers);
+                purchase == null ? null : purchase.discountRate(), salesServiceFee,
+                tiers.isEmpty() ? null : tiers,
+                managementFee, custodyFee, terms == null ? null : terms.status(),
+                terms == null ? null : terms.purchaseLimit(),
+                terms == null ? null : terms.minimumPurchaseAmount(),
+                "天天基金公开费率，仅供参考，以实际交易渠道为准", "东方财富",
+                "https://fundf10.eastmoney.com/jjfl_" + fundCode + ".html");
     }
 }

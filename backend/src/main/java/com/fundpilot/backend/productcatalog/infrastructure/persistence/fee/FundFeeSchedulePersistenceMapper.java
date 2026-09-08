@@ -14,7 +14,9 @@ final class FundFeeSchedulePersistenceMapper {
     static FundFeeSchedule toDomain(FundFeeScheduleJpaEntity entity) {
         return FundFeeSchedule.rehydrate(entity.getId(), entity.getFundCode(), entity.getPurchaseRate(),
                 entity.getDiscountRate(), entity.getSalesServiceFee(), parseTiers(entity.getRedemptionLadder()),
-                entity.getFetchedAt());
+                entity.getManagementFee(), entity.getCustodyFee(), entity.getPurchaseStatus(),
+                entity.getPurchaseLimit(), entity.getMinimumPurchaseAmount(), entity.getChannelReferenceLabel(),
+                entity.getSourceName(), entity.getSourceUrl(), entity.getRefreshStatus(), entity.getFetchedAt());
     }
 
     static FundFeeScheduleJpaEntity toEntity(FundFeeSchedule schedule) {
@@ -28,6 +30,15 @@ final class FundFeeSchedulePersistenceMapper {
         entity.setPurchaseRate(schedule.purchaseRate());
         entity.setDiscountRate(schedule.discountRate());
         entity.setSalesServiceFee(schedule.salesServiceFee());
+        entity.setManagementFee(schedule.managementFee());
+        entity.setCustodyFee(schedule.custodyFee());
+        entity.setPurchaseStatus(schedule.purchaseStatus());
+        entity.setPurchaseLimit(schedule.purchaseLimit());
+        entity.setMinimumPurchaseAmount(schedule.minimumPurchaseAmount());
+        entity.setChannelReferenceLabel(schedule.channelReferenceLabel());
+        entity.setSourceName(schedule.sourceName());
+        entity.setSourceUrl(schedule.sourceUrl());
+        entity.setRefreshStatus(schedule.refreshStatus());
         entity.setRedemptionLadder(schedule.redemptionTiers().isEmpty()
                 ? null : JSON.writeValueAsString(schedule.redemptionTiers()));
         entity.setFetchedAt(schedule.fetchedAt());

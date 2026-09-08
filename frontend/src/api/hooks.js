@@ -366,6 +366,26 @@ export function useFundFeeRates(fundCode) {
 export function getFundFeeRates(fundCode) {
     return get(`/api/products/${encodeURIComponent(fundCode)}/fees`);
 }
+export function useFundResearch(fundCode) {
+    return useQuery({
+        queryKey: ['fund-research', fundCode],
+        queryFn: () => getFundResearch(fundCode),
+        enabled: !!fundCode,
+    });
+}
+export function getFundResearch(fundCode) {
+    return get(`/api/products/${encodeURIComponent(fundCode)}/research`);
+}
+export function useFundOpenLots(portfolioFundId) {
+    return useQuery({
+        queryKey: ['fund-open-lots', portfolioFundId],
+        queryFn: () => getFundOpenLots(portfolioFundId),
+        enabled: !!portfolioFundId,
+    });
+}
+export function getFundOpenLots(portfolioFundId) {
+    return get(`/api/portfolio-funds/${portfolioFundId}/open-lots`);
+}
 export function useCancelTransaction() {
     const qc = useQueryClient();
     return useMutation({

@@ -3,10 +3,14 @@ import {buildDcaBudgetProgress} from './dcaBudget.js';
 
 describe('DCA budget progress', () => {
     it('keeps monthly amounts visible when the optional budget is unset', () => {
-        const progress = buildDcaBudgetProgress({investedAmount: '600', futureAmount: '400'});
+        const progress = buildDcaBudgetProgress({
+            confirmedInvestedAmount: '500', pendingInvestedAmount: '100', futureAmount: '400',
+        });
 
         expect(progress).toMatchObject({
             hasBudget: false,
+            confirmedInvestedAmount: 500,
+            pendingInvestedAmount: 100,
             investedAmount: 600,
             futureAmount: 400,
             projectedAmount: 1000,
@@ -18,7 +22,8 @@ describe('DCA budget progress', () => {
     it('splits invested and future amounts within a remaining budget', () => {
         const progress = buildDcaBudgetProgress({
             monthlyBudget: 2000,
-            investedAmount: 800,
+            confirmedInvestedAmount: 600,
+            pendingInvestedAmount: 200,
             futureAmount: 400,
         });
 
@@ -37,7 +42,8 @@ describe('DCA budget progress', () => {
     it('uses the projected total as scale and marks the excess when over budget', () => {
         const progress = buildDcaBudgetProgress({
             monthlyBudget: 1000,
-            investedAmount: 900,
+            confirmedInvestedAmount: 700,
+            pendingInvestedAmount: 200,
             futureAmount: 300,
         });
 
@@ -51,7 +57,8 @@ describe('DCA budget progress', () => {
     it('does not produce invalid progress from missing or malformed amounts', () => {
         const progress = buildDcaBudgetProgress({
             monthlyBudget: 0,
-            investedAmount: 'invalid',
+            confirmedInvestedAmount: 'invalid',
+            pendingInvestedAmount: null,
             futureAmount: null,
         });
 
@@ -62,7 +69,8 @@ describe('DCA budget progress', () => {
 
     it('hides the smart range when there are no smart plans', () => {
         const progress = buildDcaBudgetProgress({
-            investedAmount: 100,
+            confirmedInvestedAmount: 100,
+            pendingInvestedAmount: 0,
             futureAmount: 200,
             minimumFutureAmount: null,
             maximumFutureAmount: null,
@@ -70,5 +78,22 @@ describe('DCA budget progress', () => {
 
         expect(progress.minimumFutureAmount).toBeNull();
         expect(progress.maximumFutureAmount).toBeNull();
+    });
+
+    it('keeps each future plan maximum distinct from a missing amount', () => {
+        const progress = buildDcaBudgetProgress({
+            confirmedInvestedAmount: 100,
+            pendingInvestedAmount: 20,
+            futureAmount: 300,
+            futurePlans: [
+                {planId: 1, amount: 100, maximumAmount: 180},
+                {planId: 2, amount: 'invalid', maximumAmount: 0},
+            ],
+        });
+
+        expect(progress.futurePlans).toEqual([
+            {planId: 1, amount: 100, maximumAmount: 180},
+            {planId: 2, amount: null, maximumAmount: 0},
+        ]);
     });
 });

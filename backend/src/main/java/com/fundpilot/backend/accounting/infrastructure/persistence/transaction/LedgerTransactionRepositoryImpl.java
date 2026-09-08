@@ -132,6 +132,15 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
     }
 
     @Override
+    public List<InvestmentAmountByStatus> sumInvestedAmountByStatus(long ownerId, Instant startInclusive,
+                                                                    Instant endExclusive) {
+        return transactions.sumInvestedAmountByStatus(ownerId, startInclusive, endExclusive).stream()
+                .map(row -> new InvestmentAmountByStatus(TransactionStatus.valueOf(row.getStatus()),
+                        row.getAmount()))
+                .toList();
+    }
+
+    @Override
     public boolean existsByDisciplineAdviceIdAndStatusNot(long disciplineAdviceId, TransactionStatus status) {
         return transactions.existsByDisciplineAdviceIdAndStatusNot(disciplineAdviceId, status.name());
     }

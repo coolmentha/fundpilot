@@ -49,6 +49,10 @@ public interface TransactionRepository {
     /** 月度预算：统计用户全部未取消的 INVEST，不限于自动计划来源。 */
     java.math.BigDecimal sumInvestedAmount(long ownerId, Instant startInclusive, Instant endExclusive);
 
+    /** 月度预算：按确认状态统计用户全部未取消的 INVEST，不限于自动计划来源。 */
+    List<InvestmentAmountByStatus> sumInvestedAmountByStatus(long ownerId, Instant startInclusive,
+                                                              Instant endExclusive);
+
     /** 建议回应幂等：同一 Discipline 建议存在未取消账目（CANCELLED 不视为已回应，可重新接受）。 */
     boolean existsByDisciplineAdviceIdAndStatusNot(long disciplineAdviceId, TransactionStatus status);
 
@@ -59,4 +63,5 @@ public interface TransactionRepository {
     }
     record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, java.math.BigDecimal amount,
                                     TransactionStatus status) {}
+    record InvestmentAmountByStatus(TransactionStatus status, java.math.BigDecimal amount) {}
 }

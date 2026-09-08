@@ -75,7 +75,7 @@ export default function PortfolioReturns() {
                         formatter={percent} valueStyle={{color: pnlColor(trend.intervalReturnRate)}}/></Col>
                     <Col xs={12} md={6}><Statistic title="区间投入 / 赎回"
                         value={`${money(trend.investedAmount)} / ${money(trend.redeemedAmount)}`}/></Col>
-                    <Col xs={12} md={6}><Statistic title="最大回撤" value={trend.maximumDrawdown}
+                    <Col xs={12} md={6}><Statistic title="最大回撤（金额）" value={trend.maximumDrawdown}
                         formatter={money}/></Col>
                 </Row>
                 <ReturnTrendChart points={trend.points}/>

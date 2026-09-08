@@ -12,8 +12,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fundpilot.backend.accounting.application.command.transactionconfirmation.TransactionConfirmationCommandHandler;
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerCommandHandler;
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
+import com.fundpilot.backend.accounting.application.query.positiontracking.OpenLotQueryHandler;
 import com.fundpilot.backend.accounting.application.query.transactionhistory.TransactionQueryHandler;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
@@ -21,8 +26,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import java.time.Instant;
-import java.util.Optional;
 
 @WebMvcTest(controllers = TransactionController.class)
 @Import({TransactionController.class, TransactionExceptionHandler.class, TransactionControllerTest.TestConfig.class})
@@ -36,6 +39,23 @@ class TransactionControllerTest {
     @MockitoBean TransactionLedgerCommandHandler ledgerCommands;
     @MockitoBean TransactionConfirmationCommandHandler confirmationCommands;
     @MockitoBean TransactionQueryHandler queries;
+    @MockitoBean OpenLotQueryHandler openLots;
+
+    @Test
+    void openLotsPreservesZeroFeeAndMissingReason() throws Exception {
+        when(openLots.find(7L, 41L)).thenReturn(new OpenLotQueryHandler.Summary(41L,
+                Instant.parse("2026-09-07T00:00:00Z"), new BigDecimal("1.20"), BigDecimal.ZERO, null,
+                List.of(new OpenLotQueryHandler.LotEstimate(Instant.parse("2026-09-01T00:00:00Z"),
+                        new BigDecimal("80"), 7L, BigDecimal.ZERO, BigDecimal.ZERO, null))));
+
+        mockMvc.perform(get("/api/portfolio-funds/41/open-lots")
+                        .requestAttr(RequestActorAttributes.USER_ID, 7L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.estimatedRedemptionFee").value(0))
+                .andExpect(jsonPath("$.data.unavailableReason").doesNotExist())
+                .andExpect(jsonPath("$.data.lots[0].redemptionRate").value(0))
+                .andExpect(jsonPath("$.data.lots[0].holdingDays").value(7));
+    }
 
     @Test
     void legacyTransactionListRouteIsRemoved() throws Exception {

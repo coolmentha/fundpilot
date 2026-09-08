@@ -48,6 +48,11 @@ public class TransactionApi {
         return queries.investedAmount(ownerId, startInclusive, endExclusive);
     }
 
+    public InvestmentAmounts investedAmounts(long ownerId, Instant startInclusive, Instant endExclusive) {
+        var amounts = queries.investedAmounts(ownerId, startInclusive, endExclusive);
+        return new InvestmentAmounts(amounts.confirmed(), amounts.pending());
+    }
+
     public boolean hasTransactionForAdvice(long adviceId) {
         return queries.hasTransactionForAdvice(adviceId);
     }
@@ -153,6 +158,9 @@ public class TransactionApi {
     public record AdviceRelatedTransaction(long transactionId, String status) {}
     public record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, BigDecimal amount,
                                            String status) {}
+    public record InvestmentAmounts(BigDecimal confirmed, BigDecimal pending) {
+        public BigDecimal total() { return confirmed.add(pending); }
+    }
     public enum Source { INCREASE, DECREASE, TRANSFER_IN, TRANSFER_OUT, INVEST, ADJUST_IN, ADJUST_OUT,
         COST_BASIS_RESET }
     public enum Status { PENDING, CONFIRMED, CANCELLED }

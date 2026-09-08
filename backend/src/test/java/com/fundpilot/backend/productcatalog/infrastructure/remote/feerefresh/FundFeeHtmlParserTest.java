@@ -97,6 +97,17 @@ class FundFeeHtmlParserTest {
     }
 
     @Test
+    void parsePurchaseRate_单列无百分比返null() {
+        String html = """
+                <div><h4>申购费率</h4><table><tbody>
+                <tr><td>小于100万元</td><td>--</td></tr>
+                </tbody></table></div>
+                """;
+
+        assertThat(FundFeeHtmlParser.parsePurchaseRate(html)).isNull();
+    }
+
+    @Test
     void parseRedemptionLadder_001071_五档阶梯() {
         List<SourceRedemptionTier> ladder = FundFeeHtmlParser.parseRedemptionLadder(HTML_001071);
         assertThat(ladder).hasSize(5);
@@ -132,6 +143,34 @@ class FundFeeHtmlParserTest {
     void parseSalesServiceFee_005919_C类_百分之零点二() {
         BigDecimal fee = FundFeeHtmlParser.parseSalesServiceFee(HTML_005919);
         assertThat(fee).isEqualByComparingTo(new BigDecimal("0.002"));
+    }
+
+    @Test
+    void parseOperationFeesAndPurchaseTerms() {
+        String html = """
+                <table><tr><td>管理费率</td><td>0.50%（每年）</td></tr>
+                <tr><td>托管费率</td><td>0.10%（每年）</td></tr>
+                <tr><td>申购状态</td><td>限制大额申购</td></tr>
+                <tr><td>申购限额</td><td>单日 10 万元</td></tr>
+                <tr><td>最低申购</td><td>10 元</td></tr></table>
+                """;
+
+        assertThat(FundFeeHtmlParser.parseOperationFee(html, "管理费率"))
+                .isEqualByComparingTo("0.005");
+        assertThat(FundFeeHtmlParser.parseOperationFee(html, "托管费率"))
+                .isEqualByComparingTo("0.001");
+        var terms = FundFeeHtmlParser.parsePurchaseTerms(html);
+        assertThat(terms.status()).isEqualTo(
+                com.fundpilot.backend.productcatalog.domain.fee.FundFeeSchedule.PurchaseStatus.LIMITED);
+        assertThat(terms.purchaseLimit()).isEqualByComparingTo("100000");
+        assertThat(terms.minimumPurchaseAmount()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void changedStructureDoesNotFabricateZeroFees() {
+        String html = "<section>费率页面结构已变化</section>";
+        assertThat(FundFeeHtmlParser.parseOperationFee(html, "管理费率")).isNull();
+        assertThat(FundFeeHtmlParser.parsePurchaseRate(html)).isNull();
     }
 
     @Test

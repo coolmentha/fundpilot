@@ -1,7 +1,7 @@
 package com.fundpilot.backend.productcatalog.adapter.web.fee;
 
 import com.fundpilot.backend.platform.web.ApiResponse;
-import com.fundpilot.backend.productcatalog.application.command.feerefresh.FundFeeCommandHandler;
+import com.fundpilot.backend.productcatalog.application.query.feequery.FundFeeQueryHandler;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -19,12 +19,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping("/api/products/{fundCode}/fees")
 @RequiredArgsConstructor
 public class FundFeeController {
-    private final FundFeeCommandHandler commands;
+    private final FundFeeQueryHandler queries;
 
-    @Operation(summary = "查询基金费率,缓存未命中时自动刷新")
+    @Operation(summary = "查询本地基金费率，不触发外部刷新")
     @GetMapping
     public ApiResponse<FeeResponse> get(@PathVariable String fundCode) {
-        return ApiResponse.ok(commands.findOrRefresh(fundCode).map(FeeResponse::from).orElse(null));
+        return ApiResponse.ok(queries.findByFundCode(fundCode).map(FeeResponse::from).orElse(null));
     }
 
     @Schema(description = "基金费率视图")
@@ -33,13 +33,26 @@ public class FundFeeController {
             @Schema(description = "申购费率折扣率,例如 0.1 表示一折", example = "0.1") BigDecimal discountRate,
             @Schema(description = "销售服务费率", example = "0.004") BigDecimal salesServiceFee,
             @Schema(description = "赎回费阶梯列表,按持有天数分档") List<RedemptionTierView> redemptionLadder,
+            BigDecimal managementFee,
+            BigDecimal custodyFee,
+            String purchaseStatus,
+            BigDecimal purchaseLimit,
+            BigDecimal minimumPurchaseAmount,
+            ChannelReferenceView channelReference,
+            String status,
+            boolean stale,
             @Schema(description = "费率数据获取时间", example = "2026-08-21T09:30:00Z") Instant fetchedAt) {
-        static FeeResponse from(FundFeeCommandHandler.FeeResult result) {
+        static FeeResponse from(FundFeeQueryHandler.FeeResult result) {
             return new FeeResponse(result.purchaseRate(), result.discountRate(), result.salesServiceFee(),
                     result.redemptionTiers().stream().map(tier ->
-                            new RedemptionTierView(tier.maxDays(), tier.rate())).toList(), result.fetchedAt());
+                            new RedemptionTierView(tier.maxDays(), tier.rate())).toList(),
+                    result.managementFee(), result.custodyFee(), result.purchaseStatus(), result.purchaseLimit(),
+                    result.minimumPurchaseAmount(), result.sourceName() == null ? null
+                            : new ChannelReferenceView(result.channelReferenceLabel(), result.sourceName(), result.sourceUrl()),
+                    result.status(), result.stale(), result.fetchedAt());
         }
     }
+    public record ChannelReferenceView(String label, String sourceName, String sourceUrl) {}
     @Schema(description = "赎回费阶梯视图")
     public record RedemptionTierView(
             @Schema(description = "该档费率适用的最大持有天数", example = "7") Integer maxDays,

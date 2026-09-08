@@ -92,6 +92,17 @@ public class TransactionQueryHandler {
     }
 
     @Transactional(readOnly = true)
+    public InvestmentAmounts investedAmounts(long ownerId, Instant startInclusive, Instant endExclusive) {
+        Map<TransactionStatus, BigDecimal> amounts = transactions
+                .sumInvestedAmountByStatus(ownerId, startInclusive, endExclusive).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        TransactionRepository.InvestmentAmountByStatus::status,
+                        TransactionRepository.InvestmentAmountByStatus::amount));
+        return new InvestmentAmounts(amounts.getOrDefault(TransactionStatus.CONFIRMED, BigDecimal.ZERO),
+                amounts.getOrDefault(TransactionStatus.PENDING, BigDecimal.ZERO));
+    }
+
+    @Transactional(readOnly = true)
     public boolean hasTransactionForAdvice(long adviceId) {
         return transactions.existsByDisciplineAdviceIdAndStatusNot(adviceId, TransactionStatus.CANCELLED);
     }
@@ -108,6 +119,10 @@ public class TransactionQueryHandler {
 
     public record InvestmentPlanOccurrence(long investmentPlanId, java.time.Instant tradeDate,
                                             java.math.BigDecimal amount, String status) {}
+
+    public record InvestmentAmounts(BigDecimal confirmed, BigDecimal pending) {
+        public BigDecimal total() { return confirmed.add(pending); }
+    }
 
     private PendingResult pending(LedgerTransaction transaction,
                                   TradedPortfolioFundGateway.TradedPortfolioFund portfolioFund,

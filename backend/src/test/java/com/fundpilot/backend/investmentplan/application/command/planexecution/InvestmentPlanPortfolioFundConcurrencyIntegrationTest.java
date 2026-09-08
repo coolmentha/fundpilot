@@ -437,6 +437,11 @@ class InvestmentPlanPortfolioFundConcurrencyIntegrationTest {
         public BigDecimal investedAmount(long ownerId, Instant startInclusive, Instant endExclusive) {
             return delegate.investedAmount(ownerId, startInclusive, endExclusive);
         }
+
+        @Override
+        public InvestmentAmounts investedAmounts(long ownerId, Instant startInclusive, Instant endExclusive) {
+            return delegate.investedAmounts(ownerId, startInclusive, endExclusive);
+        }
     }
 
     private static final class FailingCorrectablePortfolioFundGateway implements CorrectablePortfolioFundGateway {

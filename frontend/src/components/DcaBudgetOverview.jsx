@@ -1,8 +1,10 @@
 import {Skeleton} from 'antd';
 import {Link} from 'react-router-dom';
-import {money} from '../constants.js';
+import {date, money} from '../constants.js';
 import {buildDcaBudgetProgress} from '../dcaBudget.js';
 import QueryErrorState from './QueryErrorState.jsx';
+
+const optionalMoney = (value) => value == null ? '-' : money(value);
 
 export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}) {
     if (isLoading) {
@@ -35,17 +37,28 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
                     <span className="dca-budget-total">
                         {money(progress.projectedAmount)} / {money(progress.monthlyBudget)}
                     </span>
-                ) : <Link to="/settings">设置预算</Link>}
+                ) : <Link to="/settings">预算未设置</Link>}
             </div>
             <div className="dca-budget-stats">
-                <div><span>已定投</span><strong>{money(progress.investedAmount)}</strong></div>
+                <div><span>已确认</span><strong>{money(progress.confirmedInvestedAmount)}</strong></div>
+                <div><span>待确认</span><strong>{money(progress.pendingInvestedAmount)}</strong></div>
                 <div><span>本月剩余预计</span><strong>{money(progress.futureAmount)}</strong></div>
                 <div><span>全月预计</span><strong>{money(progress.projectedAmount)}</strong></div>
             </div>
+            {progress.futurePlans.length > 0 && (
+                <div className="dca-budget-range">
+                    <span>未来逐项预测</span>
+                    {progress.futurePlans.map((plan) => (
+                        <strong key={`${plan.planId}-${plan.executionDate}`}>
+                            {date(plan.executionDate)} · 组合基金 #{plan.portfolioFundId} · 预计 {optionalMoney(plan.amount)} · 最大 {optionalMoney(plan.maximumAmount)}
+                        </strong>
+                    ))}
+                </div>
+            )}
             {(progress.minimumFutureAmount !== null || progress.maximumFutureAmount !== null) && (
                 <div className="dca-budget-range">
                     <span>智能计划未来区间</span>
-                    <strong>{money(progress.minimumFutureAmount)} - {money(progress.maximumFutureAmount)}</strong>
+                    <strong>{optionalMoney(progress.minimumFutureAmount)} - {optionalMoney(progress.maximumFutureAmount)}</strong>
                     <span>实际金额以执行日策略结果为准</span>
                 </div>
             )}
@@ -60,7 +73,7 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
                         <span className="dca-budget-marker" aria-hidden="true"/>
                     </div>
                     <div className="dca-budget-legend">
-                        <span>已定投 {money(progress.investedAmount)}</span>
+                        <span>已确认 {money(progress.confirmedInvestedAmount)} · 待确认 {money(progress.pendingInvestedAmount)}</span>
                         <span>本月剩余预计 {money(progress.futureAmount)}</span>
                         <span className={progress.isOverBudget ? 'dca-budget-overage' : ''}>{budgetStatus}</span>
                     </div>

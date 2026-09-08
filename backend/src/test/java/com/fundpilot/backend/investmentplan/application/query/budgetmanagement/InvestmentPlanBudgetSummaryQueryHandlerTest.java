@@ -33,7 +33,8 @@ class InvestmentPlanBudgetSummaryQueryHandlerTest {
                 InvestmentPlanFrequency.DAILY, null, null, InvestmentPlanStatus.EFFECTIVE);
         Instant monthStart = Instant.parse("2026-07-01T00:00:00Z");
         Instant monthEnd = Instant.parse("2026-08-01T00:00:00Z");
-        when(transactions.investedAmount(3L, monthStart, monthEnd)).thenReturn(new BigDecimal("150"));
+        when(transactions.investedAmounts(3L, monthStart, monthEnd)).thenReturn(
+                new PlanTransactionGateway.InvestmentAmounts(new BigDecimal("120"), new BigDecimal("30")));
         when(visiblePlans.findByOwner(3L)).thenReturn(List.of(plan));
         when(forecasts.currentMonthExecutionDates(3L, List.of(plan)))
                 .thenReturn(Map.of(7L, List.of(Instant.parse("2026-07-28T00:00:00Z"))));
@@ -44,9 +45,18 @@ class InvestmentPlanBudgetSummaryQueryHandlerTest {
         var summary = handler.currentMonth(3L);
 
         assertThat(summary.investedAmount()).isEqualByComparingTo("150");
+        assertThat(summary.confirmedInvestedAmount()).isEqualByComparingTo("120");
+        assertThat(summary.pendingInvestedAmount()).isEqualByComparingTo("30");
         assertThat(summary.futureAmount()).isEqualByComparingTo("100");
         assertThat(summary.projectedAmount()).isEqualByComparingTo("250");
         assertThat(summary.minimumFutureAmount()).isNull();
         assertThat(summary.maximumFutureAmount()).isNull();
+        assertThat(summary.futurePlans()).singleElement().satisfies(item -> {
+            assertThat(item.planId()).isEqualTo(7L);
+            assertThat(item.portfolioFundId()).isEqualTo(11L);
+            assertThat(item.executionDate()).isEqualTo(Instant.parse("2026-07-28T00:00:00Z"));
+            assertThat(item.amount()).isEqualByComparingTo("100");
+            assertThat(item.maximumAmount()).isEqualByComparingTo("100");
+        });
     }
 }

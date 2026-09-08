@@ -10,6 +10,10 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fundpilot.backend.productcatalog.domain.fee.FundFeeSchedule.PurchaseStatus;
+import com.fundpilot.backend.productcatalog.domain.fee.FundFeeSchedule.RefreshStatus;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLRestriction;
@@ -33,6 +37,15 @@ class FundFeeScheduleJpaEntity {
     private BigDecimal purchaseRate;
     private BigDecimal discountRate;
     private BigDecimal salesServiceFee;
+    private BigDecimal managementFee;
+    private BigDecimal custodyFee;
+    @Enumerated(EnumType.STRING) private PurchaseStatus purchaseStatus;
+    private BigDecimal purchaseLimit;
+    private BigDecimal minimumPurchaseAmount;
+    private String channelReferenceLabel;
+    private String sourceName;
+    @Column(length = 1000) private String sourceUrl;
+    @Enumerated(EnumType.STRING) @Column(nullable = false) private RefreshStatus refreshStatus;
     @Column(length = 2000) private String redemptionLadder;
     @Column(nullable = false) private Instant fetchedAt;
 }

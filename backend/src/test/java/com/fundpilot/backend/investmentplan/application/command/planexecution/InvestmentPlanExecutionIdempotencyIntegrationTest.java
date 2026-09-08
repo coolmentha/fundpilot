@@ -194,5 +194,10 @@ class InvestmentPlanExecutionIdempotencyIntegrationTest {
         public BigDecimal investedAmount(long ownerId, Instant startInclusive, Instant endExclusive) {
             return delegate.investedAmount(ownerId, startInclusive, endExclusive);
         }
+
+        @Override
+        public InvestmentAmounts investedAmounts(long ownerId, Instant startInclusive, Instant endExclusive) {
+            return delegate.investedAmounts(ownerId, startInclusive, endExclusive);
+        }
     }
 }

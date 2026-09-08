@@ -1,7 +1,7 @@
-import {Alert, Button, Card, Descriptions, Skeleton, Space, Tabs, Typography} from 'antd';
+import {Alert, Button, Card, Descriptions, Skeleton, Space, Tabs, Tag, Typography} from 'antd';
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined, EditOutlined} from '@ant-design/icons';
-import {useFund, useFundFeeRates, usePendingSignals, usePendingTransactions} from '../api/hooks.js';
+import {useFund, useFundFeeRates, useFundOpenLots, useFundResearch, usePendingSignals, usePendingTransactions} from '../api/hooks.js';
 import {date, datetime, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import StrategyTab from './FundStrategyTab.jsx';
@@ -12,6 +12,8 @@ import FundDcaTab from './FundDcaTab.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import {estimateStatusText} from '../querySafety.js';
 import {redemptionLadderText} from '../feeRates.js';
+import FundResearchSection from '../components/FundResearchSection.jsx';
+import FundOpenLotsSection from '../components/FundOpenLotsSection.jsx';
 
 const {Title, Text} = Typography;
 
@@ -23,7 +25,10 @@ export default function FundDetailPage() {
     const {portfolioFundId: portfolioFundIdParam} = useParams();
     const portfolioFundId = Number(portfolioFundIdParam);
     const {data: fund, isLoading, isError, refetch} = useFund(portfolioFundId);
-    const {data: feeRates} = useFundFeeRates(fund?.fundCode);
+    const feeRatesQuery = useFundFeeRates(fund?.fundCode);
+    const {data: feeRates} = feeRatesQuery;
+    const researchQuery = useFundResearch(fund?.fundCode);
+    const openLotsQuery = useFundOpenLots(portfolioFundId);
     const {data: pendingTransactions} = usePendingTransactions();
     const {data: pendingSignals} = usePendingSignals();
 
@@ -143,7 +148,31 @@ export default function FundDetailPage() {
                         <span className="num-cell">{percent(feeRates.salesServiceFee)}</span>
                     </Descriptions.Item>
                 )}
+                <Descriptions.Item label="管理费（年化）">
+                    {feeRates?.managementFee == null ? <span className="muted">未爬取</span> : <span className="num-cell">{percent(feeRates.managementFee)}</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="托管费（年化）">
+                    {feeRates?.custodyFee == null ? <span className="muted">未爬取</span> : <span className="num-cell">{percent(feeRates.custodyFee)}</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="申购状态">
+                    {feeRates?.purchaseStatus == null ? <span className="muted">未知</span> : ({OPEN: '开放', SUSPENDED: '暂停', LIMITED: '限额', UNKNOWN: '未知'}[feeRates.purchaseStatus] || feeRates.purchaseStatus)}
+                </Descriptions.Item>
+                <Descriptions.Item label="单笔申购上限">
+                    {feeRates?.purchaseLimit == null ? <span className="muted">未知</span> : <span className="num-cell">{money(feeRates.purchaseLimit)}</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="最低申购金额">
+                    {feeRates?.minimumPurchaseAmount == null ? <span className="muted">未知</span> : <span className="num-cell">{money(feeRates.minimumPurchaseAmount)}</span>}
+                </Descriptions.Item>
+                <Descriptions.Item label="费率渠道">
+                    {feeRatesQuery.isError
+                        ? <span className="muted">天天基金渠道参考加载失败</span>
+                        : feeRates
+                            ? <Space wrap>{feeRates.channelReference?.label || '天天基金渠道参考'}{feeRates.channelReference?.sourceName && `（${feeRates.channelReference.sourceName}）`}{feeRates.status === 'FAILED' && <Tag color="red">采集失败</Tag>}{feeRates.stale && <Tag color="orange">数据已过期</Tag>}</Space>
+                            : <span className="muted">未爬取</span>}
+                </Descriptions.Item>
             </Descriptions>
+            <FundResearchSection query={researchQuery}/>
+            <FundOpenLotsSection query={openLotsQuery}/>
             <Tabs defaultActiveKey="market" items={items}/>
         </Card>
     );

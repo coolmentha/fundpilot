@@ -3,6 +3,7 @@ package com.fundpilot.backend.accounting.adapter.web.transactionhistory;
 import com.fundpilot.backend.accounting.application.command.transactionconfirmation.TransactionConfirmationCommandHandler;
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerCommandHandler;
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
+import com.fundpilot.backend.accounting.application.query.positiontracking.OpenLotQueryHandler;
 import com.fundpilot.backend.accounting.application.query.transactionhistory.TransactionQueryHandler;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +28,7 @@ public class TransactionController {
     private final TransactionLedgerCommandHandler ledgerCommands;
     private final TransactionConfirmationCommandHandler confirmationCommands;
     private final TransactionQueryHandler queries;
+    private final OpenLotQueryHandler openLots;
 
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
     @Operation(summary = "查询组合基金交易流水")
@@ -35,6 +37,14 @@ public class TransactionController {
             @PathVariable long portfolioFundId) {
         return Response.ok(queries.findByPortfolioFund(ownerId, portfolioFundId).stream()
                 .map(result -> TransactionView.from(result, null, null, null, null, null, null)).toList());
+    }
+
+    @GetMapping("/api/portfolio-funds/{portfolioFundId}/open-lots")
+    @Operation(summary = "查询持仓批次与赎回费估算")
+    public Response<OpenLotSummaryView> openLots(
+            @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+            @PathVariable long portfolioFundId) {
+        return Response.ok(OpenLotSummaryView.from(openLots.find(ownerId, portfolioFundId)));
     }
 
     @PostMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
@@ -104,6 +114,27 @@ public class TransactionController {
     public record PendingTransactionUpdateRequest(@Schema(description = "修订后金额", example = "1200.00") BigDecimal amount,
                                                   @Schema(description = "修订后份额", example = "600.00") BigDecimal shares,
                                                   @Schema(description = "修订后交易日期", example = "2026-08-20T08:00:00Z") Instant tradeDate) {
+    }
+
+    @Schema(description = "持仓批次赎回费估算")
+    public record OpenLotSummaryView(long portfolioFundId, Instant latestNavDate, BigDecimal latestUnitNav,
+                                     BigDecimal estimatedRedemptionFee, String unavailableReason,
+                                     List<OpenLotView> lots) {
+        static OpenLotSummaryView from(OpenLotQueryHandler.Summary result) {
+            return new OpenLotSummaryView(result.portfolioFundId(), result.latestNavDate(), result.latestUnitNav(),
+                    result.estimatedRedemptionFee(), result.unavailableReason(), result.lots().stream()
+                    .map(OpenLotView::from).toList());
+        }
+    }
+
+    @Schema(description = "单个持仓批次赎回费估算")
+    public record OpenLotView(Instant acquireDate, BigDecimal remainingShares, long holdingDays,
+                              BigDecimal redemptionRate, BigDecimal estimatedRedemptionFee,
+                              String unavailableReason) {
+        static OpenLotView from(OpenLotQueryHandler.LotEstimate result) {
+            return new OpenLotView(result.acquireDate(), result.remainingShares(), result.holdingDays(),
+                    result.redemptionRate(), result.estimatedRedemptionFee(), result.unavailableReason());
+        }
     }
 
     @Schema(description = "交易流水视图")

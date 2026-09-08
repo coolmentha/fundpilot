@@ -16,7 +16,7 @@ class FundFeeRefreshJobTest {
 
         job.refreshDaily();
 
-        verify(commands).refreshKnownSchedules();
+        verify(commands).refreshTrackedFunds();
         Scheduled scheduled = FundFeeRefreshJob.class.getMethod("refreshDaily").getAnnotation(Scheduled.class);
         assertThat(scheduled.cron()).isEqualTo("0 30 2 * * *");
         assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");

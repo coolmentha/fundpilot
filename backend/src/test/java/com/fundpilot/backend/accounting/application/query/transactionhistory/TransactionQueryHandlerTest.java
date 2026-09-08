@@ -37,6 +37,23 @@ class TransactionQueryHandlerTest {
     @Mock SettlementFeeGateway fees;
 
     @Test
+    void 月度定投金额按确认状态汇总() {
+        Instant start = Instant.parse("2026-07-01T00:00:00Z");
+        Instant end = Instant.parse("2026-08-01T00:00:00Z");
+        when(transactions.sumInvestedAmountByStatus(7L, start, end)).thenReturn(List.of(
+                new TransactionRepository.InvestmentAmountByStatus(TransactionStatus.CONFIRMED,
+                        new BigDecimal("300")),
+                new TransactionRepository.InvestmentAmountByStatus(TransactionStatus.PENDING,
+                        new BigDecimal("100"))));
+
+        var result = handler().investedAmounts(7L, start, end);
+
+        assertThat(result.confirmed()).isEqualByComparingTo("300");
+        assertThat(result.pending()).isEqualByComparingTo("100");
+        assertThat(result.total()).isEqualByComparingTo("400");
+    }
+
+    @Test
     void 待确认买入返回预计净值与扣费后预计份额() {
         LedgerTransaction transaction = pending(1L, 10L, TransactionSource.INCREASE, new BigDecimal("1000"), null,
                 null);

@@ -136,11 +136,18 @@ describe('portfolio fund insights routes', () => {
     });
 });
 
-describe('product fee rates', () => {
-    it('queries fees by encoded product code', () => {
+describe('product optional data', () => {
+    it('queries fees, research, and open lots by their owner identifiers', async () => {
+        const {getFundResearch, getFundOpenLots} = await import('./hooks.js');
         getFundFeeRates('019736 A');
+        getFundResearch('019736 A');
+        getFundOpenLots(41);
 
-        expect(get).toHaveBeenCalledWith('/api/products/019736%20A/fees');
+        expect(get.mock.calls.slice(-3)).toEqual([
+            ['/api/products/019736%20A/fees'],
+            ['/api/products/019736%20A/research'],
+            ['/api/portfolio-funds/41/open-lots'],
+        ]);
     });
 });
 

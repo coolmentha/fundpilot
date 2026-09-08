@@ -596,9 +596,23 @@ body {
 
 .dca-budget-stats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     margin: 12px 0;
+}
+
+.dca-budget-range {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 12px 0;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.dca-budget-range strong {
+    color: var(--color-text);
+    font-weight: 500;
 }
 
 .dca-budget-stats div {

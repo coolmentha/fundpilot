@@ -110,6 +110,14 @@ class InvestmentPlanWebIntegrationTest extends AbstractIntegrationTest {
                         .header(AuthenticationFilter.HEADER_NAME, "test-admin-key"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.monthlyBudget").value(3000.00));
+        mockMvc.perform(get("/api/investment-plan-budget/summary")
+                        .header(AuthenticationFilter.HEADER_NAME, "test-admin-key"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.monthlyBudget").value(3000.00))
+                .andExpect(jsonPath("$.data.investedAmount").value(0))
+                .andExpect(jsonPath("$.data.confirmedInvestedAmount").value(0))
+                .andExpect(jsonPath("$.data.pendingInvestedAmount").value(0))
+                .andExpect(jsonPath("$.data.futurePlans").isEmpty());
     }
 
     private PortfolioFundApi.PortfolioFund track(long ownerId, String prefix) {
