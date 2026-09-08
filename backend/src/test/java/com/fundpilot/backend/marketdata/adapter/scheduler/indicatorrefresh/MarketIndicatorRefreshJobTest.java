@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fundpilot.backend.marketdata.application.command.indicatorrefresh.MarketIndicatorRefreshCommandHandler;
 import com.fundpilot.backend.marketdata.application.query.tradingcalendar.TradingCalendarQueryHandler;
@@ -13,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.annotation.Scheduled;
 
 class MarketIndicatorRefreshJobTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-10T06:30:00Z"), ZoneOffset.UTC);
@@ -44,6 +46,24 @@ class MarketIndicatorRefreshJobTest {
         job.refreshBatch2();
 
         verifyNoInteractions(commands);
+        job.refreshClosingKlines();
+        verifyNoInteractions(commands);
+    }
+
+    @Test
+    void 收盘补拉北京时间17至22点每小时运行且仅委派K线() throws Exception {
+        var commands = mock(MarketIndicatorRefreshCommandHandler.class);
+        var job = new MarketIndicatorRefreshJob(commands, tradingDayCalendar(),
+                Clock.fixed(Instant.parse("2026-07-10T09:00:00Z"), ZoneOffset.UTC));
+
+        job.refreshClosingKlines();
+
+        verify(commands).refreshClosingKlines(Instant.parse("2026-07-10T00:00:00Z"));
+        org.mockito.Mockito.verifyNoMoreInteractions(commands);
+        var scheduled = MarketIndicatorRefreshJob.class.getMethod("refreshClosingKlines")
+                .getAnnotation(Scheduled.class);
+        assertThat(scheduled.cron()).isEqualTo("0 0 17-22 * * MON-FRI");
+        assertThat(scheduled.zone()).isEqualTo("Asia/Shanghai");
     }
 
     private static TradingCalendarQueryHandler tradingDayCalendar() {

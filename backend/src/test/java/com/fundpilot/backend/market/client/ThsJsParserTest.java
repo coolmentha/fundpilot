@@ -62,7 +62,19 @@ class ThsJsParserTest {
         assertThat(result.bars().get(0).high()).isEqualByComparingTo("4850.20");
         assertThat(result.bars().get(0).low()).isEqualByComparingTo("4780.30");
         assertThat(result.bars().get(0).close()).isEqualByComparingTo("4830.40");
-        assertThat(result.bars().get(0).volume()).isEqualTo(123456L);
+        assertThat(result.bars().get(0).volume()).isEqualTo(1234L);
+        assertThat(result.bars().get(1).volume()).isEqualTo(2345L);
+    }
+
+    @Test
+    void parseIndexKline_真实量级的股数转手且周线聚合后仍为手() {
+        String raw = """
+                callback({"total":2,"data":"20260902,3347.68,3348.69,3296.47,3312.24,17171141000;20260903,3342.09,3356.25,3285.06,3312.54,16738687000"})
+                """;
+        IndexKline daily = ThsJsParser.parseIndexKline(raw);
+        assertThat(daily.bars().get(0).volume()).isEqualTo(171711410L);
+        assertThat(CsindexJsParser.aggregate(daily, "weekly").bars().getFirst().volume())
+                .isEqualTo(339098280L);
     }
 
     @Test

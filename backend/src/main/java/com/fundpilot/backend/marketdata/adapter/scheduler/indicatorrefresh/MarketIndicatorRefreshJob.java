@@ -18,6 +18,11 @@ public class MarketIndicatorRefreshJob {
     @Scheduled(cron = "0 30 14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshBatch0() { refresh(0); }
 
+    @Scheduled(cron = "0 0 17-22 * * MON-FRI", zone = "Asia/Shanghai")
+    public void refreshClosingKlines() {
+        if (isTradingDay()) commands.refreshClosingKlines(ChinaTradingDate.toUtcDate(clock.instant()));
+    }
+
     @Scheduled(cron = "0 40 14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshBatch1() { refresh(1); }
 

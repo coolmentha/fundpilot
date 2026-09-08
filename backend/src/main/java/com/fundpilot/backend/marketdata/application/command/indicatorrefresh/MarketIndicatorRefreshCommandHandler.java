@@ -14,6 +14,7 @@ import com.fundpilot.backend.marketdata.application.query.indexkline.IndexKlineQ
 import com.fundpilot.backend.marketdata.application.query.indexvaluation.IndexValuationQueryHandler;
 import com.fundpilot.backend.marketdata.domain.indicator.VolumeState;
 import com.fundpilot.backend.marketdata.domain.indicator.WeeklyMacdState;
+import com.fundpilot.backend.marketdata.domain.indexkline.IndexBar;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
@@ -25,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +50,8 @@ public class MarketIndicatorRefreshCommandHandler {
     private static final int SIXTY_DAY_WINDOW = 60;
     private static final int WEEKLY_DROP_WINDOW = 5;
     private static final int VOLUME_WINDOW = 20;
+    // 数据库日期用 UTC 零点标签，北京时间 17:00 对应标签加 9 小时。
+    private static final int CLOSING_REFRESH_UTC_HOUR = 9;
 
     private final TrackedNavProductGateway products;
     private final PublishedNavSourceGateway navSource;
@@ -69,6 +73,48 @@ public class MarketIndicatorRefreshCommandHandler {
 
     public void refreshAll() {
         refresh(products.findAll());
+    }
+
+    /** 收盘补拉只写指数 K 线，不刷新净值、指标快照或发布信号事件。 */
+    public void refreshClosingKlines(Instant tradeDate) {
+        // ponytail: 数据源无终版标志，以 17:00 后的有效日 K 判定完成；源支持终版标志后再接入。
+        Instant refreshedAfter = tradeDate.plus(CLOSING_REFRESH_UTC_HOUR, ChronoUnit.HOURS);
+        if (clock.instant().isBefore(refreshedAfter)) return;
+        Set<String> complete = klineQueries.completeCodesForDate(tradeDate, refreshedAfter);
+        Set<String> existing = klineQueries.existingCodes();
+        List<String> codes = products.findAll().stream()
+                .map(TrackedNavProductGateway.TrackedProduct::benchmarkIndexCode)
+                .filter(code -> code != null && !code.isBlank()).map(String::trim).distinct().toList();
+        int updated = 0;
+        int skipped = 0;
+        int pending = 0;
+        for (String code : codes) {
+            if (complete.contains(code)) {
+                skipped++;
+                continue;
+            }
+            try {
+                String limit = existing.contains(code) ? INCREMENTAL_KLINE_LIMIT : FULL_KLINE_LIMIT;
+                var result = klineSource.fetch(toSecid(code), limit);
+                List<IndexBar> bars = result == null || result.bars() == null ? List.of()
+                        : result.bars().stream().filter(bar -> bar != null && bar.tradeDate() != null)
+                        .map(bar -> new IndexBar(code, bar.tradeDate(), bar.open(), bar.high(), bar.low(),
+                                bar.close(), bar.volume()))
+                        .filter(IndexBar::isComplete).filter(bar -> !bar.tradeDate().isAfter(tradeDate)).toList();
+                if (bars.stream().noneMatch(bar -> bar.tradeDate().equals(tradeDate))) {
+                    pending++;
+                    log.info("指数 {} 目标交易日 {} 完整 K 线尚未取得，等待下一轮补拉", code, tradeDate);
+                    continue;
+                }
+                klineCommands.upsert(code, bars.stream().map(bar -> new IndexKlineCommandHandler.Bar(
+                        bar.tradeDate(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume())).toList());
+                updated++;
+            } catch (RuntimeException ex) {
+                pending++;
+                log.warn("指数 {} 收盘 K 线补拉失败，等待下一轮补拉", code, ex);
+            }
+        }
+        log.info("交易日 {} 收盘 K 线补拉完成: 更新 {}，已完整跳过 {}，待补拉 {}", tradeDate, updated, skipped, pending);
     }
 
     public void refreshOne(long legacyFundId) {

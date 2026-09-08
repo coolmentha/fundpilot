@@ -152,6 +152,7 @@ public final class ThsJsParser {
 
     /**
      * 解析 d.10jqka callback({...}) 最近日线响应。
+     * 成交量原始单位为股，除以 100 转成手，与中证、腾讯及东方财富入库口径一致。
      */
     public static IndexKline parseIndexKline(String raw) {
         String json = ScriptPayloadExtractor.wrappedValue(raw);
@@ -174,7 +175,7 @@ public final class ThsJsParser {
                         LocalDate.parse(fields[0], YYYYMMDD).atStartOfDay(ZoneOffset.UTC).toInstant(),
                         new BigDecimal(fields[1]), new BigDecimal(fields[4]),
                         new BigDecimal(fields[2]), new BigDecimal(fields[3]),
-                        new BigDecimal(fields[5]).longValue()));
+                        new BigDecimal(fields[5]).longValue() / 100L));
             }
             bars.sort(Comparator.comparing(IndexKline.Bar::date));
             return new IndexKline(List.copyOf(bars));

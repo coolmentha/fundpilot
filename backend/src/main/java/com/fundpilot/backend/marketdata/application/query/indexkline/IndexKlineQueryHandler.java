@@ -5,6 +5,8 @@ import com.fundpilot.backend.marketdata.domain.indexkline.IndexKlineRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class IndexKlineQueryHandler {
     private final IndexKlineRepository klines;
     @Transactional(readOnly = true) public boolean exists(String indexCode) { return klines.exists(indexCode); }
+    @Transactional(readOnly = true) public Set<String> existingCodes() { return klines.existingCodes(); }
+    @Transactional(readOnly = true) public Set<String> completeCodesForDate(Instant tradeDate, Instant refreshedAfter) {
+        return klines.findRefreshedBars(tradeDate, refreshedAfter).stream().filter(IndexBar::isComplete)
+                .map(IndexBar::indexCode).collect(Collectors.toSet());
+    }
     @Transactional(readOnly = true) public List<Bar> findAll(String indexCode) {
         return klines.findAll(indexCode).stream().map(Bar::from).toList();
     }

@@ -3,7 +3,9 @@ package com.fundpilot.backend.marketdata.infrastructure.persistence.indexkline;
 import com.fundpilot.backend.marketdata.domain.indexkline.IndexBar;
 import com.fundpilot.backend.marketdata.domain.indexkline.IndexKlineRepository;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -12,6 +14,10 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 class IndexKlineRepositoryImpl implements IndexKlineRepository {
     private final JdbcTemplate jdbc;
+    @Override public Set<String> existingCodes() {
+        return Set.copyOf(jdbc.queryForList(
+                "SELECT DISTINCT index_code FROM index_kline WHERE deleted_date IS NULL", String.class));
+    }
     @Override public boolean exists(String indexCode) {
         Integer value = jdbc.queryForObject("SELECT count(*) FROM index_kline WHERE index_code = ? AND deleted_date IS NULL", Integer.class, indexCode);
         return value != null && value > 0;
@@ -25,6 +31,16 @@ class IndexKlineRepositoryImpl implements IndexKlineRepository {
                 rs.getTimestamp("trade_date").toInstant(), rs.getBigDecimal("open"),
                 rs.getBigDecimal("high"), rs.getBigDecimal("low"), rs.getBigDecimal("close"),
                 rs.getObject("volume", Long.class)), indexCode);
+    }
+    @Override public List<IndexBar> findRefreshedBars(Instant tradeDate, Instant refreshedAfter) {
+        return jdbc.query("""
+                SELECT index_code, trade_date, open, high, low, close, volume
+                FROM index_kline
+                WHERE trade_date = ? AND updated_date >= ? AND deleted_date IS NULL
+                """, (rs, row) -> new IndexBar(rs.getString("index_code"),
+                rs.getTimestamp("trade_date").toInstant(), rs.getBigDecimal("open"),
+                rs.getBigDecimal("high"), rs.getBigDecimal("low"), rs.getBigDecimal("close"),
+                rs.getObject("volume", Long.class)), Timestamp.from(tradeDate), Timestamp.from(refreshedAfter));
     }
     @Override public int upsert(List<IndexBar> bars) {
         int changed = 0;
