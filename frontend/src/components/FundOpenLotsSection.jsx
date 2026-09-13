@@ -25,17 +25,17 @@ const columns = [
 ];
 
 export default function FundOpenLotsSection({query}) {
-    if (query.isLoading) return <Card size="small" title="持仓批次与赎回费估算" style={{marginBottom: 16}}><Skeleton active paragraph={{rows: 2}}/></Card>;
-    if (query.isError) return <Card size="small" title="持仓批次与赎回费估算" style={{marginBottom: 16}}>
+    if (query.isLoading) return <Card size="small" title="赎回费估算（按买入批次）" style={{marginBottom: 16}}><Skeleton active paragraph={{rows: 2}}/></Card>;
+    if (query.isError) return <Card size="small" title="赎回费估算（按买入批次）" style={{marginBottom: 16}}>
         <QueryErrorState onRetry={query.refetch} description="持仓批次加载失败"/>
     </Card>;
 
     const data = query.data;
-    if (!data) return <Card size="small" title="持仓批次与赎回费估算" style={{marginBottom: 16}}><Text type="secondary">暂无批次数据</Text></Card>;
+    if (!data) return <Card size="small" title="赎回费估算（按买入批次）" style={{marginBottom: 16}}><Text type="secondary">暂无批次数据</Text></Card>;
     const rows = (data.lots || []).map((lot, index) => ({...lot, key: index}));
 
     return (
-        <Card size="small" title="持仓批次与赎回费估算" style={{marginBottom: 16}}>
+        <Card size="small" title="赎回费估算（按买入批次）" style={{marginBottom: 16}}>
             <Descriptions column={{xs: 1, sm: 3}} size="small" style={{marginBottom: 12}}>
                 <Descriptions.Item label="估算净值日期">{date(data.latestNavDate)}</Descriptions.Item>
                 <Descriptions.Item label="最新单位净值">{number(data.latestUnitNav, 4)}</Descriptions.Item>

@@ -14,6 +14,7 @@ import {estimateStatusText} from '../querySafety.js';
 import {redemptionLadderText} from '../feeRates.js';
 import FundResearchSection from '../components/FundResearchSection.jsx';
 import FundOpenLotsSection from '../components/FundOpenLotsSection.jsx';
+import FundHoldingsTab from '../components/FundHoldingsTab.jsx';
 
 const {Title, Text} = Typography;
 
@@ -50,7 +51,7 @@ export default function FundDetailPage() {
         || holdingAmount - totalPnl <= 0
         ? null
         : totalPnl / (holdingAmount - totalPnl);
-    // 待处理事项与基金信息始终展开;研究资料 / 持仓批次 / 交易与策略详情默认收起。
+    // 待处理事项与基金信息常显;交易与策略详情默认展开,研究资料/赎回费估算默认收起。
     const openLots = openLotsQuery.data?.lots;
     // 跟踪指数:优先本地档案代码,缺省回退研究资料里从天天基金概况页采集的真实跟踪标的。
     const researchProfile = researchQuery.data?.profile?.data;
@@ -60,6 +61,7 @@ export default function FundDetailPage() {
     const items = [
         {key: 'market', label: '行情指标', children: <MarketTab portfolioFundId={fund.portfolioFundId} fundSubType={fund.fundSubType}/>},
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab portfolioFundId={portfolioFundId}/>},
+        {key: 'holdings', label: '证券持仓', children: <FundHoldingsTab query={researchQuery}/>},
         {key: 'strategy', label: '策略参数', children: <StrategyTab portfolioFundId={portfolioFundId}/>},
         {key: 'advice', label: '纪律建议', children: <SignalTab portfolioFundId={portfolioFundId}/>},
         {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}
@@ -160,16 +162,16 @@ export default function FundDetailPage() {
             </Descriptions>
     );
     const sections = [
+        {key: 'detail', label: '交易与策略详情', children: <Tabs defaultActiveKey="market" items={items}/>},
         {key: 'research', label: '基金研究资料', children: <FundResearchSection query={researchQuery}/>},
         {
             key: 'lots',
             label: <Space wrap size="small">
-                <span>持仓批次</span>
-                {openLots?.length ? <Text type="secondary" className="num-cell">{openLots.length} 个批次</Text> : null}
+                <span>赎回费估算</span>
+                {openLots?.length ? <Text type="secondary" className="num-cell">{openLots.length} 个买入批次</Text> : null}
             </Space>,
             children: <FundOpenLotsSection query={openLotsQuery}/>,
         },
-        {key: 'detail', label: '交易与策略详情', children: <Tabs defaultActiveKey="market" items={items}/>},
     ];
 
     return (
@@ -193,7 +195,7 @@ export default function FundDetailPage() {
                        </Space>}/>
             )}
             {summary}
-            <Collapse className="fund-detail-sections" items={sections}/>
+            <Collapse className="fund-detail-sections" defaultActiveKey={['detail']} items={sections}/>
         </Card>
     );
 }
