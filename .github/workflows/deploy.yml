@@ -660,18 +660,19 @@ jobs:
             }
 
             # 镜像拉取不需要停写；完成后再进入有硬上限的维护阶段。
-            timeout --foreground --kill-after=5s 900s docker pull "$BACKEND_IMAGE" &
+            # 后端镜像含 JDK + fat jar,VPS 到 GHCR 带宽慢时单层下载可能超过 15 分钟(v0.11.38 两次拉取超时)。
+            timeout --foreground --kill-after=5s 1800s docker pull "$BACKEND_IMAGE" &
             backend_pull_pid=$!
-            timeout --foreground --kill-after=5s 900s docker pull "$FRONTEND_IMAGE" &
+            timeout --foreground --kill-after=5s 1800s docker pull "$FRONTEND_IMAGE" &
             frontend_pull_pid=$!
             pull_status=0
             wait "$backend_pull_pid" || {
               pull_status=$?
-              echo "backend image pull failed: exit=$pull_status, timeout=900s (124 means timeout)" >&2
+              echo "backend image pull failed: exit=$pull_status, timeout=1800s (124 means timeout)" >&2
             }
             wait "$frontend_pull_pid" || {
               pull_status=$?
-              echo "frontend image pull failed: exit=$pull_status, timeout=900s (124 means timeout)" >&2
+              echo "frontend image pull failed: exit=$pull_status, timeout=1800s (124 means timeout)" >&2
             }
             [ "$pull_status" -eq 0 ] || exit "$pull_status"
             timeout --foreground --kill-after=5s 30s docker network inspect fundpilot_default >/dev/null
