@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Descriptions, Skeleton, Space, Tabs, Tag, Typography} from 'antd';
+import {Alert, Button, Card, Collapse, Descriptions, Skeleton, Space, Tabs, Tag, Typography} from 'antd';
 import {Link, useParams} from 'react-router-dom';
 import {ArrowLeftOutlined, EditOutlined} from '@ant-design/icons';
 import {useFund, useFundFeeRates, useFundOpenLots, useFundResearch, usePendingSignals, usePendingTransactions} from '../api/hooks.js';
@@ -19,7 +19,7 @@ const {Title, Text} = Typography;
 
 /**
  * 基金详情页：聚合策略 / 建议 / 行情三个 tab，替代独立 /funds/:id/strategies 路由。
- * 顶部展示基金档案，编辑仍在基金管理页进行。
+ * 待处理事项始终展开；基金信息 / 研究资料 / 持仓批次 / 交易与策略详情为折叠分块，默认收起。
  */
 export default function FundDetailPage() {
     const {portfolioFundId: portfolioFundIdParam} = useParams();
@@ -50,6 +50,13 @@ export default function FundDetailPage() {
         || holdingAmount - totalPnl <= 0
         ? null
         : totalPnl / (holdingAmount - totalPnl);
+    // 待处理事项与基金信息始终展开;研究资料 / 持仓批次 / 交易与策略详情默认收起。
+    const openLots = openLotsQuery.data?.lots;
+    // 跟踪指数:优先本地档案代码,缺省回退研究资料里从天天基金概况页采集的真实跟踪标的。
+    const researchProfile = researchQuery.data?.profile?.data;
+    const trackingIndex = fund.benchmarkIndexCode
+        || researchProfile?.trackingIndex?.code
+        || researchProfile?.trackingIndex?.name;
     const items = [
         {key: 'market', label: '行情指标', children: <MarketTab portfolioFundId={fund.portfolioFundId} fundSubType={fund.fundSubType}/>},
         {key: 'transaction', label: '交易流水', children: <FundTransactionTab portfolioFundId={portfolioFundId}/>},
@@ -58,28 +65,8 @@ export default function FundDetailPage() {
         {key: 'dca', label: '定投计划', children: <FundDcaTab portfolioFundId={fund.portfolioFundId}
                                                                benchmarkIndexCode={fund.benchmarkIndexCode}/>},
     ];
-
-    return (
-        <Card className="fund-detail" title={
-            <Space>
-                <Link to="/funds"><Button type="text" icon={<ArrowLeftOutlined/>}/></Link>
-                <Title level={4} style={{margin: 0}}>{fund.fundName}</Title>
-                <Text type="secondary" className="num-cell">{fund.fundCode}</Text>
-            </Space>
-        } extra={<Link to={`/funds?editPortfolioFundId=${portfolioFundId}`}><Button icon={<EditOutlined/>}>编辑基金</Button></Link>}>
-            {(pendingTransactionCount > 0 || pendingSignalCount > 0) && (
-                <Alert type="warning" showIcon style={{marginBottom: 16}}
-                       title="有待处理事项"
-                       description={<Space wrap>
-                           {pendingTransactionCount > 0 && (
-                               <Link to={`/confirm?portfolioFundId=${portfolioFundId}`}>待确认交易 {pendingTransactionCount} 笔</Link>
-                           )}
-                           {pendingSignalCount > 0 && (
-                               <Link to={`/advice?portfolioFundId=${portfolioFundId}`}>待回应建议 {pendingSignalCount} 条</Link>
-                           )}
-                       </Space>}/>
-            )}
-            <Descriptions className="fund-detail-summary" column={{xs: 1, sm: 2, md: 3}} size="small" style={{marginBottom: 16}}>
+    const summary = (
+        <Descriptions className="fund-detail-summary" column={{xs: 1, sm: 2, md: 3}} size="small" style={{marginBottom: 16}}>
                 <Descriptions.Item label="类型"><StatusTag value={fund.fundCategory}/></Descriptions.Item>
                 <Descriptions.Item label="子类">{text(fund.fundSubType)}</Descriptions.Item>
                 <Descriptions.Item label="状态"><StatusTag value={fund.status}/></Descriptions.Item>
@@ -127,7 +114,7 @@ export default function FundDetailPage() {
                                 ? `${fund.investmentTarget === 'QDII' ? '最新确认净值' : '估值不可用，使用最近确认净值'}（${date(fund.valuationDate)}）${fund.investmentTarget === 'QDII' && fund.valuationFirstSeenAt ? `，平台发现于 ${datetime(fund.valuationFirstSeenAt)}` : ''}，计算净值 ${fund.valuationNav == null ? '-' : money(fund.valuationNav)}`
                                 : <span className="muted">暂无可用净值</span>}
                 </Descriptions.Item>
-                <Descriptions.Item label="跟踪指数">{text(fund.benchmarkIndexCode)}</Descriptions.Item>
+                <Descriptions.Item label="跟踪指数">{trackingIndex ? <span className="num-cell">{text(trackingIndex)}</span> : <span className="muted">未识别</span>}</Descriptions.Item>
                 <Descriptions.Item label="参考费率">
                     {feeRates?.discountRate != null
                         ? <span className="num-cell">申购优惠 {percent(feeRates.discountRate)}</span>
@@ -171,9 +158,42 @@ export default function FundDetailPage() {
                             : <span className="muted">未爬取</span>}
                 </Descriptions.Item>
             </Descriptions>
-            <FundResearchSection query={researchQuery}/>
-            <FundOpenLotsSection query={openLotsQuery}/>
-            <Tabs defaultActiveKey="market" items={items}/>
+    );
+    const sections = [
+        {key: 'research', label: '基金研究资料', children: <FundResearchSection query={researchQuery}/>},
+        {
+            key: 'lots',
+            label: <Space wrap size="small">
+                <span>持仓批次</span>
+                {openLots?.length ? <Text type="secondary" className="num-cell">{openLots.length} 个批次</Text> : null}
+            </Space>,
+            children: <FundOpenLotsSection query={openLotsQuery}/>,
+        },
+        {key: 'detail', label: '交易与策略详情', children: <Tabs defaultActiveKey="market" items={items}/>},
+    ];
+
+    return (
+        <Card className="fund-detail" title={
+            <Space>
+                <Link to="/funds"><Button type="text" icon={<ArrowLeftOutlined/>}/></Link>
+                <Title level={4} style={{margin: 0}}>{fund.fundName}</Title>
+                <Text type="secondary" className="num-cell">{fund.fundCode}</Text>
+            </Space>
+        } extra={<Link to={`/funds?editPortfolioFundId=${portfolioFundId}`}><Button icon={<EditOutlined/>}>编辑基金</Button></Link>}>
+            {(pendingTransactionCount > 0 || pendingSignalCount > 0) && (
+                <Alert type="warning" showIcon style={{marginBottom: 16}}
+                       title="有待处理事项"
+                       description={<Space wrap>
+                           {pendingTransactionCount > 0 && (
+                               <Link to={`/confirm?portfolioFundId=${portfolioFundId}`}>待确认交易 {pendingTransactionCount} 笔</Link>
+                           )}
+                           {pendingSignalCount > 0 && (
+                               <Link to={`/advice?portfolioFundId=${portfolioFundId}`}>待回应建议 {pendingSignalCount} 条</Link>
+                           )}
+                       </Space>}/>
+            )}
+            {summary}
+            <Collapse className="fund-detail-sections" items={sections}/>
         </Card>
     );
 }

@@ -79,6 +79,26 @@ window.ResizeObserver = class {
 };
 const {default: FundDetailPage} = await import('./FundDetailPage.jsx');
 
+async function renderDetailPage() {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => root.render(
+        <MemoryRouter initialEntries={['/funds/11']}>
+            <Routes><Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/></Routes>
+        </MemoryRouter>,
+    ));
+    return {container, root};
+}
+
+// 展开指定折叠分块(按折叠头文案匹配)
+async function expandSection(container, label) {
+    const header = [...container.querySelectorAll('.ant-collapse-header')]
+        .find((element) => element.textContent.includes(label));
+    if (!header) throw new Error(`找不到折叠分块: ${label}`);
+    await act(async () => header.click());
+}
+
 describe('FundDetailPage', () => {
     let container;
     let root;
@@ -91,35 +111,19 @@ describe('FundDetailPage', () => {
         optional.failed = false;
     });
 
-    it('展示当前基金待办、完整费率并提供操作入口', async () => {
-        container = document.createElement('div');
-        document.body.appendChild(container);
-        root = createRoot(container);
-        await act(async () => root.render(
-            <MemoryRouter initialEntries={['/funds/11']}>
-                <Routes><Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/></Routes>
-            </MemoryRouter>,
-        ));
+    it('基金信息常显,研究/批次/详情默认收起,展开后内容完整', async () => {
+        ({container, root} = await renderDetailPage());
 
         expect(container.textContent).toContain('待确认交易 2 笔');
         expect(container.textContent).toContain('待回应建议 1 条');
-        expect(container.textContent).toContain('持有不超过 7 天 1.50%');
-        expect(container.textContent).toContain('持有超过 7 天 0.00%');
-        expect(container.textContent).toContain('销售服务费（年化）');
+        // 基金信息始终展开;研究资料/持仓批次/交易与策略详情默认收起
+        expect(container.textContent).toContain('申购原费率');
+        // 跟踪指数回退到研究资料采集的真实跟踪标的(本地档案无 benchmarkIndexCode)
+        expect(container.textContent).toContain('000300');
         expect(container.textContent).toContain('管理费（年化）0.00%');
         expect(container.textContent).toContain('托管费（年化）未爬取');
         expect(container.textContent).toContain('天天基金渠道参考（天天基金）');
-        expect(container.textContent).toContain('基金研究');
-        expect(container.textContent).toContain('C 类');
-        expect(container.textContent).toContain('沪深300ETF（510300）');
-        expect(container.textContent).toContain('0 亿份');
-        expect(container.textContent).not.toContain('0 亿元');
-        expect(container.textContent).toContain('穿透覆盖率0.00%');
         expect(container.textContent).toContain('数据已过期');
-        expect(container.textContent).toContain('持仓批次与赎回费估算');
-        expect(container.textContent).toContain('38 天');
-        expect(container.textContent).toContain('¥0.00');
-        expect(container.textContent).toContain('缺少适用赎回费率');
         expect(container.textContent).toContain('总盈亏');
         expect(container.textContent).toContain('-¥20.00');
         expect(container.textContent).toContain('(-20.00%)');
@@ -127,6 +131,27 @@ describe('FundDetailPage', () => {
         expect(container.textContent).toContain('+¥1.50');
         expect(container.textContent).toContain('(+2.00%)');
         expect(container.textContent).not.toContain('今日涨跌');
+        expect(container.textContent).not.toContain('C 类');
+        expect(container.textContent).not.toContain('38 天');
+        expect(container.textContent).not.toContain('交易流水内容');
+        expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
+            '/confirm?portfolioFundId=11', '/advice?portfolioFundId=11', '/funds?editPortfolioFundId=11',
+        ]));
+
+        await expandSection(container, '基金研究资料');
+        expect(container.textContent).toContain('C 类');
+        expect(container.textContent).toContain('沪深300ETF（510300）');
+        expect(container.textContent).toContain('0 亿份');
+        expect(container.textContent).not.toContain('0 亿元');
+        expect(container.textContent).toContain('穿透覆盖率0.00%');
+
+        await expandSection(container, '持仓批次');
+        expect(container.textContent).toContain('2 个批次');
+        expect(container.textContent).toContain('38 天');
+        expect(container.textContent).toContain('¥0.00');
+        expect(container.textContent).toContain('缺少适用赎回费率');
+
+        await expandSection(container, '交易与策略详情');
         expect([...container.querySelectorAll('.ant-tabs-tab-btn')].map((tab) => tab.textContent)).toEqual([
             '行情指标', '交易流水', '策略参数', '纪律建议', '定投计划',
         ]);
@@ -135,27 +160,23 @@ describe('FundDetailPage', () => {
         await act(async () => [...container.querySelectorAll('.ant-tabs-tab-btn')]
             .find((tab) => tab.textContent === '纪律建议').click());
         expect(container.textContent).toContain('纪律建议内容 11');
-        expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
-            '/confirm?portfolioFundId=11', '/advice?portfolioFundId=11', '/funds?editPortfolioFundId=11',
-        ]));
     });
 
     it('研究、费率和 lot 全部失败时核心详情与业务页签仍可使用', async () => {
         optional.failed = true;
-        container = document.createElement('div');
-        document.body.appendChild(container);
-        root = createRoot(container);
-        await act(async () => root.render(
-            <MemoryRouter initialEntries={['/funds/11']}>
-                <Routes><Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/></Routes>
-            </MemoryRouter>,
-        ));
+        ({container, root} = await renderDetailPage());
 
         expect(container.textContent).toContain('测试基金');
         expect(container.textContent).toContain('持仓市值');
-        expect(container.textContent).toContain('基金研究数据加载失败');
-        expect(container.textContent).toContain('持仓批次加载失败');
         expect(container.textContent).toContain('天天基金渠道参考加载失败');
+
+        await expandSection(container, '基金研究资料');
+        expect(container.textContent).toContain('基金研究数据加载失败');
+
+        await expandSection(container, '持仓批次');
+        expect(container.textContent).toContain('持仓批次加载失败');
+
+        await expandSection(container, '交易与策略详情');
         expect([...container.querySelectorAll('.ant-tabs-tab-btn')].map((tab) => tab.textContent)).toEqual([
             '行情指标', '交易流水', '策略参数', '纪律建议', '定投计划',
         ]);
