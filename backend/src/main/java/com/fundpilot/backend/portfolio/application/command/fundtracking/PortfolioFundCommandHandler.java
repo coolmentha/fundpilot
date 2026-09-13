@@ -1,6 +1,7 @@
 package com.fundpilot.backend.portfolio.application.command.fundtracking;
 
 import com.fundpilot.backend.portfolio.application.gateway.fundtracking.PortfolioFundEventGateway;
+import com.fundpilot.backend.portfolio.application.gateway.fundtracking.PublicDataFirstCollectionGateway;
 import com.fundpilot.backend.portfolio.application.gateway.fundtracking.TrackableProductGateway;
 import com.fundpilot.backend.portfolio.domain.portfoliofund.PortfolioFund;
 import com.fundpilot.backend.portfolio.domain.portfoliofund.PortfolioFundRepository;
@@ -20,6 +21,7 @@ public class PortfolioFundCommandHandler {
     private final PortfolioFundRepository portfolioFunds;
     private final TrackableProductGateway products;
     private final PortfolioFundEventGateway events;
+    private final PublicDataFirstCollectionGateway publicDataFirstCollection;
     private final Clock clock;
 
     @Transactional
@@ -44,6 +46,8 @@ public class PortfolioFundCommandHandler {
                         "该基金已在当前组合中"));
         events.publishTracked(new PortfolioFundTrackedEvent(
                 saved.id(), saved.ownerId(), saved.fundProductId(), clock.instant()));
+        // 费率/研究资料由夜间批量任务刷新,新基金要等到次日才有数据;跟踪成功后立即请求一次异步首采。
+        publicDataFirstCollection.requestFirstCollection(fundProductId);
         return PortfolioFundResult.from(saved);
     }
 

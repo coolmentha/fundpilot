@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fundpilot.backend.portfolio.application.gateway.fundtracking.PortfolioFundEventGateway;
+import com.fundpilot.backend.portfolio.application.gateway.fundtracking.PublicDataFirstCollectionGateway;
 
 class PortfolioFundCommandHandlerTest {
     private static final Instant NOW = Instant.parse("2026-07-26T10:00:00Z");
@@ -92,7 +93,8 @@ class PortfolioFundCommandHandlerTest {
         InMemoryRepository repository = new InMemoryRepository();
         List<Object> published = new ArrayList<>();
         PortfolioFundCommandHandler handler = new PortfolioFundCommandHandler(
-                repository, id -> true, recordingGateway(published), Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, id -> true, recordingGateway(published),
+                product -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
         long portfolioFundId = handler.track(
                 101L, 3L, 5L, true, new BigDecimal("0.30")).id();
         published.clear();
@@ -109,14 +111,17 @@ class PortfolioFundCommandHandlerTest {
     void publishesTrackedEventAfterPersistence() {
         InMemoryRepository repository = new InMemoryRepository();
         List<Object> published = new ArrayList<>();
+        List<Long> firstCollections = new ArrayList<>();
         PortfolioFundCommandHandler handler = new PortfolioFundCommandHandler(
-                repository, id -> true, recordingGateway(published), Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, id -> true, recordingGateway(published),
+                firstCollections::add, Clock.fixed(NOW, ZoneOffset.UTC));
 
         long portfolioFundId = handler.track(
                 101L, 3L, 5L, true, new BigDecimal("0.30")).id();
 
         assertThat(published).containsExactly(new PortfolioFundTrackedEvent(
                 portfolioFundId, 3L, 5L, NOW));
+        assertThat(firstCollections).containsExactly(5L);
     }
 
     /** 记录集成事件的测试网关,替代直接持有 Spring 事件发布器。 */
@@ -191,6 +196,6 @@ class PortfolioFundCommandHandlerTest {
 
     private PortfolioFundCommandHandler handler(InMemoryRepository repository) {
         return new PortfolioFundCommandHandler(repository, id -> true,
-                recordingGateway(new ArrayList<>()), Clock.fixed(NOW, ZoneOffset.UTC));
+                recordingGateway(new ArrayList<>()), product -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 }
