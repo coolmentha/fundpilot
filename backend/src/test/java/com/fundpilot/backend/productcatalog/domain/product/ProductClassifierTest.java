@@ -28,8 +28,22 @@ class ProductClassifierTest {
         var result = ProductClassifier.classify("华夏国证半导体芯片ETF");
 
         assertThat(result.productType()).isEqualTo(ProductType.ETF);
-        assertThat(result.benchmarkIndexCode()).isEqualTo("931865.CSI");
+        assertThat(result.benchmarkIndexCode()).isEqualTo("980017.SZ");
         assertThat(result.defaultDisciplineCategory()).isEqualTo(DefaultDisciplineCategory.SECTOR);
+    }
+
+    @Test
+    void preciseSectorKeywordWinsOverGenericSemiconductor() {
+        var result = ProductClassifier.classify("国泰CES半导体芯片行业ETF联接A");
+
+        assertThat(result.benchmarkIndexCode()).isEqualTo("990001.CSI");
+    }
+
+    @Test
+    void starBoardSemiconductorMapsToItsOwnIndex() {
+        var result = ProductClassifier.classify("科创半导体ETF华夏");
+
+        assertThat(result.benchmarkIndexCode()).isEqualTo("950125.CSI");
     }
 
     @Test

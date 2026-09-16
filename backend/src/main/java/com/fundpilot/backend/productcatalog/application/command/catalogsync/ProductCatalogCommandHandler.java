@@ -1,5 +1,6 @@
 package com.fundpilot.backend.productcatalog.application.command.catalogsync;
 
+import com.fundpilot.backend.productcatalog.application.gateway.benchmark.BenchmarkIndexResolver;
 import com.fundpilot.backend.productcatalog.application.gateway.catalogsync.ProductCatalogSourceGateway;
 import com.fundpilot.backend.productcatalog.application.gateway.catalogsync.ProductCatalogSourceFailure;
 import com.fundpilot.backend.productcatalog.domain.product.FundProduct;
@@ -16,6 +17,7 @@ public class ProductCatalogCommandHandler {
     private final FundProductRepository products;
     private final ProductCatalogSourceGateway source;
     private final ProductCatalogSynchronizationWriter synchronizationWriter;
+    private final BenchmarkIndexResolver benchmarkResolver;
 
     public int synchronize() {
         try {
@@ -40,10 +42,12 @@ public class ProductCatalogCommandHandler {
         }
         FundProduct product = products.findByFundCode(code).orElseGet(() -> {
             var classification = ProductClassifier.classify(fundName);
+            // 单只创建时优先用接口返回的真实跟踪标的,避免名称关键词猜错(如 008888 被误判为中证半导体);
+            // 全量目录同步(synchronize)不走这里,避免批量外部调用触发限流。
+            String benchmark = benchmarkResolver.resolve(code).orElse(classification.benchmarkIndexCode());
             return FundProduct.create(code, fundName, rawName, classification.productType(),
                     investmentTarget == null ? null : InvestmentTarget.valueOf(investmentTarget.name()),
-                    classification.benchmarkIndexCode(),
-                    classification.defaultDisciplineCategory());
+                    benchmark, classification.defaultDisciplineCategory());
         });
         try {
             product.identifyInvestmentTarget(investmentTarget == null ? null

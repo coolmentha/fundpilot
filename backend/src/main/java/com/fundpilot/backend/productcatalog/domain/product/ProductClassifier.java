@@ -52,13 +52,17 @@ public final class ProductClassifier {
 
     private static Map<String, String> benchmarks() {
         Map<String, String> values = new LinkedHashMap<>();
+        // 精确词条在前:名称含具体指数全称时优先命中,避免被通用词(如"半导体")先抢走。
+        values.put("国证半导体芯片", "980017.SZ"); values.put("CES半导体芯片", "990001.CSI");
+        values.put("中证半导体材料设备", "931743.CSI"); values.put("中证半导体产业", "931865.CSI");
+        values.put("科创板半导体", "950125.CSI"); values.put("科创半导体", "950125.CSI");
         values.put("中证1000", "000852.SH"); values.put("中证500", "000905.SH");
         values.put("沪深300", "000300.SH"); values.put("科创创业50", "931643.CSI");
         values.put("科创50", "000688.SH"); values.put("上证50", "000016.SH");
         values.put("创业板", "399006.SZ"); values.put("中证机器人", "H30590.CSI");
         values.put("机器人", "H30590.CSI"); values.put("中证5G通信主题", "931079.CSI");
-        values.put("5G通信", "931079.CSI"); values.put("细分有色金属", "000811.CSI");
-        values.put("有色金属", "000811.CSI"); values.put("人工智能", "930713.CSI");
+        values.put("5G通信", "931079.CSI"); values.put("细分有色金属", "000811.SH");
+        values.put("有色金属", "000811.SH"); values.put("人工智能", "930713.CSI");
         values.put("半导体", "931865.CSI"); values.put("新能源车", "930997.CSI");
         values.put("中证新能源", "399808.SZ"); values.put("新能源", "399808.SZ");
         values.put("国证绿色电力", "399438.SZ"); values.put("绿色电力", "399438.SZ");
