@@ -2,6 +2,7 @@ package com.fundpilot.backend.marketdata.infrastructure.persistence.tradingcalen
 
 import com.fundpilot.backend.marketdata.domain.tradingcalendar.TradingCalendarRepository;
 import com.fundpilot.backend.marketdata.domain.tradingcalendar.TradingDay;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -71,6 +72,15 @@ class TradingCalendarRepositoryImpl implements TradingCalendarRepository {
                 """.formatted(predicate), (rs, row) -> rs.getObject(1, LocalDate.class), sqlDate(date));
         return values.stream().findFirst().map(TradingCalendarRepositoryImpl::instant);
     }
-    private static Date sqlDate(Instant value) { return Date.valueOf(value.atZone(ZoneOffset.UTC).toLocalDate()); }
+
+    /**
+     * 把任意时刻映射为交易日历的日期键。
+     * <p>必须按北京时间(Asia/Shanghai)取自然日,与 {@code BusinessDay}/{@code ChinaTradingDate}
+     * 的业务日口径一致:前端传 "2026-09-15T00:00:00+08:00"(即 UTC 09-14 16:00),
+     * 若按 UTC 截取会落到 09-14,导致"选 15 号生成 14 号流水"的偏移。
+     */
+    private static Date sqlDate(Instant value) {
+        return Date.valueOf(value.atZone(ChinaTradingDate.ZONE).toLocalDate());
+    }
     private static Instant instant(LocalDate value) { return value.atStartOfDay(ZoneOffset.UTC).toInstant(); }
 }
