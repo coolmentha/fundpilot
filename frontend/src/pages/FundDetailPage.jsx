@@ -10,7 +10,7 @@ import MarketTab from './FundMarketTab.jsx';
 import FundTransactionTab from './FundTransactionTab.jsx';
 import FundDcaTab from './FundDcaTab.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
-import {estimateStatusText} from '../querySafety.js';
+import {estimateStatusText, holdingReturnRate} from '../querySafety.js';
 import {redemptionLadderText} from '../feeRates.js';
 import FundResearchSection from '../components/FundResearchSection.jsx';
 import FundOpenLotsSection from '../components/FundOpenLotsSection.jsx';
@@ -44,13 +44,7 @@ export default function FundDetailPage() {
         (signal) => signal.portfolioFundId === portfolioFundId,
     ).length ?? 0;
     const redemptionRates = redemptionLadderText(feeRates?.redemptionLadder);
-    const holdingAmount = Number(fund.holdingAmount);
-    const totalPnl = Number(fund.totalPnl);
-    const totalPnlRate = fund.holdingAmount == null || fund.totalPnl == null
-        || !Number.isFinite(holdingAmount) || !Number.isFinite(totalPnl)
-        || holdingAmount - totalPnl <= 0
-        ? null
-        : totalPnl / (holdingAmount - totalPnl);
+    const totalPnlRate = holdingReturnRate(fund);
     // 待处理事项与基金信息常显;交易与策略详情默认展开,研究资料/赎回费估算默认收起。
     const openLots = openLotsQuery.data?.lots;
     // 跟踪指数:优先本地档案代码,缺省回退研究资料里从天天基金概况页采集的真实跟踪标的。

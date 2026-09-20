@@ -18,7 +18,7 @@ import {
 } from '../api/hooks.js';
 import {date, datetime, labels, money, percent, text, signedMoney, signedPercent, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
-import {estimateStatusText} from '../querySafety.js';
+import {estimateStatusText, holdingReturnRate} from '../querySafety.js';
 import DcaBudgetOverview from '../components/DcaBudgetOverview.jsx';
 import {buildFundPositionWarnings} from '../positionWarnings.js';
 import FundGroupTabs from '../components/FundGroupTabs.jsx';
@@ -255,8 +255,17 @@ export default function FundsPage() {
             render: (v) => v === null || v === undefined ? '-' : money(v),
         },
         {
-            title: '总盈亏', dataIndex: 'totalPnl', width: 120, align: 'right', responsive: ['md'],
-            render: (v) => <span style={{color: pnlColor(v)}}>{signedMoney(v)}</span>,
+            title: '总盈亏', dataIndex: 'totalPnl', width: 152, align: 'right', responsive: ['md'],
+            // 收益率与基金详情页同一口径(总盈亏 / 持仓成本);成本未知时只显示金额,避免出现「- (-)」。
+            render: (v, r) => {
+                const rate = holdingReturnRate(r);
+                return (
+                    <span style={{color: pnlColor(v)}}>
+                        {signedMoney(v)}
+                        {rate != null && <> <span className="num-cell">({signedPercent(rate)})</span></>}
+                    </span>
+                );
+            },
         },
         {title: '跟踪指数', dataIndex: 'benchmarkIndexCode', width: 104, responsive: ['lg'], render: (v) => text(v)},
         {

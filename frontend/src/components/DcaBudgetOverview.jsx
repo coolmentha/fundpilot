@@ -1,4 +1,4 @@
-import {Skeleton} from 'antd';
+import {Collapse, Skeleton} from 'antd';
 import {Link} from 'react-router-dom';
 import {date, money} from '../constants.js';
 import {buildDcaBudgetProgress} from '../dcaBudget.js';
@@ -46,14 +46,20 @@ export default function DcaBudgetOverview({summary, isLoading, isError, onRetry}
                 <div><span>全月预计</span><strong>{money(progress.projectedAmount)}</strong></div>
             </div>
             {progress.futurePlans.length > 0 && (
-                <div className="dca-budget-range">
-                    <span>未来逐项预测</span>
-                    {progress.futurePlans.map((plan) => (
-                        <strong key={`${plan.planId}-${plan.executionDate}`}>
-                            {date(plan.executionDate)} · 组合基金 #{plan.portfolioFundId} · 预计 {optionalMoney(plan.amount)} · 最大 {optionalMoney(plan.maximumAmount)}
-                        </strong>
-                    ))}
-                </div>
+                // 逐条列出每个计划的执行日与金额,条目多时挤占总览,故默认收起。
+                <Collapse className="dca-budget-future-plans" ghost size="small" items={[{
+                    key: 'futurePlans',
+                    label: `未来逐项预测（${progress.futurePlans.length} 项）`,
+                    children: (
+                        <div className="dca-budget-range">
+                            {progress.futurePlans.map((plan) => (
+                                <strong key={`${plan.planId}-${plan.executionDate}`}>
+                                    {date(plan.executionDate)} · 组合基金 #{plan.portfolioFundId} · 预计 {optionalMoney(plan.amount)} · 最大 {optionalMoney(plan.maximumAmount)}
+                                </strong>
+                            ))}
+                        </div>
+                    ),
+                }]}/>
             )}
             {(progress.minimumFutureAmount !== null || progress.maximumFutureAmount !== null) && (
                 <div className="dca-budget-range">

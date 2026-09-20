@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {
     buildFundWatchlistRows,
     estimateStatusText,
+    holdingReturnRate,
     isQueryDataReady,
     mainforceRatio,
     selectContributors,
@@ -159,6 +160,15 @@ describe('query safety guards', () => {
         ], {}, {estimatesFetched: false, estimatesError: false});
 
         expect(rows.map((row) => row.holdingReturnRate)).toEqual([null, null]);
+    });
+
+    it('基金列表和详情页共用持仓收益率口径', () => {
+        expect(holdingReturnRate({holdingAmount: 1000, totalPnl: 100})).toBeCloseTo(0.1111, 4);
+        expect(holdingReturnRate({holdingAmount: 900, totalPnl: -100})).toBeCloseTo(-0.1, 10);
+        expect(holdingReturnRate({holdingAmount: null, totalPnl: 100})).toBeNull();
+        expect(holdingReturnRate({holdingAmount: 100, totalPnl: null})).toBeNull();
+        expect(holdingReturnRate({holdingAmount: 100, totalPnl: 100})).toBeNull();
+        expect(holdingReturnRate(undefined)).toBeNull();
     });
 
     it('从持仓中选择最大贡献和最大拖累', () => {

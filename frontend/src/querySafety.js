@@ -8,15 +8,22 @@ export function estimateStatusText(status) {
     return null;
 }
 
+/**
+ * 持仓收益率：总盈亏 / 持仓成本（市值 - 总盈亏）。基金列表、行情工作台和基金详情共用同一口径，
+ * 数据缺失或成本非正时返回 null。
+ */
+export function holdingReturnRate(fund) {
+    if (fund?.holdingAmount == null || fund?.totalPnl == null) return null;
+    const holdingAmount = Number(fund.holdingAmount);
+    const totalPnl = Number(fund.totalPnl);
+    const holdingCost = holdingAmount - totalPnl;
+    return Number.isFinite(holdingAmount) && Number.isFinite(totalPnl) && holdingCost > 0
+        ? totalPnl / holdingCost
+        : null;
+}
+
 export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, estimatesError}) {
     return (funds || []).map((fund) => {
-        const holdingAmount = Number(fund.holdingAmount);
-        const totalPnl = Number(fund.totalPnl);
-        const holdingCost = holdingAmount - totalPnl;
-        const holdingReturnRate = fund.holdingAmount != null && fund.totalPnl != null
-            && Number.isFinite(holdingAmount) && Number.isFinite(totalPnl) && holdingCost > 0
-            ? totalPnl / holdingCost
-            : null;
         const confirmedNav = fund.valuationSource === 'CONFIRMED_NAV'
             || (fund.investmentTarget === 'QDII'
                 && fund.valuationSource === 'LATEST_CONFIRMED_NAV');
@@ -56,7 +63,7 @@ export function buildFundWatchlistRows(funds, estimates, {estimatesFetched, esti
             holdingAmount: fund.holdingAmount,
             dailyPnl: fund.dailyPnl,
             totalPnl: fund.totalPnl,
-            holdingReturnRate,
+            holdingReturnRate: holdingReturnRate(fund),
             status: fund.status,
             groups: fund.groups || [],
         };

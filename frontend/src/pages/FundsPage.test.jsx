@@ -29,11 +29,18 @@ vi.mock('../api/hooks.js', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.React = React;
-window.matchMedia = window.matchMedia || (() => ({
+const defaultMatchMedia = window.matchMedia || (() => ({
     matches: false,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
 }));
+window.matchMedia = defaultMatchMedia;
+// 断点列(如总盈亏)在 jsdom 下不渲染:matchMedia 恒为 false。断言断点列时临时强制命中。
+const desktopMatchMedia = () => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+});
 window.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -42,6 +49,16 @@ window.ResizeObserver = class {
 window.getComputedStyle = () => ({width: '0px'});
 Element.prototype.scrollIntoView = vi.fn();
 const {default: FundsPage} = await import('./FundsPage.jsx');
+
+async function renderFundsPage(initialEntry = '/funds') {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => root.render(
+        <MemoryRouter initialEntries={[initialEntry]}><App><FundsPage/></App></MemoryRouter>,
+    ));
+    return {container: element, root};
+}
 
 async function setInputValue(input, value) {
     await act(async () => {
@@ -81,8 +98,30 @@ describe('FundsPage', () => {
         if (root) await act(async () => root.unmount());
         container?.remove();
         document.body.innerHTML = '';
+        window.matchMedia = defaultMatchMedia;
         root = null;
         container = null;
+    });
+
+    it('总盈亏列按详情页口径同时展示金额和收益率', async () => {
+        state.funds = [{...state.funds[0], holdingAmount: 1000, totalPnl: 100}];
+        window.matchMedia = desktopMatchMedia;
+
+        ({container, root} = await renderFundsPage());
+
+        // 成本 900,收益率 100 / 900 = 11.11%,与详情页 signedMoney + signedPercent 一致
+        expect(container.textContent).toContain('+¥100.00');
+        expect(container.textContent).toContain('(+11.11%)');
+    });
+
+    it('持仓成本未知时总盈亏列只显示金额', async () => {
+        state.funds = [{...state.funds[0], holdingAmount: null, totalPnl: null}];
+        window.matchMedia = desktopMatchMedia;
+
+        ({container, root} = await renderFundsPage());
+
+        expect(container.textContent).toContain('总盈亏');
+        expect(container.textContent).not.toContain('(-)');
     });
 
     it('通过 editPortfolioFundId 查询参数自动打开目标基金编辑弹窗', async () => {

@@ -615,6 +615,18 @@ body {
     font-weight: 500;
 }
 
+/* 未来逐项预测默认收起:折叠头与总览文案左对齐,展开后逐条列出计划预测。
+   选择器带 .ant-collapse 提高特异性,避免被 antd 折叠面板默认内边距覆盖。 */
+.dca-budget-future-plans.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+    padding: 4px 0;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.dca-budget-future-plans.ant-collapse > .ant-collapse-item > .ant-collapse-panel > .ant-collapse-body {
+    padding: 0;
+}
+
 .dca-budget-stats div {
     min-width: 0;
 }
