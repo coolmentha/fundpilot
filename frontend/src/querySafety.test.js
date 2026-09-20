@@ -2,9 +2,11 @@ import {describe, expect, it} from 'vitest';
 import {
     buildFundWatchlistRows,
     estimateStatusText,
+    filterSectors,
     holdingReturnRate,
     isQueryDataReady,
     mainforceRatio,
+    sectorFlowDirection,
     selectContributors,
     selectHoldingRows,
     sortSectors,
@@ -195,5 +197,65 @@ describe('query safety guards', () => {
         expect(sortSectors(sectors, 'changePct').map((row) => row.sectorName)).toEqual(['B', 'A', 'C']);
         expect(sortSectors(sectors, 'turnover').map((row) => row.sectorName)).toEqual(['A', 'B', 'C']);
         expect(sortSectors(sectors, 'mainforceRatio').map((row) => row.sectorName)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('主力净额排序按净流入降序、净流出沉底，缺失值排最后', () => {
+        const sectors = [
+            {sectorName: 'A', mainforceNet: 100},
+            {sectorName: 'B', mainforceNet: -300},
+            {sectorName: 'C', mainforceNet: 250},
+            {sectorName: 'D', mainforceNet: null},
+        ];
+
+        expect(sortSectors(sectors, 'mainforceNet').map((row) => row.sectorName)).toEqual(['C', 'A', 'B', 'D']);
+    });
+
+    it('资金方向按主力净额正负判定，零值与缺失值不归入任何方向', () => {
+        expect(sectorFlowDirection({mainforceNet: 1})).toBe('inflow');
+        expect(sectorFlowDirection({mainforceNet: '-203685104'})).toBe('outflow');
+        expect(sectorFlowDirection({mainforceNet: 0})).toBeNull();
+        expect(sectorFlowDirection({mainforceNet: null})).toBeNull();
+        expect(sectorFlowDirection({})).toBeNull();
+    });
+
+    it('按资金方向筛选行业，非方向值时返回全量副本', () => {
+        const sectors = [
+            {sectorName: 'A', mainforceNet: 100},
+            {sectorName: 'B', mainforceNet: -100},
+            {sectorName: 'C', mainforceNet: 0},
+            {sectorName: 'D', mainforceNet: null},
+        ];
+
+        expect(filterSectors(sectors, 'inflow').map((row) => row.sectorName)).toEqual(['A']);
+        expect(filterSectors(sectors, 'outflow').map((row) => row.sectorName)).toEqual(['B']);
+        expect(filterSectors(sectors, 'all').map((row) => row.sectorName)).toEqual(['A', 'B', 'C', 'D']);
+        expect(filterSectors(undefined, 'inflow')).toEqual([]);
+
+        const all = filterSectors(sectors, 'all');
+        expect(all).not.toBe(sectors);
+    });
+
+    it('升序排序让流出最多的行业排最前，缺失值仍排末尾', () => {
+        const sectors = [
+            {sectorName: 'A', mainforceNet: 100},
+            {sectorName: 'B', mainforceNet: -300},
+            {sectorName: 'C', mainforceNet: -50},
+            {sectorName: 'D', mainforceNet: null},
+        ];
+
+        expect(sortSectors(sectors, 'mainforceNet', true).map((row) => row.sectorName))
+            .toEqual(['B', 'C', 'A', 'D']);
+    });
+
+    it('先按方向筛选再按主力净额排序得到流入榜首与流出榜首', () => {
+        const sectors = [
+            {sectorName: 'A', mainforceNet: 100},
+            {sectorName: 'B', mainforceNet: -300},
+            {sectorName: 'C', mainforceNet: 250},
+            {sectorName: 'D', mainforceNet: -50},
+        ];
+
+        expect(sortSectors(filterSectors(sectors, 'inflow'), 'mainforceNet')[0].sectorName).toBe('C');
+        expect(sortSectors(filterSectors(sectors, 'outflow'), 'mainforceNet', true)[0].sectorName).toBe('B');
     });
 });

@@ -2,8 +2,8 @@ import {Table} from 'antd';
 import {compactMoney, pnlColor, signedCompactMoney, signedPercent} from '../constants.js';
 import {mainforceRatio} from '../querySafety.js';
 
-/** 复用原资金流向组件位置，渲染统一的行业表现表。 */
-export default function MoneyFlow({sectors}) {
+/** 复用原资金流向组件位置，渲染统一的行业表现表。emptyText 用于筛选后无匹配行业时的空态。 */
+export default function MoneyFlow({sectors, emptyText = '暂无行业数据'}) {
     const columns = [
         {title: '行业', dataIndex: 'sectorName', width: 150, ellipsis: true},
         {
@@ -31,6 +31,7 @@ export default function MoneyFlow({sectors}) {
 
     return <Table className="industry-table" dataSource={sectors} columns={columns}
                   rowKey={(row) => row.sectorCode || row.sectorName}
+                  locale={{emptyText}}
                   size="small" pagination={{pageSize: 10, showSizeChanger: false, hideOnSinglePage: true}}
                   tableLayout="fixed" scroll={{x: 610}}/>;
 }

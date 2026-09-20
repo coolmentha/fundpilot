@@ -92,13 +92,29 @@ export function mainforceRatio(sector) {
     return Number.isFinite(net) && Number.isFinite(turnover) && turnover > 0 ? net / turnover : null;
 }
 
-export function sortSectors(sectors, sortBy) {
+/** 行业主力资金方向:'inflow'(净流入) / 'outflow'(净流出);无资金数据或恰好为 0 时返回 null。 */
+export function sectorFlowDirection(sector) {
+    const raw = sector?.mainforceNet;
+    if (raw == null) return null;
+    const net = Number(raw);
+    if (!Number.isFinite(net) || net === 0) return null;
+    return net > 0 ? 'inflow' : 'outflow';
+}
+
+/** 资金方向筛选;direction 非 'inflow'/'outflow' 时返回全量副本。 */
+export function filterSectors(sectors, direction) {
+    if (direction !== 'inflow' && direction !== 'outflow') return [...(sectors || [])];
+    return (sectors || []).filter((sector) => sectorFlowDirection(sector) === direction);
+}
+
+/** 行业排序;默认降序,缺失值恒排末尾(升序时也不提前)。 */
+export function sortSectors(sectors, sortBy, ascending = false) {
     return [...(sectors || [])].sort((left, right) => {
         const a = sectorSortValue(left, sortBy);
         const b = sectorSortValue(right, sortBy);
         if (a == null) return b == null ? 0 : 1;
         if (b == null) return -1;
-        return b - a;
+        return ascending ? a - b : b - a;
     });
 }
 

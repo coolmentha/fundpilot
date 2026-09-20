@@ -1,20 +1,54 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {Segmented, Skeleton} from 'antd';
 import {useSectorPerformance} from '../api/hooks.js';
 import QueryErrorState from './QueryErrorState.jsx';
 import MoneyFlow from './MoneyFlow.jsx';
-import {sortSectors} from '../querySafety.js';
+import {filterSectors, sectorFlowDirection, sortSectors} from '../querySafety.js';
 
 const SORT_OPTIONS = [
     {label: '涨跌幅', value: 'changePct'},
     {label: '成交额', value: 'turnover'},
+    {label: '主力净额', value: 'mainforceNet'},
     {label: '主力净占比', value: 'mainforceRatio'},
 ];
 
-/** 全市场行业表现，排序基于后端返回的完整行业范围。 */
+const DIRECTION_OPTIONS = [
+    {label: '全部', value: 'all'},
+    {label: '净流入', value: 'inflow'},
+    {label: '净流出', value: 'outflow'},
+];
+
+const EMPTY_TEXT = {
+    inflow: '暂无主力净流入行业',
+    outflow: '暂无主力净流出行业',
+};
+
+/** 全市场行业表现，排序与资金方向筛选基于后端返回的完整行业范围。 */
 export default function SectorPerformance() {
     const {data: sectors, isLoading, isError, refetch} = useSectorPerformance();
     const [sortBy, setSortBy] = useState('changePct');
+    const [direction, setDirection] = useState('all');
+
+    // 方向选项带全量条数，数据刷新时同步更新；计数始终基于未筛选的行业范围。
+    const directionOptions = useMemo(() => {
+        const counts = {inflow: 0, outflow: 0};
+        (sectors || []).forEach((sector) => {
+            const flow = sectorFlowDirection(sector);
+            if (flow) counts[flow] += 1;
+        });
+        return DIRECTION_OPTIONS.map((option) => option.value === 'all'
+            ? option
+            : {...option, label: `${option.label} ${counts[option.value]}`});
+    }, [sectors]);
+
+    // 净流出视角按净额排序时取升序,让流出最多的行业排在最前(降序会把它们压到末页)。
+    const ascending = direction === 'outflow' && sortBy === 'mainforceNet';
+    const sortOptions = useMemo(() => SORT_OPTIONS.map((option) => (
+        option.value === 'mainforceNet' && ascending ? {...option, label: '净流出额'} : option
+    )), [ascending]);
+    const rows = useMemo(
+        () => sortSectors(filterSectors(sectors, direction), sortBy, ascending),
+        [sectors, direction, sortBy, ascending]);
 
     if (isLoading) {
         return <div className="industry-performance"><Skeleton active paragraph={{rows: 6}}/></div>;
@@ -31,9 +65,10 @@ export default function SectorPerformance() {
     return (
         <div className="industry-performance">
             <div className="industry-toolbar">
-                <Segmented options={SORT_OPTIONS} value={sortBy} onChange={setSortBy}/>
+                <Segmented options={directionOptions} value={direction} onChange={setDirection}/>
+                <Segmented options={sortOptions} value={sortBy} onChange={setSortBy}/>
             </div>
-            <MoneyFlow sectors={sortSectors(sectors, sortBy)}/>
+            <MoneyFlow key={`${direction}-${sortBy}`} sectors={rows} emptyText={EMPTY_TEXT[direction]}/>
         </div>
     );
 }
