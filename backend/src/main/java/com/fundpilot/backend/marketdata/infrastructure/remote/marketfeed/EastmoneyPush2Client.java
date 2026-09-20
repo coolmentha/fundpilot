@@ -10,7 +10,7 @@ import feign.RequestLine;
  * <p>三条数据线:
  * <ul>
  *   <li>{@link #fetchIndexRealtimeRaw(String)} 批量指数实时行情(ulist.np/get)</li>
- *   <li>{@link #fetchSectorListRaw(String)} 行业板块涨跌 + 资金流向(clist/get,fs=m:90 t:2)</li>
+ *   <li>{@link #fetchSectorListRaw(int, String)} 行业板块涨跌 + 资金流向(clist/get,fs=m:90 t:2)</li>
  *   <li>{@link #fetchNorthboundRaw()} 北向资金实时净流入(kamt.rtmin/get)</li>
  * </ul>
  * 请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与令牌桶。
@@ -31,11 +31,14 @@ public interface EastmoneyPush2Client {
     /**
      * 行业板块涨跌 + 资金流向。fs=m:90 t:2 是行业板块过滤条件。
      * <p>fields:f3 涨跌幅、f6 成交额、f12 板块代码、f14 板块名称、f62 主力净流入。
+     * <p>单页最多返回 100 条(实测 pz 调到 200/500 仍只返回 100),行业板块总数约 500,
+     * 取全必须翻页——只取第一页等于只拿排序字段的前 100 名。
      *
+     * @param page 页码(从 1 开始)
      * @param sort 排序字段(如 "f3" 按涨跌幅、"f6" 按成交额)
      */
-    @RequestLine("GET /api/qt/clist/get?pn=1&pz=100&po=1&np=1&fields=f3%2Cf6%2Cf12%2Cf14%2Cf62&fs=m:90+t:2&fid={sort}")
-    String fetchSectorListRaw(@Param("sort") String sort);
+    @RequestLine("GET /api/qt/clist/get?pn={page}&pz=100&po=1&np=1&fields=f3%2Cf6%2Cf12%2Cf14%2Cf62&fs=m:90+t:2&fid={sort}")
+    String fetchSectorListRaw(@Param("page") int page, @Param("sort") String sort);
 
     /**
      * 北向资金实时净流入(沪深股通合计)。s2n 数组每分钟一条 CSV。

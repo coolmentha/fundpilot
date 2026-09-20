@@ -160,7 +160,7 @@ class MarketRealtimeCacheTest {
                 ]}}
                 """);
         when(indexFlash.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH);
-        when(push2Client.fetchSectorListRaw("f3"))
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
                 .thenReturn("{\"data\":{\"diff\":[{\"f3\":100,\"f6\":1000,\"f12\":\"BK1\",\"f14\":\"测试行业\"}]}}")
                 .thenReturn("{\"data\":{\"diff\":[]}}");
         MarketRealtimeCache cache = new MarketRealtimeCache(
@@ -278,7 +278,7 @@ class MarketRealtimeCacheTest {
 
         verify(estimateService).fetchEstimateResult(org.mockito.ArgumentMatchers.eq("270042"), any(Instant.class), anySet());
         verify(push2Client, never()).fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString());
-        verify(push2Client, never()).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyString());
+        verify(push2Client, never()).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString());
         verify(push2Client, never()).fetchNorthboundRaw();
     }
 
@@ -676,7 +676,7 @@ class MarketRealtimeCacheTest {
                 .thenReturn("{\"data\":{\"diff\":[]}}")
                 .thenReturn("{\"data\":{\"diff\":[]}}");
         when(indexFlashClient.fetchIndexFlashRaw()).thenReturn(INDEX_FLASH).thenReturn(INDEX_FLASH);
-        when(push2Client.fetchSectorListRaw("f3"))
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
                 .thenReturn("""
                         {"data":{"diff":[{"f3":100,"f6":1000.0,"f12":"BK0001","f14":"测试板块","f62":200.0}]}}
                         """)
@@ -692,6 +692,89 @@ class MarketRealtimeCacheTest {
 
         assertThat(cache.getSectors()).extracting("sectorCode").containsExactly("BK0001");
         verify(redisStore, times(1)).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块翻页取全() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPage(1, 100))
+                .thenReturn(sectorPage(101, 2));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        // 第一页满 100 条(单页上限)时必须继续翻页,否则只剩涨幅前 100 的行业
+        assertThat(cache.getSectors()).hasSize(102);
+        assertThat(cache.getSectors()).extracting("sectorCode").contains("BK1", "BK101", "BK102");
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块翻页按代码去重() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPage(1, 100))
+                .thenReturn(sectorPage(100, 2));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        // 翻页途中排序漂移会让同一板块落到相邻两页(BK100 重复),去重后 101 个
+        assertThat(cache.getSectors()).hasSize(101);
+        assertThat(cache.getSectors()).extracting("sectorCode").contains("BK100", "BK101");
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块翻页中途失败保留旧完整缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPage(1, 100))
+                .thenReturn(sectorPage(101, 5))
+                .thenReturn(sectorPage(1, 100))
+                .thenThrow(new IllegalStateException("503"));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getSectors()).hasSize(105);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        // 第二次刷新第 2 页失败:残缺集合不能覆盖上一轮的完整缓存
+        assertThat(cache.getSectors()).hasSize(105);
+    }
+
+    /** 构造一页行业板块响应,代码从 fromCode 起连续 count 条。 */
+    private static String sectorPage(int fromCode, int count) {
+        StringBuilder rows = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                rows.append(',');
+            }
+            rows.append("{\"f3\":100,\"f6\":1000.0,\"f12\":\"BK").append(fromCode + i)
+                    .append("\",\"f14\":\"行业").append(fromCode + i).append("\",\"f62\":200.0}");
+        }
+        return "{\"data\":{\"diff\":[" + rows + "]}}";
     }
 
     private static TrackedNavProductGateway.TrackedProduct fund(String code) {

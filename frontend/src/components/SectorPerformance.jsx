@@ -23,7 +23,7 @@ const EMPTY_TEXT = {
     outflow: '暂无主力净流出行业',
 };
 
-/** 全市场行业表现，排序与资金方向筛选基于后端返回的完整行业范围。 */
+/** 全市场行业表现。后端翻页取全约 500 个行业，排序与资金方向筛选在前端基于该完整范围进行。 */
 export default function SectorPerformance() {
     const {data: sectors, isLoading, isError, refetch} = useSectorPerformance();
     const [sortBy, setSortBy] = useState('changePct');

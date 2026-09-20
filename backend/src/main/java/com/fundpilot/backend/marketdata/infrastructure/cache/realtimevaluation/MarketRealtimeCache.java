@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -73,6 +74,10 @@ public class MarketRealtimeCache {
             "0.899050"  // 北证 50：北交所宽度
     );
     private static final String MARKET_VOLUME_PRICE_SECID = "1.000001";
+    /** 东方财富 clist 单页条数上限:实测 pz 调到 200/500 也只返回 100 条。须与客户端请求的 pz 一致。 */
+    private static final int SECTOR_PAGE_SIZE = 100;
+    /** 行业板块翻页硬上限(约 500 个板块,5 页足够),防止接口异常时无限循环。 */
+    private static final int SECTOR_MAX_PAGES = 20;
 
     private final EastmoneyPush2Client push2Client;
     private final FundEstimateService fundEstimateService;
@@ -353,8 +358,7 @@ public class MarketRealtimeCache {
         long startedAt = System.nanoTime();
         String result = "success";
         try {
-            String raw = push2Client.fetchSectorListRaw("f3");
-            List<SectorSnapshot> parsed = EastmoneyJsParser.parseSectorList(raw);
+            List<SectorSnapshot> parsed = fetchAllSectors();
             if (parsed.isEmpty()) {
                 result = "empty";
             } else {
@@ -368,6 +372,34 @@ public class MarketRealtimeCache {
         } finally {
             marketDataMetrics.record("EastmoneyPush2Client", "fetchSectors", result, startedAt);
         }
+    }
+
+    /**
+     * 翻页取全行业板块。接口单页硬上限 100 条而板块总数约 500,只取第一页等于只拿涨幅前 100 的行业
+     * (跌幅榜的板块完全缺失,按资金方向筛选会得到"涨幅前 100"的子集口径)。
+     *
+     * <p>翻页途中行情仍在变动,排序会漂移导致同一板块落到相邻两页,故按板块代码去重。
+     * 取不满时抛异常由调用方保留旧缓存:宁可沿用上一轮完整数据,也不要用残缺集合覆盖缓存。
+     */
+    private List<SectorSnapshot> fetchAllSectors() {
+        List<SectorSnapshot> collected = new ArrayList<>();
+        Set<String> seenCodes = new LinkedHashSet<>();
+        boolean reachedEnd = false;
+        for (int page = 1; page <= SECTOR_MAX_PAGES && !reachedEnd; page++) {
+            List<SectorSnapshot> pageRows =
+                    EastmoneyJsParser.parseSectorList(push2Client.fetchSectorListRaw(page, "f3"));
+            // 短于整页(含空页)即最后一页。
+            reachedEnd = pageRows.size() < SECTOR_PAGE_SIZE;
+            for (SectorSnapshot row : pageRows) {
+                if (row.sectorCode() != null && seenCodes.add(row.sectorCode())) {
+                    collected.add(row);
+                }
+            }
+        }
+        if (!reachedEnd) {
+            throw new IllegalStateException("行业板块翻页超过 " + SECTOR_MAX_PAGES + " 页仍未取完");
+        }
+        return List.copyOf(collected);
     }
 
     private MarketLimitCounts fetchMarketLimitCounts() {
