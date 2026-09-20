@@ -379,6 +379,30 @@ public final class EastmoneyJsParser {
     }
 
     /**
+     * 读取 clist 行业板块响应的 {@code data.total}(板块总数)。
+     * <p>用于校验翻页是否取全:只靠「页不满 100 条即末页」判断时,接口异常返回
+     * {@code data:null}(空 diff)会被误判成取完,静默留下残缺集合。
+     *
+     * @param rawJson clist 响应文本
+     * @return 板块总数;响应为空、data 缺失或 total 非正数时返回 -1(调用方退化为按页长度判断)
+     */
+    public static int parseSectorTotal(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return -1;
+        }
+        try {
+            JsonNode total = MAPPER.readTree(rawJson).path("data").path("total");
+            if (!total.isIntegralNumber() || !total.canConvertToInt()) {
+                return -1;
+            }
+            int value = total.intValue();
+            return value > 0 ? value : -1;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("行业板块总数解析失败", e);
+        }
+    }
+
+    /**
      * 解析 push2 kamt.rtmin 北向资金实时净流入 JSON。
      * <p>响应结构 {@code data.s2n[]} 字符串数组,每条 CSV 格式
      * {@code HH:MM,沪股通净流入,沪股通余额,深股通净流入,深股通余额,北向合计净流入}。

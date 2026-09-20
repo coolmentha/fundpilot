@@ -764,6 +764,132 @@ class MarketRealtimeCacheTest {
         assertThat(cache.getSectors()).hasSize(105);
     }
 
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块按接口总数翻页取全() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPageWithTotal(1, 100, 496))
+                .thenReturn(sectorPageWithTotal(101, 100, 496))
+                .thenReturn(sectorPageWithTotal(201, 100, 496))
+                .thenReturn(sectorPageWithTotal(301, 100, 496))
+                .thenReturn(sectorPageWithTotal(401, 96, 496));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        // 接口声明总数 496 时按总数翻 5 页,不能只看页长度
+        assertThat(cache.getSectors()).hasSize(496);
+        assertThat(cache.getSectors()).extracting("sectorCode").contains("BK1", "BK496");
+        verify(push2Client, times(5)).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.eq("f3"));
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块单页失败重试后取全() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPageWithTotal(1, 100, 102))
+                // 第 2 页先被限流(空 diff)再成功:按「页不满即末页」会静默只留 100 条
+                .thenReturn("{\"data\":null}")
+                .thenReturn(sectorPageWithTotal(101, 2, 102));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getSectors()).hasSize(102);
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块取不满接口总数_保留旧完整缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPage(1, 100))
+                .thenReturn(sectorPage(101, 5))
+                // 第二轮接口声明 496 条却只返回 260 条:残缺集合不能覆盖上一轮完整缓存
+                .thenReturn(sectorPageWithTotal(1, 100, 496))
+                .thenReturn(sectorPageWithTotal(101, 40, 496))
+                .thenReturn(sectorPageWithTotal(141, 40, 496))
+                .thenReturn(sectorPageWithTotal(181, 40, 496))
+                .thenReturn(sectorPageWithTotal(221, 40, 496));
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getSectors()).hasSize(105);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getSectors()).hasSize(105);
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块连续空页取不满总数_保留旧完整缓存() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn(sectorPage(1, 100))
+                .thenReturn(sectorPage(101, 5))
+                .thenReturn(sectorPageWithTotal(1, 100, 496))
+                // 第 2 页重试后仍为空:接口声明 496 条却只剩 100 条,不能覆盖上一轮完整缓存
+                .thenReturn("{\"data\":{\"total\":496}}")
+                .thenReturn("{\"data\":{\"total\":496}}")
+                .thenReturn("{\"data\":{\"total\":496}}");
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+        assertThat(cache.getSectors()).hasSize(105);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getSectors()).hasSize(105);
+    }
+
+    @Test
+    void refreshRealtimeWithoutEstimates_行业板块缺代码的行被跳过() {
+        EastmoneyPush2Client push2Client = mock(EastmoneyPush2Client.class);
+        WatchedIndicesApi userConfigService = mock(WatchedIndicesApi.class);
+        when(userConfigService.findAllForRefresh()).thenReturn(List.of());
+        when(push2Client.fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("{\"data\":{\"diff\":[]}}");
+        when(push2Client.fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.eq("f3")))
+                .thenReturn("{\"data\":{\"diff\":[{\"f3\":100,\"f6\":1000.0,\"f14\":\"缺代码\"},"
+                        + "{\"f3\":100,\"f6\":1000.0,\"f12\":\"BK1\",\"f14\":\"行业1\"}]}}");
+        MarketRealtimeCache cache = new MarketRealtimeCache(
+                push2Client, mock(FundEstimateService.class), userConfigService, mock(TrackedNavProductGateway.class),
+                mock(MarketDataMetrics.class), CLOCK, mock(MarketRealtimeRedisStore.class),
+                mock(ThsIndexFlashClient.class), false);
+
+        cache.refreshRealtimeWithoutEstimates();
+
+        assertThat(cache.getSectors()).extracting("sectorCode").containsExactly("BK1");
+    }
+
     /** 构造一页行业板块响应,代码从 fromCode 起连续 count 条。 */
     private static String sectorPage(int fromCode, int count) {
         StringBuilder rows = new StringBuilder();
@@ -775,6 +901,11 @@ class MarketRealtimeCacheTest {
                     .append("\",\"f14\":\"行业").append(fromCode + i).append("\",\"f62\":200.0}");
         }
         return "{\"data\":{\"diff\":[" + rows + "]}}";
+    }
+
+    /** 构造带接口总数 data.total 的一页行业板块响应。 */
+    private static String sectorPageWithTotal(int fromCode, int count, int total) {
+        return sectorPage(fromCode, count).replaceFirst("\\{\"data\":\\{", "{\"data\":{\"total\":" + total + ",");
     }
 
     private static TrackedNavProductGateway.TrackedProduct fund(String code) {

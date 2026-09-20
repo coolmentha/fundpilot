@@ -192,6 +192,21 @@ class EastmoneyJsParserRealtimeTest {
     }
 
     @Test
+    void parseSectorTotal_正常响应_返回板块总数() {
+        assertThat(EastmoneyJsParser.parseSectorTotal("{\"rc\":0,\"data\":{\"total\":496,\"diff\":[]}}"))
+                .isEqualTo(496);
+    }
+
+    @Test
+    void parseSectorTotal_缺失或非正数_返回负一() {
+        assertThat(EastmoneyJsParser.parseSectorTotal("")).isEqualTo(-1);
+        assertThat(EastmoneyJsParser.parseSectorTotal(null)).isEqualTo(-1);
+        assertThat(EastmoneyJsParser.parseSectorTotal("{\"data\":null}")).isEqualTo(-1);
+        assertThat(EastmoneyJsParser.parseSectorTotal("{\"data\":{\"diff\":[]}}")).isEqualTo(-1);
+        assertThat(EastmoneyJsParser.parseSectorTotal("{\"data\":{\"total\":0}}")).isEqualTo(-1);
+    }
+
+    @Test
     void parseNorthbound_正常响应_取最后一条的北向合计() {
         String raw = """
                 {"rc":0,"data":{"s2n":[

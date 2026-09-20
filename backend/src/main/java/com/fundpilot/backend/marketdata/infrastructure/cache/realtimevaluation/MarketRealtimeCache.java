@@ -78,6 +78,10 @@ public class MarketRealtimeCache {
     private static final int SECTOR_PAGE_SIZE = 100;
     /** 行业板块翻页硬上限(约 500 个板块,5 页足够),防止接口异常时无限循环。 */
     private static final int SECTOR_MAX_PAGES = 20;
+    /** 板块单页拉取尝试次数:翻页与其他东财数据线共用令牌桶,瞬时限流/网络抖动不应让整轮刷新失败。 */
+    private static final int SECTOR_PAGE_ATTEMPTS = 3;
+    /** 板块单页重试基础退避,按尝试次数线性递增(200ms/400ms)。 */
+    private static final long SECTOR_PAGE_RETRY_BACKOFF_MILLIS = 200;
 
     private final EastmoneyPush2Client push2Client;
     private final FundEstimateService fundEstimateService;
@@ -378,28 +382,106 @@ public class MarketRealtimeCache {
      * 翻页取全行业板块。接口单页硬上限 100 条而板块总数约 500,只取第一页等于只拿涨幅前 100 的行业
      * (跌幅榜的板块完全缺失,按资金方向筛选会得到"涨幅前 100"的子集口径)。
      *
-     * <p>翻页途中行情仍在变动,排序会漂移导致同一板块落到相邻两页,故按板块代码去重。
-     * 取不满时抛异常由调用方保留旧缓存:宁可沿用上一轮完整数据,也不要用残缺集合覆盖缓存。
+     * <p>结束条件优先用接口返回的 {@code data.total} 算页数;接口未给总数时退化为「页不满 100 条即末页」。
+     * 取完后按总数校验:只靠页长度判断结束的话,接口异常返回空 diff 会被误判成取完,
+     * 静默用残缺集合覆盖缓存。
+     *
+     * <p>翻页途中行情仍在变动,排序会漂移导致同一板块落到相邻两页,故按板块代码去重;
+     * 重复一条意味着可能有一条被挤到已翻过的页而漏掉,故用「去重后条数 + 重复条数」与总数比较。
+     *
+     * <p>单页失败会重试(与其他东财数据线共用令牌桶,瞬时限流/网络抖动常见);
+     * 仍取不满时抛异常由调用方保留旧缓存:宁可沿用上一轮完整数据,也不要用残缺集合覆盖缓存。
      */
     private List<SectorSnapshot> fetchAllSectors() {
         List<SectorSnapshot> collected = new ArrayList<>();
         Set<String> seenCodes = new LinkedHashSet<>();
-        boolean reachedEnd = false;
-        for (int page = 1; page <= SECTOR_MAX_PAGES && !reachedEnd; page++) {
-            List<SectorSnapshot> pageRows =
-                    EastmoneyJsParser.parseSectorList(push2Client.fetchSectorListRaw(page, "f3"));
-            // 短于整页(含空页)即最后一页。
-            reachedEnd = pageRows.size() < SECTOR_PAGE_SIZE;
+        int duplicateCount = 0;
+        int expectedTotal = -1;
+        int pages = SECTOR_MAX_PAGES;
+        for (int page = 1; page <= pages; page++) {
+            SectorPage fetched = fetchSectorPage(page);
+            if (expectedTotal < 0 && fetched.total() > 0) {
+                expectedTotal = fetched.total();
+                pages = Math.min(SECTOR_MAX_PAGES, (expectedTotal + SECTOR_PAGE_SIZE - 1) / SECTOR_PAGE_SIZE);
+            }
+            List<SectorSnapshot> pageRows = fetched.rows();
+            if (pageRows.isEmpty()) {
+                if (expectedTotal > 0) {
+                    throw new IllegalStateException("行业板块第 " + page + " 页返回空列表,已取 "
+                            + collected.size() + "/" + expectedTotal + " 条");
+                }
+                return List.copyOf(collected);
+            }
             for (SectorSnapshot row : pageRows) {
-                if (row.sectorCode() != null && seenCodes.add(row.sectorCode())) {
+                if (row.sectorCode() == null) {
+                    continue;
+                }
+                if (seenCodes.add(row.sectorCode())) {
                     collected.add(row);
+                } else {
+                    duplicateCount++;
+                }
+            }
+            if (expectedTotal < 0 && pageRows.size() < SECTOR_PAGE_SIZE) {
+                return List.copyOf(collected);
+            }
+        }
+        if (expectedTotal < 0) {
+            throw new IllegalStateException("行业板块翻页超过 " + SECTOR_MAX_PAGES + " 页仍未取完");
+        }
+        if (collected.size() + duplicateCount < expectedTotal) {
+            throw new IllegalStateException("行业板块仅取到 " + collected.size() + "/" + expectedTotal + " 条");
+        }
+        return List.copyOf(collected);
+    }
+
+    /**
+     * 拉取并解析单页板块,失败或空列表按 {@link #SECTOR_PAGE_ATTEMPTS} 次重试。
+     * <p>东方财富限流时常返回 {@code data:null}(空 diff),按「页不满即末页」会被误判成取完,
+     * 只留下第一页 100 条,故空列表也当失败重试(空列表立即重试,只有异常才退避等待);
+     * 连续尝试都为空才把空结果交给调用方判断。
+     */
+    private SectorPage fetchSectorPage(int page) {
+        SectorPage lastEmpty = null;
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= SECTOR_PAGE_ATTEMPTS; attempt++) {
+            try {
+                String raw = push2Client.fetchSectorListRaw(page, "f3");
+                SectorPage fetched = new SectorPage(
+                        EastmoneyJsParser.parseSectorTotal(raw),
+                        EastmoneyJsParser.parseSectorList(raw));
+                if (!fetched.rows().isEmpty()) {
+                    return fetched;
+                }
+                lastEmpty = fetched;
+                lastFailure = null;
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                lastEmpty = null;
+                if (attempt < SECTOR_PAGE_ATTEMPTS) {
+                    backoffBeforeSectorRetry(attempt);
                 }
             }
         }
-        if (!reachedEnd) {
-            throw new IllegalStateException("行业板块翻页超过 " + SECTOR_MAX_PAGES + " 页仍未取完");
+        if (lastEmpty != null) {
+            log.warn("行业板块第 {} 页连续 {} 次返回空列表", page, SECTOR_PAGE_ATTEMPTS);
+            return lastEmpty;
         }
-        return List.copyOf(collected);
+        log.warn("行业板块第 {} 页拉取失败,已重试 {} 次", page, SECTOR_PAGE_ATTEMPTS, lastFailure);
+        throw lastFailure;
+    }
+
+    /** 板块单页重试退避(按尝试次数线性递增);中断时只恢复标记,让循环尽快结束并把最后异常抛给调用方。 */
+    private static void backoffBeforeSectorRetry(int attempt) {
+        try {
+            Thread.sleep(SECTOR_PAGE_RETRY_BACKOFF_MILLIS * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** 单页板块响应:接口声明的总数(-1 表示未提供)+ 解析出的板块行。 */
+    private record SectorPage(int total, List<SectorSnapshot> rows) {
     }
 
     private MarketLimitCounts fetchMarketLimitCounts() {
