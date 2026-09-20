@@ -499,7 +499,9 @@ jobs:
               run_before_total_deadline 30 docker rm -f "$candidate" 2>/dev/null || true
               run_before_total_deadline 120 docker run -d --rm --name "$candidate" --network fundpilot_default \
                 "$FRONTEND_IMAGE" >/dev/null
-              for i in $(seq 1 30); do
+              # nginx 正常几十秒内即可服务;VPS 容器启动变慢时 60 秒窗口会误杀健康镜像,
+              # 放宽到约 3 分钟,仍要求在切换生产前真正响应。
+              for i in $(seq 1 90); do
                 if run_before_total_deadline 15 docker exec "$candidate" \
                     wget -q -T 5 -O /dev/null http://127.0.0.1/; then
                   run_before_total_deadline 30 docker rm -f "$candidate" >/dev/null
