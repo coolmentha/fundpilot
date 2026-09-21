@@ -152,6 +152,16 @@ jobs:
       YANGJIBAO_SECRET: ${{ secrets.YANGJIBAO_SECRET }}
       FUNDPILOT_BOOTSTRAP_USERNAME: ${{ secrets.FUNDPILOT_BOOTSTRAP_USERNAME }}
       FUNDPILOT_BOOTSTRAP_PASSWORD: ${{ secrets.FUNDPILOT_BOOTSTRAP_PASSWORD }}
+      # 价格提醒邮件(可选):未配置 Secret 时留空,提醒记录为 FAILED 且不影响其它功能
+      MAIL_HOST: ${{ secrets.MAIL_HOST }}
+      MAIL_PORT: ${{ secrets.MAIL_PORT }}
+      MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+      MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+      MAIL_SMTP_AUTH: ${{ secrets.MAIL_SMTP_AUTH }}
+      MAIL_SMTP_STARTTLS: ${{ secrets.MAIL_SMTP_STARTTLS }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM }}
+      FUNDPILOT_ALERTING_ENABLED: ${{ secrets.FUNDPILOT_ALERTING_ENABLED }}
+      FUNDPILOT_ALERTING_EVALUATION_CRON: ${{ secrets.FUNDPILOT_ALERTING_EVALUATION_CRON }}
       DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: SSH deploy
@@ -161,7 +171,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 80m
-          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,YANGJIBAO_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,DEPLOYMENT_TOKEN
+          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,YANGJIBAO_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,MAIL_HOST,MAIL_PORT,MAIL_USERNAME,MAIL_PASSWORD,MAIL_SMTP_AUTH,MAIL_SMTP_STARTTLS,MAIL_FROM,FUNDPILOT_ALERTING_ENABLED,FUNDPILOT_ALERTING_EVALUATION_CRON,DEPLOYMENT_TOKEN
           script: |
             set -Eeuo pipefail
             umask 077
@@ -328,6 +338,17 @@ jobs:
                 printf 'FUNDPILOT_BOOTSTRAP_PASSWORD=%s\n' "$FUNDPILOT_BOOTSTRAP_PASSWORD"
                 printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
                 printf 'DEPLOYMENT_VALIDATION_MODE=false\n'
+                printf 'MAIL_HOST=%s\n' "${MAIL_HOST:-}"
+                printf 'MAIL_PORT=%s\n' "${MAIL_PORT:-587}"
+                printf 'MAIL_USERNAME=%s\n' "${MAIL_USERNAME:-}"
+                printf 'MAIL_PASSWORD=%s\n' "${MAIL_PASSWORD:-}"
+                printf 'MAIL_SMTP_AUTH=%s\n' "${MAIL_SMTP_AUTH:-true}"
+                printf 'MAIL_SMTP_STARTTLS=%s\n' "${MAIL_SMTP_STARTTLS:-true}"
+                printf 'MAIL_FROM=%s\n' "${MAIL_FROM:-}"
+                # 提醒邮件正文里的详情链接前缀固定用站点地址,避免手工维护两份
+                printf 'FUNDPILOT_APP_BASE_URL=%s\n' "$PUBLIC_URL"
+                printf 'FUNDPILOT_ALERTING_ENABLED=%s\n' "${FUNDPILOT_ALERTING_ENABLED:-true}"
+                printf 'FUNDPILOT_ALERTING_EVALUATION_CRON=%s\n' "${FUNDPILOT_ALERTING_EVALUATION_CRON:-0 30 14 * * MON-FRI}"
                 printf 'TAG=%s\n' "$target_tag"
                 if [ -n "$target_backend_image" ]; then
                   printf 'BACKEND_IMAGE=%s\n' "$target_backend_image"
