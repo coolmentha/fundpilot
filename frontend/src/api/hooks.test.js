@@ -33,6 +33,14 @@ import {
     updateStrategy,
     updatePendingTransaction,
     voidPortfolioFund,
+    createAlertRule,
+    deleteAlertRule,
+    getAlertNotifications,
+    getAlertRules,
+    invalidateAlertRuleQueries,
+    setAlertRuleEnabled,
+    updateAlertRule,
+    updateSiteEmail,
 } from './hooks.js';
 
 describe('portfolio fund onboarding', () => {
@@ -272,5 +280,57 @@ describe('DCA plan deletion', () => {
             [{queryKey: ['dca-active']}],
             [{queryKey: ['dca-budget-summary']}],
         ]);
+    });
+});
+
+describe('price alert rules', () => {
+    const body = {scope: 'GLOBAL', portfolioFundId: null, ruleType: 'RISE', threshold: 0.05, enabled: true};
+
+    it('reads rules and notifications from the alerting endpoints', () => {
+        getAlertRules();
+        getAlertNotifications(20);
+
+        expect(get.mock.calls.slice(-2)).toEqual([
+            ['/api/alert-rules'],
+            ['/api/alert-notifications?limit=20'],
+        ]);
+    });
+
+    it('creates a rule through the alerting endpoint', () => {
+        createAlertRule(body);
+
+        expect(post).toHaveBeenLastCalledWith('/api/alert-rules', body);
+    });
+
+    it('updates a rule by id', () => {
+        updateAlertRule({id: 7, body});
+
+        expect(put).toHaveBeenLastCalledWith('/api/alert-rules/7', body);
+    });
+
+    it('toggles a rule through the action endpoint', () => {
+        setAlertRuleEnabled({id: 7, action: 'disable'});
+
+        expect(post).toHaveBeenLastCalledWith('/api/alert-rules/7/disable');
+    });
+
+    it('deletes a rule by id', () => {
+        deleteAlertRule(7);
+
+        expect(del).toHaveBeenLastCalledWith('/api/alert-rules/7');
+    });
+
+    it('invalidates the rule list after rule mutations', () => {
+        const queryClient = {invalidateQueries: vi.fn()};
+
+        invalidateAlertRuleQueries(queryClient);
+
+        expect(queryClient.invalidateQueries).toHaveBeenCalledWith({queryKey: ['alert-rules']});
+    });
+
+    it('updates the reminder email through the auth endpoint', () => {
+        updateSiteEmail('alice@example.com');
+
+        expect(put).toHaveBeenLastCalledWith('/api/auth/email', {email: 'alice@example.com'});
     });
 });

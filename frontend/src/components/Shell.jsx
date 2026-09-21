@@ -12,6 +12,7 @@ import {
     QuestionCircleOutlined,
     MoonOutlined,
     SunOutlined,
+    BellOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
@@ -32,6 +33,7 @@ const PAGE_META = {
     '/advice': {title: '纪律建议', subtitle: '查看今日与历史建议'},
     '/confirm': {title: '操作确认', subtitle: '处理所有待确认交易'},
     '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
+    '/alerts': {title: '价格提醒', subtitle: '阈值规则与提醒记录'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
     '/help': {title: '使用帮助', subtitle: '网站操作手册与常见问题'},
 };
@@ -54,6 +56,7 @@ const NAV_GROUPS = [
     },
     {
         key: 'system', label: '系统', children: [
+            {key: '/alerts', icon: <BellOutlined/>, label: '价格提醒'},
             {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
             {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
             {key: '/help', icon: <QuestionCircleOutlined/>, label: '使用帮助'},
@@ -72,6 +75,7 @@ const BOTTOM_NAV = [
 const BOTTOM_MORE = [
     {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
     {key: '/returns', icon: <LineChartOutlined/>, label: '累计收益'},
+    {key: '/alerts', icon: <BellOutlined/>, label: '价格提醒'},
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
     {key: '/help', icon: <QuestionCircleOutlined/>, label: '使用帮助'},

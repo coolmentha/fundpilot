@@ -10,6 +10,7 @@ const FundDetailPage = React.lazy(() => import('./pages/FundDetailPage.jsx'));
 const SignalsPage = React.lazy(() => import('./pages/SignalsPage.jsx'));
 const ConfirmPage = React.lazy(() => import('./pages/ConfirmPage.jsx'));
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage.jsx'));
+const AlertRulesPage = React.lazy(() => import('./pages/AlertRulesPage.jsx'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage.jsx'));
 const DcaManagementPage = React.lazy(() => import('./pages/DcaManagementPage.jsx'));
 const HelpPage = React.lazy(() => import('./pages/HelpPage.jsx'));
@@ -34,6 +35,7 @@ export default function App() {
                     <Route path="/advice" element={<SignalsPage/>}/>
                     <Route path="/confirm" element={<ConfirmPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>
+                    <Route path="/alerts" element={<AlertRulesPage/>}/>
                     <Route path="/admin" element={<AdminRoute/>}/>
                     <Route path="/help" element={<HelpPage/>}/>
                     <Route path="*" element={<Navigate to="/" replace/>}/>

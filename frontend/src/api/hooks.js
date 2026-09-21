@@ -654,3 +654,79 @@ export function useFundIntraday(portfolioFundId) {
         refetchInterval: () => isChinaMarketOpen() ? 30000 : false,
     });
 }
+
+// ===== 价格提醒 =====
+export function getAlertRules() {
+    return get('/api/alert-rules');
+}
+
+export function useAlertRules() {
+    return useQuery({queryKey: ['alert-rules'], queryFn: getAlertRules});
+}
+
+export function createAlertRule(body) {
+    return post('/api/alert-rules', body);
+}
+
+export function updateAlertRule({id, body}) {
+    return put(`/api/alert-rules/${id}`, body);
+}
+
+export function setAlertRuleEnabled({id, action}) {
+    return post(`/api/alert-rules/${id}/${action}`);
+}
+
+export function deleteAlertRule(id) {
+    return del(`/api/alert-rules/${id}`);
+}
+
+export function getAlertNotifications(limit = 100) {
+    return get(`/api/alert-notifications?limit=${limit}`);
+}
+
+export function updateSiteEmail(email) {
+    return put('/api/auth/email', {email});
+}
+
+/** 规则增删改后刷新规则列表（今日状态、上次触发时间随评估变化）。 */
+export function invalidateAlertRuleQueries(queryClient) {
+    queryClient.invalidateQueries({queryKey: ['alert-rules']});
+}
+
+const useInvalidateAlertRules = () => {
+    const qc = useQueryClient();
+    return () => invalidateAlertRuleQueries(qc);
+};
+
+export function useCreateAlertRule() {
+    const onSuccess = useInvalidateAlertRules();
+    return useMutation({mutationFn: createAlertRule, onSuccess});
+}
+
+export function useUpdateAlertRule() {
+    const onSuccess = useInvalidateAlertRules();
+    return useMutation({mutationFn: updateAlertRule, onSuccess});
+}
+
+export function useSetAlertRuleEnabled() {
+    const onSuccess = useInvalidateAlertRules();
+    return useMutation({mutationFn: setAlertRuleEnabled, onSuccess});
+}
+
+export function useDeleteAlertRule() {
+    const onSuccess = useInvalidateAlertRules();
+    return useMutation({mutationFn: deleteAlertRule, onSuccess});
+}
+
+/** 最近提醒记录，limit 默认 100 条。 */
+export function useAlertNotifications(limit = 100) {
+    return useQuery({
+        queryKey: ['alert-notifications', limit],
+        queryFn: () => getAlertNotifications(limit),
+    });
+}
+
+/** 更新当前用户的提醒邮箱，留空表示不发送提醒邮件。 */
+export function useUpdateSiteEmail() {
+    return useMutation({mutationFn: updateSiteEmail});
+}

@@ -132,5 +132,5 @@ export default function SiteAuthGate({children}) {
     }
     if (!authenticated) return React.createElement(LoginPage, {onLogin: login});
 
-    return React.createElement(SiteAuthContext.Provider, {value: {logout, user}}, children);
+    return React.createElement(SiteAuthContext.Provider, {value: {logout, user, updateUser: setUser}}, children);
 }

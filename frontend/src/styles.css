@@ -1685,3 +1685,65 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 .trend-line { fill: none; stroke: #1677ff; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .portfolio-trend-dates { display: flex; justify-content: space-between; color: #8c8c8c; font-size: 12px; }
 .portfolio-trend-empty { color: #8c8c8c; padding: 24px 0 8px; text-align: center; }
+
+/* ===== 价格提醒 ===== */
+.alert-rules-page {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.alert-rules-card,
+.alert-notifications-card {
+    min-width: 0;
+}
+
+.alert-rule-target,
+.alert-notification-funds {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.alert-rule-target span,
+.alert-notification-funds span {
+    overflow-wrap: anywhere;
+}
+
+.alert-rule-target .ant-typography,
+.alert-notification-funds .ant-typography {
+    font-size: 12px;
+}
+
+.alert-rule-target .ant-tag {
+    align-self: flex-start;
+    margin-inline-end: 0;
+}
+
+.alert-notification-summary {
+    font-size: 12px;
+}
+
+.alert-rule-wizard-steps {
+    margin-bottom: 20px;
+}
+
+.alert-rule-type-group .ant-radio-wrapper {
+    align-items: flex-start;
+}
+
+.alert-rule-type-hint {
+    display: block;
+    font-size: 12px;
+}
+
+.alert-rule-summary {
+    margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+    .alert-rule-wizard-steps .ant-steps-item-title {
+        font-size: 13px;
+    }
+}

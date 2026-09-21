@@ -28,8 +28,29 @@ import {
     verifySiteSession,
 } from '../api/client.js';
 import {SITE_LOGOUT_EVENT_KEY} from './siteAuthStorage.js';
+import {useSiteAuth} from './SiteAuthContext.js';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+function AuthProbe() {
+    const {user, updateUser} = useSiteAuth();
+    return React.createElement('div', null, `${user?.email}:${typeof updateUser}`);
+}
+
+class ProbeErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {message: ''};
+    }
+
+    static getDerivedStateFromError(error) {
+        return {message: error.message};
+    }
+
+    render() {
+        return this.state.message ? React.createElement('div', null, this.state.message) : this.props.children;
+    }
+}
 
 describe('SiteAuthGate', () => {
     let container;
@@ -44,7 +65,7 @@ describe('SiteAuthGate', () => {
         vi.clearAllMocks();
     });
 
-    async function renderGate() {
+    async function renderGate(children = <div>private-content</div>) {
         container = document.createElement('div');
         document.body.appendChild(container);
         root = createRoot(container);
@@ -52,7 +73,7 @@ describe('SiteAuthGate', () => {
         await act(async () => {
             root.render(
                 <QueryClientProvider client={queryClient}>
-                    <SiteAuthGate><div>private-content</div></SiteAuthGate>
+                    <SiteAuthGate>{children}</SiteAuthGate>
                 </QueryClientProvider>,
             );
         });
@@ -138,5 +159,22 @@ describe('SiteAuthGate', () => {
         })));
 
         expect(container.textContent).toBe('login');
+    });
+
+    it('exposes the signed-in user and updateUser to consumers', async () => {
+        verifySiteSession.mockResolvedValue({authenticated: true, email: 'alice@example.com'});
+        await renderGate(<AuthProbe/>);
+        await act(async () => undefined);
+
+        expect(container.textContent).toBe('alice@example.com:function');
+    });
+
+    it('rejects useSiteAuth outside the gate', async () => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(<ProbeErrorBoundary><AuthProbe/></ProbeErrorBoundary>));
+
+        expect(container.textContent).toContain('useSiteAuth must be used inside SiteAuthGate');
     });
 });

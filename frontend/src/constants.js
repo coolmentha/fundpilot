@@ -85,6 +85,13 @@ export const labels = {
     HARD_CONSTRAINT_BREACH: '硬约束违反',
     MIN_HOLD_DAYS_NOT_MET: '持有期不足',
     INSUFFICIENT_MARKET_DATA: '行情数据不足',
+    // AlertRuleScope
+    GLOBAL: '全部关注基金',
+    FUND: '指定基金',
+    // AlertRuleType
+    RISE: '上涨提醒',
+    PROFIT: '盈利提醒',
+    DROP: '下跌提醒',
 };
 
 // 标签颜色：成功态绿、进行中态金、终态默认、动作态蓝。

@@ -1,12 +1,14 @@
 import {useState} from 'react';
-import {App, Button, Card, InputNumber, Select, Space, Typography} from 'antd';
+import {App, Button, Card, Input, InputNumber, Select, Space, Typography} from 'antd';
 import {ImportOutlined} from '@ant-design/icons';
 import {
     useReplaceWatchedIndices,
     useInvestmentPlanBudget,
     useUpdateInvestmentPlanBudget,
+    useUpdateSiteEmail,
     useWatchedIndices,
 } from '../api/hooks.js';
+import {useSiteAuth} from '../auth/SiteAuthContext.js';
 import QueryErrorState from '../components/QueryErrorState.jsx';
 import YangjibaoImportModal from '../components/YangjibaoImportModal.jsx';
 import {isQueryDataReady} from '../querySafety.js';
@@ -36,17 +38,21 @@ const INDEX_OPTIONS = [
 
 export default function SettingsPage() {
     const {message} = App.useApp();
+    const {user, updateUser} = useSiteAuth();
     const budget = useInvestmentPlanBudget();
     const watchedIndices = useWatchedIndices();
     const updateBudget = useUpdateInvestmentPlanBudget();
     const replaceWatchedIndices = useReplaceWatchedIndices();
+    const updateEmail = useUpdateSiteEmail();
     const [selectedOverride, setSelectedOverride] = useState(null);
     const [monthlyBudgetOverride, setMonthlyBudgetOverride] = useState(undefined);
+    const [emailOverride, setEmailOverride] = useState(undefined);
     const [importOpen, setImportOpen] = useState(false);
     const selected = selectedOverride ?? watchedIndices.data?.indexCodes ?? [];
     const monthlyDcaBudget = monthlyBudgetOverride === undefined
         ? (budget.data?.monthlyBudget ?? null)
         : monthlyBudgetOverride;
+    const reminderEmail = emailOverride === undefined ? (user?.email ?? '') : emailOverride;
     const budgetReady = isQueryDataReady(budget);
     const watchedIndicesReady = isQueryDataReady(watchedIndices);
 
@@ -60,6 +66,13 @@ export default function SettingsPage() {
         if (!watchedIndicesReady) return;
         await replaceWatchedIndices.mutateAsync(selected);
         message.success('关注指数已更新');
+    };
+
+    const saveReminderEmail = async () => {
+        const updated = await updateEmail.mutateAsync((reminderEmail ?? '').trim());
+        if (updated) updateUser?.(updated);
+        setEmailOverride(undefined);
+        message.success('提醒邮箱已更新');
     };
 
     return (
@@ -99,6 +112,22 @@ export default function SettingsPage() {
                     />
                     <Button type="primary" loading={replaceWatchedIndices.isPending}
                             disabled={!watchedIndicesReady} onClick={saveWatchedIndices}>保存关注指数</Button>
+                </div>
+                <div>
+                    <Text type="secondary" style={{display: 'block', marginBottom: 8}}>提醒邮箱</Text>
+                    <Text type="secondary" style={{display: 'block', marginBottom: 12, fontSize: 12}}>
+                        价格提醒邮件将发送到此邮箱，留空则不发送。
+                    </Text>
+                    <Input
+                        aria-label="提醒邮箱"
+                        type="email"
+                        value={reminderEmail}
+                        onChange={(event) => setEmailOverride(event.target.value)}
+                        placeholder="未设置"
+                        className="full-width"
+                    />
+                    <Button type="primary" loading={updateEmail.isPending}
+                            onClick={saveReminderEmail}>保存提醒邮箱</Button>
                 </div>
                 {budget.isError && <QueryErrorState onRetry={budget.refetch} description="月度预算加载失败"/>}
                 {watchedIndices.isError && <QueryErrorState onRetry={watchedIndices.refetch} description="关注指数加载失败"/>}
