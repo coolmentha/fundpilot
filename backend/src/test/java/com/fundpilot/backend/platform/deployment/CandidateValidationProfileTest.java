@@ -19,6 +19,8 @@ class CandidateValidationProfileTest {
                     .isTrue();
             assertThat(context.getEnvironment().getProperty("spring.flyway.enabled", Boolean.class))
                     .isFalse();
+            assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto"))
+                    .isEqualTo("none");
             assertThat(context.getEnvironment().getProperty(
                     "spring.modulith.events.republish-outstanding-events-on-restart", Boolean.class))
                     .isFalse();

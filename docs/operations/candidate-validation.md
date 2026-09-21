@@ -4,7 +4,7 @@
 
 候选后端只用于启动与 `/actuator/health` 检查，不承接业务流量。`validation` Profile 明确关闭 Flyway 和 Spring Modulith 未完成事件重放；调度注册、管理员初始化、账本重建、交易补偿、交易日历同步与行情缓存预热也不会在候选启动时执行。部署脚本另外使用只读容器文件系统和 PostgreSQL `default_transaction_read_only=on`，即使遗漏新的启动写入也会失败而不是落库。
 
-候选验证要求已有 `fundpilot_default` 网络、健康的 `fundpilot-db` 与 `fundpilot-redis`，数据库 schema 必须是已确认迁移后的生产等效版本。候选模式不创建 schema、不修复 Flyway 历史，也不能替代迁移评审。
+候选验证要求已有 `fundpilot_default` 网络、健康的 `fundpilot-db` 与 `fundpilot-redis`。候选容器在迁移之前启动，面对的是上一版本的 schema，因此 `validation` Profile 使用 `spring.jpa.hibernate.ddl-auto=none`：候选只回答「这个镜像能否在等效配置下起来」，不要求 schema 已是迁移后的状态，否则任何加表或加列的 release 都会在候选阶段必然失败。schema 等价性由迁移后正常模式的 `wait_for_backend`（`ddl-auto=validate`）兜底，该处失败会连同数据库一起回滚。候选模式不创建 schema、不修复 Flyway 历史，也不能替代迁移评审。
 
 ## 自动部署
 

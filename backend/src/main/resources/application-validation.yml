@@ -1,6 +1,12 @@
 spring:
   flyway:
     enabled: false
+  jpa:
+    hibernate:
+      # 候选容器跑在迁移之前,schema 仍是上一版本;此时做 ddl-auto=validate 会让
+      # 任何加表/加列的 release 在候选阶段必然失败。schema 等价性由迁移后正常模式的
+      # wait_for_backend(ddl-auto=validate)兜底,失败会连数据库一起回滚。
+      ddl-auto: none
   modulith:
     events:
       republish-outstanding-events-on-restart: false
