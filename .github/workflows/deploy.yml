@@ -5,6 +5,7 @@
 # 价格提醒邮件(可选):MAIL_HOST / MAIL_USERNAME / MAIL_PASSWORD / MAIL_PORT / MAIL_SMTP_SSL
 # (未配置时提醒记录为 FAILED,不影响其它功能;发件人默认取 MAIL_USERNAME)
 # VPS 须先 docker login ghcr.io(拉私有镜像)；YANGJIBAO_SECRET 优先使用仓库 Secret，兼容已有 VPS .env
+# VPS 拉 GHCR 会随机被限速到几十 KB/s，默认先走 GHCR 镜像站(可用仓库变量 GHCR_MIRROR 覆盖，留空则直连)
 name: Deploy
 
 on:
@@ -165,6 +166,8 @@ jobs:
       FUNDPILOT_ALERTING_ENABLED: ${{ secrets.FUNDPILOT_ALERTING_ENABLED }}
       FUNDPILOT_ALERTING_EVALUATION_CRON: ${{ secrets.FUNDPILOT_ALERTING_EVALUATION_CRON }}
       DEPLOYMENT_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+      # GHCR 镜像站(不含协议)；留空表示直连 ghcr.io
+      GHCR_MIRROR: ${{ vars.GHCR_MIRROR || 'ghcr.dockerproxy.net' }}
     steps:
       - name: SSH deploy
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
@@ -173,7 +176,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 80m
-          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,YANGJIBAO_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,MAIL_HOST,MAIL_PORT,MAIL_USERNAME,MAIL_PASSWORD,MAIL_SMTP_AUTH,MAIL_SMTP_STARTTLS,MAIL_SMTP_SSL,FUNDPILOT_ALERTING_ENABLED,FUNDPILOT_ALERTING_EVALUATION_CRON,DEPLOYMENT_TOKEN
+          envs: VPS_PATH,RELEASE_TAG,IMAGE_TAG,BACKEND_IMAGE,FRONTEND_IMAGE,PUBLIC_URL,DB_USERNAME,DB_PASSWORD,FUNDPILOT_SESSION_SECRET,YANGJIBAO_SECRET,FUNDPILOT_BOOTSTRAP_USERNAME,FUNDPILOT_BOOTSTRAP_PASSWORD,MAIL_HOST,MAIL_PORT,MAIL_USERNAME,MAIL_PASSWORD,MAIL_SMTP_AUTH,MAIL_SMTP_STARTTLS,MAIL_SMTP_SSL,FUNDPILOT_ALERTING_ENABLED,FUNDPILOT_ALERTING_EVALUATION_CRON,DEPLOYMENT_TOKEN,GHCR_MIRROR
           script: |
             set -Eeuo pipefail
             umask 077
@@ -685,19 +688,34 @@ jobs:
             }
 
             # 镜像拉取不需要停写；完成后再进入有硬上限的维护阶段。
-            # 后端镜像含 JDK + fat jar,VPS 到 GHCR 带宽慢时单层下载可能超过 15 分钟(v0.11.38 两次拉取超时)。
-            timeout --foreground --kill-after=5s 1800s docker pull "$BACKEND_IMAGE" &
-            backend_pull_pid=$!
-            timeout --foreground --kill-after=5s 1800s docker pull "$FRONTEND_IMAGE" &
-            frontend_pull_pid=$!
+            # GHCR 到 VPS 的国际链路会随机把单条 TCP 连接限速到几十 KB/s(同一层两次实测差 300 倍),
+            # 而 docker 不会重试「慢但没断」的连接,曾导致单次拉取 23 分钟(v0.11.38 两次拉取超时)。
+            # 先走 GHCR 镜像站(并发聚合约 8MB/s,按 digest 拉取仍由 docker 校验完整性),失败再回退直连。
+            pull_image() {
+              canonical="$1"
+              if [ -n "${GHCR_MIRROR:-}" ]; then
+                mirror_ref="${canonical/ghcr.io/${GHCR_MIRROR}}"
+                if timeout --foreground --kill-after=5s 900s docker pull "$mirror_ref"; then
+                  # 镜像层已由镜像站落盘,再从 canonical 补一次 manifest/RepoDigest 注册(仅几 KB)。
+                  timeout --foreground --kill-after=5s 300s docker pull "$canonical"
+                  return $?
+                fi
+                echo "mirror pull failed, falling back to direct: $canonical" >&2
+              fi
+              timeout --foreground --kill-after=5s 1800s docker pull "$canonical"
+            }
             pull_status=0
+            pull_image "$BACKEND_IMAGE" &
+            backend_pull_pid=$!
+            pull_image "$FRONTEND_IMAGE" &
+            frontend_pull_pid=$!
             wait "$backend_pull_pid" || {
               pull_status=$?
-              echo "backend image pull failed: exit=$pull_status, timeout=1800s (124 means timeout)" >&2
+              echo "backend image pull failed: exit=$pull_status (124 means timeout)" >&2
             }
             wait "$frontend_pull_pid" || {
               pull_status=$?
-              echo "frontend image pull failed: exit=$pull_status, timeout=1800s (124 means timeout)" >&2
+              echo "frontend image pull failed: exit=$pull_status (124 means timeout)" >&2
             }
             [ "$pull_status" -eq 0 ] || exit "$pull_status"
             timeout --foreground --kill-after=5s 30s docker network inspect fundpilot_default >/dev/null
