@@ -30,6 +30,18 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  mail:
+    # SMTP 未配置时主体功能不受影响,提醒记录为 FAILED。
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:true}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 
 server:
   port: ${SERVER_PORT:8080}
@@ -76,3 +88,12 @@ fundpilot:
     session-ttl: ${YANGJIBAO_SESSION_TTL:PT30M}
     session-retention: ${YANGJIBAO_SESSION_RETENTION:P7D}
     timeout: ${YANGJIBAO_TIMEOUT:PT15S}
+  alerting:
+    # 关闭后不注册价格提醒评估任务;规则与历史仍可读写。
+    enabled: ${FUNDPILOT_ALERTING_ENABLED:true}
+    # 每交易日评估时点(Asia/Shanghai);每条规则每个交易日最多成功发送 1 次。
+    evaluation-cron: "${FUNDPILOT_ALERTING_EVALUATION_CRON:0 30 14 * * MON-FRI}"
+    # 发件人;留空表示未配置邮件服务,提醒将记录为失败。
+    mail-from: ${MAIL_FROM:}
+    # 提醒邮件正文里的详情链接前缀。
+    app-base-url: ${FUNDPILOT_APP_BASE_URL:http://localhost:5173}

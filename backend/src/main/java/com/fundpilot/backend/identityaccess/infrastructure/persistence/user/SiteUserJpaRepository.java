@@ -14,6 +14,8 @@ interface SiteUserJpaRepository extends JpaRepository<SiteUserJpaEntity, Long> {
 
     Optional<SiteUserJpaEntity> findByUsername(String username);
 
+    Optional<SiteUserJpaEntity> findFirstByEmailIgnoreCase(String email);
+
     Optional<SiteUserJpaEntity> findFirstByRoleAndEnabledTrueOrderByIdAsc(UserRole role);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

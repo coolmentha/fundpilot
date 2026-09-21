@@ -31,6 +31,11 @@ class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByEmailIgnoreCase(String email) {
+        return repository.findFirstByEmailIgnoreCase(email).map(SiteUserPersistenceMapper::toDomain);
+    }
+
+    @Override
     public Optional<User> findFirstEnabledByRole(UserRole role) {
         return repository.findFirstByRoleAndEnabledTrueOrderByIdAsc(role)
                 .map(SiteUserPersistenceMapper::toDomain);

@@ -49,9 +49,10 @@ public class AuthenticationQueryHandler {
     }
 
     private AuthenticatedActor actor(User user) {
-        return new AuthenticatedActor(user.id(), user.username(), ActorRole.valueOf(user.role().name()));
+        return new AuthenticatedActor(user.id(), user.username(), ActorRole.valueOf(user.role().name()),
+                user.email());
     }
 
-    public record AuthenticatedActor(long userId, String username, ActorRole role) {
+    public record AuthenticatedActor(long userId, String username, ActorRole role, String email) {
     }
 }

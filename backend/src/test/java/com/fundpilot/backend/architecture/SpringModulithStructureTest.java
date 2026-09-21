@@ -26,12 +26,14 @@ class SpringModulithStructureTest {
             "discipline",
             "investmentplan",
             "insights",
-            "importing"
+            "importing",
+            "alerting"
     );
 
     private static final Set<String> EXPECTED_MODULES = Set.of(
             "identityaccess", "productcatalog", "portfolio", "accounting", "marketdata",
-            "discipline", "investmentplan", "insights", "importing", "platform", "sharedkernel"
+            "discipline", "investmentplan", "insights", "importing", "alerting",
+            "platform", "sharedkernel"
     );
 
     @Test

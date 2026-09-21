@@ -11,6 +11,9 @@ public interface UserRepository {
 
     Optional<User> findByUsername(String username);
 
+    /** 按邮箱查账号（邮箱不区分大小写），用于自助设置提醒邮箱时的唯一性校验。 */
+    Optional<User> findByEmailIgnoreCase(String email);
+
     Optional<User> findFirstEnabledByRole(UserRole role);
 
     Optional<User> lockFirstEnabledByRole(UserRole role);

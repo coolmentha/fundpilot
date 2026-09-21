@@ -9,7 +9,7 @@ final class SiteUserPersistenceMapper {
 
     static User toDomain(SiteUserJpaEntity entity) {
         return User.rehydrate(entity.getId(), entity.getVersion(), entity.getUsername(), entity.getPasswordHash(),
-                entity.getRole(), entity.isEnabled());
+                entity.getRole(), entity.isEnabled(), entity.getEmail());
     }
 
     static SiteUserJpaEntity toEntity(User user) {
@@ -20,6 +20,7 @@ final class SiteUserPersistenceMapper {
         entity.setPasswordHash(user.passwordHash());
         entity.setRole(user.role());
         entity.setEnabled(user.enabled());
+        entity.setEmail(user.email());
         return entity;
     }
 
@@ -27,5 +28,6 @@ final class SiteUserPersistenceMapper {
         entity.setPasswordHash(user.passwordHash());
         entity.setRole(user.role());
         entity.setEnabled(user.enabled());
+        entity.setEmail(user.email());
     }
 }

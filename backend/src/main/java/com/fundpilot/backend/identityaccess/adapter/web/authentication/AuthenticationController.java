@@ -41,7 +41,8 @@ public class AuthenticationController {
                         request.getHeader(LoginClientAddressResolver.FORWARDED_FOR_HEADER)));
         response.addHeader(HttpHeaders.SET_COOKIE,
                 sessionCookie(request, result.sessionToken()).build().toString());
-        return IdentityApiResponse.ok(new AuthUserView(result.userId(), result.username(), result.role().name()));
+        return IdentityApiResponse.ok(new AuthUserView(result.userId(), result.username(), result.role().name(),
+                result.email()));
     }
 
     @GetMapping("/verify")
@@ -49,7 +50,18 @@ public class AuthenticationController {
     public IdentityApiResponse<AuthUserView> verify(HttpServletRequest request) {
         RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
         var actor = queries.requireActive(identity.userId());
-        return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name()));
+        return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(),
+                actor.email()));
+    }
+
+    @PutMapping("/email")
+    @Operation(summary = "修改当前用户提醒邮箱")
+    public IdentityApiResponse<AuthUserView> changeEmail(@RequestBody EmailChangeRequest emailChange,
+                                                        HttpServletRequest request) {
+        RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
+        String email = commands.changeEmail(identity.userId(), emailChange == null ? null : emailChange.email());
+        var actor = queries.requireActive(identity.userId());
+        return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(), email));
     }
 
     @PutMapping("/password")
@@ -91,10 +103,16 @@ public class AuthenticationController {
     public record PasswordChangeRequest(String currentPassword, String newPassword) {
     }
 
+    @Schema(description = "提醒邮箱变更请求")
+    public record EmailChangeRequest(
+            @Schema(description = "提醒邮箱；留空表示不接收提醒邮件", example = "zhangsan@example.com") String email) {
+    }
+
     @Schema(description = "当前登录用户视图")
     public record AuthUserView(
             @Schema(description = "用户ID", example = "1") long id,
             @Schema(description = "用户名", example = "zhangsan") String username,
-            @Schema(description = "用户角色", example = "ADMIN") String role) {
+            @Schema(description = "用户角色", example = "ADMIN") String role,
+            @Schema(description = "提醒邮箱", example = "zhangsan@example.com") String email) {
     }
 }

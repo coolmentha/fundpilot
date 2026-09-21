@@ -48,4 +48,6 @@ public class SiteUserJpaEntity {
     private UserRole role;
     @Column(nullable = false)
     private boolean enabled = true;
+    @Column(length = 255)
+    private String email;
 }

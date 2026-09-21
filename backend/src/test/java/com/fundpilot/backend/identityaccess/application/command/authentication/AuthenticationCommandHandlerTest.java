@@ -34,7 +34,7 @@ class AuthenticationCommandHandlerTest {
         AuthenticationObservability observability = mock(AuthenticationObservability.class);
         when(limiter.check(SOURCE, "alice")).thenReturn(new LoginRateLimiter.Decision(false, 30));
         var handler = new AuthenticationCommandHandler(users, passwords, sessions, legacyAccessKey,
-                limiter, observability, new PasswordPolicy());
+                limiter, observability, new PasswordPolicy(), new EmailPolicy());
 
         assertThatThrownBy(() -> handler.login(" alice ", "wrong-password", null, SOURCE))
                 .isInstanceOf(AuthenticationFailure.class)
@@ -56,13 +56,13 @@ class AuthenticationCommandHandlerTest {
         SessionTokenGateway sessions = mock(SessionTokenGateway.class);
         LoginRateLimiter limiter = mock(LoginRateLimiter.class);
         AuthenticationObservability observability = mock(AuthenticationObservability.class);
-        User user = User.rehydrate(7L, "alice", "stored-hash", UserRole.USER, true);
+        User user = User.rehydrate(7L, "alice", "stored-hash", UserRole.USER, true, null);
         when(limiter.check(SOURCE, "alice")).thenReturn(new LoginRateLimiter.Decision(true, 0));
         when(users.findByUsername("alice")).thenReturn(Optional.of(user));
         when(passwords.matches("correct-password", "stored-hash")).thenReturn(true);
         when(sessions.issue(7L, UserRole.USER, 0)).thenReturn("session-token");
         var handler = new AuthenticationCommandHandler(users, passwords, sessions,
-                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy());
+                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy(), new EmailPolicy());
 
         var result = handler.login(" alice ", "correct-password", null, SOURCE);
 
@@ -84,7 +84,7 @@ class AuthenticationCommandHandlerTest {
         when(users.findByUsername("ghost")).thenReturn(Optional.empty());
         when(passwords.matchesUnknown("wrong-password")).thenReturn(false);
         var handler = new AuthenticationCommandHandler(users, passwords, mock(SessionTokenGateway.class),
-                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy());
+                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy(), new EmailPolicy());
 
         assertThatThrownBy(() -> handler.login("ghost", "wrong-password", null, SOURCE))
                 .isInstanceOf(AuthenticationFailure.class)
@@ -101,12 +101,12 @@ class AuthenticationCommandHandlerTest {
         PasswordHashGateway passwords = mock(PasswordHashGateway.class);
         LoginRateLimiter limiter = mock(LoginRateLimiter.class);
         AuthenticationObservability observability = mock(AuthenticationObservability.class);
-        User user = User.rehydrate(8L, "disabled", "stored-hash", UserRole.USER, false);
+        User user = User.rehydrate(8L, "disabled", "stored-hash", UserRole.USER, false, null);
         when(limiter.check(SOURCE, "disabled")).thenReturn(new LoginRateLimiter.Decision(true, 0));
         when(users.findByUsername("disabled")).thenReturn(Optional.of(user));
         when(passwords.matches("correct-password", "stored-hash")).thenReturn(true);
         var handler = new AuthenticationCommandHandler(users, passwords, mock(SessionTokenGateway.class),
-                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy());
+                mock(LegacyAccessKeyGateway.class), limiter, observability, new PasswordPolicy(), new EmailPolicy());
 
         assertThatThrownBy(() -> handler.login("disabled", "correct-password", null, SOURCE))
                 .isInstanceOf(AuthenticationFailure.class)
@@ -123,13 +123,13 @@ class AuthenticationCommandHandlerTest {
         LegacyAccessKeyGateway legacyAccessKey = mock(LegacyAccessKeyGateway.class);
         LoginRateLimiter limiter = mock(LoginRateLimiter.class);
         AuthenticationObservability observability = mock(AuthenticationObservability.class);
-        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true);
+        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true, null);
         when(legacyAccessKey.isConfigured()).thenReturn(true);
         when(legacyAccessKey.matches("legacy-key")).thenReturn(true);
         when(users.findFirstEnabledByRole(UserRole.ADMIN)).thenReturn(Optional.of(admin));
         when(sessions.issue(1L, UserRole.ADMIN, 0)).thenReturn("session-token");
         var handler = new AuthenticationCommandHandler(users, mock(PasswordHashGateway.class), sessions,
-                legacyAccessKey, limiter, observability, new PasswordPolicy());
+                legacyAccessKey, limiter, observability, new PasswordPolicy(), new EmailPolicy());
 
         var result = handler.login(null, null, "legacy-key", SOURCE);
 

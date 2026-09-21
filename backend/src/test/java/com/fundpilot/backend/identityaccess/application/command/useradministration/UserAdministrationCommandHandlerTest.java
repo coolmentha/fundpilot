@@ -23,7 +23,7 @@ class UserAdministrationCommandHandlerTest {
     void cannotDemoteLastEnabledAdmin() {
         UserRepository users = mock(UserRepository.class);
         PasswordHashGateway passwords = mock(PasswordHashGateway.class);
-        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true);
+        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true, null);
         when(users.findById(1L)).thenReturn(Optional.of(admin));
         when(users.lockFirstEnabledByRole(UserRole.ADMIN)).thenReturn(Optional.of(admin));
         when(users.countEnabledByRole(UserRole.ADMIN)).thenReturn(1L);
@@ -39,7 +39,7 @@ class UserAdministrationCommandHandlerTest {
     @Test
     void cannotDisableLastEnabledAdmin() {
         UserRepository users = mock(UserRepository.class);
-        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true);
+        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true, null);
         when(users.findById(1L)).thenReturn(Optional.of(admin));
         when(users.lockFirstEnabledByRole(UserRole.ADMIN)).thenReturn(Optional.of(admin));
         when(users.countEnabledByRole(UserRole.ADMIN)).thenReturn(1L);
@@ -87,7 +87,7 @@ class UserAdministrationCommandHandlerTest {
     void existingBootstrapAdminDoesNotRevalidateConfiguredPassword() {
         UserRepository users = mock(UserRepository.class);
         PasswordHashGateway passwords = mock(PasswordHashGateway.class);
-        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true);
+        User admin = User.rehydrate(1L, "admin", "hash", UserRole.ADMIN, true, null);
         when(users.findByUsername("admin")).thenReturn(Optional.of(admin));
         var handler = new UserAdministrationCommandHandler(users, passwords, new PasswordPolicy());
 

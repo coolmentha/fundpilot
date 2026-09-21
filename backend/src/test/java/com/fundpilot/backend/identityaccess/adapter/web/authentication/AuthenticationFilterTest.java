@@ -38,7 +38,7 @@ class AuthenticationFilterTest {
     @Test
     void adminOrdinaryRequestBindsItsRealIdentity() throws Exception {
         when(authentication.authenticate("key", null))
-                .thenReturn(Optional.of(new AuthenticatedActor(7L, "admin", ActorRole.ADMIN)));
+                .thenReturn(Optional.of(new AuthenticatedActor(7L, "admin", ActorRole.ADMIN, null)));
         MockHttpServletRequest request = apiRequest("/api/funds");
         request.addHeader(AuthenticationFilter.HEADER_NAME, "key");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -54,7 +54,7 @@ class AuthenticationFilterTest {
     @Test
     void regularUserCannotAccessAdminEntry() throws Exception {
         when(authentication.authenticate(isNull(), isNull()))
-                .thenReturn(Optional.of(new AuthenticatedActor(8L, "user", ActorRole.USER)));
+                .thenReturn(Optional.of(new AuthenticatedActor(8L, "user", ActorRole.USER, null)));
         MockHttpServletRequest request = apiRequest("/api/admin/users");
         MockHttpServletResponse response = new MockHttpServletResponse();
 

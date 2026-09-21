@@ -84,6 +84,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <!-- 邮件提醒:基金价格变动邮件通知 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
         <!-- Swagger/OpenAPI 注解(@Tag/@Operation/@Schema):仅编译期契约文档,不引入 springdoc 运行时端点 -->
         <dependency>
             <groupId>io.swagger.core.v3</groupId>

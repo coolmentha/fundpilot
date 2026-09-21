@@ -9,6 +9,8 @@ import com.fundpilot.backend.identityaccess.domain.user.User;
 import com.fundpilot.backend.identityaccess.domain.user.UserRepository;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.ActorRole;
+import com.fundpilot.backend.platform.web.error.BusinessException;
+import com.fundpilot.backend.platform.web.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class AuthenticationCommandHandler {
     private final LoginRateLimiter loginRateLimiter;
     private final AuthenticationObservability observability;
     private final PasswordPolicy passwordPolicy;
+    private final EmailPolicy emailPolicy;
 
     @Transactional(readOnly = true)
     public LoginResult login(String username, String password, String suppliedLegacyKey) {
@@ -83,13 +86,30 @@ public class AuthenticationCommandHandler {
         return true;
     }
 
+    /** 更新当前用户的提醒邮箱；传入 null/空白表示清除邮箱（不再接收提醒邮件）。 */
+    @Transactional
+    public String changeEmail(long userId, String email) {
+        User user = users.findById(userId).filter(User::enabled).orElseThrow(this::unauthorized);
+        String normalized = emailPolicy.normalize(email);
+        if (normalized != null) {
+            users.findByEmailIgnoreCase(normalized)
+                    .filter(owner -> !owner.id().equals(userId))
+                    .ifPresent(owner -> {
+                        throw new BusinessException(ErrorCode.USER_EMAIL_INVALID, "该邮箱已被其它账号使用");
+                    });
+        }
+        user.changeEmail(normalized);
+        users.save(user);
+        return user.email();
+    }
+
     private String normalizeUsername(String username) {
         return username == null ? "" : username.trim();
     }
 
     private LoginResult result(User user) {
         long userVersion = user.version() == null ? 0L : user.version();
-        return new LoginResult(user.id(), user.username(), ActorRole.valueOf(user.role().name()),
+        return new LoginResult(user.id(), user.username(), ActorRole.valueOf(user.role().name()), user.email(),
                 sessions.issue(user.id(), user.role(), userVersion));
     }
 
@@ -97,6 +117,6 @@ public class AuthenticationCommandHandler {
         return new AuthenticationFailure(AuthenticationFailure.Code.ADMIN_UNAUTHORIZED, "用户名或密码错误");
     }
 
-    public record LoginResult(long userId, String username, ActorRole role, String sessionToken) {
+    public record LoginResult(long userId, String username, ActorRole role, String email, String sessionToken) {
     }
 }
