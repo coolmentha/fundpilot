@@ -254,12 +254,15 @@
          (例如 exception/GlobalExceptionHandlerTest.java 实际声明 platform.web.error),
          所以分片边界一律按声明包划分。新增顶层业务包必须同时加入某个分片,
          由 architecture/TestShardAssignmentTest 守卫,漏加会让该包在 CI 完全不被执行。
-         分片权重取自分片 CI(run 35731915355)的实测每包耗时,按最长处理时间优先装箱:
-         1≈150s(accounting 86 + productcatalog 32 + architecture 22 + insights 10)、
-         2≈154s(portfolio 48 + marketdata 43 + alerting 31 + user 17 + importing 15)、
-         3≈146s(discipline 46 + investmentplan 45 + identityaccess 30 + platform 20 + config 5 + 其余 1)。
+         分片权重取自分片 CI 的实测每包耗时,按最长处理时间优先装箱(run 35762077689,测试耗时合计 389s):
+         1≈129s(accounting 50 + productcatalog 37 + architecture 34 + insights 9)、
+         2≈127s(portfolio 43 + marketdata 36 + alerting 26 + importing 16 + user 7)、
+         3≈133s(investmentplan 71 + identityaccess 22 + platform 15 + config 12 + discipline 9 + market 4)。
          注意每包耗时不是常量:每个测试 JVM 都要重付一次 Spring 上下文启动(实测 12-16s),
-         分片越细总耗时膨胀越大(3 分片实测 1.44x),调边界必须以新的一轮 CI 实测为准。 -->
+         且同一个包在不同分片里的耗时差别很大(例如 investmentplan 在旧 shard-2 是 45s、在 shard-3 是 71s),
+         所以调边界只能按新一轮 CI 实测重新装箱,不要拿串行基线或上一轮的包耗时直接推算。
+         分片后仍有约 20-59s/片 的无归属耗时(编译 + fork 启动 + 上下文切换),
+         这部分不随包成本变化,是分片墙钟收益低于分片数的主要原因。 -->
     <profiles>
         <profile>
             <id>live</id>
