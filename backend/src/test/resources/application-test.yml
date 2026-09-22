@@ -1,4 +1,6 @@
-# Test profile:使用独立 fundpilot_test schema，禁止连接或清理业务 public schema。
+# Test profile:使用独立测试 schema，禁止连接或清理业务 public schema。
+# schema 名由 surefire 按 fork 注入(pom.xml 的 fundpilot.test.schema),并行时每个 fork 独占一个,
+# 避免多个 fork 同时 DROP SCHEMA CASCADE 互相踩踏。IDE 单跑无该属性,回退 fundpilot_test。
 fundpilot:
   admin:
     # 仅测试会话签名，不用于任何生产环境。
@@ -13,17 +15,17 @@ spring:
       repositories:
         enabled: false
   datasource:
-    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=fundpilot_test}
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=${fundpilot.test.schema:fundpilot_test}}
     username: ${TEST_DB_USERNAME:fundpilot}
     password: ${TEST_DB_PASSWORD:fundpilot}
   flyway:
-    schemas: fundpilot_test
-    default-schema: fundpilot_test
+    schemas: ${fundpilot.test.schema:fundpilot_test}
+    default-schema: ${fundpilot.test.schema:fundpilot_test}
     create-schemas: true
   jpa:
     properties:
       hibernate:
-        default_schema: fundpilot_test
+        default_schema: ${fundpilot.test.schema:fundpilot_test}
 
 # 关闭交易日历启动预热:避免集成测试启动时灌入 8000+ 条新浪交易日,
 # 与测试夹具日期(如 2026-06-22)撞唯一索引 uq_trading_calendar_date。

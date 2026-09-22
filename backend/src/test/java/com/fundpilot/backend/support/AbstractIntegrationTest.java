@@ -15,7 +15,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * 集成测试基类——使用本地 PostgreSQL 的独立 {@code fundpilot_test} schema，
+ * 集成测试基类——使用本地 PostgreSQL 的独立测试 schema（默认 {@code fundpilot_test}，
+ * 并行执行时由 surefire 按 fork 分配 {@code fundpilot_test_w1..w4}），
  * Flyway 真实跑迁移,Hibernate {@code validate} 真实校验 JPA 字段映射与表列一致。
  * <p>
  * 用 {@link SpringBootTest} 而非 {@code @DataJpaTest}:{@code @DataJpaTest} 切片默认排除

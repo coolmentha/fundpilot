@@ -224,6 +224,14 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <excludedGroups>live</excludedGroups>
+                    <!-- 并行执行:按类分片到 4 个 fork,各占一个 CPU。
+                         每个 fork 拿到独立的 fundpilot.test.schema,配套 application-test.yml 的同名占位符,
+                         使 TestDatabaseSchema 的 DROP SCHEMA CASCADE 只作用于本 fork。 -->
+                    <forkCount>4</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <systemPropertyVariables>
+                        <fundpilot.test.schema>fundpilot_test_w${surefire.forkNumber}</fundpilot.test.schema>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <!-- Jacoco:prepare-agent 注入 agent 到 surefire,report/check 在 verify 生成报告并阻断覆盖率回退。 -->
