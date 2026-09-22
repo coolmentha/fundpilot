@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Alert, Col, DatePicker, Row, Segmented, Skeleton, Statistic, Table, Typography} from 'antd';
+import {Alert, Col, DatePicker, Row, Segmented, Skeleton, Statistic, Table, Tooltip, Typography} from 'antd';
 import {Link} from 'react-router-dom';
 import {usePortfolioReturns, usePortfolioReturnTrends} from '../api/hooks.js';
 import {date, money, percent, pnlColor, signedMoney} from '../constants.js';
@@ -91,15 +91,23 @@ function ReturnTrendChart({points}) {
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = max - min || 1;
-    const coords = values.map((value, index) => {
-        const x = points.length === 1 ? 50 : index * 100 / (points.length - 1);
-        return `${x},${92 - (value - min) * 78 / span}`;
-    }).join(' ');
+    const xOf = (index) => points.length === 1 ? 50 : index * 100 / (points.length - 1);
+    const yOf = (value) => 92 - (value - min) * 78 / span;
+    const coords = values.map((value, index) => `${xOf(index)},${yOf(value)}`).join(' ');
     return <div className="portfolio-trend-chart" aria-label="组合累计收益趋势">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img">
-            <line x1="0" y1="92" x2="100" y2="92" className="trend-axis"/>
-            <polyline points={coords} className="trend-line"/>
-        </svg>
+        <div className="portfolio-trend-plot">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img">
+                <line x1="0" y1="92" x2="100" y2="92" className="trend-axis"/>
+                <polyline points={coords} className="trend-line"/>
+            </svg>
+            {points.map((point, index) => {
+                const label = `${date(point.date)} 累计收益 ${signedMoney(point.totalReturn)}`;
+                return <Tooltip key={point.date} title={label}>
+                    <span className="trend-point" tabIndex={0} aria-label={label}
+                          style={{left: `${xOf(index)}%`, top: `${yOf(Number(point.totalReturn))}%`}}/>
+                </Tooltip>;
+            })}
+        </div>
         <div className="portfolio-trend-dates"><span>{date(points[0].date)}</span><span>{date(points.at(-1).date)}</span></div>
     </div>;
 }

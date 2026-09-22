@@ -1681,6 +1681,10 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 .portfolio-trend-stats { margin-top: 16px; }
 .portfolio-trend-chart { margin-top: 12px; border: 1px solid var(--border-color, #f0f0f0); padding: 12px 12px 4px; }
 .portfolio-trend-chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.portfolio-trend-plot { position: relative; }
+.trend-point { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+    background: #1677ff; border: 1px solid #fff; box-sizing: border-box; cursor: pointer; }
+.trend-point:hover, .trend-point:focus-visible { outline: none; width: 12px; height: 12px; margin: -6px 0 0 -6px; }
 .trend-axis { stroke: #d9d9d9; stroke-width: .6; stroke-dasharray: 2 2; }
 .trend-line { fill: none; stroke: #1677ff; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .portfolio-trend-dates { display: flex; justify-content: space-between; color: #8c8c8c; font-size: 12px; }

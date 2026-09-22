@@ -24,6 +24,7 @@ vi.mock('antd', async () => {
                 {key: `${row.portfolioFundId}-${column.title}`},
                 column.render ? column.render(row[column.dataIndex], row) : row[column.dataIndex])))),
         Typography: {Text: Box},
+        Tooltip: ({title, children}) => React.createElement('div', {title}, children),
     };
 });
 
@@ -89,6 +90,19 @@ describe('PortfolioReturns', () => {
         expect(container.textContent).toContain('1 只基金净值未覆盖本区间');
         expect(container.querySelector('[aria-label="组合累计收益趋势"]')).not.toBeNull();
         expect(container.querySelector('a').getAttribute('href')).toBe('/funds/12');
+    });
+
+    it('labels every trend point with its own date and return amount', async () => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+        await act(async () => root.render(<MemoryRouter><PortfolioReturns/></MemoryRouter>));
+
+        const markers = [...container.querySelectorAll('.trend-point')];
+        expect(markers.map((marker) => marker.getAttribute('aria-label'))).toEqual([
+            '2026-07-28 累计收益 +¥20.00',
+            '2026-07-29 累计收益 +¥26.00',
+        ]);
     });
 
     it('distinguishes trend loading and failure from an empty result', async () => {
