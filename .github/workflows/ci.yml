@@ -1,6 +1,8 @@
 # CI:push / PR 时跑后端测试 + 前端 lint/test/build 验证。
 # 后端测试拆成 3 个 shard job,每个 job 独占一台 4 vCPU runner 与一个 PostgreSQL service:
-# 实测同一台机器上 forkCount=4 只快 12%,瓶颈是 4 个 JVM 抢同一个 PG;每个 shard 各带一个 PG 后接近线性。
+# 同一台机器上 forkCount=4 只快 12%(多个 JVM 抢同一个 PG),分片换成独立 runner 后能拿到独立算力,
+# 但每个测试 JVM 都要重付一次 Spring 上下文启动(实测 12-16s),所以总测试耗时随分片数膨胀
+# (3 分片实测 1.44x),墙钟收益低于分片数,分片边界要按实测耗时调平而不是按串行基线估算。
 # 覆盖率门禁必须在全部分片 exec 合并之后判定,因此单独一个 job,见 pom.xml 的 coverage-check profile。
 name: CI
 
