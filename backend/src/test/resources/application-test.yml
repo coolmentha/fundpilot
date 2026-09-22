@@ -18,6 +18,13 @@ spring:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/fundpilot?currentSchema=${fundpilot.test.schema:fundpilot_test}}
     username: ${TEST_DB_USERNAME:fundpilot}
     password: ${TEST_DB_PASSWORD:fundpilot}
+    hikari:
+      # 并行执行时每个 fork 会缓存多个 Spring 上下文,各自持有一个连接池。
+      # Hikari 默认 minimumIdle=maximumPoolSize=10,4 个 fork 叠加会打满 PG 的 max_connections=100,
+      # 报 "FATAL: sorry, too many clients already" 导致上下文加载失败。
+      # 测试对库的访问是串行的,并发用例最多 2 个线程同时写,4 条连接足够。
+      maximum-pool-size: 4
+      minimum-idle: 1
   flyway:
     schemas: ${fundpilot.test.schema:fundpilot_test}
     default-schema: ${fundpilot.test.schema:fundpilot_test}
