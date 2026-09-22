@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { verifyCurrentRelease, verifyReleaseGate } from './verify-release-gate.mjs'
+import { REQUIRED_JOBS, verifyCurrentRelease, verifyReleaseGate } from './verify-release-gate.mjs'
+
+const FRONTEND_JOB = 'Frontend lint, test and build'
+
+/** 除指定 job 外,其余规定验证全部成功。 */
+const successfulJobs = (excluded = []) => REQUIRED_JOBS
+  .filter(name => !excluded.includes(name))
+  .map(name => ({ name, conclusion: 'success' }))
 
 test('拒绝缺失的同提交 CI 结果', () => {
   assert.throws(
@@ -39,9 +46,21 @@ test('拒绝缺失任一规定验证结果', () => {
     () => verifyReleaseGate({
       expectedSha: sha,
       runs: [{ id: 9, head_sha: sha, status: 'completed', conclusion: 'success' }],
-      jobs: [{ name: 'Backend full test', conclusion: 'success' }]
+      jobs: successfulJobs([FRONTEND_JOB])
     }),
     /missing required CI job: Frontend lint, test and build/
+  )
+})
+
+test('拒绝缺失任一分片结果', () => {
+  const sha = '3'.repeat(40)
+  assert.throws(
+    () => verifyReleaseGate({
+      expectedSha: sha,
+      runs: [{ id: 13, head_sha: sha, status: 'completed', conclusion: 'success' }],
+      jobs: successfulJobs(['Backend test (shard-2)'])
+    }),
+    /missing required CI job: Backend test \(shard-2\)/
   )
 })
 
@@ -52,11 +71,26 @@ test('拒绝任一规定验证失败', () => {
       expectedSha: sha,
       runs: [{ id: 10, head_sha: sha, status: 'completed', conclusion: 'success' }],
       jobs: [
-        { name: 'Backend full test', conclusion: 'success' },
-        { name: 'Frontend lint, test and build', conclusion: 'failure' }
+        ...successfulJobs([FRONTEND_JOB]),
+        { name: FRONTEND_JOB, conclusion: 'failure' }
       ]
     }),
     /required CI job did not succeed: Frontend lint, test and build/
+  )
+})
+
+test('拒绝任一后端分片失败', () => {
+  const sha = '4'.repeat(40)
+  assert.throws(
+    () => verifyReleaseGate({
+      expectedSha: sha,
+      runs: [{ id: 14, head_sha: sha, status: 'completed', conclusion: 'success' }],
+      jobs: [
+        ...successfulJobs(['Backend test (shard-3)']),
+        { name: 'Backend test (shard-3)', conclusion: 'failure' }
+      ]
+    }),
+    /required CI job did not succeed: Backend test \(shard-3\)/
   )
 })
 
@@ -65,10 +99,7 @@ test('接受同一提交的全部规定验证成功', () => {
   assert.equal(verifyReleaseGate({
     expectedSha: sha,
     runs: [{ id: 11, head_sha: sha, status: 'completed', conclusion: 'success' }],
-    jobs: [
-      { name: 'Backend full test', conclusion: 'success' },
-      { name: 'Frontend lint, test and build', conclusion: 'success' }
-    ]
+    jobs: successfulJobs()
   }).id, 11)
 })
 
@@ -90,10 +121,7 @@ test('GitHub API 请求使用有界超时并绑定同一 CI attempt', async () =
       ok: true,
       json: async () => requests.length === 1
         ? { workflow_runs: [{ id: 12, run_attempt: 3, head_sha: sha, status: 'completed', conclusion: 'success' }] }
-        : { jobs: [
-            { name: 'Backend full test', conclusion: 'success' },
-            { name: 'Frontend lint, test and build', conclusion: 'success' }
-          ] }
+        : { jobs: successfulJobs() }
     }
   }
 

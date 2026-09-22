@@ -224,17 +224,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <excludedGroups>live</excludedGroups>
-                    <!-- 并行执行:按类分片到 4 个 fork,各占一个 CPU。
-                         每个 fork 拿到独立的 fundpilot.test.schema,配套 application-test.yml 的同名占位符,
-                         使 TestDatabaseSchema 的 DROP SCHEMA CASCADE 只作用于本 fork。 -->
-                    <forkCount>4</forkCount>
-                    <reuseForks>true</reuseForks>
-                    <systemPropertyVariables>
-                        <fundpilot.test.schema>fundpilot_test_w${surefire.forkNumber}</fundpilot.test.schema>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
-            <!-- Jacoco:prepare-agent 注入 agent 到 surefire,report/check 在 verify 生成报告并阻断覆盖率回退。 -->
+            <!-- Jacoco:prepare-agent 注入 agent 到 surefire;report 与 check 在 coverage-check profile 中,
+                 因为覆盖率门禁必须在所有分片 exec 合并后才能判定,不能由单个分片单独执行。 -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -246,126 +239,6 @@
                             <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>coverage-check-overall</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.800209</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.640694</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>coverage-check-identityaccess</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>com/fundpilot/backend/identityaccess/*</include>
-                            </includes>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.846938</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.650000</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>coverage-check-accounting</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>com/fundpilot/backend/accounting/*</include>
-                            </includes>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.823186</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.612535</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>coverage-check-investmentplan</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>com/fundpilot/backend/investmentplan/*</include>
-                            </includes>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.787572</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.608040</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -375,6 +248,15 @@
         </plugins>
     </build>
 
+    <!-- 测试分片:CI 用 3 个独立 job(各自 4 vCPU runner + 独立 PostgreSQL)并行跑,
+         单机多 fork 共用一台 PG 会互相抢 DB,forkCount 收益仅 12%;换成独立 runner 后接近线性。
+         includes 由 surefire 匹配 target/test-classes 下的 class 路径,即"声明包"而非源文件目录
+         (例如 exception/GlobalExceptionHandlerTest.java 实际声明 platform.web.error),
+         所以分片边界一律按声明包划分。新增顶层业务包必须同时加入某个分片,
+         由 architecture/TestShardAssignmentTest 守卫,漏加会让该包在 CI 完全不被执行。
+         分片权重取自串行 CI 的实测类耗时:1≈106s(portfolio 49 + alerting 33 + architecture 24)、
+         2≈101s(accounting 41 + investmentplan 38 + discipline 18 + config 5)、
+         3≈105s(marketdata 29 + identityaccess 28 + platform 14 + importing 13 + insights 13 + 其余 8)。 -->
     <profiles>
         <profile>
             <id>live</id>
@@ -386,6 +268,230 @@
                         <configuration>
                             <excludedGroups combine.self="override"/>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-1</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/portfolio/**/*Test.java</include>
+                                <include>com/fundpilot/backend/alerting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/architecture/**/*Test.java</include>
+                                <include>com/fundpilot/backend/support/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-2</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/accounting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/**/*Test.java</include>
+                                <include>com/fundpilot/backend/config/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-3</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/marketdata/**/*Test.java</include>
+                                <include>com/fundpilot/backend/identityaccess/**/*Test.java</include>
+                                <include>com/fundpilot/backend/platform/**/*Test.java</include>
+                                <include>com/fundpilot/backend/importing/**/*Test.java</include>
+                                <include>com/fundpilot/backend/insights/**/*Test.java</include>
+                                <include>com/fundpilot/backend/user/**/*Test.java</include>
+                                <include>com/fundpilot/backend/productcatalog/**/*Test.java</include>
+                                <include>com/fundpilot/backend/market/**/*Test.java</include>
+                                <include>com/fundpilot/backend/sharedkernel/**/*Test.java</include>
+                                <include>com/fundpilot/backend/controller/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- 覆盖率门禁:只在合并了全部分片 exec 之后启用(CI 的 Backend coverage gate job)。
+             分片 job 不启用,避免用局部数据判定全局阈值。
+             输入:target/jacoco-shards/**/*.exec(CI 从各分片 artifact 下载);输出:target/jacoco-merged.exec。 -->
+        <profile>
+            <id>coverage-check</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>merge-shards</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>merge</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+                                    <fileSets>
+                                        <fileSet>
+                                            <directory>${project.build.directory}/jacoco-shards</directory>
+                                            <includes>
+                                                <include>**/*.exec</include>
+                                            </includes>
+                                        </fileSet>
+                                    </fileSets>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>report</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>coverage-check-overall</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.800209</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.640694</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>coverage-check-identityaccess</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                    <includes>
+                                        <include>com/fundpilot/backend/identityaccess/*</include>
+                                    </includes>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.846938</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.650000</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>coverage-check-accounting</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                    <includes>
+                                        <include>com/fundpilot/backend/accounting/*</include>
+                                    </includes>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.823186</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.612535</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>coverage-check-investmentplan</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                    <includes>
+                                        <include>com/fundpilot/backend/investmentplan/*</include>
+                                    </includes>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.787572</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.608040</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

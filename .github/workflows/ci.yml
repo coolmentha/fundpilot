@@ -1,5 +1,7 @@
 # CI:push / PR 时跑后端测试 + 前端 lint/test/build 验证。
-# 后端 mvn verify 含 testcontainers 集成测试(GitHub runner 自带 Docker)。
+# 后端测试拆成 3 个 shard job,每个 job 独占一台 4 vCPU runner 与一个 PostgreSQL service:
+# 实测同一台机器上 forkCount=4 只快 12%,瓶颈是 4 个 JVM 抢同一个 PG;每个 shard 各带一个 PG 后接近线性。
+# 覆盖率门禁必须在全部分片 exec 合并之后判定,因此单独一个 job,见 pom.xml 的 coverage-check profile。
 name: CI
 
 on:
@@ -9,8 +11,15 @@ on:
 
 jobs:
   backend-test:
-    name: Backend full test
+    # 显示名是发布门禁契约的一部分(deploy/verify-release-gate.mjs 的 REQUIRED_JOBS 按此匹配),
+    # 改名必须同步改那里和 deploy/*.test.mjs。
+    name: Backend test (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    strategy:
+      # 一个分片失败不取消其他分片,便于一次拿到全部分片的失败原因。
+      fail-fast: false
+      matrix:
+        shard: [ shard-1, shard-2, shard-3 ]
     # 集成测试继承 AbstractIntegrationTest(@ActiveProfiles("test")),
     # 连 localhost:5432(application-test.yml 默认值)。用 service container 提供同址 PG,
     # 匹配本地开发环境,无需改测试代码。
@@ -31,7 +40,7 @@ jobs:
       redis:
         image: redis:8-alpine
         ports:
-          - 6379:6379
+          - "6379:6379"
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s
@@ -50,11 +59,50 @@ jobs:
           java-version: '25'
           cache: maven
 
-      # surefire 已排除 live 组(pom.xml excludedGroups=live),CI 不跑直连东方财富的 live 测试
-      - name: Maven verify
-        run: ./mvnw -B verify
+      # surefire 已排除 live 组(pom.xml excludedGroups=live),CI 不跑直连东方财富的 live 测试。
+      # shard profile 只跑本分片的包,分片边界与权重见 pom.xml 注释,由 architecture/TestShardAssignmentTest 守卫。
+      - name: Maven test
+        run: ./mvnw -B test -P${{ matrix.shard }}
 
-      # jacoco 在 verify 阶段生成报告(pom.xml 已配 report execution),上传 artifact 便于下载查看
+      # jacoco prepare-agent 已注入 surefire,产出本分片的 target/jacoco.exec;
+      # 覆盖率判定由 backend-coverage 合并全部 shard 后执行,这里只上传原始数据。
+      - name: Upload shard coverage data
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jacoco-exec-${{ matrix.shard }}
+          path: backend/target/jacoco.exec
+          retention-days: 7
+
+  backend-coverage:
+    name: Backend coverage gate
+    runs-on: ubuntu-latest
+    needs: backend-test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # 每个 artifact 解到 target/jacoco-shards/<artifact 名>/jacoco.exec,
+      # coverage-check profile 的 merge 用 **/*.exec 把它们合并成 target/jacoco-merged.exec。
+      - name: Download shard coverage data
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: jacoco-exec-*
+          path: backend/target/jacoco-shards
+
+      # -DskipTests:不重复跑测试,只合并 exec 并按合并后的全量数据判定阈值与生成报告。
+      - name: Maven coverage gate
+        run: ./mvnw -B verify -Pcoverage-check -DskipTests
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

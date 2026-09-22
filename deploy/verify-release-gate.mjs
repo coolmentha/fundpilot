@@ -1,6 +1,14 @@
 import { pathToFileURL } from 'node:url'
 
-const REQUIRED_JOBS = ['Backend full test', 'Frontend lint, test and build']
+// ci.yml 的 job 显示名,后端按分片拆成多个 job,任一缺失或失败都拒绝发布。
+// 改 ci.yml 的 job 名必须同步改这里,并由 workflow-policy.test.mjs 锁定两边一致。
+export const REQUIRED_JOBS = [
+  'Backend test (shard-1)',
+  'Backend test (shard-2)',
+  'Backend test (shard-3)',
+  'Backend coverage gate',
+  'Frontend lint, test and build'
+]
 
 export function verifyReleaseGate({ expectedSha, runs, jobs }) {
   const run = runs.find(candidate => candidate.head_sha === expectedSha)
