@@ -254,9 +254,12 @@
          (例如 exception/GlobalExceptionHandlerTest.java 实际声明 platform.web.error),
          所以分片边界一律按声明包划分。新增顶层业务包必须同时加入某个分片,
          由 architecture/TestShardAssignmentTest 守卫,漏加会让该包在 CI 完全不被执行。
-         分片权重取自串行 CI 的实测类耗时:1≈106s(portfolio 49 + alerting 33 + architecture 24)、
-         2≈101s(accounting 41 + investmentplan 38 + discipline 18 + config 5)、
-         3≈105s(marketdata 29 + identityaccess 28 + platform 14 + importing 13 + insights 13 + 其余 8)。 -->
+         分片权重取自分片 CI(run 35731915355)的实测每包耗时,按最长处理时间优先装箱:
+         1≈150s(accounting 86 + productcatalog 32 + architecture 22 + insights 10)、
+         2≈154s(portfolio 48 + marketdata 43 + alerting 31 + user 17 + importing 15)、
+         3≈146s(discipline 46 + investmentplan 45 + identityaccess 30 + platform 20 + config 5 + 其余 1)。
+         注意每包耗时不是常量:每个测试 JVM 都要重付一次 Spring 上下文启动(实测 12-16s),
+         分片越细总耗时膨胀越大(3 分片实测 1.44x),调边界必须以新的一轮 CI 实测为准。 -->
     <profiles>
         <profile>
             <id>live</id>
@@ -281,9 +284,10 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/portfolio/**/*Test.java</include>
-                                <include>com/fundpilot/backend/alerting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/accounting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/productcatalog/**/*Test.java</include>
                                 <include>com/fundpilot/backend/architecture/**/*Test.java</include>
+                                <include>com/fundpilot/backend/insights/**/*Test.java</include>
                                 <include>com/fundpilot/backend/support/**/*Test.java</include>
                             </includes>
                         </configuration>
@@ -300,10 +304,11 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/accounting/**/*Test.java</include>
-                                <include>com/fundpilot/backend/investmentplan/**/*Test.java</include>
-                                <include>com/fundpilot/backend/discipline/**/*Test.java</include>
-                                <include>com/fundpilot/backend/config/**/*Test.java</include>
+                                <include>com/fundpilot/backend/portfolio/**/*Test.java</include>
+                                <include>com/fundpilot/backend/marketdata/**/*Test.java</include>
+                                <include>com/fundpilot/backend/alerting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/user/**/*Test.java</include>
+                                <include>com/fundpilot/backend/importing/**/*Test.java</include>
                             </includes>
                         </configuration>
                     </plugin>
@@ -319,13 +324,11 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/marketdata/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/**/*Test.java</include>
                                 <include>com/fundpilot/backend/identityaccess/**/*Test.java</include>
                                 <include>com/fundpilot/backend/platform/**/*Test.java</include>
-                                <include>com/fundpilot/backend/importing/**/*Test.java</include>
-                                <include>com/fundpilot/backend/insights/**/*Test.java</include>
-                                <include>com/fundpilot/backend/user/**/*Test.java</include>
-                                <include>com/fundpilot/backend/productcatalog/**/*Test.java</include>
+                                <include>com/fundpilot/backend/config/**/*Test.java</include>
                                 <include>com/fundpilot/backend/market/**/*Test.java</include>
                                 <include>com/fundpilot/backend/sharedkernel/**/*Test.java</include>
                                 <include>com/fundpilot/backend/controller/**/*Test.java</include>
