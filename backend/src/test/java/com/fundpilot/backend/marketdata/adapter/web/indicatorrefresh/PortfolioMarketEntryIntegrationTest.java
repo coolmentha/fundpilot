@@ -50,6 +50,9 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     @MockitoBean RealtimeValuationCacheGateway realtimeCache;
     @MockitoBean MarketRealtimeCache marketRealtimeCache;
 
+    /** {@link #create(long)} 建立的基金代码，用于把"未触发外部刷新"的断言收窄到本测试自己的基金。 */
+    private String createdFundCode;
+
     @BeforeEach
     void isolateExternalMarketSources() {
         when(klineSource.fetch(anyString(), anyString()))
@@ -84,7 +87,7 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
                 testActorId(), "测试作废", Instant.now()));
         assertRejected(id);
         assertRejected(Long.MAX_VALUE);
-        verifyNoInteractions(source);
+        verify(source, never()).fetchHistory(createdFundCode);
     }
 
     @Test
@@ -101,7 +104,7 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
         }
         mvc.perform(post("/api/portfolio-funds/{id}/market-data/refresh", id).cookie(foreignCookie))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
-        verifyNoInteractions(source);
+        verify(source, never()).fetchHistory(createdFundCode);
     }
 
     @Test
@@ -124,12 +127,17 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     }
 
     private long create(long ownerId) {
-        var product = products.ensure(new FundProductApi.EnsureProduct("MKT" + Long.toString(System.nanoTime(), 36),
+        // 刷新任务会遍历测试 schema 中所有已跟踪基金，调用次数取决于同 JVM 里先跑过哪些测试类。
+        // 因此这里只等"本测试自己的基金"被拉取，并把后续断言也收窄到该基金代码，
+        // 避免用 anyString() 依赖"全局恰好 1 次"这种顺序相关的不变量。
+        String fundCode = "MKT" + Long.toString(System.nanoTime(), 36);
+        var product = products.ensure(new FundProductApi.EnsureProduct(fundCode,
                 "行情测试基金", null, FundProductApi.InvestmentTarget.STOCK));
         long id = portfolios.track(new PortfolioFundApi.TrackPortfolioFund(null, ownerId, product.id(),
                 true, new BigDecimal("0.30"))).id();
-        verify(source, timeout(5_000)).fetchHistory(anyString());
+        verify(source, timeout(5_000).atLeastOnce()).fetchHistory(fundCode);
         clearInvocations(source);
+        createdFundCode = fundCode;
         return id;
     }
 
