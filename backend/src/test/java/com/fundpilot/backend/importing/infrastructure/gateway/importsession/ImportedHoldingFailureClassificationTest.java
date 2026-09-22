@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fundpilot.backend.accounting.adapter.api.fundonboarding.PortfolioFundOnboardingApi;
+import com.fundpilot.backend.accounting.adapter.api.portfoliocorrection.PortfolioCostCorrectionApi;
 import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.accounting.adapter.api.transaction.TransactionApi;
 import com.fundpilot.backend.importing.application.command.importsession.YangjibaoImportFailure;
@@ -37,7 +38,8 @@ class ImportedHoldingFailureClassificationTest {
         positions = mock(PositionApi.class);
         gateway = new ImportedHoldingGatewayImpl(products, navPrefetch, mock(PublishedNavApi.class), portfolioFunds,
                 mock(PortfolioGroupingApi.class), mock(PortfolioFundOnboardingApi.class), positions,
-                mock(TransactionApi.class), new ImportedHoldingGatewayImplTest.TestTransactionManager(),
+                mock(TransactionApi.class), mock(PortfolioCostCorrectionApi.class),
+                new ImportedHoldingGatewayImplTest.TestTransactionManager(),
                 mock(ImportItemReceiptStore.class));
     }
 

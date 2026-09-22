@@ -87,7 +87,8 @@ public class PortfolioReturnQueryHandler {
                 .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
         BigDecimal holding = holdingComplete ? rows.stream().map(FundReturnResult::holdingAmount)
                 .filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add) : null;
-        BigDecimal totalReturn = holding == null ? null : holding.add(redeemed).subtract(invested);
+        // 累计收益 = 已实现 + 未实现(工作台盈亏口径),与"投入/赎回"现金流列不构成等式
+        BigDecimal totalReturn = realized == null || unrealized == null ? null : realized.add(unrealized);
         return new PortfolioReturnResult(invested, redeemed, fees, holding, realized, unrealized, totalReturn,
                 totalReturn != null && invested.signum() > 0 ? totalReturn.divide(invested, MATH) : null,
                 realizedComplete, rows);
@@ -183,8 +184,9 @@ public class PortfolioReturnQueryHandler {
         ReturnCompositionGateway.ReturnFact value = returns == null
                 ? new ReturnCompositionGateway.ReturnFact(fund.id(), BigDecimal.ZERO, BigDecimal.ZERO,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, true) : returns;
-        BigDecimal total = holding == null ? null
-                : holding.add(value.redeemedAmount()).subtract(value.investedAmount());
+        // 单只累计收益 = 已实现 + 未实现;清仓基金的未实现为 0,历史已实现继续计入
+        BigDecimal total = value.realizedPnl() == null || unrealized == null ? null
+                : value.realizedPnl().add(unrealized);
         return new FundReturnResult(fund.id(), fund.legacyFundId(), product == null ? null : product.fundCode(),
                 product == null ? null : product.fundName(), position == null ? "EMPTY" : position.status(),
                 product == null ? null : product.productType(), product == null ? null : product.investmentTarget(),

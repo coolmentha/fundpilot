@@ -90,7 +90,37 @@ class PortfolioReturnQueryHandlerTest {
                 .containsExactly("000001");
         assertThat(handler.clearedFunds(7L)).extracting(PortfolioReturnQueryHandler.FundReturnResult::fundCode)
                 .containsExactly("000002");
-        assertThat(handler.findByOwner(7L).totalReturn()).isEqualByComparingTo("30");
+        assertThat(handler.findByOwner(7L).totalReturn()).isEqualByComparingTo("20");
+    }
+
+    @Test
+    void totalReturnIsRealizedPlusUnrealizedEvenWhenCostBasisDiffersFromLedgerInvested() {
+        ReturnCompositionGateway facts = mock(ReturnCompositionGateway.class);
+        when(facts.findPortfolioFunds(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.PortfolioFund(12L, 101L, 31L, true, true, new BigDecimal("0.3"))));
+        when(facts.findPositions(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.Position(12L, "OPEN", Instant.parse("2026-01-01T00:00:00Z"),
+                        new BigDecimal("12"), new BigDecimal("100"))));
+        when(facts.findReturnFacts(7L)).thenReturn(List.of(
+                new ReturnCompositionGateway.ReturnFact(12L, new BigDecimal("1000"), BigDecimal.ZERO,
+                        new BigDecimal("1000"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, true)));
+        when(facts.findProducts(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Product(31L, "000001", "示例基金", "ETF", "STOCK", "000300",
+                        "BROAD_BASE")));
+        when(facts.findLatestTwoNavs(Set.of(31L))).thenReturn(List.of(
+                new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-29T00:00:00Z"),
+                        new BigDecimal("10"), new BigDecimal("10"), Instant.parse("2026-07-29T01:00:00Z"))));
+        when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
+        when(facts.findGroupMemberships(7L)).thenReturn(List.of());
+        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
+
+        var result = handler(facts).findByOwner(7L);
+
+        var fund = result.funds().getFirst();
+        assertThat(fund.holdingAmount()).isEqualByComparingTo("1000");
+        assertThat(fund.unrealizedPnl()).isEqualByComparingTo("-200");
+        assertThat(fund.totalReturn()).isEqualByComparingTo("-200");
+        assertThat(result.totalReturn()).isEqualByComparingTo("-200");
     }
 
     @Test

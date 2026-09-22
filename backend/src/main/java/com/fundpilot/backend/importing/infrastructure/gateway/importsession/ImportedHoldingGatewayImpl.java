@@ -1,6 +1,7 @@
 package com.fundpilot.backend.importing.infrastructure.gateway.importsession;
 
 import com.fundpilot.backend.accounting.adapter.api.fundonboarding.PortfolioFundOnboardingApi;
+import com.fundpilot.backend.accounting.adapter.api.portfoliocorrection.PortfolioCostCorrectionApi;
 import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.accounting.adapter.api.transaction.TransactionApi;
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportedHoldingGateway;
@@ -33,6 +34,7 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
     private final PortfolioFundOnboardingApi onboarding;
     private final PositionApi positions;
     private final TransactionApi transactions;
+    private final PortfolioCostCorrectionApi corrections;
     private final PlatformTransactionManager transactionManager;
     private final ImportItemReceiptStore receipts;
 
@@ -76,9 +78,11 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
             } else if (request.mode() == ExistingMode.KEEP_LOCAL) {
                 result = new ItemResult(ItemStatus.SKIPPED, "以本系统份额为准", existing.get().portfolioFundId());
             } else {
+                long portfolioFundId = existing.get().portfolioFundId();
                 transactions.adjustToHoldingShares(new TransactionApi.AdjustToHoldingShares(
-                        request.ownerId(), existing.get().portfolioFundId(), request.shares()));
-                result = new ItemResult(ItemStatus.ADJUSTED, "已按目标份额调整", existing.get().portfolioFundId());
+                        request.ownerId(), portfolioFundId, request.shares()));
+                syncCostPerShare(request, portfolioFundId);
+                result = new ItemResult(ItemStatus.ADJUSTED, "已按目标份额调整", portfolioFundId);
             }
             receipts.save(request, result);
             return result;
@@ -104,6 +108,37 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
                 product.id(), true, DEFAULT_WARNING_RATIO, shares, costPerShare, null));
         groups.assignByNames(new PortfolioGroupingApi.AssignByNames(ownerId, result.portfolioFundId(), groupNames));
         return result.portfolioFundId();
+    }
+
+    /**
+     * 以平台为准同步份额时,把平台成本单价一并写成本地成本基准,否则补进来的份额是零成本,
+     * 持仓成本会低于平台真实投入。平台未提供成本单价或目标份额为 0(清仓)时保持账本原样;
+     * 与本地成本一致时不写成本重置流水。
+     */
+    private void syncCostPerShare(ItemRequest request, long portfolioFundId) {
+        BigDecimal costPerShare = request.costPerShare();
+        if (costPerShare == null || costPerShare.signum() <= 0
+                || request.shares() == null || request.shares().signum() <= 0) {
+            return;
+        }
+        BigDecimal local = positions.findOwned(request.ownerId(), portfolioFundId)
+                .map(PositionApi.Position::costPerShare).orElse(null);
+        if (local != null && local.compareTo(costPerShare) == 0) return;
+        try {
+            corrections.correct(new PortfolioCostCorrectionApi.CorrectCostPerShare(
+                    request.ownerId(), portfolioFundId, costPerShare));
+        } catch (PortfolioCostCorrectionApi.Failure failure) {
+            throw classify(failure);
+        }
+    }
+
+    private YangjibaoImportFailure classify(PortfolioCostCorrectionApi.Failure failure) {
+        return switch (failure.code()) {
+            case COST_PER_SHARE_INVALID -> new YangjibaoImportFailure(
+                    YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_VALIDATION_FAILED, "导入成本单价无效", failure);
+            case PORTFOLIO_FUND_NOT_FOUND, PORTFOLIO_FUND_NOT_OPEN -> new YangjibaoImportFailure(
+                    YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_CONFLICT, "本地持仓状态与平台不一致", failure);
+        };
     }
 
     private YangjibaoImportFailure classify(PortfolioFundOnboardingApi.Failure failure) {
