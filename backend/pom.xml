@@ -254,15 +254,18 @@
          (例如 exception/GlobalExceptionHandlerTest.java 实际声明 platform.web.error),
          所以分片边界一律按声明包划分。新增顶层业务包必须同时加入某个分片,
          由 architecture/TestShardAssignmentTest 守卫,漏加会让该包在 CI 完全不被执行。
-         边界按 run 35762077689 的实测每包耗时做最长处理时间优先装箱(测试耗时合计 389s,六片各约 63-67s)。
-         之所以切到 6 片:墙钟只取决于最慢的那片,而单片耗时上限被最重的原子单元锁死
-         (architecture 包 34s、productcatalog.infrastructure.migration 单类 33s、
-         investmentplan.application.command.planexecution 单类 45s),3 片时最慢片 133s,6 片可压到约 67s。
-         调边界只能按新一轮 CI 实测重新装箱:每包耗时不是常量,每个测试 JVM 都要重付一次
-         Spring 上下文启动(实测 12-16s),同一个包在不同分片里的耗时差别也很大
-         (investmentplan.application 在旧 shard-3 实测 61s)。
-         分片外还有约 20-60s/片 不随包成本变化的固定耗时(编译 + fork 启动 + 容器初始化),
-         因此分片数不能无限加:单片测试耗时降到与固定耗时同量级后再拆就没有收益了。 -->
+         边界按实测每包耗时做最长处理时间优先装箱。墙钟只取决于最慢的那片,
+         实测(run 35811438498)各片 job 129-207s,拆解如下:
+         · 每片固定约 70s:编译 807 个主源文件 + 223 个测试源文件约 30s,surefire 启动约 9s,
+           service 容器与 job 启停约 31s;这部分与本片跑多少测试无关。
+         · 每片还要付一次"冷启动":该 JVM 第一个集成测试类承担 Spring 上下文构建与
+           测试 schema 的 Flyway 迁移,实测 11-35s,落在哪个类上完全取决于分片内执行顺序。
+         · 其余才是真正的测试耗时(各片 66-115s)。
+         所以分片数不是越多越好:每多一片就多付约 100s 固定成本。从 3 片到 6 片,
+         总测试耗时由 389s 膨胀到 533s(+37%,几乎全是重复的冷启动),但最慢片从 133s 降到 115s,
+         墙钟仍由 298s 改善到 248s。
+         调边界只能按新一轮 CI 实测重新装箱:同一个包在不同分片里的耗时差别很大
+         (user.MultiUserIsolationIntegrationTest 在 3 片时 6.8s、6 片时 32.2s,差额就是它承担的冷启动)。 -->
     <profiles>
         <profile>
             <id>live</id>
