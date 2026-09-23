@@ -19,11 +19,14 @@ test('CI 名称和发布门禁锁定同一提交的完整验证', () => {
     'Backend test (shard-1)',
     'Backend test (shard-2)',
     'Backend test (shard-3)',
+    'Backend test (shard-4)',
+    'Backend test (shard-5)',
+    'Backend test (shard-6)',
     'Backend coverage gate',
     'Frontend lint, test and build'
   ])
   assert.match(ci, /name: Backend test \(\$\{\{ matrix\.shard \}\}\)/)
-  assert.match(ci, /matrix:[\s\S]*?shard: \[ shard-1, shard-2, shard-3 \]/)
+  assert.match(ci, /matrix:[\s\S]*?shard: \[ shard-1, shard-2, shard-3, shard-4, shard-5, shard-6 \]/)
   assert.match(ci, /name: Backend coverage gate/)
   assert.match(ci, /name: Frontend lint, test and build/)
   assert.match(ci, /run: npm run test:coverage/)

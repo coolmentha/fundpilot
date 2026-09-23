@@ -1,8 +1,8 @@
 # CI:push / PR 时跑后端测试 + 前端 lint/test/build 验证。
-# 后端测试拆成 3 个 shard job,每个 job 独占一台 4 vCPU runner 与一个 PostgreSQL service:
-# 同一台机器上 forkCount=4 只快 12%(多个 JVM 抢同一个 PG),分片换成独立 runner 后能拿到独立算力,
-# 但每个测试 JVM 都要重付一次 Spring 上下文启动(实测 12-16s),所以总测试耗时随分片数膨胀
-# (3 分片实测 1.44x),墙钟收益低于分片数,分片边界要按实测耗时调平而不是按串行基线估算。
+# 后端测试拆成 6 个 shard job,每个 job 独占一台 4 vCPU runner 与一个 PostgreSQL service:
+# 同一台机器上 forkCount=4 只快 12%(多个 JVM 抢同一个 PG),分片换成独立 runner 后才拿到独立算力。
+# 墙钟只取决于最慢的那片,而单片耗时被最重的原子单元锁死(见 pom.xml 的分片注释),
+# 所以拆到 6 片能把最慢片从 133s 压到约 67s;再多拆没有收益,因为每片还有约 20-60s 固定耗时。
 # 覆盖率门禁必须在全部分片 exec 合并之后判定,因此单独一个 job,见 pom.xml 的 coverage-check profile。
 name: CI
 
@@ -21,7 +21,7 @@ jobs:
       # 一个分片失败不取消其他分片,便于一次拿到全部分片的失败原因。
       fail-fast: false
       matrix:
-        shard: [ shard-1, shard-2, shard-3 ]
+        shard: [ shard-1, shard-2, shard-3, shard-4, shard-5, shard-6 ]
     # 集成测试继承 AbstractIntegrationTest(@ActiveProfiles("test")),
     # 连 localhost:5432(application-test.yml 默认值)。用 service container 提供同址 PG,
     # 匹配本地开发环境,无需改测试代码。

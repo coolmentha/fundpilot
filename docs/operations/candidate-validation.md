@@ -10,7 +10,7 @@
 
 `.github/workflows/deploy.yml` 在停止当前服务前，以同一后端镜像 digest 连续启动并停止候选容器两次。每次都必须通过容器内 `/actuator/health`；失败立即终止发布。脱敏后的启动配置、镜像 digest、时间、健康结果和应用日志保存在 VPS 的 `candidate-validation/<release-tag>-attempt-<n>.log`，用于核对重复启动没有调度、迁移或业务写入记录。
 
-发布工作流先拒绝不在 `main` 上的 tag，再由 `deploy/verify-release-gate.mjs` 调用 GitHub Actions API，要求当前 tag 的完整 40 位提交 SHA 存在成功的 `ci.yml` workflow run，且同一 run 的当前 `run_attempt` 中 `Backend test (shard-1)`、`Backend test (shard-2)`、`Backend test (shard-3)`、`Backend coverage gate` 与 `Frontend lint, test and build` 五个 job 都成功（清单见该脚本的 `REQUIRED_JOBS`，由 `deploy/workflow-policy.test.mjs` 锁定与 `ci.yml` 一致）。每次 API 请求使用 15 秒超时。`ci.yml` 只由分支 push/PR 触发且没有手动触发入口；查询再以 workflow 文件和精确 `head_sha` 限定来源，无需另造 event 白名单。run 与 job 请求均取每页 100 条；若目标 run 或规定 job 不在返回页内，会按缺失结果拒绝，不会跨页寻找宽松替代结果。结果缺失、失败或属于不同提交均在构建镜像和读取生产秘密前终止。
+发布工作流先拒绝不在 `main` 上的 tag，再由 `deploy/verify-release-gate.mjs` 调用 GitHub Actions API，要求当前 tag 的完整 40 位提交 SHA 存在成功的 `ci.yml` workflow run，且同一 run 的当前 `run_attempt` 中 `Backend test (shard-1)` 至 `Backend test (shard-6)`、`Backend coverage gate` 与 `Frontend lint, test and build` 八个 job 都成功（清单见该脚本的 `REQUIRED_JOBS`，由 `deploy/workflow-policy.test.mjs` 锁定与 `ci.yml` 一致）。每次 API 请求使用 15 秒超时。`ci.yml` 只由分支 push/PR 触发且没有手动触发入口；查询再以 workflow 文件和精确 `head_sha` 限定来源，无需另造 event 白名单。run 与 job 请求均取每页 100 条；若目标 run 或规定 job 不在返回页内，会按缺失结果拒绝，不会跨页寻找宽松替代结果。结果缺失、失败或属于不同提交均在构建镜像和读取生产秘密前终止。
 
 候选两次通过后，发布流程才进入停写、备份和正常模式切换。正常后端由 `deploy/docker-compose.prod.yml` 启动，`DEPLOYMENT_VALIDATION_MODE=false`，按正常策略执行已确认的 Flyway 迁移和启动任务；必须先通过后端健康检查和前端候选检查，才写入 `.deployed-state` 并启动正式前端；随后后端、容器内前端和公网根路径必须共同通过。任一健康检查失败都会保留错误输出、停止后续发布并进入既有回滚或提交后停止流程，不输出成功发布声明。
 

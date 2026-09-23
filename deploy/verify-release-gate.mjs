@@ -6,6 +6,9 @@ export const REQUIRED_JOBS = [
   'Backend test (shard-1)',
   'Backend test (shard-2)',
   'Backend test (shard-3)',
+  'Backend test (shard-4)',
+  'Backend test (shard-5)',
+  'Backend test (shard-6)',
   'Backend coverage gate',
   'Frontend lint, test and build'
 ]

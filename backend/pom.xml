@@ -248,21 +248,21 @@
         </plugins>
     </build>
 
-    <!-- 测试分片:CI 用 3 个独立 job(各自 4 vCPU runner + 独立 PostgreSQL)并行跑,
-         单机多 fork 共用一台 PG 会互相抢 DB,forkCount 收益仅 12%;换成独立 runner 后接近线性。
+    <!-- 测试分片:CI 用 6 个独立 job(各自 4 vCPU runner + 独立 PostgreSQL)并行跑。
+         单机多 fork 共用一台 PG 会互相抢 DB(forkCount=4 只快 12%),分片换成独立 runner 才拿到独立算力。
          includes 由 surefire 匹配 target/test-classes 下的 class 路径,即"声明包"而非源文件目录
          (例如 exception/GlobalExceptionHandlerTest.java 实际声明 platform.web.error),
          所以分片边界一律按声明包划分。新增顶层业务包必须同时加入某个分片,
          由 architecture/TestShardAssignmentTest 守卫,漏加会让该包在 CI 完全不被执行。
-         分片权重取自分片 CI 的实测每包耗时,按最长处理时间优先装箱(run 35762077689,测试耗时合计 389s):
-         1≈129s(accounting 50 + productcatalog 37 + architecture 34 + insights 9)、
-         2≈127s(portfolio 43 + marketdata 36 + alerting 26 + importing 16 + user 7)、
-         3≈133s(investmentplan 71 + identityaccess 22 + platform 15 + config 12 + discipline 9 + market 4)。
-         注意每包耗时不是常量:每个测试 JVM 都要重付一次 Spring 上下文启动(实测 12-16s),
-         且同一个包在不同分片里的耗时差别很大(例如 investmentplan 在旧 shard-2 是 45s、在 shard-3 是 71s),
-         所以调边界只能按新一轮 CI 实测重新装箱,不要拿串行基线或上一轮的包耗时直接推算。
-         分片后仍有约 20-59s/片 的无归属耗时(编译 + fork 启动 + 上下文切换),
-         这部分不随包成本变化,是分片墙钟收益低于分片数的主要原因。 -->
+         边界按 run 35762077689 的实测每包耗时做最长处理时间优先装箱(测试耗时合计 389s,六片各约 63-67s)。
+         之所以切到 6 片:墙钟只取决于最慢的那片,而单片耗时上限被最重的原子单元锁死
+         (architecture 包 34s、productcatalog.infrastructure.migration 单类 33s、
+         investmentplan.application.command.planexecution 单类 45s),3 片时最慢片 133s,6 片可压到约 67s。
+         调边界只能按新一轮 CI 实测重新装箱:每包耗时不是常量,每个测试 JVM 都要重付一次
+         Spring 上下文启动(实测 12-16s),同一个包在不同分片里的耗时差别也很大
+         (investmentplan.application 在旧 shard-3 实测 61s)。
+         分片外还有约 20-60s/片 不随包成本变化的固定耗时(编译 + fork 启动 + 容器初始化),
+         因此分片数不能无限加:单片测试耗时降到与固定耗时同量级后再拆就没有收益了。 -->
     <profiles>
         <profile>
             <id>live</id>
@@ -287,10 +287,14 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/accounting/**/*Test.java</include>
-                                <include>com/fundpilot/backend/productcatalog/**/*Test.java</include>
-                                <include>com/fundpilot/backend/architecture/**/*Test.java</include>
-                                <include>com/fundpilot/backend/insights/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/importing/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/infrastructure/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/domain/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/domain/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/infrastructure/**/*Test.java</include>
+                                <include>com/fundpilot/backend/controller/**/*Test.java</include>
+                                <include>com/fundpilot/backend/sharedkernel/**/*Test.java</include>
                                 <include>com/fundpilot/backend/support/**/*Test.java</include>
                             </includes>
                         </configuration>
@@ -307,11 +311,12 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/portfolio/**/*Test.java</include>
-                                <include>com/fundpilot/backend/marketdata/**/*Test.java</include>
-                                <include>com/fundpilot/backend/alerting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/productcatalog/**/*Test.java</include>
+                                <include>com/fundpilot/backend/config/**/*Test.java</include>
+                                <include>com/fundpilot/backend/identityaccess/adapter/**/*Test.java</include>
                                 <include>com/fundpilot/backend/user/**/*Test.java</include>
-                                <include>com/fundpilot/backend/importing/**/*Test.java</include>
+                                <include>com/fundpilot/backend/insights/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/insights/infrastructure/**/*Test.java</include>
                             </includes>
                         </configuration>
                     </plugin>
@@ -327,14 +332,75 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <includes>
-                                <include>com/fundpilot/backend/discipline/**/*Test.java</include>
-                                <include>com/fundpilot/backend/investmentplan/**/*Test.java</include>
-                                <include>com/fundpilot/backend/identityaccess/**/*Test.java</include>
+                                <include>com/fundpilot/backend/architecture/**/*Test.java</include>
                                 <include>com/fundpilot/backend/platform/**/*Test.java</include>
-                                <include>com/fundpilot/backend/config/**/*Test.java</include>
+                                <include>com/fundpilot/backend/marketdata/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/marketdata/domain/**/*Test.java</include>
                                 <include>com/fundpilot/backend/market/**/*Test.java</include>
-                                <include>com/fundpilot/backend/sharedkernel/**/*Test.java</include>
-                                <include>com/fundpilot/backend/controller/**/*Test.java</include>
+                                <include>com/fundpilot/backend/portfolio/domain/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-4</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/portfolio/adapter/web/fundtracking/**/*Test.java</include>
+                                <include>com/fundpilot/backend/identityaccess/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/importing/infrastructure/**/*Test.java</include>
+                                <include>com/fundpilot/backend/importing/adapter/**/*Test.java</include>
+                                <include>com/fundpilot/backend/marketdata/adapter/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/adapter/**/*Test.java</include>
+                                <include>com/fundpilot/backend/identityaccess/infrastructure/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-5</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/accounting/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/marketdata/infrastructure/**/*Test.java</include>
+                                <include>com/fundpilot/backend/portfolio/adapter/web/fundgrouping/**/*Test.java</include>
+                                <include>com/fundpilot/backend/portfolio/application/**/*Test.java</include>
+                                <include>com/fundpilot/backend/insights/adapter/**/*Test.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>shard-6</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>com/fundpilot/backend/alerting/**/*Test.java</include>
+                                <include>com/fundpilot/backend/accounting/adapter/**/*Test.java</include>
+                                <include>com/fundpilot/backend/accounting/domain/**/*Test.java</include>
+                                <include>com/fundpilot/backend/accounting/infrastructure/**/*Test.java</include>
+                                <include>com/fundpilot/backend/investmentplan/adapter/**/*Test.java</include>
+                                <include>com/fundpilot/backend/discipline/application/**/*Test.java</include>
                             </includes>
                         </configuration>
                     </plugin>
