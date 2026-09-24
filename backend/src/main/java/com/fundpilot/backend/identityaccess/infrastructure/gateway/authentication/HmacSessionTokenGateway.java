@@ -3,6 +3,7 @@ package com.fundpilot.backend.identityaccess.infrastructure.gateway.authenticati
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
 import com.fundpilot.backend.identityaccess.infrastructure.configuration.IdentityAccessProperties;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -26,6 +27,17 @@ public class HmacSessionTokenGateway implements SessionTokenGateway {
 
     private final IdentityAccessProperties properties;
     private final Clock clock;
+
+    /**
+     * 会话 Cookie 的签名秘密缺失时，登录签发会以空指针失败、已签发会话会静默失效，
+     * 这里改为启动期拒绝：配置只标明键名，不输出值。
+     */
+    @PostConstruct
+    void verifySigningSecretConfigured() {
+        if (signingSecret() == null) {
+            throw new IllegalStateException("Missing required configuration: fundpilot.admin.session-secret");
+        }
+    }
 
     @Override
     public Duration maxAge() {

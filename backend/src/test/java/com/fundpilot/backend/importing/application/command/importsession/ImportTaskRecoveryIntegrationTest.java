@@ -17,6 +17,7 @@ import com.fundpilot.backend.importing.application.gateway.importsession.ImportS
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportedHoldingGateway;
 import com.fundpilot.backend.importing.application.gateway.importsession.YangjibaoSourceGateway;
 import com.fundpilot.backend.importing.infrastructure.gateway.importsession.JdbcImportSessionGateway;
+import com.fundpilot.backend.support.TestDatabaseSchema;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +44,10 @@ import org.springframework.test.util.ReflectionTestUtils;
         "fundpilot.deployment.validation-mode=true"
 })
 class ImportTaskRecoveryIntegrationTest {
+    static {
+        TestDatabaseSchema.resetOnce("fundpilot_import_002");
+    }
+
     @Autowired JdbcImportSessionGateway sessions;
     @Autowired JdbcTemplate jdbc;
     YangjibaoSourceGateway source;

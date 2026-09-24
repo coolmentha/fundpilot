@@ -10,6 +10,7 @@ import com.fundpilot.backend.importing.application.gateway.importsession.Importe
 import com.fundpilot.backend.marketdata.application.command.indicatorrefresh.MarketIndicatorRefreshCommandHandler;
 import com.fundpilot.backend.marketdata.adapter.api.publishednav.NavPrefetchApi;
 import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
+import com.fundpilot.backend.support.TestDatabaseSchema;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -35,6 +36,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
         "spring.jpa.properties.hibernate.default_schema=fundpilot_import_001"
 })
 class ImportItemAtomicityIntegrationTest {
+    static {
+        TestDatabaseSchema.resetOnce("fundpilot_import_001");
+    }
+
     @Autowired ImportedHoldingGateway holdings;
     @Autowired UserAdministrationApi users;
     @Autowired JdbcTemplate jdbc;

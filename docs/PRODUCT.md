@@ -101,7 +101,7 @@ Product Catalog `FundProduct` 保存基金身份、类型和公开费率，Portf
 - `enabled=false` 暂停执行，但不删除计划。
 - 同一基金同时最多一份 `EFFECTIVE` 计划。
 
-14:55 的 `DcaSuggestionJob` 在交易日自动生成 `INVEST/PENDING` 交易。相同计划在同一北京时间自然日只能生成一次，CONFIRMED 或 CANCELLED 都视为本期已处理。
+14:55 的 `InvestmentPlanExecutionJob` 在交易日自动生成 `INVEST/PENDING` 交易。相同计划在同一北京时间自然日只能生成一次，CONFIRMED 或 CANCELLED 都视为本期已处理。
 
 基金列表和定投管理页展示本月已定投、本月剩余预计和全月预计。用户可在设置页配置可选月度预算，超额只提示，不改变计划或交易状态。
 
@@ -143,7 +143,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 
 `/settings` 管理关注指数和可选每月定投预算。预算直接覆盖或清空，用于基金列表的本月现金流提示；所有买入、转换和净值确认均不受它影响。
 
-`/admin` 提供行情刷新、信号生成、净值确认、基金字典和交易日历同步等管理操作，并提供 Grafana 外链查看系统监控。自动信号生成和自动定投必须同时受北京时间与交易日历约束。
+`/admin` 提供行情刷新、信号生成、净值确认、基金字典和交易日历同步等管理操作，并在「系统监控」Tab 展示各定时任务最近执行状态与连续失败次数。自动信号生成和自动定投必须同时受北京时间与交易日历约束。
 
 ## 九、数据与失败原则
 
@@ -166,7 +166,7 @@ ACCUMULATING -> ARMED -> TRIGGERED -> COOLDOWN -> ACCUMULATING/ARMED
 | 交易 | `/api/portfolio-funds/{portfolioFundId}/transactions`、`/api/transactions/{transactionId}` |
 | 收益 | `/api/insights/portfolio/**` |
 | 行情 | `/api/market/indices/realtime`、`/api/market/breadth`、`/api/market/volume-price`、`/api/market/sectors` |
-| 配置 | `/api/user-config` |
+| 配置 | `/api/market-data/watched-indices`、`/api/investment-plan-budget` |
 | 管理 | `/api/admin/**` |
 
 ## 十一、权威决策

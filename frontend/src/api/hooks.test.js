@@ -41,7 +41,19 @@ import {
     setAlertRuleEnabled,
     updateAlertRule,
     updateSiteEmail,
+    realtimeQueryOptions,
 } from './hooks.js';
+
+describe('non-realtime query options', () => {
+    it('does not poll on a fixed interval in the background', () => {
+        expect(realtimeQueryOptions).not.toHaveProperty('refetchInterval');
+        expect(realtimeQueryOptions.refetchIntervalInBackground).toBe(false);
+    });
+
+    it('still refetches when the window regains focus', () => {
+        expect(realtimeQueryOptions.refetchOnWindowFocus).toBe(true);
+    });
+});
 
 describe('portfolio fund onboarding', () => {
     it('creates a portfolio fund through the accounting-owned endpoint', () => {

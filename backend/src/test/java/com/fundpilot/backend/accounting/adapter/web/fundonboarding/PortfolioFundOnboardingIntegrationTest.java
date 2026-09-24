@@ -30,13 +30,17 @@ import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -61,6 +65,9 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
     @Autowired ObjectMapper objectMapper;
     @Autowired PortfolioFundOnboardingCommandHandler onboarding;
     @Autowired PlatformTransactionManager transactionManager;
+
+    /** 本次用例经 {@link #insertRawNav} 写入裸净值行的 product，用例结束按 product 清理。 */
+    private final Set<Long> rawNavProductIds = new LinkedHashSet<>();
 
     @TestBean(methodName = "failingMarketRefresh")
     MarketIndicatorRefreshCommandHandler marketRefresh;
@@ -515,6 +522,23 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
                 """, new Object[]{productId, fundCode, Timestamp.from(navDate), nav, Timestamp.from(navDate)},
                 new int[]{java.sql.Types.BIGINT, java.sql.Types.VARCHAR, java.sql.Types.TIMESTAMP,
                         java.sql.Types.NUMERIC, java.sql.Types.TIMESTAMP});
+        rawNavProductIds.add(productId);
+    }
+
+    /**
+     * 裸插的净值行可能带 {@code nav = NULL}，而 {@code findLatestTwoByProductIds} 不做非空过滤：
+     * 这些行落在共享的测试账号下，会被后续用例（如提醒规则创建读取持仓基金最新两期净值）
+     * 映射为领域对象时抛「单位净值不能为空」。此处按 product 清理本次用例写入的裸净值行。
+     */
+    @AfterEach
+    void removeRawNavFixtures() {
+        if (rawNavProductIds.isEmpty()) {
+            return;
+        }
+        String placeholders = String.join(", ", Collections.nCopies(rawNavProductIds.size(), "?"));
+        jdbc.update("DELETE FROM fund_nav_history WHERE fund_product_id IN (" + placeholders + ")",
+                rawNavProductIds.toArray());
+        rawNavProductIds.clear();
     }
 
     private Cookie ownerCookie() {

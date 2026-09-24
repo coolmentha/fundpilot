@@ -341,7 +341,6 @@ jobs:
                 printf 'FUNDPILOT_SESSION_SECRET=%s\n' "$FUNDPILOT_SESSION_SECRET"
                 printf 'FUNDPILOT_BOOTSTRAP_USERNAME=%s\n' "$FUNDPILOT_BOOTSTRAP_USERNAME"
                 printf 'FUNDPILOT_BOOTSTRAP_PASSWORD=%s\n' "$FUNDPILOT_BOOTSTRAP_PASSWORD"
-                printf 'FLYWAY_REPAIR_LEGACY_V7=true\n'
                 printf 'DEPLOYMENT_VALIDATION_MODE=false\n'
                 printf 'MAIL_HOST=%s\n' "${MAIL_HOST:-}"
                 printf 'MAIL_PORT=%s\n' "${MAIL_PORT:-587}"
@@ -474,7 +473,7 @@ jobs:
                     -e YANGJIBAO_SECRET=validation-mode-no-external-use \
                     -e FUNDPILOT_SESSION_SECRET=validation-mode-no-session-use \
                     -e FUNDPILOT_BOOTSTRAP_USERNAME= -e FUNDPILOT_BOOTSTRAP_PASSWORD= \
-                    -e FLYWAY_REPAIR_LEGACY_V7=false "$BACKEND_IMAGE" >/dev/null; then
+                    "$BACKEND_IMAGE" >/dev/null; then
                   printf 'result=start-failed\n' >> "$report"
                   return 1
                 fi
@@ -638,7 +637,7 @@ jobs:
                 git checkout --detach "$PREVIOUS_RELEASE_TAG" || release_files_ok=0
                 if [ "$PREVIOUS_ENV_READY" -eq 1 ]; then
                   if cp "$PREVIOUS_ENV_FILE" .env && chmod 600 .env; then
-                    unset DB_USERNAME DB_PASSWORD FLYWAY_REPAIR_LEGACY_V7
+                    unset DB_USERNAME DB_PASSWORD
                     unset BACKEND_IMAGE FRONTEND_IMAGE
                   else
                     release_files_ok=0

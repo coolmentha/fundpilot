@@ -2,7 +2,9 @@
 
 养基宝 `fundpilot.yangjibao.secret` 是请求签名秘密，通过运行环境变量 `YANGJIBAO_SECRET` 注入。仓库和构建产物不提供可工作的默认值；缺失、空字符串或全空白均在客户端 Bean 创建时使应用启动失败，错误只标明配置键。该约束适用于生产及本地启动；测试仅使用明确的虚构秘密。
 
-签名协议公开部分保持不变：MD5、UTF-8、小写十六进制、去掉查询参数的请求路径、秒级时间戳，以及 `Request-Time`、`Request-Sign`、`Authorization` 请求头。匿名签名拼接路径、时间戳、秘密；登录态签名在路径与时间戳之间加入授权 token。授权 token 是会话秘密，不是部署配置。第三方 URL 是公开端点，超时和会话 TTL 是普通运行参数。行情客户端的公开请求参数不作为本 Issue 的签名秘密处理；用户登录 Cookie 签名属于独立身份认证配置。
+签名协议公开部分保持不变：MD5、UTF-8、小写十六进制、去掉查询参数的请求路径、秒级时间戳，以及 `Request-Time`、`Request-Sign`、`Authorization` 请求头。匿名签名拼接路径、时间戳、秘密；登录态签名在路径与时间戳之间加入授权 token。授权 token 是会话秘密，不是部署配置。第三方 URL 是公开端点，超时和会话 TTL 是普通运行参数。行情客户端的公开请求参数不作为本 Issue 的签名秘密处理。
+
+用户登录 Cookie 签名属于独立身份认证配置：`fundpilot.admin.session-secret` 经环境变量 `FUNDPILOT_SESSION_SECRET` 注入，未设置时回退兼容 `ADMIN_API_KEY`。两者都为空或全空白时，网关 Bean 创建阶段即失败，错误只标明配置键、不回显值；这取代了此前「签发时空指针、解析时静默失效」的行为。测试 profile 使用明确的虚构值。
 
 自动部署优先读取 GitHub Actions 仓库 Secret `YANGJIBAO_SECRET`，经 SSH 环境传入并写入仓库根目录受控 `.env`；未设置仓库 Secret 时兼容保留原 VPS `.env` 值。`deploy/docker-compose.prod.yml` 再将其传入后端容器。本地部署也可直接使用受控 `.env` 或宿主环境。只填写第三方协议认可的既有值，不应任意生成替代值。示例文件保留空值；禁止将真实值提交、写入镜像或输出到日志。部署脚本与 Compose 对缺失或空值提前报错，应用另行拒绝全空白值。
 

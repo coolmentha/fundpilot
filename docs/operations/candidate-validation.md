@@ -65,3 +65,26 @@ npm run build
 ```
 
 门禁 fixture 覆盖缺失、失败、异提交、缺少规定 job、规定 job 失败、API 超时信号、固定 `ci.yml` 来源及同一 attempt job 请求。需要验证覆盖率失败路径时，可运行 `npm exec vitest -- run src/dcaBudget.test.js --coverage --coverage.thresholds.lines=100`；该定向命令预期退出 1，仅是故障注入，不是基线采集。后端工作树稳定后由主代理串行运行 `./backend/mvnw -B -f backend/pom.xml clean verify`，从新生成的 `backend/target/site/jacoco/jacoco.xml` 登记全量及认证、账目、定投基线，再配置 JaCoCo check。
+
+## Flyway 历史缺口（V5/V7）
+
+`db/migration/` 中不存在 `V5` 与 `V7` 脚本（曾用的 `V7__dca_take_profit_replaces_timing.sql` 已从仓库删除，后续迁移改名 `V8`）。当目标库历史表里留存这些已删除脚本的执行记录时，Flyway 会把它们判为 `MISSING_SUCCESS` 并拒绝启动，这就是 #66 修复的 VPS 事故。
+
+当时由 CD 每次部署注入 `FLYWAY_REPAIR_LEGACY_V7=true`、配合 `LegacyV7FlywayRepairService` 在 `migrate` 前执行受限 `repair` 兜底。v0.13.0 实测确认该补丁已无作用：生产库 `flyway_schema_history` 中既不存在 V5/V7 行，也不存在任何非成功 `SQL` 行，正常启动从未再进入 repair 分支。补丁代码、配置开关、CD 注入与对应测试已一并删除，正常启动回到 Spring Boot 默认策略（`migrate` 内含校验）。
+
+只有一种情况需要重现它：把补丁执行前（早于 #66 发布）的数据库备份恢复到目标库。此时先确认缺口范围：
+
+```sql
+SELECT installed_rank, version, type, description, success
+FROM flyway_schema_history
+WHERE version IN ('5', '7');
+```
+
+确认结果里只有缺失项、且没有 `type = 'DELETE'` 的残留行后，二选一恢复：
+
+1. 用任意可运行 Flyway 的环境对目标库执行 `flyway repair`，只删除缺失脚本的执行记录。
+2. 直接删除该行：`DELETE FROM flyway_schema_history WHERE version = '7';`
+
+需要原实现时可用 `git show 4a5c9f7:backend/src/main/java/com/fundpilot/backend/config/LegacyV7FlywayRepairService.java` 取回（DDD 迁移后路径为 `platform/persistence/flyway/`）。
+
+同类风险仍需避免：改动或重命名**已经发布执行过**的迁移脚本，会让 Flyway 在 `validate` 阶段报描述或校验和不匹配而拒绝启动。`V7` 改名 `V8`、以及 v0.13.0 中新建的 `V56__add_scheduled_job_status.sql` 与生产已执行的 `V56__add_portfolio_return_snapshot_rebuild_state.sql` 撞号（已改为 `V57`），都属于这一类。

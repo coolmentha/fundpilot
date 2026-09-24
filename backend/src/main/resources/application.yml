@@ -52,7 +52,7 @@ management:
   endpoints:
     web:
       exposure:
-        # prometheus:供 fundpilot_default 网络内 Prometheus 抓取(backend 不映射宿主端口,公网不可达)
+        # prometheus:保留指标导出端点供外部抓取;Prometheus/Grafana 抓取栈不随应用部署
         include: health,info,prometheus
   endpoint:
     health:
@@ -63,9 +63,6 @@ management:
       enabled: false
 
 fundpilot:
-  investment-plan-scheduler:
-    # true 使用 InvestmentPlan + Accounting 新链路；false 仅在回切时恢复 legacy DCA 调度器。
-    enabled: ${INVESTMENT_PLAN_SCHEDULER_ENABLED:true}
   auth:
     bootstrap:
       username: ${FUNDPILOT_BOOTSTRAP_USERNAME:}
@@ -84,10 +81,6 @@ fundpilot:
     api-key: ${ADMIN_API_KEY:}
     # Cookie 签名密钥；未配置时兼容回退 ADMIN_API_KEY，生产应单独设置。
     session-secret: ${FUNDPILOT_SESSION_SECRET:}
-  flyway:
-    # 仅允许修复 VPS 已知的遗留 V7 Missing 记录；未命中时仍执行严格校验。
-    legacy-v7-repair:
-      enabled: ${FLYWAY_REPAIR_LEGACY_V7:false}
   yangjibao:
     base-url: ${YANGJIBAO_BASE_URL:http://browser-plug-api.yangjibao.com}
     secret: ${YANGJIBAO_SECRET:}
