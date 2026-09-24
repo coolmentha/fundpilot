@@ -3,9 +3,8 @@ package com.fundpilot.backend.discipline.adapter.web.adviceresponse;
 import com.fundpilot.backend.discipline.application.query.advicequery.AdviceQueryHandler;
 import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
+import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.math.BigDecimal;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,8 +54,8 @@ public class AdviceQueryController {
     public ApiResponse<List<View>> range(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId, @PathVariable long legacyFundId,
             @RequestParam String from, @RequestParam String to) {
-        Instant start = LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant end = LocalDate.parse(to).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant start = ChinaTradingDate.parseUtcDate(from);
+        Instant end = ChinaTradingDate.nextUtcDate(ChinaTradingDate.parseUtcDate(to));
         return ApiResponse.ok(queries.range(ownerId, legacyFundId, start, end).stream().map(View::from).toList());
     }
 
@@ -65,8 +64,8 @@ public class AdviceQueryController {
     public ApiResponse<List<View>> portfolioFundRange(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId, @PathVariable long portfolioFundId,
             @RequestParam String from, @RequestParam String to) {
-        Instant start = LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant end = LocalDate.parse(to).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant start = ChinaTradingDate.parseUtcDate(from);
+        Instant end = ChinaTradingDate.nextUtcDate(ChinaTradingDate.parseUtcDate(to));
         return ApiResponse.ok(queries.rangeByPortfolioFund(ownerId, portfolioFundId, start, end).stream().map(View::from).toList());
     }
 

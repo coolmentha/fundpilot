@@ -1,6 +1,7 @@
 package com.fundpilot.backend.sharedkernel.time;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -31,5 +32,19 @@ public final class ChinaTradingDate {
                 .truncatedTo(ChronoUnit.DAYS)
                 .withZoneSameLocal(ZoneOffset.UTC)
                 .toInstant();
+    }
+
+    /** 将任意时刻映射为其北京时间后一自然日对应的 UTC 00:00 Instant。 */
+    public static Instant nextUtcDate(Instant instant) {
+        return instant.atZone(ZONE)
+                .plusDays(1)
+                .truncatedTo(ChronoUnit.DAYS)
+                .withZoneSameLocal(ZoneOffset.UTC)
+                .toInstant();
+    }
+
+    /** 解析 {@code yyyy-MM-dd} 日期标签字符串为其对应的 UTC 00:00 Instant。 */
+    public static Instant parseUtcDate(String date) {
+        return LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 }

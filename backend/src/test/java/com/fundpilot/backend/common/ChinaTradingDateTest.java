@@ -23,4 +23,16 @@ class ChinaTradingDateTest {
         assertThat(ChinaTradingDate.previousUtcDate(tuesdayAtThree))
                 .isEqualTo(Instant.parse("2026-07-13T00:00:00Z"));
     }
+
+    @Test
+    void nextUtcDate_日期标签映射为次日Utc零点() {
+        assertThat(ChinaTradingDate.nextUtcDate(Instant.parse("2026-09-07T00:00:00Z")))
+                .isEqualTo(Instant.parse("2026-09-08T00:00:00Z"));
+    }
+
+    @Test
+    void parseUtcDate_日期标签字符串解析为Utc零点() {
+        assertThat(ChinaTradingDate.parseUtcDate("2026-09-07"))
+                .isEqualTo(Instant.parse("2026-09-07T00:00:00Z"));
+    }
 }

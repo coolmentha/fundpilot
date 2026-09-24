@@ -32,3 +32,7 @@ WHERE completion_date IS NOT NULL
 ```
 
 Never delete rows whose `completion_date` is null. Preserve them for retry and incident analysis.
+
+## Metric export
+
+The metrics above, along with job and market-data metrics, remain exported at `/actuator/prometheus`. The Prometheus / Grafana / Loki / Promtail stack is retired in v0.13.0: `deploy/docker-compose.monitor.yml` and `deploy/monitor/` were removed because nothing referenced them. Running containers are unaffected by the file removal. To scrape again, restore those files from git history and start the stack as documented in that compose file before it was deleted. Scheduled job status stays visible without any of this, in the `/admin`「系统监控」tab.

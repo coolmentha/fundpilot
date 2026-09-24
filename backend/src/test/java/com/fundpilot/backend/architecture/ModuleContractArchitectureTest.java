@@ -13,6 +13,7 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -30,6 +31,17 @@ class ModuleContractArchitectureTest {
 
     private static final String ROOT = "com.fundpilot.backend.";
     private static final Set<String> BUSINESS_MODULES = SpringModulithStructureTest.BUSINESS_MODULES;
+
+    /** 编码规范第 6 条:日期一律经 sharedkernel 统一转换入口处理,Controller 不得直接使用日期与时区类型。 */
+    private static final Set<String> FORBIDDEN_DATE_TYPES = Set.of(
+            "java.time.LocalDate",
+            "java.time.LocalDateTime",
+            "java.time.LocalTime",
+            "java.time.ZoneId",
+            "java.time.ZoneOffset",
+            "java.time.format.DateTimeFormatter",
+            "java.util.Date",
+            "java.util.Calendar");
 
     private final JavaClasses classes = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
@@ -246,6 +258,21 @@ class ModuleContractArchitectureTest {
                     .forEach(target -> violations.add(source.getName()
                             + " 直接依赖事件发布基础设施,集成事件必须由 infrastructure.messaging 投递"));
         });
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void 所有Controller不直接使用日期与时区类型() {
+        List<String> violations = new ArrayList<>();
+
+        classes.stream()
+                .filter(type -> type.isAnnotatedWith(RestController.class))
+                .forEach(type -> type.getDirectDependenciesFromSelf().stream()
+                        .map(Dependency::getTargetClass)
+                        .filter(target -> FORBIDDEN_DATE_TYPES.contains(target.getFullName()))
+                        .forEach(target -> violations.add(type.getName() + " 直接使用 " + target.getFullName()
+                                + ",日期必须经 sharedkernel 统一转换入口处理")));
 
         assertThat(violations).isEmpty();
     }
