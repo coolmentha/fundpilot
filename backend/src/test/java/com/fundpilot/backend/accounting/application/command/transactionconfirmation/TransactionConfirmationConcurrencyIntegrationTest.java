@@ -47,7 +47,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest(properties = "fundpilot.yangjibao.secret=test-only-yangjibao-signing-secret")
+@SpringBootTest(properties = {
+        "fundpilot.yangjibao.secret=test-only-yangjibao-signing-secret",
+        "fundpilot.admin.session-secret=test-only-admin-session-secret"})
 @Testcontainers
 class TransactionConfirmationConcurrencyIntegrationTest {
 
