@@ -21,7 +21,7 @@ class PendingTransactionCompensationJobTest {
         job.compensateOnStartup();
         job.compensateHourly();
 
-        verify(accounting, org.mockito.Mockito.times(2)).compensateAll(org.mockito.ArgumentMatchers.any());
+        verify(accounting, org.mockito.Mockito.times(2)).compensateAll();
         Method method = PendingTransactionCompensationJob.class.getMethod("compensateHourly");
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
         assertThat(scheduled.cron()).isEqualTo("0 5 * * * *");

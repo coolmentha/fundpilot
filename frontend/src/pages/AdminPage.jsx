@@ -1,7 +1,11 @@
 import React from 'react';
-import {App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Typography} from 'antd';
-import {DashboardOutlined, DatabaseOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined, UserOutlined} from '@ant-design/icons';
-import {useAdminAction, useAdminUserMutation, useAdminUsers} from '../api/hooks.js';
+import {App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
+import {DatabaseOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined, UserOutlined} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import {useAdminAction, useAdminJobStatus, useAdminUserMutation, useAdminUsers} from '../api/hooks.js';
+
+dayjs.extend(utc);
 
 const {Title, Text} = Typography;
 
@@ -9,8 +13,10 @@ export default function AdminPage() {
     const {message} = App.useApp();
     const adminAction = useAdminAction();
     const users = useAdminUsers();
+    const jobs = useAdminJobStatus();
     const userMutation = useAdminUserMutation();
     const [createOpen, setCreateOpen] = React.useState(false);
+    const [jobKeyword, setJobKeyword] = React.useState('');
     const [form] = Form.useForm();
     const run = async (action, successMsg) => {
         try {
@@ -37,12 +43,6 @@ export default function AdminPage() {
                     手动触发定时任务（日常由后端 @Scheduled 自动执行，此处用于调试/补跑）。
                 </Text>
                 <Space direction="vertical" size="middle" className="full-width">
-                    <Card size="small" title="系统监控" extra={
-                        <Button href="/grafana/dashboards"
-                                target="_blank" icon={<DashboardOutlined/>}>打开 Grafana</Button>
-                    }>
-                        <Text type="secondary">在 Grafana 查看服务指标、任务运行状态和日志。</Text>
-                    </Card>
                     <Card size="small" title="建议生成" extra={
                         <Popconfirm title="生成今日建议？未回应建议将按最新行情重算。" onConfirm={() =>
                             run('generate', () => '建议生成完成')}>
@@ -89,6 +89,67 @@ export default function AdminPage() {
                         <Text type="secondary">从上证指数日K线提取交易日(周末节假日自动跳过)，写入 trading_calendar 表，供 MIN_HOLD_DAYS 判定。</Text>
                     </Card>
                 </Space>
+            </Card>
+    );
+    const jobRows = jobs.data || [];
+    const failedJobCount = jobRows.filter((job) => job.consecutiveFailures > 0).length;
+    const keyword = jobKeyword.trim();
+    const monitoring = (
+            <Card title={<Title level={4}>系统监控</Title>} extra={
+                <Button icon={<ReloadOutlined/>} loading={jobs.isFetching}
+                        onClick={() => jobs.refetch()}>刷新</Button>
+            }>
+                <Text type="secondary" style={{display: 'block', marginBottom: 12}}>
+                    定时任务最近一次执行状态；连续失败次数会累计，需人工排查。
+                </Text>
+                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, marginBottom: 12}}>
+                    <Input allowClear placeholder="按任务名搜索" style={{width: 240}}
+                           aria-label="按任务名搜索" value={jobKeyword}
+                           onChange={(event) => setJobKeyword(event.target.value)}/>
+                    <Text type="secondary">
+                        共 {jobRows.length} 个任务
+                        {failedJobCount > 0 ? ` · ${failedJobCount} 个连续失败` : ''}
+                    </Text>
+                </div>
+                <Table rowKey="task" size="small" loading={jobs.isLoading}
+                       dataSource={keyword ? jobRows.filter((job) => job.task.includes(keyword)) : jobRows}
+                       pagination={{pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 个任务`}}
+                       scroll={{x: 860}}
+                       locale={{emptyText: '暂无任务执行记录'}}
+                       columns={[
+                           {title: '任务', dataIndex: 'task', width: 240,
+                            render: (task) => <Text code>{task}</Text>},
+                           {title: '最近执行', dataIndex: 'lastFinishedAt', width: 140,
+                            sorter: (left, right) => dayjs(left.lastFinishedAt).valueOf()
+                                    - dayjs(right.lastFinishedAt).valueOf(),
+                            defaultSortOrder: 'descend',
+                            render: (value) => value
+                                    ? dayjs(value).utcOffset(8).format('MM-DD HH:mm:ss') : '-'},
+                           {title: '耗时', dataIndex: 'lastDurationMillis', width: 90,
+                            sorter: (left, right) => left.lastDurationMillis - right.lastDurationMillis,
+                            render: (value) => value < 1000
+                                    ? `${value}ms` : `${(value / 1000).toFixed(1)}s`},
+                           {title: '结果', dataIndex: 'lastResult', width: 90,
+                            filters: [{text: '成功', value: 'SUCCESS'}, {text: '失败', value: 'FAILURE'}],
+                            onFilter: (value, row) => row.lastResult === value,
+                            render: (result) => (
+                                    <Tag color={result === 'SUCCESS' ? 'green' : 'red'}>
+                                        {result === 'SUCCESS' ? '成功' : '失败'}
+                                    </Tag>
+                            )},
+                           {title: '连续失败', dataIndex: 'consecutiveFailures', width: 110,
+                            filters: [{text: '仅看有失败的', value: 'failed'}],
+                            onFilter: (value, row) => row.consecutiveFailures > 0,
+                            sorter: (left, right) => left.consecutiveFailures - right.consecutiveFailures,
+                            render: (count) => count > 0
+                                    ? <Tag color="red">{count} 次</Tag>
+                                    : <Text type="secondary">0</Text>},
+                           {title: '失败原因', dataIndex: 'lastFailureMessage', ellipsis: true,
+                            render: (reason) => reason
+                                    ? <Tooltip title={reason}><Text type="danger">{reason}</Text></Tooltip>
+                                    : '-'},
+                       ]}/>
             </Card>
     );
     const userRows = users.data || [];
@@ -160,6 +221,7 @@ export default function AdminPage() {
     return (
         <Tabs defaultActiveKey="operations" items={[
             {key: 'operations', label: '管理操作', children: operations},
+            {key: 'monitoring', label: '系统监控', children: monitoring},
             {key: 'users', label: '用户管理', children: userManagement},
         ]}/>
     );

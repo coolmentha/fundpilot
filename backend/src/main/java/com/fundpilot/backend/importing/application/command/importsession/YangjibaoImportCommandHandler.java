@@ -8,6 +8,7 @@ import com.fundpilot.backend.importing.application.gateway.importsession.ImportS
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportSessionGateway.StoredSelection;
 import com.fundpilot.backend.importing.application.gateway.importsession.ImportedHoldingGateway;
 import com.fundpilot.backend.importing.application.gateway.importsession.YangjibaoSourceGateway;
+import com.fundpilot.backend.platform.observability.JobName;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -223,6 +224,7 @@ public class YangjibaoImportCommandHandler {
         }
     }
 
+    @JobName("过期导入会话清理")
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Shanghai")
     void purgeExpiredSessions() {
         Instant now = Instant.now();

@@ -2,6 +2,7 @@ package com.fundpilot.backend.marketdata.adapter.scheduler.navpublishing;
 
 import com.fundpilot.backend.marketdata.application.command.navpublishing.DailyNavPublishingCommandHandler;
 import com.fundpilot.backend.marketdata.application.query.tradingcalendar.TradingCalendarQueryHandler;
+import com.fundpilot.backend.platform.observability.JobName;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +20,13 @@ public class DailyNavPublishingJob {
     private final TradingCalendarQueryHandler tradingCalendar;
     private final Clock clock;
 
+    @JobName("净值发布")
     @Scheduled(cron = "0 */5 20-22 * * MON-FRI", zone = "Asia/Shanghai")
     public void publishToday() {
         navPublishing.publishToday();
     }
 
+    @JobName("净值补发")
     @Scheduled(cron = "0 */10 0-9 * * *", zone = "Asia/Shanghai")
     public void catchUpPreviousTradingDay() {
         Instant today = ChinaTradingDate.toUtcDate(clock.instant());

@@ -1,9 +1,13 @@
 import {useQuery, useMutation, useQueryClient} from '@tanstack/react-query';
 import {get, post, put, del} from './client.js';
 
-const realtimeQueryOptions = {
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
+/**
+ * 组合、信号、收益等非行情查询的共享选项：不做定时轮询。
+ * 这些数据由用户操作触发的失效重取驱动，行情实时性由独立的行情通道负责，
+ * 因此只保留获得焦点时的重取，避免每 30 秒的背景请求。
+ */
+export const realtimeQueryOptions = {
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
 };
 
@@ -530,6 +534,10 @@ export function useAdminAction() {
 
 export function useAdminUsers() {
     return useQuery({queryKey: ['admin-users'], queryFn: () => get('/api/admin/users')});
+}
+
+export function useAdminJobStatus() {
+    return useQuery({queryKey: ['admin-jobs'], queryFn: () => get('/api/admin/jobs')});
 }
 
 export function saveAdminUser(path, body) {

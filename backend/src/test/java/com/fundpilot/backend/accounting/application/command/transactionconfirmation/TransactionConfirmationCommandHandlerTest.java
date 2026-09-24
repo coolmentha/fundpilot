@@ -81,7 +81,7 @@ class TransactionConfirmationCommandHandlerTest {
         TransactionConfirmationCommandHandler handler = new TransactionConfirmationCommandHandler(
                 transactions, lots, portfolioFunds, fees, navs, positions, events, batchTransactions, clock);
 
-        int confirmed = handler.confirmPendingFor(10L, Instant.parse("2026-07-27T00:00:00Z"));
+        int confirmed = handler.confirmPendingFor(10L);
 
         assertThat(confirmed).isEqualTo(1);
         verify(transactions).save(goodBuy);
@@ -121,7 +121,7 @@ class TransactionConfirmationCommandHandlerTest {
         TransactionConfirmationCommandHandler handler = new TransactionConfirmationCommandHandler(
                 transactions, lots, portfolioFunds, fees, navs, positions, events, batchTransactions, clock);
 
-        int confirmed = handler.confirmPendingFor(10L, Instant.parse("2026-07-27T00:00:00Z"));
+        int confirmed = handler.confirmPendingFor(10L);
 
         assertThat(confirmed).isEqualTo(0);
         verify(transactions, never()).save(any());

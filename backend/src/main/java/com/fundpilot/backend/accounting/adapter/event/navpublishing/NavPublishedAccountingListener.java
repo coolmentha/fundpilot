@@ -14,6 +14,6 @@ public class NavPublishedAccountingListener {
 
     @ApplicationModuleListener
     public void onNavPublished(NavPublished event) {
-        confirmations.confirmPendingForProduct(event.fundProductId(), event.navDate());
+        confirmations.confirmPendingForProduct(event.fundProductId());
     }
 }

@@ -18,6 +18,6 @@ class NavPublishedAccountingListenerTest {
         new NavPublishedAccountingListener(confirmations).onNavPublished(new NavPublished(
                 7L, "001071", navDate, new BigDecimal("1.2345"), new BigDecimal("2.3456"), navDate));
 
-        verify(confirmations).confirmPendingForProduct(7L, navDate);
+        verify(confirmations).confirmPendingForProduct(7L);
     }
 }

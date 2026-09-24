@@ -2,6 +2,7 @@ package com.fundpilot.backend.marketdata.adapter.scheduler.realtimevaluation;
 
 import com.fundpilot.backend.marketdata.application.command.realtimevaluation.RealtimeValuationRefreshCommandHandler;
 import com.fundpilot.backend.marketdata.application.query.tradingcalendar.TradingCalendarQueryHandler;
+import com.fundpilot.backend.platform.observability.JobName;
 import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import java.time.Clock;
 import java.time.Instant;
@@ -28,11 +29,13 @@ public class RealtimeValuationRefreshJob {
     private final Clock clock;
     private final AtomicBoolean refreshingRealtime = new AtomicBoolean(false);
 
+    @JobName("实时估值刷新")
     @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshRealtime() {
         if (isTradingHours()) runRealtimeOnce(commands::refreshRealtimeWithoutEstimates);
     }
 
+    @JobName("盘中估值刷新")
     @Scheduled(cron = "*/30 * 9-14 * * MON-FRI", zone = "Asia/Shanghai")
     public void refreshFundEstimates() {
         if (isTradingHours()) {

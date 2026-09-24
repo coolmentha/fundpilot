@@ -1,15 +1,12 @@
 package com.fundpilot.backend.accounting.adapter.scheduler.transactionconfirmation;
 
-import com.fundpilot.backend.sharedkernel.time.ChinaTradingDate;
 import com.fundpilot.backend.accounting.application.command.transactionconfirmation.TransactionCompensationCommandHandler;
+import com.fundpilot.backend.platform.observability.JobName;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import java.time.Clock;
-import java.time.Instant;
 
 /**
  * 净值确认定时任务(issue #15):次日凌晨 3:00 回填前一天 PENDING 交易的 nav + 另一侧 + confirmTime,转 CONFIRMED。
@@ -25,13 +22,12 @@ public class NavConfirmJob {
     private static final Logger log = LoggerFactory.getLogger(NavConfirmJob.class);
 
     private final TransactionCompensationCommandHandler accountingCompensation;
-    private final Clock clock;
 
+    @JobName("净值确认")
     @Scheduled(cron = "0 0 3 * * MON-FRI", zone = "Asia/Shanghai")
     public void run() {
         log.info("净值确认任务开始");
-        Instant tradeDay = ChinaTradingDate.previousUtcDate(clock.instant());
-        int confirmed = accountingCompensation.compensateAll(tradeDay);
+        int confirmed = accountingCompensation.compensateAll();
         log.info("净值确认任务结束 confirmed={}", confirmed);
     }
 }

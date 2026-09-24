@@ -1,6 +1,7 @@
 package com.fundpilot.backend.marketdata.adapter.scheduler.tradingcalendar;
 
 import com.fundpilot.backend.marketdata.application.command.tradingcalendar.TradingCalendarCommandHandler;
+import com.fundpilot.backend.platform.observability.JobName;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,7 @@ public class TradingCalendarSynchronizationJob {
     @Value("${trading-calendar.sync-on-startup:true}") private boolean syncOnStartup;
     @Value("${fundpilot.deployment.validation-mode:false}") private boolean deploymentValidationMode;
 
+    @JobName("交易日历同步")
     @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Shanghai")
     public void synchronizeDaily() {
         synchronize("每日", true);

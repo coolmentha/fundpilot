@@ -103,25 +103,28 @@ public class TransactionConfirmationCommandHandler {
 
     /**
      * 净值公布后批量确认某组合基金的 PENDING 流水；当日无净值时静默跳过。
+     * <p>确认日期恒取自流水自身的 {@code trade_date}：PENDING 流水只能由
+     * {@link LedgerTransaction#placePending} 创建，该方法用 {@code Objects.requireNonNull}
+     * 强制 {@code trade_date} 非空，故无需调用方传入日期。
      * <p>逐笔隔离(issue #145)：任一笔坏流水(如卖出超持仓、缺必填字段)只跳过该笔，
      * 不阻断同基金其余正常流水的确认。
      */
     @Transactional
-    public int confirmPendingFor(long portfolioFundId, Instant fallbackDate) {
+    public int confirmPendingFor(long portfolioFundId) {
         if (portfolioFunds.findForUpdate(portfolioFundId)
                 .filter(TradedPortfolioFundGateway.TradedPortfolioFund::tradable).isEmpty()) {
             return 0;
         }
         List<LedgerTransaction> pendings =
                 transactions.findByPortfolioFundAndStatus(portfolioFundId, TransactionStatus.PENDING);
-        return confirmWhereNavAvailable(pendings, fallbackDate);
+        return confirmWhereNavAvailable(pendings);
     }
 
     /**
      * 新净值发布后，确认同一产品下净值已齐备的待确认流水。
      * <p>每只组合基金在独立事务中确认(issue #145)：一只基金的坏流水不影响其他基金。
      */
-    public int confirmPendingForProduct(long fundProductId, Instant navDate) {
+    public int confirmPendingForProduct(long fundProductId) {
         return portfolioFundsWithPendingTransactions().stream()
                 .filter(portfolioFundId -> portfolioFunds.find(portfolioFundId)
                         .map(portfolioFund -> portfolioFund.tradable()
@@ -129,7 +132,7 @@ public class TransactionConfirmationCommandHandler {
                         .orElse(false))
                 .mapToInt(portfolioFundId -> {
                     try {
-                        return batchTransactions.execute(() -> confirmPendingFor(portfolioFundId, navDate));
+                        return batchTransactions.execute(() -> confirmPendingFor(portfolioFundId));
                     } catch (RuntimeException exception) {
                         log.warn("产品 {} 净值确认失败 portfolio_fund={}，跳过该基金",
                                 fundProductId, portfolioFundId, exception);
@@ -148,7 +151,7 @@ public class TransactionConfirmationCommandHandler {
                 .stream().toList();
     }
 
-    private int confirmWhereNavAvailable(List<LedgerTransaction> pendings, Instant fallbackDate) {
+    private int confirmWhereNavAvailable(List<LedgerTransaction> pendings) {
         int confirmed = 0;
         for (LedgerTransaction transaction : pendings) {
             if (transaction.status() != TransactionStatus.PENDING) {
@@ -161,7 +164,7 @@ public class TransactionConfirmationCommandHandler {
                 // 悲观锁定后重读状态,避免与手动确认/撤单并发时乐观锁失败整批跳过
                 confirmed += transactions.findByIdForUpdate(transaction.id())
                         .filter(candidate -> candidate.status() == TransactionStatus.PENDING)
-                        .map(candidate -> confirmOneWhereNavAvailable(candidate, fallbackDate))
+                        .map(candidate -> confirmOneWhereNavAvailable(candidate))
                         .orElse(0);
             } catch (TransactionConfirmationFailure failure) {
                 log.warn("批量确认跳过坏流水 tx_id={} code={}", transaction.id(), failure.code(), failure);
@@ -170,8 +173,9 @@ public class TransactionConfirmationCommandHandler {
         return confirmed;
     }
 
-    private int confirmOneWhereNavAvailable(LedgerTransaction transaction, Instant fallbackDate) {
-        Instant dayLabel = BusinessDay.toDateLabel(transaction.effectiveTradeDate(fallbackDate));
+    private int confirmOneWhereNavAvailable(LedgerTransaction transaction) {
+        // trade_date 由领域强制非空;兜底值仅覆盖历史空值行
+        Instant dayLabel = BusinessDay.toDateLabel(transaction.effectiveTradeDate(clock.instant()));
         ConversionPair conversion = resolveConversion(transaction);
         if (conversion != null) {
             return tryConfirmConversion(conversion, dayLabel, new ArrayList<>());

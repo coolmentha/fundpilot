@@ -1,6 +1,7 @@
 package com.fundpilot.backend.accounting.adapter.scheduler.transactionconfirmation;
 
 import com.fundpilot.backend.accounting.application.command.transactionconfirmation.TransactionCompensationCommandHandler;
+import com.fundpilot.backend.platform.observability.JobName;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -22,11 +23,12 @@ public class PendingTransactionCompensationJob {
         if (deploymentValidationMode) {
             return;
         }
-        accountingCompensation.compensateAll(java.time.Instant.now());
+        accountingCompensation.compensateAll();
     }
 
+    @JobName("待确认流水补偿")
     @Scheduled(cron = "0 5 * * * *", zone = "Asia/Shanghai")
     public void compensateHourly() {
-        accountingCompensation.compensateAll(java.time.Instant.now());
+        accountingCompensation.compensateAll();
     }
 }

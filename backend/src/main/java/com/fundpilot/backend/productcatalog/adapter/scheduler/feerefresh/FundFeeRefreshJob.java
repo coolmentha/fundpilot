@@ -1,5 +1,6 @@
 package com.fundpilot.backend.productcatalog.adapter.scheduler.feerefresh;
 
+import com.fundpilot.backend.platform.observability.JobName;
 import com.fundpilot.backend.productcatalog.application.command.feerefresh.FundFeeCommandHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 public class FundFeeRefreshJob {
     private final FundFeeCommandHandler commands;
 
+    @JobName("基金费率刷新")
     @Scheduled(cron = "0 30 2 * * *", zone = "Asia/Shanghai")
     public void refreshDaily() {
         commands.refreshTrackedFunds();
