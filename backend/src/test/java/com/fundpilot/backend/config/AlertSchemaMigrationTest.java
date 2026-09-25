@@ -37,28 +37,31 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
             assertThat(count("alert_notification")).isZero();
             insertOwnerAndPortfolioFund();
 
-            long globalRule = insertRule("GLOBAL", null, dailyChangeAbove("0.05"));
-            insertRule("FUND", 21L, dailyChangeAbove("0.10"));
+            long globalRule = insertRule("CONDITION", "GLOBAL", null, dailyChangeAbove("0.05"));
+            insertRule("CONDITION", "FUND", 21L, dailyChangeAbove("0.10"));
 
             assertThatThrownBy(() -> execute("""
-                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, conditions, enabled)
-                    VALUES (1, 'GLOBAL', 21, '%2$s', true);
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, kind, conditions, enabled)
+                    VALUES (1, 'GLOBAL', 21, 'CONDITION', '%2$s', true);
                     """.formatted(SCHEMA, dailyChangeAbove("0.05"))))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("ck_alert_rule_scope_target");
             assertThatThrownBy(() -> execute("""
-                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, conditions, enabled)
-                    VALUES (1, 'FUND', NULL, '%2$s', true);
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, kind, conditions, enabled)
+                    VALUES (1, 'FUND', NULL, 'CONDITION', '%2$s', true);
                     """.formatted(SCHEMA, dailyChangeAbove("0.05"))))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("ck_alert_rule_scope_target");
-            // 条件数组是唯一触发口径，必填。
+            // 规则种类必填：应用总是显式写入，缺省写入属于结构性错误。
             assertThatThrownBy(() -> execute("""
-                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, enabled)
-                    VALUES (1, 'GLOBAL', NULL, true);
-                    """.formatted(SCHEMA)))
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, conditions, enabled)
+                    VALUES (1, 'GLOBAL', NULL, '%2$s', true);
+                    """.formatted(SCHEMA, dailyChangeAbove("0.05"))))
                     .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("conditions");
+                    .hasMessageContaining("kind");
+            // 回撤止盈不写条件数组(判定靠止盈参数与状态机)，故 conditions 允许为空；
+            // 条件型规则必须有条件这一口径由应用层 AlertRuleDraft 校验，不在库上约束。
+            insertRule("TRAILING_STOP", "FUND", 21L, null);
 
             long sent = insertNotification(globalRule, "2026-09-21T06:30:00Z", "SENT");
             assertThat(sent).isPositive();
@@ -73,7 +76,7 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
             // 换一个交易日则允许再次成功发送。
             assertThat(insertNotification(globalRule, "2026-09-22T06:30:00Z", "SENT")).isPositive();
 
-            assertThat(count("alert_rule")).isEqualTo(2);
+            assertThat(count("alert_rule")).isEqualTo(3);
             assertThat(count("alert_notification")).isEqualTo(4);
         } finally {
             execute("DROP SCHEMA IF EXISTS " + SCHEMA + " CASCADE");
@@ -142,13 +145,15 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
         return group.conditions().getFirst();
     }
 
-    private long insertRule(String scope, Long portfolioFundId, String conditions) throws SQLException {
+    /** 插入一条规则；{@code conditions} 为 null 时写 NULL(仅回撤止盈会这样)。 */
+    private long insertRule(String kind, String scope, Long portfolioFundId, String conditions) throws SQLException {
         String sql = """
                 INSERT INTO %s.alert_rule
-                    (owner_id, scope, portfolio_fund_id, conditions, enabled)
-                VALUES (1, '%s', %s, '%s', true)
+                    (owner_id, scope, portfolio_fund_id, kind, conditions, enabled)
+                VALUES (1, '%s', %s, '%s', %s, true)
                 RETURNING id
-                """.formatted(SCHEMA, scope, portfolioFundId == null ? "NULL" : portfolioFundId, conditions);
+                """.formatted(SCHEMA, scope, portfolioFundId == null ? "NULL" : portfolioFundId, kind,
+                conditions == null ? "NULL" : "'" + conditions + "'");
         return queryLong(sql);
     }
 
