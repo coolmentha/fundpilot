@@ -10,6 +10,9 @@ Controller 只做 HTTP 路由:接收参数、调用对应应用层 Command/Query
 - 逻辑下沉到应用层 `*CommandHandler`/`*QueryHandler`(`@Service`),Controller 通过构造器注入。
 - 新建/更新聚合由 Handler 调用领域对象和 Gateway/Repository 完成,Controller 只传 Request DTO。
 - 示例:`PortfolioFundOnboardingController` 委托 `PortfolioFundOnboardingCommandHandler` 完成组合基金开户。
+- 响应包装只用平台 `platform/web/ApiResponse`,**禁止模块内自建包装 record 或同名类**(历史上
+  `Response`/`ImportingApiResponse`/`InsightsApiResponse` 等 9 处复制品已统一删除)。成功响应
+  `code` 为 `null`,错误 code/message 经 `GlobalExceptionHandler` 与各 `*ExceptionHandler` 返回。
 
 ## 2. 构造器注入用 @RequiredArgsConstructor
 
@@ -76,3 +79,17 @@ View 只含业务字段,关联对象只取 id,不含 `version`/`deletedDate` 等
 - 数值常量放在所属领域就近的常量位置，例如 `TakeProfitPolicy.MIN_HOLD_TRADING_DAYS`、`TakeProfitParams.MAX_COOLDOWN_DAYS`、`ShareScale.SCALE`。
 - 提醒的指标、关系与规则种类使用 `IndicatorCode`、`ConditionRelation`、`AlertRuleKind` 枚举，持久化枚举用 `@Enumerated(EnumType.STRING)`（name 稳定，存量数据兼容）。
 - 数值域的合法性在对应值对象构造器集中校验（如 `TakeProfitParams` 的比例范围），不在调用方重复判断。
+- 原生 SQL 里的枚举名:`@Query` 注解参数要求编译期常量,不能用 `.name()`,使用枚举类上的
+  `*_NAME` 静态常量(如 `TransactionSource.INVEST_NAME`,与枚举常量同文件维护);`JdbcTemplate`
+  运行时拼接可直接 `TransactionStatus.PENDING.name()`。不在 SQL 字符串里写裸状态字面量。
+
+## 9. 异步事件监听必须幂等
+
+跨模块协作的 `@ApplicationModuleListener` 会被兜底重发:监听器抛异常或进程中断留下的事件,
+由 `platform/adapter/scheduler/eventpublication/EventPublicationResubmissionJob` 每 5 分钟
+扫描 `event_publication` 表重新投递(10 分钟年龄门槛)。
+
+- 监听器处理逻辑必须幂等:写状态前先复核前置条件(如 `InvestmentPlanLifecycleCommandHandler`
+  退休计划前重查计划状态),重复消费同一事件不产生副作用。
+- 新增监听器时按"事件会重发"设计,不要依赖"恰好消费一次"。
+- 主流程的关键校验(如执行前复核 TRACKED 状态)不因事件已收到而省略。

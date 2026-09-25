@@ -31,6 +31,11 @@ pnpm-debug.log*
 *.tmp
 *.temp
 
+# Local agent tool dirs
+.agents/
+.codex/
+.trae/
+
 # Local native binaries
 *.dll
 .zcode/
