@@ -1,5 +1,9 @@
 package com.fundpilot.backend.accounting.infrastructure.persistence.transaction;
 
+import com.fundpilot.backend.accounting.domain.transaction.TransactionSource;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
+import com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi;
+
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -42,9 +46,12 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
     }
 
     @Query(value = "select portfolio_fund_id as portfolioFundId, "
-            + "coalesce(sum(case when source in ('INCREASE','TRANSFER_IN','INVEST','ADJUST_IN') "
-            + "then shares when source = 'COST_BASIS_RESET' then 0 else -shares end), 0) as holdingShares "
-            + "from fund_transaction where status = 'CONFIRMED' and deleted_date is null "
+            + "coalesce(sum(case when source in ('" + TransactionSource.INCREASE_NAME + "','"
+            + TransactionSource.TRANSFER_IN_NAME + "','" + TransactionSource.INVEST_NAME + "','"
+            + TransactionSource.ADJUST_IN_NAME + "') then shares "
+            + "when source = '" + TransactionSource.COST_BASIS_RESET_NAME + "' then 0 else -shares end), 0) "
+            + "as holdingShares "
+            + "from fund_transaction where status = '" + TransactionStatus.CONFIRMED_NAME + "' and deleted_date is null "
             + "and portfolio_fund_id in (:portfolioFundIds) group by portfolio_fund_id",
             nativeQuery = true)
     List<HoldingSharesProjection> aggregateConfirmedShares(
@@ -67,7 +74,8 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
     @Query(value = "select t.investment_plan_id as investmentPlanId, t.trade_date as tradeDate, "
             + "t.amount as amount, t.status as status from fund_transaction t "
             + "join investment_plan p on p.id = t.investment_plan_id "
-            + "where p.owner_id = :ownerId and t.source = 'INVEST' and t.trade_date >= :start "
+            + "where p.owner_id = :ownerId and t.source = '" + TransactionSource.INVEST_NAME
+            + "' and t.trade_date >= :start "
             + "and t.trade_date < :end and t.deleted_date is null", nativeQuery = true)
     List<InvestmentPlanOccurrenceProjection> findInvestmentPlanOccurrences(@Param("ownerId") Long ownerId,
                                                                              @Param("start") Instant start,
@@ -75,9 +83,10 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
 
     @Query(value = "select coalesce(sum(t.amount), 0) from fund_transaction t "
             + "join portfolio_fund p on p.id = t.portfolio_fund_id "
-            + "where p.owner_id = :ownerId and p.validity = 'TRACKED' and t.source = 'INVEST' "
-            + "and t.status <> 'CANCELLED' and t.trade_date >= :start and t.trade_date < :end "
-            + "and t.deleted_date is null", nativeQuery = true)
+            + "where p.owner_id = :ownerId and p.validity = '" + PortfolioFundApi.Validity.TRACKED_NAME
+            + "' and t.source = '" + TransactionSource.INVEST_NAME + "' "
+            + "and t.status <> '" + TransactionStatus.CANCELLED_NAME + "' and t.trade_date >= :start "
+            + "and t.trade_date < :end and t.deleted_date is null", nativeQuery = true)
     java.math.BigDecimal sumInvestedAmount(@Param("ownerId") Long ownerId, @Param("start") Instant start,
                                            @Param("end") Instant end);
 
@@ -88,9 +97,10 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
 
     @Query(value = "select t.status as status, coalesce(sum(t.amount), 0) as amount from fund_transaction t "
             + "join portfolio_fund p on p.id = t.portfolio_fund_id "
-            + "where p.owner_id = :ownerId and p.validity = 'TRACKED' and t.source = 'INVEST' "
-            + "and t.status <> 'CANCELLED' and t.trade_date >= :start and t.trade_date < :end "
-            + "and t.deleted_date is null group by t.status", nativeQuery = true)
+            + "where p.owner_id = :ownerId and p.validity = '" + PortfolioFundApi.Validity.TRACKED_NAME
+            + "' and t.source = '" + TransactionSource.INVEST_NAME + "' "
+            + "and t.status <> '" + TransactionStatus.CANCELLED_NAME + "' and t.trade_date >= :start "
+            + "and t.trade_date < :end and t.deleted_date is null group by t.status", nativeQuery = true)
     List<InvestmentAmountByStatusProjection> sumInvestedAmountByStatus(@Param("ownerId") Long ownerId,
                                                                         @Param("start") Instant start,
                                                                         @Param("end") Instant end);

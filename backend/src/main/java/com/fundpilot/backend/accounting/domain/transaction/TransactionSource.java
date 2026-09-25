@@ -13,6 +13,15 @@ public enum TransactionSource {
     ADJUST_OUT,
     COST_BASIS_RESET;
 
+    /**
+     * 原生 SQL(@Query 注解参数要求编译期常量,无法调用 name())使用的枚举名常量,值必须与枚举常量一致。
+     */
+    public static final String INCREASE_NAME = "INCREASE";
+    public static final String TRANSFER_IN_NAME = "TRANSFER_IN";
+    public static final String INVEST_NAME = "INVEST";
+    public static final String ADJUST_IN_NAME = "ADJUST_IN";
+    public static final String COST_BASIS_RESET_NAME = "COST_BASIS_RESET";
+
     /** 买入类：录入金额，确认时按净值折算份额并建 lot。 */
     public boolean isBuy() {
         return this == INCREASE || this == TRANSFER_IN || this == INVEST;

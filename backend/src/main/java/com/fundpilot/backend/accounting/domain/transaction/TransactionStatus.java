@@ -4,5 +4,11 @@ package com.fundpilot.backend.accounting.domain.transaction;
 public enum TransactionStatus {
     PENDING,
     CONFIRMED,
-    CANCELLED
+    CANCELLED;
+
+    /**
+     * 原生 SQL(@Query 注解参数要求编译期常量,无法调用 name())使用的枚举名常量,值必须与枚举常量一致。
+     */
+    public static final String CONFIRMED_NAME = "CONFIRMED";
+    public static final String CANCELLED_NAME = "CANCELLED";
 }

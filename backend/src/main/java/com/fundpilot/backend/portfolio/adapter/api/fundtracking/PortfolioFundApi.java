@@ -110,7 +110,12 @@ public class PortfolioFundApi {
 
     public enum Validity {
         TRACKED,
-        VOIDED
+        VOIDED;
+
+        /**
+         * 原生 SQL(@Query 注解参数要求编译期常量,无法调用 name())使用的枚举名常量,值必须与枚举常量一致。
+         */
+        public static final String TRACKED_NAME = "TRACKED";
     }
 
     public static final class Failure extends RuntimeException {

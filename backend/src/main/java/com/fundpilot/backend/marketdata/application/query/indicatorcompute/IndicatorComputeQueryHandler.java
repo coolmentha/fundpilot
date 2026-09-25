@@ -64,6 +64,8 @@ public class IndicatorComputeQueryHandler {
 
     private static final Set<String> SUPPORTED_CODES = Set.of(PRICE_VS_MA, MA, MA_CROSS, NAV_RANGE_POSITION,
             NAV_DRAWDOWN, VOLUME_RATIO, VOLUME_DROP, WEEKLY_MACD_HISTOGRAM, INDEX_PE, INDEX_PE_PERCENTILE);
+    /** 日内缓存条目上限:试算参数组合不可枚举,超上限直接清空重算,防日内无界膨胀。 */
+    private static final int MAX_CACHE_ENTRIES = 5_000;
 
     private final PublishedNavRepository navs;
     private final IndexKlineRepository klines;
@@ -94,6 +96,9 @@ public class IndicatorComputeQueryHandler {
             return cached;
         }
         List<IndicatorValue> computed = compute(normalized);
+        if (cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.clear();
+        }
         cache.put(key, computed);
         return computed;
     }

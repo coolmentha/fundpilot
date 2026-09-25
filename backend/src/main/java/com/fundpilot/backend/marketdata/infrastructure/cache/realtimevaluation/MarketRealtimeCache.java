@@ -550,6 +550,7 @@ public class MarketRealtimeCache {
                     .toList();
             if (tracked.isEmpty()) {
                 allEstimateCursor = 0;
+                evictUntrackedEstimateEntries(tracked);
                 return;
             }
             Set<String> targetCodes = tracked.stream()
@@ -578,11 +579,24 @@ public class MarketRealtimeCache {
                 return;
             }
             allEstimateCursor = 0;
+            evictUntrackedEstimateEntries(tracked);
         } catch (RuntimeException e) {
             log.warn("基金估值刷新失败", e);
         } finally {
             refreshingEstimates.set(false);
         }
+    }
+
+    /** 完整刷新周期结束时清除已不在追踪范围的残留条目,防止基金移除/作废后缓存只增不减。 */
+    private void evictUntrackedEstimateEntries(List<TrackedNavProductGateway.TrackedProduct> tracked) {
+        Set<String> trackedCodes = tracked.stream()
+                .map(TrackedNavProductGateway.TrackedProduct::fundCode)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        estimateCache.keySet().retainAll(trackedCodes);
+        intradayCache.keySet().retainAll(trackedCodes);
+        estimateStatuses.keySet().retainAll(trackedCodes);
+        estimateRetryAfter.keySet().retainAll(trackedCodes);
     }
 
     private void refreshFundEstimate(TrackedNavProductGateway.TrackedProduct product, Instant deadline,
