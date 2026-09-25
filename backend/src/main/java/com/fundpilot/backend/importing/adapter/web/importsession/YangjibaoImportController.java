@@ -1,6 +1,7 @@
 package com.fundpilot.backend.importing.adapter.web.importsession;
 
 import com.fundpilot.backend.importing.application.command.importsession.YangjibaoImportCommandHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,35 +19,35 @@ public class YangjibaoImportController {
 
     @PostMapping("/sessions")
     @Operation(summary = "创建导入会话")
-    public ImportingApiResponse<YangjibaoImportCommandHandler.SessionView> create() {
-        return ImportingApiResponse.ok(commands.create());
+    public ApiResponse<YangjibaoImportCommandHandler.SessionView> create() {
+        return ApiResponse.ok(commands.create());
     }
 
     @GetMapping("/sessions")
     @Operation(summary = "查询当前用户的导入会话")
-    public ImportingApiResponse<List<YangjibaoImportSessionView>> list() {
-        return ImportingApiResponse.ok(commands.listSessions().stream()
+    public ApiResponse<List<YangjibaoImportSessionView>> list() {
+        return ApiResponse.ok(commands.listSessions().stream()
                 .map(YangjibaoImportSessionView::from)
                 .toList());
     }
 
     @GetMapping("/sessions/{id}")
     @Operation(summary = "查询导入会话状态")
-    public ImportingApiResponse<YangjibaoImportCommandHandler.SessionView> state(@PathVariable String id) {
-        return ImportingApiResponse.ok(commands.state(id));
+    public ApiResponse<YangjibaoImportCommandHandler.SessionView> state(@PathVariable String id) {
+        return ApiResponse.ok(commands.state(id));
     }
 
     @GetMapping("/sessions/{id}/preview")
     @Operation(summary = "预览导入数据")
-    public ImportingApiResponse<List<YangjibaoImportCommandHandler.PreviewItem>> preview(@PathVariable String id) {
-        return ImportingApiResponse.ok(commands.preview(id));
+    public ApiResponse<List<YangjibaoImportCommandHandler.PreviewItem>> preview(@PathVariable String id) {
+        return ApiResponse.ok(commands.preview(id));
     }
 
     @PostMapping("/sessions/{id}/import")
     @Operation(summary = "执行导入")
-    public ImportingApiResponse<YangjibaoImportCommandHandler.ImportJobView> run(@PathVariable String id,
+    public ApiResponse<YangjibaoImportCommandHandler.ImportJobView> run(@PathVariable String id,
                                                                         @RequestBody ImportRequest request) {
-        return ImportingApiResponse.ok(commands.startImport(id, request.items().stream()
+        return ApiResponse.ok(commands.startImport(id, request.items().stream()
                 .map(item -> new YangjibaoImportCommandHandler.Selection(item.itemId(),
                         item.existingMode() == null ? null
                                 : YangjibaoImportCommandHandler.ExistingMode.valueOf(item.existingMode().name())))
@@ -55,21 +56,21 @@ public class YangjibaoImportController {
 
     @GetMapping("/sessions/{id}/import")
     @Operation(summary = "查询导入任务状态")
-    public ImportingApiResponse<YangjibaoImportCommandHandler.ImportJobView> importStatus(@PathVariable String id) {
-        return ImportingApiResponse.ok(commands.importStatus(id));
+    public ApiResponse<YangjibaoImportCommandHandler.ImportJobView> importStatus(@PathVariable String id) {
+        return ApiResponse.ok(commands.importStatus(id));
     }
 
     @PostMapping("/sessions/{id}/import/retry")
     @Operation(summary = "重试失败条目导入")
-    public ImportingApiResponse<YangjibaoImportCommandHandler.ImportJobView> retryFailed(@PathVariable String id) {
-        return ImportingApiResponse.ok(commands.retryFailed(id));
+    public ApiResponse<YangjibaoImportCommandHandler.ImportJobView> retryFailed(@PathVariable String id) {
+        return ApiResponse.ok(commands.retryFailed(id));
     }
 
     @DeleteMapping("/sessions/{id}")
     @Operation(summary = "取消导入会话")
-    public ImportingApiResponse<Void> cancel(@PathVariable String id) {
+    public ApiResponse<Void> cancel(@PathVariable String id) {
         commands.cancel(id);
-        return ImportingApiResponse.ok(null);
+        return ApiResponse.ok(null);
     }
 
     @Schema(description = "养基宝导入请求")

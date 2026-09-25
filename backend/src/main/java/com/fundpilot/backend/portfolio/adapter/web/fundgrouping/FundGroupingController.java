@@ -1,5 +1,6 @@
 package com.fundpilot.backend.portfolio.adapter.web.fundgrouping;
 
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import com.fundpilot.backend.portfolio.application.command.fundgrouping.FundGroupingCommandHandler;
 import com.fundpilot.backend.portfolio.application.query.fundgrouping.FundGroupingQueryHandler;
@@ -26,14 +27,14 @@ public class FundGroupingController {
 
     @Operation(summary = "查询基金分组列表")
     @GetMapping
-    public Response<List<GroupView>> list(
+    public ApiResponse<List<GroupView>> list(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return Response.ok(queries.list(ownerId).stream().map(GroupView::from).toList());
+        return ApiResponse.ok(queries.list(ownerId).stream().map(GroupView::from).toList());
     }
 
     @Operation(summary = "替换基金分组")
     @PutMapping
-    public Response<List<GroupView>> replace(
+    public ApiResponse<List<GroupView>> replace(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @RequestBody(required = false) ReplaceGroupsRequest request) {
         List<FundGroupingCommandHandler.GroupInput> inputs = request == null || request.groups() == null
@@ -42,7 +43,7 @@ public class FundGroupingController {
                         .map(item -> new FundGroupingCommandHandler.GroupInput(item.id(), item.name()))
                         .toList();
         commands.replace(ownerId, inputs);
-        return Response.ok(queries.list(ownerId).stream().map(GroupView::from).toList());
+        return ApiResponse.ok(queries.list(ownerId).stream().map(GroupView::from).toList());
     }
 
     @Schema(description = "基金分组替换请求")
@@ -65,17 +66,6 @@ public class FundGroupingController {
         static GroupView from(FundGroupingQueryHandler.GroupResult result) {
             return new GroupView(result.id(), result.name(), result.sortOrder(),
                     result.portfolioFundCount());
-        }
-    }
-
-    @Schema(description = "通用响应视图")
-    record Response<T>(
-            @Schema(description = "请求是否成功,true 表示成功,false 表示失败", example = "true") boolean success,
-            @Schema(description = "业务数据") T data,
-            @Schema(description = "业务错误码,成功时为空", example = "OK") String code,
-            @Schema(description = "提示信息,成功时为空", example = "操作成功") String message) {
-        static <T> Response<T> ok(T data) {
-            return new Response<>(true, data, null, null);
         }
     }
 }

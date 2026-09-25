@@ -3,6 +3,7 @@ package com.fundpilot.backend.investmentplan.adapter.web.budgetmanagement;
 import com.fundpilot.backend.investmentplan.application.command.budgetmanagement.InvestmentPlanBudgetCommandHandler;
 import com.fundpilot.backend.investmentplan.application.query.budgetmanagement.InvestmentPlanBudgetQueryHandler;
 import com.fundpilot.backend.investmentplan.application.query.budgetmanagement.InvestmentPlanBudgetSummaryQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -26,17 +27,17 @@ public class InvestmentPlanBudgetController {
     private final InvestmentPlanBudgetCommandHandler commands;
     private final InvestmentPlanBudgetQueryHandler queries;
     private final InvestmentPlanBudgetSummaryQueryHandler summaries;
-    @GetMapping @Operation(summary = "查询当月预算") public Response<View> get(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return Response.ok(new View(queries.get(ownerId)));
+    @GetMapping @Operation(summary = "查询当月预算") public ApiResponse<View> get(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
+        return ApiResponse.ok(new View(queries.get(ownerId)));
     }
-    @PutMapping @Operation(summary = "设置月度预算") public Response<View> update(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    @PutMapping @Operation(summary = "设置月度预算") public ApiResponse<View> update(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                              @RequestBody Request request) {
-        return Response.ok(new View(commands.set(ownerId, request.monthlyBudget())));
+        return ApiResponse.ok(new View(commands.set(ownerId, request.monthlyBudget())));
     }
-    @GetMapping("/summary") @Operation(summary = "查询当月预算汇总") public Response<SummaryView> summary(
+    @GetMapping("/summary") @Operation(summary = "查询当月预算汇总") public ApiResponse<SummaryView> summary(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
         var summary = summaries.currentMonth(ownerId);
-        return Response.ok(new SummaryView(summary.monthlyBudget(), summary.investedAmount(), summary.futureAmount(),
+        return ApiResponse.ok(new SummaryView(summary.monthlyBudget(), summary.investedAmount(), summary.futureAmount(),
                 summary.projectedAmount(), summary.remainingAmount(), summary.overBudgetAmount(),
                 summary.minimumFutureAmount(), summary.maximumFutureAmount(), summary.minimumProjectedAmount(),
                 summary.maximumProjectedAmount(), summary.confirmedInvestedAmount(), summary.pendingInvestedAmount(),
@@ -60,9 +61,5 @@ public class InvestmentPlanBudgetController {
             return new FuturePlanView(plan.planId(), plan.portfolioFundId(), plan.executionDate(), plan.amount(),
                     plan.maximumAmount());
         }
-    }
-    @Schema(description = "统一响应结果")
-    record Response<T>(boolean success, T data, String code, String message) {
-        static <T> Response<T> ok(T data) { return new Response<>(true, data, null, null); }
     }
 }

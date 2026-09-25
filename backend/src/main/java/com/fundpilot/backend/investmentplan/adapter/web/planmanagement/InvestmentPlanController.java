@@ -124,8 +124,4 @@ public class InvestmentPlanController {
                     result.amount().multiply(BigDecimal.valueOf(dates.size())), dates, result.latestDecision());
         }
     }
-    @Schema(description = "统一响应结果")
-    record ApiResponse<T>(boolean success, T data, String code, String message) {
-        static <T> ApiResponse<T> ok(T data) { return new ApiResponse<>(true, data, null, null); }
-    }
 }

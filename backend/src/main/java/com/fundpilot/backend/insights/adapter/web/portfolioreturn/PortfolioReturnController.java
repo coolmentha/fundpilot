@@ -2,6 +2,7 @@ package com.fundpilot.backend.insights.adapter.web.portfolioreturn;
 
 import com.fundpilot.backend.insights.application.query.portfolioreturn.PortfolioReturnQueryHandler;
 import com.fundpilot.backend.insights.application.query.portfolioreturn.PortfolioReturnTrendQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,48 +22,48 @@ public class PortfolioReturnController {
     private final PortfolioReturnTrendQueryHandler trends;
 
     @GetMapping("/returns")
-    public InsightsApiResponse<PortfolioReturnView> returns(
+    public ApiResponse<PortfolioReturnView> returns(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
         var value = queries.findByOwner(ownerId);
-        return InsightsApiResponse.ok(new PortfolioReturnView(value.investedAmount(), value.redeemedAmount(),
+        return ApiResponse.ok(new PortfolioReturnView(value.investedAmount(), value.redeemedAmount(),
                 value.feeAmount(), value.holdingAmount(), value.realizedPnl(), value.unrealizedPnl(),
                 value.totalReturn(), value.returnRate(), value.realizedComplete(), value.funds().stream()
                 .map(FundReturnView::from).toList()));
     }
 
     @GetMapping("/funds/current")
-    public InsightsApiResponse<List<FundReturnView>> currentFunds(
+    public ApiResponse<List<FundReturnView>> currentFunds(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return InsightsApiResponse.ok(queries.currentFunds(ownerId).stream().map(FundReturnView::from).toList());
+        return ApiResponse.ok(queries.currentFunds(ownerId).stream().map(FundReturnView::from).toList());
     }
 
     @GetMapping("/funds/history")
-    public InsightsApiResponse<List<FundReturnView>> clearedFunds(
+    public ApiResponse<List<FundReturnView>> clearedFunds(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return InsightsApiResponse.ok(queries.clearedFunds(ownerId).stream().map(FundReturnView::from).toList());
+        return ApiResponse.ok(queries.clearedFunds(ownerId).stream().map(FundReturnView::from).toList());
     }
 
     @GetMapping("/funds/{portfolioFundId}")
-    public InsightsApiResponse<FundReturnView> fund(
+    public ApiResponse<FundReturnView> fund(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @org.springframework.web.bind.annotation.PathVariable long portfolioFundId) {
         var fund = queries.fund(ownerId, portfolioFundId);
-        return InsightsApiResponse.ok(fund == null ? null : FundReturnView.from(fund));
+        return ApiResponse.ok(fund == null ? null : FundReturnView.from(fund));
     }
 
     @GetMapping("/summary")
-    public InsightsApiResponse<PortfolioReturnQueryHandler.PortfolioSummaryResult> summary(
+    public ApiResponse<PortfolioReturnQueryHandler.PortfolioSummaryResult> summary(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return InsightsApiResponse.ok(queries.summary(ownerId));
+        return ApiResponse.ok(queries.summary(ownerId));
     }
 
     @GetMapping("/return-trends")
-    public InsightsApiResponse<PortfolioReturnTrendQueryHandler.TrendResult> returnTrends(
+    public ApiResponse<PortfolioReturnTrendQueryHandler.TrendResult> returnTrends(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @RequestParam(defaultValue = "30D") String period,
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to) {
-        return InsightsApiResponse.ok(trends.find(ownerId, period, from, to));
+        return ApiResponse.ok(trends.find(ownerId, period, from, to));
     }
 
     public record PortfolioReturnView(BigDecimal investedAmount, BigDecimal redeemedAmount, BigDecimal feeAmount,

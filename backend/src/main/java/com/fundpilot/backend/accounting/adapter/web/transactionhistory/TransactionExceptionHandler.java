@@ -2,6 +2,7 @@ package com.fundpilot.backend.accounting.adapter.web.transactionhistory;
 
 import com.fundpilot.backend.accounting.application.command.transactionconfirmation.TransactionConfirmationFailure;
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -10,15 +11,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = TransactionController.class)
 class TransactionExceptionHandler {
     @ExceptionHandler(TransactionLedgerFailure.class)
-    ResponseEntity<TransactionController.Response<Void>> handle(TransactionLedgerFailure failure) {
+    ResponseEntity<ApiResponse<Void>> handle(TransactionLedgerFailure failure) {
         return ResponseEntity.status(statusOf(failure.code()))
-                .body(TransactionController.Response.error(failure.code().name(), failure.getMessage()));
+                .body(ApiResponse.error(failure.code().name(), failure.getMessage()));
     }
 
     @ExceptionHandler(TransactionConfirmationFailure.class)
-    ResponseEntity<TransactionController.Response<Void>> handle(TransactionConfirmationFailure failure) {
+    ResponseEntity<ApiResponse<Void>> handle(TransactionConfirmationFailure failure) {
         return ResponseEntity.status(statusOf(failure.code())).body(
-                TransactionController.Response.error(failure.code().name(), failure.getMessage()));
+                ApiResponse.error(failure.code().name(), failure.getMessage()));
     }
 
     private HttpStatus statusOf(TransactionLedgerFailure.Code code) {

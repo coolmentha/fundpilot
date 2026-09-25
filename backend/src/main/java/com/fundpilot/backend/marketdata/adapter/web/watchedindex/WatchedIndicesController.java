@@ -2,6 +2,7 @@ package com.fundpilot.backend.marketdata.adapter.web.watchedindex;
 
 import com.fundpilot.backend.marketdata.application.command.watchedindex.WatchedIndexCommandHandler;
 import com.fundpilot.backend.marketdata.application.query.watchedindex.WatchedIndexQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,15 +26,15 @@ public class WatchedIndicesController {
 
     @GetMapping
     @Operation(summary = "查询关注指数列表")
-    public MarketDataApiResponse<View> get(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return MarketDataApiResponse.ok(new View(queries.findByOwner(ownerId)));
+    public ApiResponse<View> get(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
+        return ApiResponse.ok(new View(queries.findByOwner(ownerId)));
     }
 
     @PutMapping
     @Operation(summary = "全量替换关注指数")
-    public MarketDataApiResponse<View> replace(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
+    public ApiResponse<View> replace(@RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
                                                 @RequestBody ReplaceRequest request) {
-        return MarketDataApiResponse.ok(new View(commands.replace(ownerId, request.indexCodes()).indexCodes()));
+        return ApiResponse.ok(new View(commands.replace(ownerId, request.indexCodes()).indexCodes()));
     }
 
     @Schema(description = "关注指数替换请求")

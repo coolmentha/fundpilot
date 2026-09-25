@@ -38,7 +38,7 @@ class YangjibaoImportControllerTest {
         mockMvc.perform(get("/api/imports/yangjibao/sessions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.code").isEmpty())
                 .andExpect(jsonPath("$.data[0].sessionId").value("session-1"))
                 .andExpect(jsonPath("$.data[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data[0].createdAt").value("2026-08-30T08:00:00Z"))

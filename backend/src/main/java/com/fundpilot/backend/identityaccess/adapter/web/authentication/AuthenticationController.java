@@ -4,6 +4,7 @@ import com.fundpilot.backend.identityaccess.application.command.authentication.A
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.LoginClientAddressResolver;
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.application.query.authentication.AuthenticationQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,7 +33,7 @@ public class AuthenticationController {
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
-    public IdentityApiResponse<AuthUserView> login(@RequestBody(required = false) LoginRequest login,
+    public ApiResponse<AuthUserView> login(@RequestBody(required = false) LoginRequest login,
                                                    HttpServletRequest request,
                                                    HttpServletResponse response) {
         var result = commands.login(login == null ? null : login.username(),
@@ -41,46 +42,46 @@ public class AuthenticationController {
                         request.getHeader(LoginClientAddressResolver.FORWARDED_FOR_HEADER)));
         response.addHeader(HttpHeaders.SET_COOKIE,
                 sessionCookie(request, result.sessionToken()).build().toString());
-        return IdentityApiResponse.ok(new AuthUserView(result.userId(), result.username(), result.role().name(),
+        return ApiResponse.ok(new AuthUserView(result.userId(), result.username(), result.role().name(),
                 result.email()));
     }
 
     @GetMapping("/verify")
     @Operation(summary = "校验登录状态")
-    public IdentityApiResponse<AuthUserView> verify(HttpServletRequest request) {
+    public ApiResponse<AuthUserView> verify(HttpServletRequest request) {
         RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
         var actor = queries.requireActive(identity.userId());
-        return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(),
+        return ApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(),
                 actor.email()));
     }
 
     @PutMapping("/email")
     @Operation(summary = "修改当前用户提醒邮箱")
-    public IdentityApiResponse<AuthUserView> changeEmail(@RequestBody EmailChangeRequest emailChange,
+    public ApiResponse<AuthUserView> changeEmail(@RequestBody EmailChangeRequest emailChange,
                                                         HttpServletRequest request) {
         RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
         String email = commands.changeEmail(identity.userId(), emailChange == null ? null : emailChange.email());
         var actor = queries.requireActive(identity.userId());
-        return IdentityApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(), email));
+        return ApiResponse.ok(new AuthUserView(actor.userId(), actor.username(), actor.role().name(), email));
     }
 
     @PutMapping("/password")
     @Operation(summary = "修改当前用户密码")
-    public IdentityApiResponse<Boolean> changePassword(@RequestBody PasswordChangeRequest passwordChange,
+    public ApiResponse<Boolean> changePassword(@RequestBody PasswordChangeRequest passwordChange,
                                                        HttpServletRequest request,
                                                        HttpServletResponse response) {
         RequestIdentity identity = (RequestIdentity) request.getAttribute(AuthenticationFilter.USER_ATTRIBUTE);
         boolean changed = commands.changePassword(identity.userId(), passwordChange.currentPassword(),
                 passwordChange.newPassword());
         response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(request, "").maxAge(0).build().toString());
-        return IdentityApiResponse.ok(changed);
+        return ApiResponse.ok(changed);
     }
 
     @PostMapping("/logout")
     @Operation(summary = "用户退出登录")
-    public IdentityApiResponse<Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
+    public ApiResponse<Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(request, "").maxAge(0).build().toString());
-        return IdentityApiResponse.ok(true);
+        return ApiResponse.ok(true);
     }
 
     private ResponseCookie.ResponseCookieBuilder sessionCookie(HttpServletRequest request, String value) {

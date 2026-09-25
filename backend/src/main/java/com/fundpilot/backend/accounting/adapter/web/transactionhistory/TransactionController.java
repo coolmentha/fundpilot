@@ -5,6 +5,7 @@ import com.fundpilot.backend.accounting.application.command.transactionledger.Tr
 import com.fundpilot.backend.accounting.application.command.transactionledger.TransactionLedgerFailure;
 import com.fundpilot.backend.accounting.application.query.positiontracking.OpenLotQueryHandler;
 import com.fundpilot.backend.accounting.application.query.transactionhistory.TransactionQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -32,65 +33,65 @@ public class TransactionController {
 
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
     @Operation(summary = "查询组合基金交易流水")
-    public Response<List<TransactionView>> listPortfolioFund(
+    public ApiResponse<List<TransactionView>> listPortfolioFund(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long portfolioFundId) {
-        return Response.ok(queries.findByPortfolioFund(ownerId, portfolioFundId).stream()
+        return ApiResponse.ok(queries.findByPortfolioFund(ownerId, portfolioFundId).stream()
                 .map(result -> TransactionView.from(result, null, null, null, null, null)).toList());
     }
 
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/open-lots")
     @Operation(summary = "查询持仓批次与赎回费估算")
-    public Response<OpenLotSummaryView> openLots(
+    public ApiResponse<OpenLotSummaryView> openLots(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long portfolioFundId) {
-        return Response.ok(OpenLotSummaryView.from(openLots.find(ownerId, portfolioFundId)));
+        return ApiResponse.ok(OpenLotSummaryView.from(openLots.find(ownerId, portfolioFundId)));
     }
 
     @PostMapping("/api/portfolio-funds/{portfolioFundId}/transactions")
     @Operation(summary = "登记组合基金手动交易")
-    public Response<TransactionView> recordPortfolioFund(
+    public ApiResponse<TransactionView> recordPortfolioFund(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long portfolioFundId,
             @RequestBody ManualTransactionRequest request) {
         var result = ledgerCommands.recordManual(ownerId, portfolioFundId, request.source(), request.amount(),
                 request.shares(), request.tradeDate(), request.targetPortfolioFundId());
-        return Response.ok(view(ownerId, result.transactionId()));
+        return ApiResponse.ok(view(ownerId, result.transactionId()));
     }
 
     @GetMapping("/api/transactions/pending")
     @Operation(summary = "查询待确认交易列表")
-    public Response<List<TransactionView>> pending(
+    public ApiResponse<List<TransactionView>> pending(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return Response.ok(queries.findPendingByOwner(ownerId).stream()
+        return ApiResponse.ok(queries.findPendingByOwner(ownerId).stream()
                 .map(TransactionView::from).toList());
     }
 
     @PutMapping("/api/transactions/{transactionId}")
     @Operation(summary = "修订待确认交易")
-    public Response<TransactionView> revise(
+    public ApiResponse<TransactionView> revise(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long transactionId,
             @RequestBody PendingTransactionUpdateRequest request) {
         ledgerCommands.revisePending(ownerId, transactionId, request.amount(), request.shares(), request.tradeDate());
-        return Response.ok(view(ownerId, transactionId));
+        return ApiResponse.ok(view(ownerId, transactionId));
     }
 
     @PostMapping("/api/transactions/{transactionId}/cancel")
     @Operation(summary = "取消交易")
-    public Response<List<TransactionView>> cancel(
+    public ApiResponse<List<TransactionView>> cancel(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long transactionId) {
-        return Response.ok(confirmationCommands.cancel(ownerId, transactionId).stream()
+        return ApiResponse.ok(confirmationCommands.cancel(ownerId, transactionId).stream()
                 .map(id -> view(ownerId, id)).toList());
     }
 
     @PostMapping("/api/transactions/{transactionId}/confirm")
     @Operation(summary = "确认交易")
-    public Response<List<TransactionView>> confirm(
+    public ApiResponse<List<TransactionView>> confirm(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long transactionId) {
-        return Response.ok(confirmationCommands.confirm(ownerId, transactionId).stream()
+        return ApiResponse.ok(confirmationCommands.confirm(ownerId, transactionId).stream()
                 .map(id -> view(ownerId, id)).toList());
     }
 
@@ -162,17 +163,6 @@ public class TransactionController {
                     result.confirmTime(), result.cancelTime(), result.relatedTransactionId(),
                     result.tradeDate(), result.createdDate(), expectedNav, expectedShares, confirmationState,
                     confirmationReason, false);
-        }
-    }
-
-    @Schema(description = "统一响应结果")
-    public record Response<T>(boolean success, T data, String code, String message) {
-        static <T> Response<T> ok(T data) {
-            return new Response<>(true, data, null, null);
-        }
-
-        static Response<Void> error(String code, String message) {
-            return new Response<>(false, null, code, message);
         }
     }
 }

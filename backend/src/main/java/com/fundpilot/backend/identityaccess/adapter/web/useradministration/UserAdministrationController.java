@@ -1,9 +1,9 @@
 package com.fundpilot.backend.identityaccess.adapter.web.useradministration;
 
-import com.fundpilot.backend.identityaccess.adapter.web.authentication.IdentityApiResponse;
 import com.fundpilot.backend.identityaccess.application.command.useradministration.UserAdministrationCommandHandler;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.CurrentActorQueryHandler;
 import com.fundpilot.backend.identityaccess.application.query.useradministration.UserAdministrationQueryHandler;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,31 +28,31 @@ public class UserAdministrationController {
 
     @GetMapping
     @Operation(summary = "查询用户列表")
-    public IdentityApiResponse<List<UserResult>> list() {
-        return IdentityApiResponse.ok(queries.list(actors.current()).stream()
+    public ApiResponse<List<UserResult>> list() {
+        return ApiResponse.ok(queries.list(actors.current()).stream()
                 .map(user -> new UserResult(user.id(), user.username(), user.role().name(), user.enabled()))
                 .toList());
     }
 
     @PostMapping
     @Operation(summary = "创建用户")
-    public IdentityApiResponse<UserResult> create(@RequestBody UserRequest request) {
-        return IdentityApiResponse.ok(toResult(commands.create(
+    public ApiResponse<UserResult> create(@RequestBody UserRequest request) {
+        return ApiResponse.ok(toResult(commands.create(
                 actors.current(), request.username(), request.password(), request.role())));
     }
 
     @PostMapping("/{id}/status")
     @Operation(summary = "更新用户启用状态")
-    public IdentityApiResponse<UserResult> updateStatus(@PathVariable long id,
+    public ApiResponse<UserResult> updateStatus(@PathVariable long id,
                                                         @RequestBody StatusRequest request) {
-        return IdentityApiResponse.ok(toResult(commands.updateStatus(actors.current(), id, request.enabled())));
+        return ApiResponse.ok(toResult(commands.updateStatus(actors.current(), id, request.enabled())));
     }
 
     @PostMapping("/{id}/role")
     @Operation(summary = "更新用户角色")
-    public IdentityApiResponse<UserResult> updateRole(@PathVariable long id,
+    public ApiResponse<UserResult> updateRole(@PathVariable long id,
                                                       @RequestBody RoleRequest request) {
-        return IdentityApiResponse.ok(toResult(commands.updateRole(actors.current(), id, request.role())));
+        return ApiResponse.ok(toResult(commands.updateRole(actors.current(), id, request.role())));
     }
 
     private UserResult toResult(UserAdministrationCommandHandler.UserResult user) {

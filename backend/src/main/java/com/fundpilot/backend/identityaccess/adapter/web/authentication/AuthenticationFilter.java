@@ -6,6 +6,7 @@ import com.fundpilot.backend.identityaccess.application.gateway.authentication.S
 import com.fundpilot.backend.identityaccess.application.query.authentication.AuthenticationQueryHandler;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.CurrentActor;
 import com.fundpilot.backend.identityaccess.application.query.currentactor.ActorRole;
+import com.fundpilot.backend.platform.web.ApiResponse;
 import com.fundpilot.backend.platform.web.RequestActorAttributes;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -94,6 +95,6 @@ public class AuthenticationFilter extends OncePerRequestFilter {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        jsonMapper.writeValue(response.getOutputStream(), IdentityApiResponse.error(code.name(), message));
+        jsonMapper.writeValue(response.getOutputStream(), ApiResponse.error(code.name(), message));
     }
 }
