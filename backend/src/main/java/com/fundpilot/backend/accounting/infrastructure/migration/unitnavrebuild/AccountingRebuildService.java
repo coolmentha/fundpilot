@@ -75,10 +75,8 @@ public class AccountingRebuildService {
                 "nullif(sum(remaining_shares), 0) cost_per_share from fund_lot " +
                 "where deleted_date is null and remaining_shares > 0 group by fund_id) lots " +
                 "where f.id = lots.fund_id");
-        jdbcTemplate.update("update fund_strategy set take_profit_phase = 'ACCUMULATING', " +
-                "cycle_started_at = null, cycle_peak_nav = null, triggered_signal_id = null, " +
-                "cooldown_started_at = null, updated_date = now() " +
-                "where status = 'EFFECTIVE' and deleted_date is null");
+        // 重建使历史状态机(周期峰值/冷静期)全部失效,与上方 lot 一样按派生数据处理,清空后由评估任务重新累积
+        jdbcTemplate.update("delete from alert_suggestion_state");
         jdbcTemplate.update("update accounting_rebuild_state set status = 'COMPLETED', " +
                 "completed_at = now(), details = ? where rebuild_key = ?",
                 "Rebuilt " + transactions.size() + " confirmed transactions", REBUILD_KEY);

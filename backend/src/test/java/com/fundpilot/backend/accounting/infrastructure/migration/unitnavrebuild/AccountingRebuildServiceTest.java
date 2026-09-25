@@ -52,9 +52,24 @@ class AccountingRebuildServiceTest extends AbstractIntegrationTest {
                         "values(?,?,?,?,?,?,0,now(),now())",
                 fundId, buyId, Timestamp.from(Instant.parse("2026-07-01T06:00:00Z")),
                 new BigDecimal("400"), new BigDecimal("300"), new BigDecimal("2.50"));
-        jdbcTemplate.update("insert into fund_strategy(fund_id,status,take_profit_phase,cycle_started_at," +
-                        "cycle_peak_nav,triggered_signal_id,cooldown_started_at,customized,version,created_date,updated_date) " +
-                        "values(?,'EFFECTIVE','HARVESTING',now(),3,99,now(),true,0,now(),now())", fundId);
+        // 止盈状态机现挂在 alert_suggestion_state(V59,依赖 site_user/fund_product/portfolio_fund/alert_rule 外键链)
+        long ownerId = jdbcTemplate.queryForObject(
+                "insert into site_user(username,password_hash,role) values('REBUILD_OWNER','x','USER') returning id",
+                Long.class);
+        long productId = jdbcTemplate.queryForObject(
+                "insert into fund_product(fund_code,fund_name) values('REBUILD_P001','重建组合基金') returning id",
+                Long.class);
+        long portfolioFundId = jdbcTemplate.queryForObject(
+                "insert into portfolio_fund(owner_id,fund_product_id,validity,position_warning_enabled," +
+                        "position_warning_ratio) values(?,?,'TRACKED',false,0.3) returning id",
+                Long.class, ownerId, productId);
+        long ruleId = jdbcTemplate.queryForObject(
+                "insert into alert_rule(owner_id,scope,portfolio_fund_id,kind,rule_type,threshold) " +
+                        "values(?,'FUND',?,'CONDITION','DRAWDOWN',0.15) returning id",
+                Long.class, ownerId, portfolioFundId);
+        jdbcTemplate.update("insert into alert_suggestion_state(alert_rule_id,owner_id,portfolio_fund_id,phase," +
+                        "cycle_started_at,cycle_peak_nav,cooldown_started_at) values(?,?,?,'HARVESTING',now(),3,now())",
+                ruleId, ownerId, portfolioFundId);
         jdbcTemplate.update("insert into accounting_rebuild_state(rebuild_key,status) values(?, 'PENDING') " +
                         "on conflict(rebuild_key) do update set status='PENDING',completed_at=null",
                 AccountingRebuildService.REBUILD_KEY);
@@ -75,10 +90,9 @@ class AccountingRebuildServiceTest extends AbstractIntegrationTest {
         assertThat(decimal("select amount from fund_transaction where id=?", sellId)).isEqualByComparingTo("118.8");
         assertThat(decimal("select amount from fund_transaction where id=?", transferInId)).isEqualByComparingTo("118.8");
         assertThat(decimal("select shares from fund_transaction where id=?", transferInId)).isEqualByComparingTo("59.40");
-        assertThat(jdbcTemplate.queryForObject("select take_profit_phase from fund_strategy where fund_id=?",
-                String.class, fundId)).isEqualTo("ACCUMULATING");
-        assertThat(jdbcTemplate.queryForObject("select cycle_peak_nav is null from fund_strategy where fund_id=?",
-                Boolean.class, fundId)).isTrue();
+        // 重建使历史状态机(周期峰值/冷静期)全部失效,alert_suggestion_state 按派生数据清空,由评估任务重新累积
+        assertThat(jdbcTemplate.queryForObject("select count(*) from alert_suggestion_state", Integer.class))
+                .isZero();
         assertThat(accountingRebuildService.rebuildIfPending()).isFalse();
     }
 

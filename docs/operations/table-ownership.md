@@ -50,17 +50,17 @@
 | event_publication | platform | 在用 | `com.fundpilot.backend.platform.observability.EventPublicationMetrics` |
 | scheduled_job_status | platform | 在用 | `com.fundpilot.backend.platform.observability.JobExecutionStatusStore` |
 | fund | — | 遗留 | 残留引用：`com.fundpilot.backend.portfolio.infrastructure.persistence.portfoliofund.PortfolioFundRepositoryImpl`（legacy bridge，建/停用 fund 行）、`com.fundpilot.backend.accounting.infrastructure.migration.unitnavrebuild.AccountingRebuildService`（一次性重建回写 `cost_per_share`） |
-| fund_strategy | — | 遗留 | 残留引用：`com.fundpilot.backend.accounting.infrastructure.migration.unitnavrebuild.AccountingRebuildService`（一次性重建重置 `take_profit_phase`） |
+| fund_strategy | — | 已删除 | 本次 `V61` drop（原「遗留」，唯一残留引用 AccountingRebuildService 的止盈状态重置已改为清空 `alert_suggestion_state`） |
 | fund_group_member | — | 遗留 | 残留引用：`com.fundpilot.backend.portfolio.infrastructure.persistence.fundgroup.FundGroupRepositoryImpl`（bridge 双写） |
-| fund_strategy_activation | — | 遗留 | 无代码引用 |
+| fund_strategy_activation | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」） |
 | signal_log | — | 已删除 | v0.14.0 `V60` drop（原「遗留·无代码引用」，本版本连同入向外键 `fk_ft_signal_log` 一并删除） |
-| strategy_backtest | — | 遗留 | 无代码引用 |
+| strategy_backtest | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」） |
 | user_config | — | 遗留 | 无代码引用 |
 | fund_dict | — | 遗留 | 无代码引用 |
-| fund_dca_plan | — | 遗留 | 无代码引用 |
+| fund_dca_plan | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」，由 `investment_plan` 取代） |
 | fund_product_migration_conflict | — | 遗留 | 无代码引用 |
 
-合计 43 张：在用 30 张，遗留 9 张，已删除 4 张（`discipline_strategy`、`discipline_advice`、`discipline_classification`、`signal_log`）。
+合计 43 张：在用 30 张，遗留 5 张，已删除 8 张（`discipline_strategy`、`discipline_advice`、`discipline_classification`、`signal_log`、`fund_strategy`、`fund_strategy_activation`、`strategy_backtest`、`fund_dca_plan`）。
 
 ## v0.14.0 已删除表
 
