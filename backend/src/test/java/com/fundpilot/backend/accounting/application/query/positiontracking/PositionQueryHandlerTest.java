@@ -86,6 +86,6 @@ class PositionQueryHandlerTest {
         return LedgerTransaction.rehydrate(id, 12L, 2L, TransactionSource.INCREASE,
                 TransactionStatus.CONFIRMED, new BigDecimal(amount), new BigDecimal(shares), BigDecimal.ONE,
                 BigDecimal.ZERO, BigDecimal.ZERO, occurredAt, occurredAt, null, occurredAt,
-                null, null, null, null, null);
+                null, null, null);
     }
 }

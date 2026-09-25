@@ -108,7 +108,7 @@ public class PortfolioFundOnboardingCommandHandler {
         events.publishConfirmed(new TransactionConfirmed(transaction.id(), transaction.portfolioFundId(),
                 transaction.ownerId(), transaction.source().name(), transaction.amount(), transaction.shares(),
                 transaction.nav(), transaction.fee(), transaction.tradeDate(), transaction.confirmTime(),
-                transaction.signalLogId(), transaction.dcaPlanId(), transaction.disciplineAdviceId(),
+                transaction.dcaPlanId(),
                 transaction.investmentPlanId(), transaction.id(), now));
         return new OnboardingResult(portfolioFund.portfolioFundId(), transaction.id());
     }

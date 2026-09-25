@@ -12,32 +12,28 @@ import {
     createPortfolioFund,
     createManualTransaction,
     deleteDcaPlan,
-    createStrategy,
     getPortfolioFundTransactions,
     getPortfolioInsightFund,
-    getPortfolioFundLatestAdvice,
-    getPortfolioFundAdviceRange,
     getFundFeeRates,
     getYangjibaoSessions,
     getWatchedIndices,
     invalidateDcaBudgetSummary,
     invalidateDcaPlanQueries,
-    invalidateConfirmOperationQueries,
-    invalidateSignalQueries,
     requestAdminAction,
     replaceWatchedIndices,
     replacePortfolioFundGroups,
     saveAdminUser,
     updatePortfolioFundCostBasis,
     updatePortfolioFundWarning,
-    updateStrategy,
     updatePendingTransaction,
     voidPortfolioFund,
     createAlertRule,
     deleteAlertRule,
+    getAlertIndicatorMetadata,
     getAlertNotifications,
     getAlertRules,
     invalidateAlertRuleQueries,
+    previewAlertRule,
     setAlertRuleEnabled,
     updateAlertRule,
     updateSiteEmail,
@@ -124,35 +120,11 @@ describe('portfolio fund configuration', () => {
     });
 });
 
-describe('discipline strategy routes', () => {
-    it('creates a strategy under the portfolio fund endpoint', () => {
-        const body = {profitActivationPercent: 0.15, customized: false};
-
-        createStrategy({portfolioFundId: 41, body});
-
-        expect(post).toHaveBeenLastCalledWith('/api/discipline/strategies/portfolio-funds/41', body);
-    });
-
-    it('updates a strategy by strategy id while retaining portfolio scope in the caller', () => {
-        const body = {profitActivationPercent: 0.20, customized: true};
-
-        updateStrategy({strategyId: 7, body});
-
-        expect(put).toHaveBeenLastCalledWith('/api/discipline/strategies/7', body);
-    });
-});
-
 describe('portfolio fund insights routes', () => {
-    it('uses the portfolio fund identifier for return details and discipline advice', () => {
+    it('uses the portfolio fund identifier for return details', () => {
         getPortfolioInsightFund(41);
-        getPortfolioFundLatestAdvice(41);
-        getPortfolioFundAdviceRange(41, '2026-09-01', '2026-09-07');
 
-        expect(get.mock.calls.slice(-3)).toEqual([
-            ['/api/insights/portfolio/funds/41'],
-            ['/api/discipline/advice/portfolio-funds/41/latest'],
-            ['/api/discipline/advice/portfolio-funds/41?from=2026-09-01&to=2026-09-07'],
-        ]);
+        expect(get).toHaveBeenLastCalledWith('/api/insights/portfolio/funds/41');
     });
 });
 
@@ -191,40 +163,8 @@ describe('养基宝导入会话', () => {
     });
 });
 
-describe('signal query invalidation', () => {
-    it('refreshes pending, today, and range queries after a signal response', () => {
-        const queryClient = {invalidateQueries: vi.fn()};
-
-        invalidateSignalQueries(queryClient);
-
-        expect(queryClient.invalidateQueries.mock.calls).toEqual([
-            [{queryKey: ['signals-pending']}],
-            [{queryKey: ['signals-today']}],
-            [{queryKey: ['signals-range']}],
-        ]);
-    });
-});
-
-describe('confirm operation query invalidation', () => {
-    it('refreshes the new pending transaction and affected fund projections', () => {
-        const queryClient = {invalidateQueries: vi.fn()};
-
-        invalidateConfirmOperationQueries(queryClient);
-
-        expect(queryClient.invalidateQueries.mock.calls).toEqual([
-            [{queryKey: ['signals-pending']}],
-            [{queryKey: ['signals-today']}],
-            [{queryKey: ['signals-range']}],
-            [{queryKey: ['transactions-pending']}],
-            [{queryKey: ['fund-transactions']}],
-            [{queryKey: ['funds']}],
-        ]);
-    });
-});
-
 describe('admin actions', () => {
     it.each([
-        ['generate', '/api/admin/signals/generate'],
         ['confirm-nav', '/api/admin/transactions/confirm-nav'],
         ['sync-dict', '/api/admin/products/catalog/sync'],
         ['sync-calendar', '/api/admin/market-data/sync-trading-calendar'],
@@ -296,7 +236,11 @@ describe('DCA plan deletion', () => {
 });
 
 describe('price alert rules', () => {
-    const body = {scope: 'GLOBAL', portfolioFundId: null, ruleType: 'RISE', threshold: 0.05, enabled: true};
+    const body = {
+        scope: 'GLOBAL', portfolioFundId: null, match: 'ALL',
+        conditions: [{indicator: 'DAILY_CHANGE', relation: 'ABOVE', params: {}, value: 0.05}],
+        enabled: true,
+    };
 
     it('reads rules and notifications from the alerting endpoints', () => {
         getAlertRules();
@@ -306,6 +250,18 @@ describe('price alert rules', () => {
             ['/api/alert-rules'],
             ['/api/alert-notifications?limit=20'],
         ]);
+    });
+
+    it('reads the indicator metadata that drives the condition builder', () => {
+        getAlertIndicatorMetadata();
+
+        expect(get).toHaveBeenLastCalledWith('/api/alert-rules/indicators');
+    });
+
+    it('previews a draft rule without saving it', () => {
+        previewAlertRule(body);
+
+        expect(post).toHaveBeenLastCalledWith('/api/alert-rules/preview', body);
     });
 
     it('creates a rule through the alerting endpoint', () => {

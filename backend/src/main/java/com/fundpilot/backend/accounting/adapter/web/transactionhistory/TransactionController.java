@@ -36,7 +36,7 @@ public class TransactionController {
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,
             @PathVariable long portfolioFundId) {
         return Response.ok(queries.findByPortfolioFund(ownerId, portfolioFundId).stream()
-                .map(result -> TransactionView.from(result, null, null, null, null, null, null)).toList());
+                .map(result -> TransactionView.from(result, null, null, null, null, null)).toList());
     }
 
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/open-lots")
@@ -140,29 +140,28 @@ public class TransactionController {
     @Schema(description = "交易流水视图")
     public record TransactionView(long id, Long fundId, long portfolioFundId, BigDecimal amount, BigDecimal shares, BigDecimal nav,
                                   BigDecimal fee, BigDecimal feeRate, String status, String source,
-                                  Instant confirmTime, Instant cancelTime, Long signalLogId,
+                                  Instant confirmTime, Instant cancelTime,
                                   Long relatedTransactionId, Instant tradeDate, Instant createdDate,
                                   BigDecimal expectedNav, BigDecimal expectedShares,
                                   String confirmationState, String confirmationReason,
-                                  boolean qdii, String signalReason) {
+                                  boolean qdii) {
         static TransactionView from(TransactionQueryHandler.TransactionViewResult result) {
-            return from(result.transaction(), result.legacyFundId(), null, null, null, null, null);
+            return from(result.transaction(), result.legacyFundId(), null, null, null, null);
         }
 
         static TransactionView from(TransactionQueryHandler.PendingResult result) {
             return from(result.transaction(), result.legacyFundId(), result.expectedNav(), result.expectedShares(),
-                    result.confirmationState(), result.confirmationReason(), result.signalReason());
+                    result.confirmationState(), result.confirmationReason());
         }
 
         private static TransactionView from(TransactionLedgerCommandHandler.LedgerResult result, Long legacyFundId,
                                             BigDecimal expectedNav, BigDecimal expectedShares,
-                                            String confirmationState, String confirmationReason,
-                                            String signalReason) {
+                                            String confirmationState, String confirmationReason) {
             return new TransactionView(result.transactionId(), legacyFundId, result.portfolioFundId(), result.amount(), result.shares(),
                     result.nav(), result.fee(), result.feeRate(), result.status(), result.source(),
-                    result.confirmTime(), result.cancelTime(), result.signalLogId(), result.relatedTransactionId(),
+                    result.confirmTime(), result.cancelTime(), result.relatedTransactionId(),
                     result.tradeDate(), result.createdDate(), expectedNav, expectedShares, confirmationState,
-                    confirmationReason, false, signalReason);
+                    confirmationReason, false);
         }
     }
 

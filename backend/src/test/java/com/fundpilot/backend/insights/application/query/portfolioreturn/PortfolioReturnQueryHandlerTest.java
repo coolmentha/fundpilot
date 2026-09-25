@@ -38,8 +38,6 @@ class PortfolioReturnQueryHandlerTest {
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of(
                 new ReturnCompositionGateway.GroupMembership(12L, 4L, "核心")));
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of(
-                new ReturnCompositionGateway.DisciplineClassification(12L, "SECTOR")));
 
         var result = handler(facts).findByOwner(7L);
 
@@ -48,7 +46,7 @@ class PortfolioReturnQueryHandlerTest {
             assertThat(fund.holdingAmount()).isEqualByComparingTo("150");
             assertThat(fund.unrealizedPnl()).isEqualByComparingTo("50");
             assertThat(fund.totalReturn()).isEqualByComparingTo("50");
-            assertThat(fund.disciplineCategory()).isEqualTo("SECTOR");
+            assertThat(fund.disciplineCategory()).isEqualTo("BROAD_BASE");
             assertThat(fund.groups()).containsExactly(new PortfolioReturnQueryHandler.FundGroup(4L, "核心"));
         });
         assertThat(result.investedAmount()).isEqualByComparingTo("100");
@@ -81,9 +79,6 @@ class PortfolioReturnQueryHandlerTest {
                         new BigDecimal("10"), new BigDecimal("10"), Instant.parse("2026-07-27T01:00:00Z"))));
         when(facts.findRealtimeValuations(Set.of("000001", "000002"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L, 13L))).thenReturn(List.of(
-                new ReturnCompositionGateway.DisciplineClassification(12L, "BROAD_BASE"),
-                new ReturnCompositionGateway.DisciplineClassification(13L, "ACTIVE")));
         var handler = handler(facts);
 
         assertThat(handler.currentFunds(7L)).extracting(PortfolioReturnQueryHandler.FundReturnResult::fundCode)
@@ -112,7 +107,6 @@ class PortfolioReturnQueryHandlerTest {
                         new BigDecimal("10"), new BigDecimal("10"), Instant.parse("2026-07-29T01:00:00Z"))));
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
 
         var result = handler(facts).findByOwner(7L);
 
@@ -139,7 +133,6 @@ class PortfolioReturnQueryHandlerTest {
         when(facts.findLatestTwoNavs(Set.of(31L))).thenReturn(List.of());
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
 
         var fund = handler(facts).fund(7L, 12L);
 
@@ -203,7 +196,6 @@ class PortfolioReturnQueryHandlerTest {
                         BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-28T01:00:00Z"))));
         when(facts.findRealtimeValuations(Set.of("000001", "000002"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L, 13L))).thenReturn(List.of());
 
         var summary = handler(facts).summary(7L);
 
@@ -233,7 +225,6 @@ class PortfolioReturnQueryHandlerTest {
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of(
                 new ReturnCompositionGateway.RealtimeValuation("000001", null, null, null, "TIMEOUT")));
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
 
         var result = handler(facts).findByOwner(7L);
 
@@ -267,7 +258,6 @@ class PortfolioReturnQueryHandlerTest {
                         BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-27T01:00:00Z"))));
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
 
         var fund = handler(facts).currentFunds(7L).getFirst();
 
@@ -297,7 +287,6 @@ class PortfolioReturnQueryHandlerTest {
                 new ReturnCompositionGateway.Nav(31L, Instant.parse("2026-07-28T00:00:00Z"),
                         BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-28T08:00:00Z"))));
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
 
         var fund = handler(facts).findByOwnerAt(7L, businessDate).funds().getFirst();
 
@@ -325,7 +314,6 @@ class PortfolioReturnQueryHandlerTest {
                         BigDecimal.ONE, BigDecimal.ONE, Instant.parse("2026-07-27T01:00:00Z"))));
         when(facts.findRealtimeValuations(Set.of("000001"))).thenReturn(List.of());
         when(facts.findGroupMemberships(7L)).thenReturn(List.of());
-        when(facts.findDisciplineClassifications(7L, Set.of(12L))).thenReturn(List.of());
         return facts;
     }
 

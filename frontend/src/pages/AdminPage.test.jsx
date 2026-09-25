@@ -116,9 +116,9 @@ describe('AdminPage', () => {
         expect(activePane().textContent).toContain('管理操作');
         expect(activePane().textContent).toContain('同步交易日历');
 
-        await click(buttonByText(activePane(), '生成今日建议'));
+        await click(buttonByText(activePane(), '回填净值'));
         await confirmPopconfirm();
-        expect(mocks.adminAction).toHaveBeenCalledWith({action: 'generate'});
+        expect(mocks.adminAction).toHaveBeenCalledWith({action: 'confirm-nav'});
 
         await click(buttonByText(activePane(), '同步交易日历'));
         await confirmPopconfirm();

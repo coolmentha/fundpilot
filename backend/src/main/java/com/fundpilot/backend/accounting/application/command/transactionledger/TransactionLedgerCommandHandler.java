@@ -94,42 +94,20 @@ public class TransactionLedgerCommandHandler {
         }
 
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, source, amount, shares, normalizedTradeDate, null, null));
+                ownerId, source, amount, shares, normalizedTradeDate, null));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, now);
         return LedgerResult.from(saved);
     }
 
-    /** 由信号或定投计划生成一笔待确认流水，携带来源幂等键。 */
+    /** 由定投计划生成一笔待确认流水，携带来源幂等键。 */
     @Transactional
     public LedgerResult placePending(long ownerId, long portfolioFundId, TransactionSource source,
                                      BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                     Long signalLogId, Long dcaPlanId) {
+                                     Long dcaPlanId) {
         requireTradable(ownerId, portfolioFundId);
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, source, amount, shares, tradeDate, signalLogId, dcaPlanId));
-        LedgerTransaction saved = transactions.save(transaction);
-        publishCreated(saved, clock.instant());
-        return LedgerResult.from(saved);
-    }
-
-    /** Discipline 建议回应创建待确认账目，建议 ID 是跨模块幂等键，来源原因冗余展示。 */
-    @Transactional
-    public LedgerResult placePendingForAdvice(long ownerId, long portfolioFundId, Source source,
-                                              BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                              long disciplineAdviceId, String signalReason) {
-        requireTradable(ownerId, portfolioFundId);
-        if (transactions.existsByDisciplineAdviceIdAndStatusNot(
-                disciplineAdviceId, TransactionStatus.CANCELLED)) {
-            throw failure(TransactionLedgerFailure.Code.ADVICE_ALREADY_RESPONDED,
-                    "建议 #" + disciplineAdviceId + " 已创建账目");
-        }
-        Instant effectiveTradeDate = tradeDate != null ? tradeDate : clock.instant();
-        Instant normalizedTradeDate = tradingDays.latestTradingDayOnOrBefore(effectiveTradeDate)
-                .orElse(effectiveTradeDate);
-        LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, TransactionSource.valueOf(source.name()), amount, shares, normalizedTradeDate, null, null,
-                disciplineAdviceId, signalReason));
+                ownerId, source, amount, shares, tradeDate, dcaPlanId));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, clock.instant());
         return LedgerResult.from(saved);
@@ -152,7 +130,7 @@ public class TransactionLedgerCommandHandler {
                     "投资计划 #" + investmentPlanId + " 当日已生成账目");
         }
         LedgerTransaction transaction = create(() -> LedgerTransaction.placePending(portfolioFundId,
-                ownerId, TransactionSource.INVEST, amount, null, businessDate, null, null, null,
+                ownerId, TransactionSource.INVEST, amount, null, businessDate, null,
                 investmentPlanId));
         LedgerTransaction saved = transactions.save(transaction);
         publishCreated(saved, clock.instant());
@@ -253,11 +231,11 @@ public class TransactionLedgerCommandHandler {
 
         LedgerTransaction outLeg = transactions.save(create(() -> LedgerTransaction.placePending(
                 portfolioFundId, ownerId, TransactionSource.TRANSFER_OUT, null, shares, tradeDate,
-                null, null)));
+                null)));
         LedgerTransaction inLeg = LedgerTransaction.rehydrate(
                 pendingInLegPlaceholder(targetPortfolioFundId, ownerId, tradeDate).id(),
                 targetPortfolioFundId, ownerId, TransactionSource.TRANSFER_IN, TransactionStatus.PENDING,
-                null, null, null, null, null, tradeDate, null, null, now, outLeg.id(), null, null, null,
+                null, null, null, null, null, tradeDate, null, null, now, outLeg.id(), null,
                 null);
         LedgerTransaction savedInLeg = transactions.save(inLeg);
 
@@ -344,16 +322,14 @@ public class TransactionLedgerCommandHandler {
                                String status, BigDecimal amount, BigDecimal shares, BigDecimal nav,
                                BigDecimal fee, BigDecimal feeRate, Instant tradeDate,
                                Instant confirmTime, Instant cancelTime, Instant createdDate, Long relatedTransactionId,
-                                Long signalLogId, Long dcaPlanId, Long disciplineAdviceId,
-                                Long investmentPlanId) {
+                                Long dcaPlanId, Long investmentPlanId) {
         public static LedgerResult from(LedgerTransaction transaction) {
             return new LedgerResult(transaction.id(), transaction.portfolioFundId(),
                     transaction.ownerId(), transaction.source().name(), transaction.status().name(),
                     transaction.amount(), transaction.shares(), transaction.nav(), transaction.fee(),
                     transaction.feeRate(), transaction.tradeDate(), transaction.confirmTime(),
                     transaction.cancelTime(), transaction.createdDate(), transaction.relatedTransactionId(),
-                    transaction.signalLogId(), transaction.dcaPlanId(), transaction.disciplineAdviceId(),
-                    transaction.investmentPlanId());
+                    transaction.dcaPlanId(), transaction.investmentPlanId());
         }
     }
 

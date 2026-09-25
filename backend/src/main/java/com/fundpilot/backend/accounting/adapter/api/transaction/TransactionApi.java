@@ -53,15 +53,6 @@ public class TransactionApi {
         return new InvestmentAmounts(amounts.confirmed(), amounts.pending());
     }
 
-    public boolean hasTransactionForAdvice(long adviceId) {
-        return queries.hasTransactionForAdvice(adviceId);
-    }
-
-    public java.util.Optional<AdviceRelatedTransaction> findByAdvice(long adviceId) {
-        return queries.findByAdvice(adviceId)
-                .map(value -> new AdviceRelatedTransaction(value.transactionId(), value.status()));
-    }
-
     public Transaction recordManual(RecordManual request) {
         try {
             return from(ledger.recordManual(request.ownerId(), request.portfolioFundId(),
@@ -87,16 +78,6 @@ public class TransactionApi {
         try {
             return from(ledger.revisePending(request.ownerId(), request.transactionId(), request.amount(),
                     request.shares(), request.tradeDate()));
-        } catch (TransactionLedgerFailure failure) {
-            throw Failure.from(failure);
-        }
-    }
-
-    public Transaction placePendingForAdvice(PlacePendingForAdvice request) {
-        try {
-            return from(ledger.placePendingForAdvice(request.ownerId(), request.portfolioFundId(),
-                    TransactionLedgerCommandHandler.Source.valueOf(request.source().name()), request.amount(), request.shares(),
-                    request.tradeDate(), request.disciplineAdviceId(), request.signalReason()));
         } catch (TransactionLedgerFailure failure) {
             throw Failure.from(failure);
         }
@@ -131,8 +112,8 @@ public class TransactionApi {
         return new Transaction(result.transactionId(), result.portfolioFundId(), result.ownerId(),
                 Source.valueOf(result.source()), Status.valueOf(result.status()), result.amount(), result.shares(),
                 result.nav(), result.fee(), result.feeRate(), result.tradeDate(), result.confirmTime(),
-                result.cancelTime(), result.createdDate(), result.relatedTransactionId(), result.signalLogId(),
-                result.dcaPlanId(), result.disciplineAdviceId(), result.investmentPlanId());
+                result.cancelTime(), result.createdDate(), result.relatedTransactionId(),
+                result.dcaPlanId(), result.investmentPlanId());
     }
 
     public record RecordManual(long ownerId, long portfolioFundId, Source source, BigDecimal amount,
@@ -142,20 +123,16 @@ public class TransactionApi {
                                       Transaction transaction) {}
     public record RevisePending(long ownerId, long transactionId, BigDecimal amount, BigDecimal shares,
                                 Instant tradeDate) {}
-    public record PlacePendingForAdvice(long ownerId, long portfolioFundId, Source source,
-                                        BigDecimal amount, BigDecimal shares, Instant tradeDate,
-                                        long disciplineAdviceId, String signalReason) {}
     public record PlacePendingForInvestmentPlan(long ownerId, long portfolioFundId,
                                                 BigDecimal amount, Instant tradeDate,
                                                 long investmentPlanId) {}
     public record Transaction(long id, long portfolioFundId, long ownerId, Source source, Status status,
                               BigDecimal amount, BigDecimal shares, BigDecimal nav, BigDecimal fee,
                               BigDecimal feeRate, Instant tradeDate, Instant confirmTime, Instant cancelTime,
-                              Instant createdDate, Long relatedTransactionId, Long signalLogId, Long dcaPlanId,
-                              Long disciplineAdviceId, Long investmentPlanId) {}
+                              Instant createdDate, Long relatedTransactionId, Long dcaPlanId,
+                              Long investmentPlanId) {}
     public record PendingTransaction(Transaction transaction, BigDecimal expectedNav, BigDecimal expectedShares,
                                      String confirmationState, String confirmationReason) {}
-    public record AdviceRelatedTransaction(long transactionId, String status) {}
     public record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, BigDecimal amount,
                                            String status) {}
     public record InvestmentAmounts(BigDecimal confirmed, BigDecimal pending) {
@@ -198,7 +175,6 @@ public class TransactionApi {
         INSUFFICIENT_LOTS,
         NAV_UNAVAILABLE,
         AMOUNT_TOO_SMALL,
-        ADVICE_ALREADY_RESPONDED,
         INVESTMENT_PLAN_ALREADY_EXECUTED
     }
 }

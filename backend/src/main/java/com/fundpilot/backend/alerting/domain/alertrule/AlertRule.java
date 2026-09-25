@@ -1,58 +1,60 @@
 package com.fundpilot.backend.alerting.domain.alertrule;
 
-import java.math.BigDecimal;
+import com.fundpilot.backend.alerting.domain.condition.ConditionGroup;
+import com.fundpilot.backend.alerting.domain.suggestion.TakeProfitParams;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
-/** 价格提醒规则聚合根；单基金规则（FUND）优先于全局规则（GLOBAL）。 */
+/**
+ * 提醒规则聚合根：通用规则是一组指标条件的合取（全部条件满足即触发），建议型规则在此之上带出建议卖出份额。
+ *
+ * <p>单基金规则（FUND）只对指定基金生效，优先级高于全局规则（GLOBAL）：全局规则会剔除已被
+ * 「同一基金 + 同一条件组」的单基金规则覆盖的基金。
+ */
 public final class AlertRule {
-
-    private static final BigDecimal MAX_THRESHOLD = BigDecimal.ONE;
 
     private final Long id;
     private final Long version;
     private final long ownerId;
     private AlertRuleScope scope;
     private Long portfolioFundId;
-    private AlertRuleType type;
-    private BigDecimal threshold;
+    private AlertRuleKind kind;
+    private ConditionGroup conditions;
+    private TakeProfitParams takeProfit;
     private boolean enabled;
 
     private AlertRule(Long id, Long version, long ownerId, AlertRuleScope scope, Long portfolioFundId,
-                      AlertRuleType type, BigDecimal threshold, boolean enabled) {
+                      AlertRuleKind kind, ConditionGroup conditions, TakeProfitParams takeProfit, boolean enabled) {
         this.id = id;
         this.version = version;
         this.ownerId = positive(ownerId, "用户 ID");
-        this.type = Objects.requireNonNull(type, "提醒类型不能为空");
-        this.threshold = requireThreshold(threshold);
+        apply(kind, conditions, takeProfit);
         this.enabled = enabled;
         applyScope(scope, portfolioFundId);
     }
 
-    public static AlertRule create(long ownerId, AlertRuleScope scope, Long portfolioFundId,
-                                   AlertRuleType type, BigDecimal threshold, boolean enabled) {
-        return new AlertRule(null, null, ownerId, scope, portfolioFundId, type, threshold, enabled);
+    public static AlertRule create(long ownerId, AlertRuleScope scope, Long portfolioFundId, AlertRuleKind kind,
+                                   ConditionGroup conditions, TakeProfitParams takeProfit, boolean enabled) {
+        return new AlertRule(null, null, ownerId, scope, portfolioFundId, kind, conditions, takeProfit, enabled);
     }
 
     public static AlertRule rehydrate(long id, long ownerId, AlertRuleScope scope, Long portfolioFundId,
-                                      AlertRuleType type, BigDecimal threshold, boolean enabled) {
-        return rehydrate(id, null, ownerId, scope, portfolioFundId, type, threshold, enabled);
+                                      AlertRuleKind kind, ConditionGroup conditions, TakeProfitParams takeProfit,
+                                      boolean enabled) {
+        return rehydrate(id, null, ownerId, scope, portfolioFundId, kind, conditions, takeProfit, enabled);
     }
 
     public static AlertRule rehydrate(long id, Long version, long ownerId, AlertRuleScope scope,
-                                      Long portfolioFundId, AlertRuleType type, BigDecimal threshold,
-                                      boolean enabled) {
-        return new AlertRule(positive(id, "提醒规则 ID"), version, ownerId, scope, portfolioFundId, type,
-                threshold, enabled);
+                                      Long portfolioFundId, AlertRuleKind kind, ConditionGroup conditions,
+                                      TakeProfitParams takeProfit, boolean enabled) {
+        return new AlertRule(positive(id, "提醒规则 ID"), version, ownerId, scope, portfolioFundId, kind, conditions,
+                takeProfit, enabled);
     }
 
-    public void update(AlertRuleScope scope, Long portfolioFundId, AlertRuleType type, BigDecimal threshold) {
-        this.type = Objects.requireNonNull(type, "提醒类型不能为空");
-        this.threshold = requireThreshold(threshold);
+    public void update(AlertRuleScope scope, Long portfolioFundId, AlertRuleKind kind, ConditionGroup conditions,
+                       TakeProfitParams takeProfit) {
+        apply(kind, conditions, takeProfit);
         applyScope(scope, portfolioFundId);
-    }
-
-    public void changeThreshold(BigDecimal threshold) {
-        this.threshold = requireThreshold(threshold);
     }
 
     public void enable() {
@@ -63,28 +65,50 @@ public final class AlertRule {
         this.enabled = false;
     }
 
-    /** 该规则是否被观测值触发。observedValue 为小数口径（0.05 表示 5%）。 */
-    public boolean triggered(BigDecimal observedValue) {
-        if (observedValue == null) {
-            return false;
-        }
-        return switch (type) {
-            case RISE, PROFIT -> observedValue.compareTo(threshold) >= 0;
-            case DROP -> observedValue.compareTo(threshold.negate()) <= 0;
-        };
+    public boolean global() {
+        return scope == AlertRuleScope.GLOBAL;
+    }
+
+    /** 建议型规则：判定不走通用条件求值器，通知包含建议卖出份额。 */
+    public boolean suggestion() {
+        return kind.suggestion();
     }
 
     /**
-     * 该规则是否适用于该基金。仅按持仓状态过滤：PROFIT 只对已持仓基金生效。
+     * 判定的口径签名，用于「全局规则剔除已被单基金规则覆盖的基金」。
      *
-     * <p>入参用基本类型而非应用层 record，避免 domain 反向依赖上层。
+     * <p>与旧口径一致：只看判定的形状（种类 + 指标 + 参数 + 关系），不看阈值——同类型的单基金规则
+     * 视为已覆盖该基金，避免同一基金被两条同类规则重复提醒。回撤止盈没有条件，用参数参与签名。
      */
-    public boolean appliesTo(boolean positionOpen) {
-        return type != AlertRuleType.PROFIT || positionOpen;
+    public String signature() {
+        return kind.name() + "|" + (conditions == null ? String.valueOf(takeProfit) : shape(conditions));
     }
 
-    public boolean global() {
-        return scope == AlertRuleScope.GLOBAL;
+    private static String shape(ConditionGroup group) {
+        return group.conditions().stream()
+                .map(condition -> condition.indicator().code() + condition.params() + condition.relation())
+                .collect(Collectors.joining("+"));
+    }
+
+    private void apply(AlertRuleKind kind, ConditionGroup conditions, TakeProfitParams takeProfit) {
+        AlertRuleKind validatedKind = Objects.requireNonNull(kind, "提醒规则种类不能为空");
+        if (validatedKind.needsConditions()) {
+            if (conditions == null) {
+                throw new IllegalArgumentException("提醒条件不能为空");
+            }
+        } else if (conditions != null) {
+            throw new IllegalArgumentException(validatedKind.label() + "的判定由参数决定，不配置条件");
+        }
+        if (validatedKind == AlertRuleKind.TRAILING_STOP) {
+            if (takeProfit == null) {
+                throw new IllegalArgumentException("回撤止盈必须配置止盈参数");
+            }
+        } else if (takeProfit != null) {
+            throw new IllegalArgumentException(validatedKind.label() + "不接受止盈参数");
+        }
+        this.kind = validatedKind;
+        this.conditions = conditions;
+        this.takeProfit = takeProfit;
     }
 
     private void applyScope(AlertRuleScope scope, Long portfolioFundId) {
@@ -104,13 +128,6 @@ public final class AlertRule {
         }
     }
 
-    private static BigDecimal requireThreshold(BigDecimal value) {
-        if (value == null || value.signum() <= 0 || value.compareTo(MAX_THRESHOLD) > 0) {
-            throw new IllegalArgumentException("提醒阈值必须大于 0 且不超过 1");
-        }
-        return value;
-    }
-
     private static long positive(long value, String field) {
         if (value <= 0) throw new IllegalArgumentException(field + "必须为正数");
         return value;
@@ -121,7 +138,8 @@ public final class AlertRule {
     public long ownerId() { return ownerId; }
     public AlertRuleScope scope() { return scope; }
     public Long portfolioFundId() { return portfolioFundId; }
-    public AlertRuleType type() { return type; }
-    public BigDecimal threshold() { return threshold; }
+    public AlertRuleKind kind() { return kind; }
+    public ConditionGroup conditions() { return conditions; }
+    public TakeProfitParams takeProfit() { return takeProfit; }
     public boolean enabled() { return enabled; }
 }

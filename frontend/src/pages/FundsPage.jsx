@@ -272,7 +272,6 @@ export default function FundsPage() {
             title: '操作', width: 168, render: (_, row) => (
                 <Space size="small" wrap>
                     <Link to={`/funds/${row.portfolioFundId}`}>详情</Link>
-                    <Link to={`/advice?portfolioFundId=${row.portfolioFundId}`}>建议</Link>
                     <a onClick={() => openEdit(row)}>编辑</a>
                     <a className="danger-link" onClick={() => openVoid(row)}><DeleteOutlined/> 作废</a>
                 </Space>
@@ -350,10 +349,8 @@ export default function FundsPage() {
                     <Form.Item name="fundName" hidden><Input/></Form.Item>
                     <Form.Item name="fundSubType" hidden><Input/></Form.Item>
                     <Form.Item name="benchmarkIndexCode" hidden><Input/></Form.Item>
-                    <Form.Item label={editing ? '纪律分类' : '默认纪律分类'}
-                               help={editing
-                                   ? '来自纪律配置；如需调整，请在基金详情的纪律策略中操作'
-                                   : '来自产品目录的默认建议；创建后在纪律策略中确认或调整'}>
+                    <Form.Item label="默认分类"
+                               help="来自产品目录的默认分类，创建后由目录同步维护，不可在此修改">
                         {form.getFieldValue('fundCategory')
                             ? <StatusTag value={form.getFieldValue('fundCategory')}/>
                             : <span className="muted">-</span>}
@@ -425,7 +422,7 @@ export default function FundsPage() {
                    confirmLoading={voidPortfolioFund.isPending} destroyOnHidden>
                 <Space direction="vertical" size={16} className="full-width">
                     <Alert type="warning" showIcon message="作废不可恢复"
-                           description="该记录将不再参与持仓、收益、纪律和计划计算，底层审计记录仍会保留。"/>
+                           description="该记录将不再参与持仓、收益、提醒和计划计算，底层审计记录仍会保留。"/>
                     <Input.TextArea value={voidReason} rows={3} maxLength={500} showCount
                                     placeholder="填写作废原因"
                                     onChange={(event) => setVoidReason(event.target.value)}/>

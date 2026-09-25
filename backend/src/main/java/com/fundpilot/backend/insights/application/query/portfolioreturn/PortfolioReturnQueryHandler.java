@@ -59,16 +59,12 @@ public class PortfolioReturnQueryHandler {
                 .collect(Collectors.groupingBy(ReturnCompositionGateway.GroupMembership::portfolioFundId,
                         Collectors.mapping(value -> new FundGroup(value.groupId(), value.groupName()),
                                 Collectors.toList())));
-        Map<Long, String> classifications = facts.findDisciplineClassifications(ownerId,
-                        funds.stream().map(ReturnCompositionGateway.PortfolioFund::id).collect(Collectors.toSet()))
-                .stream().collect(Collectors.toMap(ReturnCompositionGateway.DisciplineClassification::portfolioFundId,
-                        ReturnCompositionGateway.DisciplineClassification::category));
         List<FundReturnResult> rows = funds.stream().map(fund -> row(fund, positions.get(fund.id()),
                 returns.get(fund.id()), products.get(fund.fundProductId()),
                 navs.getOrDefault(fund.fundProductId(), List.of()),
                 valuations.get(products.get(fund.fundProductId()) == null ? null
                         : products.get(fund.fundProductId()).fundCode()),
-                groups.getOrDefault(fund.id(), List.of()), classifications.get(fund.id()),
+                groups.getOrDefault(fund.id(), List.of()),
                 businessDate == null ? clock.instant() : businessDate)).toList();
         BigDecimal invested = rows.stream().map(FundReturnResult::externalInvestedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -147,7 +143,9 @@ public class PortfolioReturnQueryHandler {
                                         ReturnCompositionGateway.Product product,
                                         List<ReturnCompositionGateway.Nav> navs,
                                         ReturnCompositionGateway.RealtimeValuation valuation,
-                                        List<FundGroup> groups, String disciplineCategory, Instant now) {
+                                        List<FundGroup> groups, Instant now) {
+        // 纪律分类以产品目录为准(D5):目录值为 null 时原样透传 null,由前端兜底显示,不伪造默认分类
+        String disciplineCategory = product == null ? null : product.defaultDisciplineCategory();
         BigDecimal shares = position == null ? BigDecimal.ZERO : position.confirmedShares();
         boolean open = position != null && "OPEN".equals(position.status()) && shares.signum() > 0;
         ReturnCompositionGateway.Nav latest = navs.isEmpty() ? null : navs.getFirst();
@@ -187,7 +185,8 @@ public class PortfolioReturnQueryHandler {
         // 单只累计收益 = 已实现 + 未实现;清仓基金的未实现为 0,历史已实现继续计入
         BigDecimal total = value.realizedPnl() == null || unrealized == null ? null
                 : value.realizedPnl().add(unrealized);
-        return new FundReturnResult(fund.id(), fund.legacyFundId(), product == null ? null : product.fundCode(),
+        return new FundReturnResult(fund.id(), fund.fundProductId(), fund.legacyFundId(),
+                product == null ? null : product.fundCode(),
                 product == null ? null : product.fundName(), position == null ? "EMPTY" : position.status(),
                 product == null ? null : product.productType(), product == null ? null : product.investmentTarget(),
                 product == null ? null : product.benchmarkIndexCode(), disciplineCategory, fund.positionWarningEnabled(),
@@ -246,7 +245,8 @@ public class PortfolioReturnQueryHandler {
                                          int risingFundCount, int fallingFundCount,
                                          int profitableFundCount, int losingFundCount,
                                          boolean isEstimated, int estimateFetchFailedCount) {}
-    public record FundReturnResult(long portfolioFundId, Long legacyFundId, String fundCode, String fundName,
+    public record FundReturnResult(long portfolioFundId, long fundProductId, Long legacyFundId,
+                                   String fundCode, String fundName,
                                    String positionStatus, String productType, String investmentTarget,
                                    String benchmarkIndexCode, String disciplineCategory,
                                    boolean positionWarningEnabled, BigDecimal positionWarningRatio,

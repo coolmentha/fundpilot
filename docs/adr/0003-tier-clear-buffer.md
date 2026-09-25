@@ -1,5 +1,7 @@
 # 反弹清空判定加 0.5% 缓冲带，偏离框架原文
 
+> **Status: superseded by [ADR-0015](./0015-pyramid-retire-trailing-stop-decouple.md)** —— 四档金字塔加仓已在 ADR-0015 退场，本 ADR 的档位清空缓冲带随之失去作用对象，落地常量 `HardConstraintConfig.TIER_CLEAR_BUFFER` 一并删除；v0.14.0 删除 discipline 模块后，仓库内已无该常量的任何残留。本 ADR 保留作为决策演进留痕。
+
 `backend/基金纪律策略框架.md §六` 明确"反弹清空"按精确档位边界判定（举例："反弹到 -12%（回到一档区，因为
 -12% ∈ [-15%, -8%]）→ 清空二、三、四档"）。本期实现选择**只在清空判定一侧**加 0.5% 缓冲带——`drawdown < tierNDrawdown - 0.005`
 才清空 N 档。

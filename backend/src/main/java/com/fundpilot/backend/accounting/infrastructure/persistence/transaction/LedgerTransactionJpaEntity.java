@@ -85,17 +85,7 @@ class LedgerTransactionJpaEntity {
     @Column(name = "related_fund_transaction_id")
     private Long relatedTransactionId;
 
-    @Column(name = "signal_log_id")
-    private Long signalLogId;
-
-    /** 建议回应冗余的来源原因(LOGIC_BROKEN/TRAILING_STOP),供确认工作台展示。 */
-    @Column(name = "signal_reason", length = 32)
-    private String signalReason;
-
     private Long dcaPlanId;
-
-    @Column(name = "discipline_advice_id")
-    private Long disciplineAdviceId;
 
     @Column(name = "investment_plan_id")
     private Long investmentPlanId;

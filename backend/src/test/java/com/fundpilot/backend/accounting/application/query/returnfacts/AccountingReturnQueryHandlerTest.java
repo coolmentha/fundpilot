@@ -81,6 +81,6 @@ class AccountingReturnQueryHandlerTest {
         Instant occurredAt = Instant.parse(tradeDate);
         return LedgerTransaction.rehydrate(id, portfolioFundId, 7L, source, TransactionStatus.CONFIRMED,
                 new BigDecimal(amount), new BigDecimal(shares), null, new BigDecimal(fee), null,
-                occurredAt, occurredAt, null, occurredAt, null, null, null, null, null);
+                occurredAt, occurredAt, null, occurredAt, null, null, null);
     }
 }

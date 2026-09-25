@@ -1,47 +1,22 @@
-import {Card, Col, Row, Space, Statistic, Table, Typography, Button, Skeleton} from 'antd';
-import {Link, useNavigate} from 'react-router-dom';
-import {ThunderboltOutlined, FundOutlined, WalletOutlined,
+import {Card, Col, Row, Space, Statistic, Table, Typography, Skeleton} from 'antd';
+import {Link} from 'react-router-dom';
+import {FundOutlined, WalletOutlined,
     RiseOutlined, FallOutlined, SmileOutlined} from '@ant-design/icons';
-import {useFunds, usePendingSignals, usePortfolioSummary} from '../api/hooks.js';
-import {datetime, text, signedMoney, pnlColor} from '../constants.js';
+import {useFunds, usePortfolioSummary} from '../api/hooks.js';
+import {signedMoney, pnlColor} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 
 const {Title} = Typography;
 
 export default function DashboardPage() {
-    const navigate = useNavigate();
     const {data: funds, isLoading: fundsLoading} = useFunds();
-    const {data: pending, isLoading: pendingLoading} = usePendingSignals();
     const {data: summary, isLoading: summaryLoading} = usePortfolioSummary();
 
     const holdingFunds = (funds || []).filter((f) => f.status === 'HOLDING');
-    const pendingCount = pending?.length ?? 0;
     const dailyPnlTotal = summary?.dailyPnlTotal;
     const estimateFetchFailedCount = summary?.estimateFetchFailedCount ?? 0;
     const estimateFetchFailed = estimateFetchFailedCount > 0;
-
-    const fundName = (portfolioFundId) => funds?.find(
-        (fund) => fund.portfolioFundId === portfolioFundId,
-    )?.fundName || `基金 #${portfolioFundId}`;
-
-    const pendingColumns = [
-        {title: '基金', width: 160, render: (_, r) => (
-            <Link to={`/funds/${r.portfolioFundId}`}>{fundName(r.portfolioFundId)}</Link>
-        )},
-        {title: '类型', dataIndex: 'action', width: 90, render: (v) => <StatusTag value={v}/>},
-        {title: '档位', dataIndex: 'triggerTier', width: 70, render: (v) => v ?? '-'},
-        {title: '建议量', width: 130, render: (_, r) => {
-            const m = r.suggestedMeasure;
-            return m ? <span className="num-cell">{Number(m.value).toFixed(2)} ({text(m.measureUnit)})</span> : '-';
-        }},
-        {title: '建议时间', dataIndex: 'signalDate', width: 170, render: datetime},
-        {
-            title: '', width: 100, render: (_, r) => r.action !== 'NONE' && (
-                <Button type="primary" size="small" onClick={() => navigate(`/advice?portfolioFundId=${r.portfolioFundId}`)}>去回应</Button>
-            ),
-        },
-    ];
 
     const holdingColumns = [
         {title: '代码', dataIndex: 'fundCode', width: 110},
@@ -62,13 +37,6 @@ export default function DashboardPage() {
                 <Card><Skeleton active paragraph={{rows: 2}}/></Card>
             ) : (
             <Row gutter={[16, 16]}>
-                <Col xs={12} md={6}>
-                    <Card className="kpi-card kpi-amber" onClick={() => navigate('/advice')}
-                          hoverable style={{cursor: 'pointer'}}>
-                        <Statistic title={<span className="kpi-label">待确认操作</span>}
-                                   value={pendingCount} prefix={<ThunderboltOutlined/>}/>
-                    </Card>
-                </Col>
                 <Col xs={12} md={6}>
                     <Card className="kpi-card kpi-green">
                         <Statistic title={<span className="kpi-label">持仓基金</span>}
@@ -115,14 +83,6 @@ export default function DashboardPage() {
                     </Card>
                 </Col>
             </Row>
-
-            {/* 待回应建议 */}
-            <Card title={<Title level={4}>待确认操作</Title>}
-                  extra={pendingCount > 0 ? <Link to="/advice">全部 →</Link> : null}>
-                <Table rowKey="id" size="small" loading={pendingLoading} dataSource={pending || []} columns={pendingColumns}
-                       pagination={false} scroll={{x: 760}}
-                       locale={{emptyText: <EmptyState description="暂无待回应建议"/>}}/>
-            </Card>
 
             {/* 持仓基金 */}
             <Card title={<Title level={4}>持仓基金</Title>}

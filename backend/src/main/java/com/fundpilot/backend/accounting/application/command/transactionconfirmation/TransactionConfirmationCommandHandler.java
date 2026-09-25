@@ -302,16 +302,16 @@ public class TransactionConfirmationCommandHandler {
         transaction.cancel(now);
         LedgerTransaction saved = transactions.save(transaction);
         events.publishCancelled(new TransactionCancelled(saved.id(), saved.portfolioFundId(),
-                saved.ownerId(), saved.source().name(), saved.signalLogId(), saved.dcaPlanId(),
-                saved.disciplineAdviceId(), saved.investmentPlanId(), now, saved.id(), now));
+                saved.ownerId(), saved.source().name(), saved.dcaPlanId(),
+                saved.investmentPlanId(), now, saved.id(), now));
         cancelled.add(saved);
     }
 
     private void publishConfirmed(LedgerTransaction saved, Instant occurredAt) {
         events.publishConfirmed(new TransactionConfirmed(saved.id(), saved.portfolioFundId(),
                 saved.ownerId(), saved.source().name(), saved.amount(), saved.shares(), saved.nav(),
-                saved.fee(), saved.tradeDate(), saved.confirmTime(), saved.signalLogId(),
-                saved.dcaPlanId(), saved.disciplineAdviceId(), saved.investmentPlanId(), saved.id(), occurredAt));
+                saved.fee(), saved.tradeDate(), saved.confirmTime(),
+                saved.dcaPlanId(), saved.investmentPlanId(), saved.id(), occurredAt));
     }
 
     /** 卖出份额不得超过 CONFIRMED 事实持仓。 */

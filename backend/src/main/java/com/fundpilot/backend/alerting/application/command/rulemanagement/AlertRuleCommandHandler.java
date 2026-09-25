@@ -4,12 +4,12 @@ import com.fundpilot.backend.alerting.application.gateway.ruleevaluation.AlertFu
 import com.fundpilot.backend.alerting.application.query.rulemanagement.AlertRuleQueryHandler;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleRepository;
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleScope;
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleType;
+import com.fundpilot.backend.alerting.domain.suggestion.SuggestionStateRepository;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
 import java.math.BigDecimal;
-import java.util.Locale;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,33 +22,32 @@ public class AlertRuleCommandHandler {
     private final AlertRuleRepository rules;
     private final AlertFundFactsGateway facts;
     private final AlertRuleQueryHandler views;
+    private final SuggestionStateRepository states;
 
     @Transactional
     public AlertRuleQueryHandler.RuleViewResult create(long ownerId, RuleInput input) {
-        AlertRuleScope scope = scope(input);
-        Long targetFundId = targetFundId(input, ownerId, scope);
-        AlertRule rule;
-        try {
-            rule = AlertRule.create(ownerId, scope, targetFundId, type(input), input.threshold(),
-                    input.enabled() == null || input.enabled());
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_THRESHOLD_INVALID, exception.getMessage());
-        }
+        AlertRuleDraft draft = draft(ownerId, input);
+        AlertRule rule = AlertRule.create(ownerId, draft.scope(), draft.portfolioFundId(), draft.kind(),
+                draft.conditions(), draft.takeProfit(), input.enabled() == null || input.enabled());
         return views.viewOf(ownerId, rules.save(rule));
     }
 
     @Transactional
     public AlertRuleQueryHandler.RuleViewResult update(long ownerId, long ruleId, RuleInput input) {
         AlertRule rule = owned(ownerId, ruleId);
-        AlertRuleScope scope = scope(input);
-        Long targetFundId = targetFundId(input, ownerId, scope);
-        try {
-            rule.update(scope, targetFundId, type(input), input.threshold());
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_THRESHOLD_INVALID, exception.getMessage());
-        }
+        AlertRuleDraft draft = draft(ownerId, input);
+        rule.update(draft.scope(), draft.portfolioFundId(), draft.kind(), draft.conditions(), draft.takeProfit());
         setEnabled(rule, input.enabled());
-        return views.viewOf(ownerId, rules.save(rule));
+        AlertRule saved = rules.save(rule);
+        // 判定配置变了，旧状态不再有效（周期峰值与阶段都按旧配置累积）
+        states.deleteByRule(saved.id());
+        return views.viewOf(ownerId, saved);
+    }
+
+    /** 校验请求并取出结构化草稿；与保存前试算共用同一套校验。 */
+    public AlertRuleDraft draft(long ownerId, RuleInput input) {
+        return AlertRuleDraft.validate(input, facts.currentFunds(ownerId).stream()
+                .map(AlertFundFactsGateway.AlertFundFact::portfolioFundId).toList());
     }
 
     @Transactional
@@ -60,7 +59,9 @@ public class AlertRuleCommandHandler {
 
     @Transactional
     public void delete(long ownerId, long ruleId) {
-        rules.softDelete(owned(ownerId, ruleId).id());
+        long owned = owned(ownerId, ruleId).id();
+        states.deleteByRule(owned);
+        rules.softDelete(owned);
     }
 
     private AlertRule owned(long ownerId, long ruleId) {
@@ -80,47 +81,17 @@ public class AlertRuleCommandHandler {
         }
     }
 
-    private Long targetFundId(RuleInput input, long ownerId, AlertRuleScope scope) {
-        if (scope == AlertRuleScope.GLOBAL) {
-            if (input.portfolioFundId() != null) {
-                throw new BusinessException(ErrorCode.ALERT_RULE_SCOPE_INVALID, "全局规则不能指定基金");
-            }
-            return null;
-        }
-        if (input.portfolioFundId() == null || input.portfolioFundId() <= 0) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_SCOPE_INVALID, "单基金规则必须指定基金");
-        }
-        boolean tracked = facts.currentFunds(ownerId).stream()
-                .anyMatch(fund -> fund.portfolioFundId() == input.portfolioFundId());
-        if (!tracked) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_TARGET_FUND_INVALID, "指定基金不在当前关注列表中");
-        }
-        return input.portfolioFundId();
-    }
+    public record RuleInput(String scope, Long portfolioFundId, String kind, String match,
+                            List<ConditionInput> conditions, TakeProfitInput takeProfit, Boolean enabled) {
 
-    private static AlertRuleScope scope(RuleInput input) {
-        if (input.scope() == null || input.scope().isBlank()) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_SCOPE_INVALID, "提醒范围不能为空");
+        /** 条件入参：指标码 + 参数 + 关系 + 阈值（可为空，取指标默认值）。 */
+        public record ConditionInput(String indicator, Map<String, Integer> params, String relation,
+                                     BigDecimal value) {
         }
-        try {
-            return AlertRuleScope.valueOf(input.scope().trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_SCOPE_INVALID, "不支持的提醒范围");
-        }
-    }
 
-    private static AlertRuleType type(RuleInput input) {
-        if (input.ruleType() == null || input.ruleType().isBlank()) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_TYPE_INVALID, "提醒类型不能为空");
+        /** 回撤止盈的六个参数（小数表示，如 0.15 即 15%）。 */
+        public record TakeProfitInput(BigDecimal activation, BigDecimal pullback, BigDecimal harvest,
+                                     BigDecimal minimumHolding, BigDecimal maxSingleSell, Integer cooldownDays) {
         }
-        try {
-            return AlertRuleType.valueOf(input.ruleType().trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            throw new BusinessException(ErrorCode.ALERT_RULE_TYPE_INVALID, "不支持的提醒类型");
-        }
-    }
-
-    public record RuleInput(String scope, Long portfolioFundId, String ruleType, BigDecimal threshold,
-                            Boolean enabled) {
     }
 }

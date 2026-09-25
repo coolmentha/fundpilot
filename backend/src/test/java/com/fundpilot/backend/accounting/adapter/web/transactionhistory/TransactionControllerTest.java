@@ -78,7 +78,7 @@ class TransactionControllerTest {
         Instant tradeDate = Instant.parse("2026-08-20T00:00:00Z");
         var result = new TransactionLedgerCommandHandler.LedgerResult(
                 99L, 41L, 7L, "TRANSFER_OUT", "PENDING", null, new java.math.BigDecimal("10"),
-                null, null, null, tradeDate, null, null, tradeDate, 42L, null, null, null, null);
+                null, null, null, tradeDate, null, null, tradeDate, 42L, null, null);
         when(ledgerCommands.recordManual(eq(7L), eq(41L),
                 eq(TransactionLedgerCommandHandler.Source.TRANSFER_OUT), isNull(),
                 eq(new java.math.BigDecimal("10")), eq(tradeDate), eq(42L))).thenReturn(result);

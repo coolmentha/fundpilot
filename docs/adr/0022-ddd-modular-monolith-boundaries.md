@@ -2,6 +2,11 @@
 
 FundPilot 将从按 MVC 技术角色组织的单体迁移为 Spring Modulith 约束的 DDD 模块化单体。业务边界固定为 IdentityAccess、ProductCatalog、Portfolio、Accounting、MarketData、Discipline、InvestmentPlan、Insights 和 Importing；每个业务模块内部使用 `adapter/application/domain/infrastructure` 四层，domain 保持纯 Java。该选择以清晰的业务所有权和可执行的模块依赖检查换取迁移成本，并避免把当前跨包调用原样包装成“DDD”。
 
+> **补充（v0.14.0）**：本 ADR 正文的业务边界清单已有变动——`Discipline` 模块于 v0.14.0 整体删除（其判定迁移为 `Alerting` 模块的建议型提醒），
+> 而 `Alerting` 是本 ADR 定稿后新增的业务模块，清单中未列。**架构决策本身不变**（模块化单体、四层结构、adapter.api 契约、表所有权收敛均照旧）；
+> 当前业务模块集合以 `backend/src/test/java/com/fundpilot/backend/architecture/SpringModulithStructureTest.java` 的 `BUSINESS_MODULES`
+> 与 [表所有权清单](../operations/table-ownership.md) 为准。
+
 ## Status
 
 Accepted.

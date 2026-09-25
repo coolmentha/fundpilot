@@ -11,6 +11,9 @@ import java.util.Objects;
  *
  * <p>同一规则同一交易日最多只允许一条 {@code SENT}（由部分唯一索引兜底并发），失败行不占用额度，
  * 下一次评估会正常重试。
+ *
+ * <p>{@code triggerType} 与 {@code threshold} 是早期的固定三阈值模型留下的存量字段，只用于读取历史记录，
+ * 新记录一律为空并改用 {@code conditionsSnapshot} 记录当次的条件数组。
  */
 public final class AlertNotification {
 
@@ -22,6 +25,7 @@ public final class AlertNotification {
     private final long alertRuleId;
     private final AlertRuleType triggerType;
     private final BigDecimal threshold;
+    private final String conditionsSnapshot;
     private final Instant tradingDate;
     private final AlertNotificationStatus status;
     private final String recipientEmail;
@@ -31,15 +35,16 @@ public final class AlertNotification {
     private final Instant sentAt;
 
     private AlertNotification(Long id, Long version, long ownerId, long alertRuleId, AlertRuleType triggerType,
-                              BigDecimal threshold, Instant tradingDate, AlertNotificationStatus status,
-                              String recipientEmail, int fundCount, String triggerSummary, String failureReason,
-                              Instant sentAt) {
+                              BigDecimal threshold, String conditionsSnapshot, Instant tradingDate,
+                              AlertNotificationStatus status, String recipientEmail, int fundCount,
+                              String triggerSummary, String failureReason, Instant sentAt) {
         this.id = id;
         this.version = version;
         this.ownerId = positive(ownerId, "用户 ID");
         this.alertRuleId = positive(alertRuleId, "提醒规则 ID");
-        this.triggerType = Objects.requireNonNull(triggerType, "提醒类型不能为空");
-        this.threshold = Objects.requireNonNull(threshold, "提醒阈值不能为空");
+        this.triggerType = triggerType;
+        this.threshold = threshold;
+        this.conditionsSnapshot = conditionsSnapshot;
         this.tradingDate = Objects.requireNonNull(tradingDate, "交易日不能为空");
         this.status = Objects.requireNonNull(status, "提醒状态不能为空");
         this.recipientEmail = recipientEmail;
@@ -49,26 +54,28 @@ public final class AlertNotification {
         this.sentAt = sentAt;
     }
 
-    public static AlertNotification recordSent(long ownerId, long alertRuleId, AlertRuleType triggerType,
-                                               BigDecimal threshold, Instant tradingDate, String recipientEmail,
-                                               int fundCount, String triggerSummary, Instant sentAt) {
-        return new AlertNotification(null, null, ownerId, alertRuleId, triggerType, threshold, tradingDate,
+    public static AlertNotification recordSent(long ownerId, long alertRuleId, String conditionsSnapshot,
+                                               Instant tradingDate, String recipientEmail, int fundCount,
+                                               String triggerSummary, Instant sentAt) {
+        return new AlertNotification(null, null, ownerId, alertRuleId, null, null, conditionsSnapshot, tradingDate,
                 AlertNotificationStatus.SENT, recipientEmail, fundCount, triggerSummary, null, sentAt);
     }
 
-    public static AlertNotification recordFailure(long ownerId, long alertRuleId, AlertRuleType triggerType,
-                                                  BigDecimal threshold, Instant tradingDate, String recipientEmail,
-                                                  int fundCount, String triggerSummary, String failureReason) {
-        return new AlertNotification(null, null, ownerId, alertRuleId, triggerType, threshold, tradingDate,
+    public static AlertNotification recordFailure(long ownerId, long alertRuleId, String conditionsSnapshot,
+                                                  Instant tradingDate, String recipientEmail, int fundCount,
+                                                  String triggerSummary, String failureReason) {
+        return new AlertNotification(null, null, ownerId, alertRuleId, null, null, conditionsSnapshot, tradingDate,
                 AlertNotificationStatus.FAILED, recipientEmail, fundCount, triggerSummary, failureReason, null);
     }
 
     public static AlertNotification rehydrate(long id, Long version, long ownerId, long alertRuleId,
-                                              AlertRuleType triggerType, BigDecimal threshold, Instant tradingDate,
+                                              AlertRuleType triggerType, BigDecimal threshold,
+                                              String conditionsSnapshot, Instant tradingDate,
                                               AlertNotificationStatus status, String recipientEmail, int fundCount,
                                               String triggerSummary, String failureReason, Instant sentAt) {
         return new AlertNotification(positive(id, "提醒记录 ID"), version, ownerId, alertRuleId, triggerType,
-                threshold, tradingDate, status, recipientEmail, fundCount, triggerSummary, failureReason, sentAt);
+                threshold, conditionsSnapshot, tradingDate, status, recipientEmail, fundCount, triggerSummary,
+                failureReason, sentAt);
     }
 
     private static String truncate(String value) {
@@ -91,6 +98,7 @@ public final class AlertNotification {
     public long alertRuleId() { return alertRuleId; }
     public AlertRuleType triggerType() { return triggerType; }
     public BigDecimal threshold() { return threshold; }
+    public String conditionsSnapshot() { return conditionsSnapshot; }
     public Instant tradingDate() { return tradingDate; }
     public AlertNotificationStatus status() { return status; }
     public String recipientEmail() { return recipientEmail; }

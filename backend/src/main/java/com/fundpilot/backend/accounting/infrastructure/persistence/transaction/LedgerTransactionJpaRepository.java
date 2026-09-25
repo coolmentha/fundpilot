@@ -95,9 +95,4 @@ interface LedgerTransactionJpaRepository extends JpaRepository<LedgerTransaction
                                                                         @Param("start") Instant start,
                                                                         @Param("end") Instant end);
 
-    boolean existsByDisciplineAdviceIdAndStatusNot(Long disciplineAdviceId, String status);
-
-    @Query("select t from LedgerTransactionJpaEntity t where t.disciplineAdviceId = :disciplineAdviceId "
-            + "order by t.createdDate desc")
-    List<LedgerTransactionJpaEntity> findByDisciplineAdviceId(@Param("disciplineAdviceId") Long disciplineAdviceId);
 }

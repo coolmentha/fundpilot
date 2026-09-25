@@ -60,7 +60,7 @@ describe('HelpPage', () => {
         const destinations = [...container.querySelectorAll('.help-destination')];
         expect(destinations).toHaveLength(6);
         expect(destinations.map((item) => item.getAttribute('href')))
-            .toEqual(['/', '/funds', '/dca', '/advice', '/confirm', '/settings']);
+            .toEqual(['/', '/funds', '/dca', '/alerts', '/confirm', '/settings']);
         expect(container.textContent).toContain('行情工作台');
         expect(container.textContent).toContain('用户配置');
     });
@@ -72,7 +72,7 @@ describe('HelpPage', () => {
         const workflows = [...container.querySelectorAll('.help-workflow')];
         expect(workflows).toHaveLength(4);
         expect(workflows.map((workflow) => workflow.querySelector('h5').textContent))
-            .toEqual(['添加基金与维护持仓', '设置自动定投', '阅读和回应纪律建议', '处理待确认交易']);
+            .toEqual(['添加基金与维护持仓', '设置自动定投', '配置价格提醒', '处理待确认交易']);
         expect(workflows.map((workflow) => workflow.querySelectorAll('.help-workflow-steps li').length))
             .toEqual([3, 3, 3, 3]);
         expect(workflows[3].querySelector('footer').textContent).toContain('完成标志');

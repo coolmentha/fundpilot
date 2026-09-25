@@ -10,7 +10,6 @@ import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionSource;
 import com.fundpilot.backend.accounting.application.query.returnfacts.AccountingReturnQueryHandler;
-import com.fundpilot.backend.discipline.adapter.api.classification.DisciplineClassificationApi;
 import com.fundpilot.backend.identityaccess.adapter.api.currentactor.CurrentActorApi;
 import com.fundpilot.backend.identityaccess.adapter.api.useradministration.UserAdministrationApi;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
@@ -29,7 +28,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -50,8 +48,6 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired PortfolioFundApi portfolioFundApi;
     @Autowired FundProductApi products;
-    @Autowired DisciplineClassificationApi classifications;
-    @Autowired JdbcTemplate jdbcTemplate;
     @Autowired PositionRepository positions;
     @Autowired TransactionRepository ledgerTransactions;
     @Autowired LotRepository lots;
@@ -163,14 +159,6 @@ class PortfolioCorrectionIntegrationTest extends AbstractIntegrationTest {
     @Test
     void blocksPendingThenVoidsWithoutDeletingLedgerAndRetryKeepsFirstAudit() throws Exception {
         var fund = track("009999", "录入错误基金");
-        classifications.set(new DisciplineClassificationApi.SetClassification(
-                testActorId(), fund.id(), DisciplineClassificationApi.Category.BROAD_BASE,
-                DisciplineClassificationApi.Source.USER_CONFIRMED));
-        assertThat(jdbcTemplate.queryForMap("""
-                SELECT category, source FROM discipline_classification WHERE portfolio_fund_id = ?
-                """, fund.id()))
-                .containsEntry("category", "BROAD_BASE")
-                .containsEntry("source", "USER_CONFIRMED");
         LedgerTransaction pending = ledgerTransactions.save(LedgerTransaction.placePending(
                 fund.id(), testActorId(), TransactionSource.INCREASE, BigDecimal.ONE, null,
                 Instant.parse("2026-08-01T00:00:00Z"), null, null));

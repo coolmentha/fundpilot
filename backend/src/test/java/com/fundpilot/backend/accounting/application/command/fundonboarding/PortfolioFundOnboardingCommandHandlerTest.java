@@ -86,7 +86,7 @@ class PortfolioFundOnboardingCommandHandlerTest {
         when(transactions.save(any())).thenReturn(LedgerTransaction.rehydrate(101L, 11L, 3L,
                 TransactionSource.INCREASE, TransactionStatus.CONFIRMED, new BigDecimal("60.0000"),
                 new BigDecimal("50.00"), new BigDecimal("1.2000"), null, null, openedAt, openedAt,
-                null, openedAt, null, null, null, null, null));
+                null, openedAt, null, null, null));
 
         var result = handler.onboard(41L, 3L, 9L, true, new BigDecimal("0.30"),
                 new BigDecimal("50"), new BigDecimal("1.100000009"), openedAt);

@@ -18,7 +18,7 @@ const {Text} = Typography;
 
 /**
  * 基金详情 · 定投计划 tab。用户配置一次,系统在定投日 14:55 自动生成 INVEST 交易。
- * 与移动止盈建议解耦:定投负责持续买入,止盈由基金绑定的纪律策略独立触发。
+ * 与止盈提醒解耦:定投负责持续买入,止盈由基金绑定的提醒规则独立触发。
  */
 export default function FundDcaTab({portfolioFundId, benchmarkIndexCode}) {
     const {message} = App.useApp();

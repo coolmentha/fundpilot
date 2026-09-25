@@ -2,22 +2,22 @@
 
 ## 业务目标与边界
 
-交易账本记录用户真实发生或准备发生的份额变化。系统不直接下单，而是在用户录入、定投执行或信号回应后建立交易记录，并在交易发生日单位净值可用时完成确认。
+交易账本记录用户真实发生或准备发生的份额变化。系统不直接下单，而是在用户录入或定投执行后建立交易记录，并在交易发生日单位净值可用时完成确认。
 
 ## 交易来源
 
 | 来源 | 方向 | 创建时已知 | 确认时补充 | 说明 |
 | --- | --- | --- | --- | --- |
-| `INCREASE` | 增加 | 金额 | 份额、净值、费用 | 手动加仓或遗留买入信号 |
+| `INCREASE` | 增加 | 金额 | 份额、净值、费用 | 手动加仓 |
 | `TRANSFER_IN` | 增加 | 金额；转换联动时可暂空 | 份额、净值、费用 | 转入或基金转换转入腿 |
 | `INVEST` | 增加 | 金额 | 份额、净值、费用 | 手动定投或自动定投 |
-| `DECREASE` | 减少 | 份额 | 净额、净值、费用 | 手动减仓或卖出信号 |
+| `DECREASE` | 减少 | 份额 | 净额、净值、费用 | 手动减仓 |
 | `TRANSFER_OUT` | 减少 | 份额 | 净额、净值、费用 | 转出或基金转换转出腿 |
 | `ADJUST_IN` | 增加 | 份额 | 无 | 账实调增，录入即确认 |
 | `ADJUST_OUT` | 减少 | 份额 | 无 | 账实调减，录入即确认 |
 | `COST_BASIS_RESET` | 不变 | 总成本、份额快照 | 无 | 成本修正，录入即确认；仅由基金编辑入口创建 |
 
-信号触发的交易保留 `signalLog` 关联；手动交易和自动定投的 `signalLog` 为空。自动定投通过 `dcaPlanId` 关联执行计划。
+自动定投通过 `dcaPlanId` 关联执行计划。v0.14.0 已删除交易上的信号关联列（`signal_log_id` 与 `signal_reason`），交易不再携带信号关联。
 
 ## 交易状态
 
@@ -32,7 +32,7 @@ stateDiagram-v2
 - `CONFIRMED` 和 `CANCELLED` 都是终态，不能再次确认或撤销。
 - PENDING 不进入事实持仓。
 - 所有来源的 PENDING 主流水都可在基金详情或操作确认工作台修改；买入类可改金额和交易日期，卖出类可改份额和交易日期。
-- 修改信号或定投流水只影响本次执行，不修改来源计划；来源、基金、关联关系和转换目标不可修改。
+- 修改 PENDING 流水只影响本次执行，不修改来源计划；来源、基金、关联关系和转换目标不可修改。
 - 确认或调整落账后，根据全部 CONFIRMED 交易重算基金状态。
 
 ## 手动交易
@@ -43,7 +43,7 @@ stateDiagram-v2
 - 卖出类必须填写正数份额。
 - `ADJUST_IN/OUT` 必须填写正数份额，录入即确认，不计算净值、金额或手续费。
 - `tradeDate` 可选，默认当前时间；未来时间被拒绝。
-- 手动卖出不经过卖出信号和 5 个交易日建议信号保护，但确认时仍按真实持仓、FIFO lot 和费率校验。
+- 手动卖出不经过建议型提醒的成熟份额保护（该约束只作用于提醒自身的卖出建议），但确认时仍按真实持仓、FIFO lot 和费率校验。
 
 ## 操作确认工作台
 
@@ -83,7 +83,7 @@ flowchart LR
     J --> K[计算扣费后净额]
     H --> L[置 CONFIRMED]
     K --> L
-    L --> M[推进止盈周期并重算基金状态]
+    L --> M[重算基金状态]
 ```
 
 自动批量确认与手动确认共用相同的费用、lot、成本和持仓规则：
@@ -137,5 +137,5 @@ flowchart LR
 ## 实现与验证入口
 
 - 实现：[TransactionLedgerCommandHandler](../../backend/src/main/java/com/fundpilot/backend/accounting/application/command/transactionledger/TransactionLedgerCommandHandler.java)、[TransactionConfirmationCommandHandler](../../backend/src/main/java/com/fundpilot/backend/accounting/application/command/transactionconfirmation/TransactionConfirmationCommandHandler.java)（确认/撤单/净值确认合并于此）、[NavConfirmJob](../../backend/src/main/java/com/fundpilot/backend/accounting/adapter/scheduler/transactionconfirmation/NavConfirmJob.java)、[TransactionController](../../backend/src/main/java/com/fundpilot/backend/accounting/adapter/web/transactionhistory/TransactionController.java)
-- 测试：[TransactionLedgerCommandHandlerConversionTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionledger/TransactionLedgerCommandHandlerConversionTest.java)、[TransactionLedgerCommandHandlerAdviceTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionledger/TransactionLedgerCommandHandlerAdviceTest.java)、[TransactionConfirmationCommandHandlerTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionconfirmation/TransactionConfirmationCommandHandlerTest.java)、[TransactionSettlementTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionconfirmation/TransactionSettlementTest.java)、[NavConfirmJobTest](../../backend/src/test/java/com/fundpilot/backend/accounting/adapter/scheduler/transactionconfirmation/NavConfirmJobTest.java)、[PendingTransactionCompensationJobTest](../../backend/src/test/java/com/fundpilot/backend/accounting/adapter/scheduler/transactionconfirmation/PendingTransactionCompensationJobTest.java)
+- 测试：[TransactionLedgerCommandHandlerConversionTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionledger/TransactionLedgerCommandHandlerConversionTest.java)、[TransactionConfirmationCommandHandlerTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionconfirmation/TransactionConfirmationCommandHandlerTest.java)、[TransactionSettlementTest](../../backend/src/test/java/com/fundpilot/backend/accounting/application/command/transactionconfirmation/TransactionSettlementTest.java)、[NavConfirmJobTest](../../backend/src/test/java/com/fundpilot/backend/accounting/adapter/scheduler/transactionconfirmation/NavConfirmJobTest.java)、[PendingTransactionCompensationJobTest](../../backend/src/test/java/com/fundpilot/backend/accounting/adapter/scheduler/transactionconfirmation/PendingTransactionCompensationJobTest.java)
 - 相关决策：[ADR-0013](../adr/0013-cost-per-share-stored-instead-of-derived.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)、[ADR-0021](../adr/0021-dca-budget-and-position-warnings.md)

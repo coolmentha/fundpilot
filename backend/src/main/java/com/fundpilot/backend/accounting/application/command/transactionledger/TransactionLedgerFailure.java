@@ -23,7 +23,6 @@ public class TransactionLedgerFailure extends RuntimeException {
         TRANSACTION_INPUT_REQUIRED,
         ILLEGAL_STATE_TRANSITION,
         INSUFFICIENT_HOLDING_SHARES,
-        ADVICE_ALREADY_RESPONDED,
         INVESTMENT_PLAN_ALREADY_EXECUTED
     }
 }

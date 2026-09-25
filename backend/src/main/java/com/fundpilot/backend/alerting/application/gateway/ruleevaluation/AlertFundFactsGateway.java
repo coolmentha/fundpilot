@@ -1,31 +1,38 @@
 package com.fundpilot.backend.alerting.application.gateway.ruleevaluation;
 
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-/** 提醒评估所需的外部事实来源：用户关注基金的收益快照与交易日历。 */
+/** 提醒评估所需的外部事实来源：用户关注基金的收益快照、持仓事实与交易日历。 */
 public interface AlertFundFactsGateway {
 
-    /** 该用户全部关注基金的当前收益事实。 */
+    /** 该用户全部关注基金的当前收益与持仓事实。 */
     List<AlertFundFact> currentFunds(long ownerId);
 
     /** 指定时刻是否为交易日。 */
     boolean isTradingDay(Instant at);
 
-    record AlertFundFact(long portfolioFundId, String fundCode, String fundName,
-                         String positionStatus, boolean open, BigDecimal dailyChangePct,
-                         BigDecimal holdingAmount, BigDecimal unrealizedPnl,
-                         BigDecimal holdingReturnRate, BigDecimal valuationNav,
-                         Instant valuationDate, String estimateStatus) {
+    /** 两个日期之间（不含起点、含终点）的交易日数，用于冷静期与最短持有天数。 */
+    long tradingDaysBetween(Instant fromExclusive, Instant toInclusive);
 
-        /** 该规则类型的观测值口径：涨跌用当日涨跌幅，盈利用持仓收益率；均以小数表示（0.05 即 5%）。 */
-        public BigDecimal observedValue(AlertRuleType type) {
-            return switch (type) {
-                case RISE, DROP -> dailyChangePct;
-                case PROFIT -> holdingReturnRate;
-            };
+    /**
+     * 单只基金的事实，也是「基金事实类」指标（涨跌幅、持仓收益率）与建议型规则判定的取值来源。
+     *
+     * <p>持仓四项（单位成本、确认份额、成熟可赎回份额、累计净值）只在建议型规则里使用；未持仓基金为
+     * 空值语义，由规则按「无数据」处理。
+     */
+    record AlertFundFact(long portfolioFundId, long fundProductId, String fundCode, String fundName,
+                         String positionStatus, boolean open, String productType, Instant openedAt,
+                         BigDecimal costPerShare, BigDecimal holdingShares, BigDecimal matureRedeemableShares,
+                         BigDecimal dailyChangePct, BigDecimal holdingAmount, BigDecimal unrealizedPnl,
+                         BigDecimal holdingReturnRate, BigDecimal valuationNav, BigDecimal currentUnitNav,
+                         BigDecimal currentAccumulatedNav, Instant lastBuyTime, Instant valuationDate,
+                         String estimateStatus) {
+
+        /** 是否当前在持：建议型规则只对在持基金给出建议。 */
+        public boolean held() {
+            return "OPEN".equals(positionStatus);
         }
     }
 }

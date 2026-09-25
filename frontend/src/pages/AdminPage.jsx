@@ -1,6 +1,6 @@
 import React from 'react';
 import {App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography} from 'antd';
-import {DatabaseOutlined, PlusOutlined, ReloadOutlined, ThunderboltOutlined, UserOutlined} from '@ant-design/icons';
+import {DatabaseOutlined, PlusOutlined, ReloadOutlined, UserOutlined} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc.js';
 import {useAdminAction, useAdminJobStatus, useAdminUserMutation, useAdminUsers} from '../api/hooks.js';
@@ -43,19 +43,10 @@ export default function AdminPage() {
                     手动触发定时任务（日常由后端 @Scheduled 自动执行，此处用于调试/补跑）。
                 </Text>
                 <Space direction="vertical" size="middle" className="full-width">
-                    <Card size="small" title="建议生成" extra={
-                        <Popconfirm title="生成今日建议？未回应建议将按最新行情重算。" onConfirm={() =>
-                            run('generate', () => '建议生成完成')}>
-                            <Button type="primary" icon={<ThunderboltOutlined/>}
-                                    loading={adminAction.isPending}>生成今日建议</Button>
-                        </Popconfirm>
-                    }>
-                        <Text type="secondary">每日 14:50 自动触发；手动重跑会更新未回应建议，已生成交易的建议保持不变。</Text>
-                    </Card>
                     <Card size="small" title="净值确认" extra={
                         <Popconfirm title="按每笔交易发生日补偿确认 PENDING 交易？" onConfirm={() =>
                             run('confirm-nav', (r) => `净值确认完成，回填 ${r?.confirmed ?? 0} 条`)}>
-                            <Button icon={<DatabaseOutlined/>}
+                            <Button type="primary" icon={<DatabaseOutlined/>}
                                     loading={adminAction.isPending}>回填净值</Button>
                         </Popconfirm>
                     }>

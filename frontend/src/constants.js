@@ -14,26 +14,6 @@ export const labels = {
     ETF: 'ETF',
     INDEX: '指数',
     INDEX_ENHANCED: '指数增强',
-    // StrategyParamStatus
-    PENDING_CALIBRATION: '草稿',
-    CALIBRATED: '已通过',
-    CALIBRATION_FAILED: '未通过',
-    EFFECTIVE: '已生效',
-    // TakeProfitPhase
-    ACCUMULATING: '积累中',
-    ARMED: '已启动',
-    TRIGGERED: '待止盈',
-    COOLDOWN: '冷静期',
-    // SignalType
-    NONE: '无建议',
-    BUILD: '建仓',
-    ADD: '加仓',
-    SELL: '卖出',
-    // SignalActionStatus
-    INFORMATIONAL: '无需操作',
-    RESPONDED: '已回应',
-    IGNORED: '已忽略',
-    EXPIRED: '已过期',
     // FundTransactionStatus
     PENDING: '待确认',
     CONFIRMED: '已确认',
@@ -70,28 +50,9 @@ export const labels = {
     // MeasureUnit
     AMOUNT: '金额',
     SHARE: '份额',
-    // SignalReason(issue #12)
-    BUILD: '建仓',
-    ADD: '加仓',
-    FUND_CLEARED: '基金已清仓',
-    NO_STRATEGY: '无生效策略',
-    NO_SELL_TRIGGER: '未触发卖出条件',
-    BUILD_CONDITION_NOT_MET: '建仓条件未满足',
-    NO_ADD_TIER: '无加仓档位触发',
-    LOGIC_BROKEN: '逻辑止损',
-    NO_TIER_TO_SELL: '无可卖档位',
-    TRAILING_STOP: '移动止盈',
-    REBALANCE: '再平衡减仓',
-    HARD_CONSTRAINT_BREACH: '硬约束违反',
-    MIN_HOLD_DAYS_NOT_MET: '持有期不足',
-    INSUFFICIENT_MARKET_DATA: '行情数据不足',
     // AlertRuleScope
     GLOBAL: '全部关注基金',
     FUND: '指定基金',
-    // AlertRuleType
-    RISE: '上涨提醒',
-    PROFIT: '盈利提醒',
-    DROP: '下跌提醒',
 };
 
 // 标签颜色：成功态绿、进行中态金、终态默认、动作态蓝。
@@ -240,6 +201,9 @@ export const errorTitles = {
     SIGNAL_OPERATION_VALUE_INVALID: '实际操作数值不合法',
     USER_ACCOUNT_INVALID: '用户信息不合法',
     OPENED_AT_IN_FUTURE: '建仓时间晚于当前时间',
+    // 提醒规则种类与参数(与后端 ErrorCode 的 ALERT_RULE_KIND_INVALID / ALERT_RULE_PARAMETER_INVALID 对应)
+    ALERT_RULE_KIND_INVALID: '提醒规则种类不合法',
+    ALERT_RULE_PARAMETER_INVALID: '提醒规则参数不合法',
     // 交易/信号状态非法
     TRANSACTION_ALREADY_CONFIRMED: '交易已确认',
     TRANSACTION_ALREADY_CANCELLED: '交易已撤销',
@@ -253,13 +217,6 @@ export const errorTitles = {
     SIGNAL_ALREADY_IGNORED: '信号已忽略',
     SIGNAL_EXPIRED: '信号已过期',
     SIGNAL_FUND_MISMATCH: '信号与基金不匹配',
-    // 纪律建议回应(模块级 AdviceResponseFailure.Code)
-    ALREADY_RESPONDED: '建议已回应',
-    ADVICE_IGNORED: '建议已忽略',
-    ADVICE_NOT_ACTIONABLE: '建议当前不可操作',
-    ADVICE_NOT_FOUND: '建议不存在',
-    VALUE_REQUIRED: '缺少必要数值',
-    VALUE_NOT_ALLOWED: '数值不被允许',
     ILLEGAL_STATE_TRANSITION: '状态切换非法',
     INSUFFICIENT_HOLDING_SHARES: '持仓份额不足',
     INSUFFICIENT_LOTS: '可用持仓批次不足',

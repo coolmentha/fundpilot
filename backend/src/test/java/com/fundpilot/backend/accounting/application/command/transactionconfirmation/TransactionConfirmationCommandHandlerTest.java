@@ -48,10 +48,10 @@ class TransactionConfirmationCommandHandlerTest {
 
         LedgerTransaction badSell = LedgerTransaction.rehydrate(501L, 10L, 1L, TransactionSource.DECREASE,
                 TransactionStatus.PENDING, null, new BigDecimal("100"), null, null, null,
-                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null, null, null);
+                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null);
         LedgerTransaction goodBuy = LedgerTransaction.rehydrate(502L, 10L, 1L, TransactionSource.INCREASE,
                 TransactionStatus.PENDING, new BigDecimal("100"), null, null, null, null,
-                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null, null, null);
+                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null);
 
         when(transactions.findByPortfolioFundAndStatus(10L, TransactionStatus.PENDING))
                 .thenReturn(List.of(badSell, goodBuy));
@@ -75,7 +75,7 @@ class TransactionConfirmationCommandHandlerTest {
             return LedgerTransaction.rehydrate(500L, tx.portfolioFundId(), tx.ownerId(), tx.source(),
                     tx.status(), tx.amount(), tx.shares(), tx.nav(), tx.fee(), tx.feeRate(),
                     tx.tradeDate(), tx.confirmTime(), null, tx.createdDate(), tx.relatedTransactionId(),
-                    tx.signalLogId(), tx.dcaPlanId(), tx.disciplineAdviceId(), tx.investmentPlanId());
+                    tx.dcaPlanId(), tx.investmentPlanId());
         });
 
         TransactionConfirmationCommandHandler handler = new TransactionConfirmationCommandHandler(
@@ -108,7 +108,7 @@ class TransactionConfirmationCommandHandlerTest {
         LedgerTransaction confirmedConcurrently = LedgerTransaction.rehydrate(503L, 10L, 1L,
                 TransactionSource.INCREASE, TransactionStatus.CONFIRMED, new BigDecimal("100"),
                 new BigDecimal("50"), new BigDecimal("2.0"), null, null,
-                Instant.parse("2026-07-24T00:00:00Z"), NOW, null, null, null, null, null, null, null);
+                Instant.parse("2026-07-24T00:00:00Z"), NOW, null, null, null, null, null);
 
         when(transactions.findByPortfolioFundAndStatus(10L, TransactionStatus.PENDING))
                 .thenReturn(List.of(confirmedConcurrently));
@@ -140,10 +140,10 @@ class TransactionConfirmationCommandHandlerTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         LedgerTransaction pending = LedgerTransaction.rehydrate(601L, 10L, 1L, TransactionSource.INCREASE,
                 TransactionStatus.PENDING, new BigDecimal("100"), null, null, null, null,
-                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null, null, null);
+                Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null);
         LedgerTransaction confirmed = LedgerTransaction.rehydrate(601L, 10L, 1L, TransactionSource.INCREASE,
                 TransactionStatus.CONFIRMED, new BigDecimal("100"), new BigDecimal("50"), new BigDecimal("2.0"),
-                null, null, Instant.parse("2026-07-24T00:00:00Z"), NOW, null, null, null, null, null, null, null);
+                null, null, Instant.parse("2026-07-24T00:00:00Z"), NOW, null, null, null, null, null);
         TradedPortfolioFundGateway.TradedPortfolioFund traded =
                 new TradedPortfolioFundGateway.TradedPortfolioFund(10L, 1L, 31L, 9L, true);
 
@@ -180,14 +180,14 @@ class TransactionConfirmationCommandHandlerTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         LedgerTransaction pendingSell = LedgerTransaction.rehydrate(602L, 10L, 1L,
                 TransactionSource.DECREASE, TransactionStatus.PENDING, null, new BigDecimal("60"), null,
-                null, null, Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null, null, null);
+                null, null, Instant.parse("2026-07-24T00:00:00Z"), null, null, null, null, null, null);
         LedgerTransaction confirmedAdjustment = LedgerTransaction.rehydrate(700L, 10L, 1L,
                 TransactionSource.ADJUST_IN, TransactionStatus.CONFIRMED, null, new BigDecimal("100"), null,
-                null, null, Instant.parse("2026-07-23T00:00:00Z"), NOW, null, null, null, null, null, null, null);
+                null, null, Instant.parse("2026-07-23T00:00:00Z"), NOW, null, null, null, null, null);
         LedgerTransaction confirmedSell = LedgerTransaction.rehydrate(701L, 10L, 1L,
                 TransactionSource.DECREASE, TransactionStatus.CONFIRMED, null, new BigDecimal("60"),
                 new BigDecimal("2.0"), null, null, Instant.parse("2026-07-24T00:00:00Z"), NOW,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null);
         TradedPortfolioFundGateway.TradedPortfolioFund traded =
                 new TradedPortfolioFundGateway.TradedPortfolioFund(10L, 1L, 31L, 9L, true);
 

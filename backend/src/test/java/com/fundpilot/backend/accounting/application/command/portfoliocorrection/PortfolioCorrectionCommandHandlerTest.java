@@ -102,8 +102,8 @@ class PortfolioCorrectionCommandHandlerTest {
                             transaction.source(), transaction.status(), transaction.amount(), transaction.shares(),
                             transaction.nav(), transaction.fee(), transaction.feeRate(), transaction.tradeDate(),
                             transaction.confirmTime(), transaction.cancelTime(), transaction.createdDate(),
-                            transaction.relatedTransactionId(), transaction.signalLogId(), transaction.dcaPlanId(),
-                            transaction.disciplineAdviceId(), transaction.investmentPlanId(), transaction.signalReason());
+                            transaction.relatedTransactionId(), transaction.dcaPlanId(),
+                            transaction.investmentPlanId());
                 });
         var handler = handler(new FakeGateway(), positions, transactions,
                 (portfolioFundId, legacyFundId) -> false);

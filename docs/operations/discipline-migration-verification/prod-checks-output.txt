@@ -1,0 +1,54 @@
+Border style is 0.
+== C-6 ① signal_log_id 非空行数（决定是否需要替代标记列）==
+ft_signal_log_id_not_null 
+-------------------------
+                        0
+(1 row)
+
+== C-5 待删列的非空行数 ==
+ft_signal_reason_not_null 
+-------------------------
+                        0
+(1 row)
+
+ft_discipline_advice_id_not_null 
+--------------------------------
+                               0
+(1 row)
+
+== C-5 待删表行数 ==
+discipline_advice_rows 
+----------------------
+                     8
+(1 row)
+
+discipline_strategy_rows 
+------------------------
+                       5
+(1 row)
+
+discipline_classification_rows 
+------------------------------
+                            48
+(1 row)
+
+signal_log_rows 
+---------------
+              8
+(1 row)
+
+== D5 分类来源：目录值分布（保留列）==
+directory_category count 
+------------------ -----
+MIXED              10986
+ACTIVE              9967
+BROAD_BASE          4879
+SECTOR              2253
+(4 rows)
+
+== 迁移前 Flyway 版本 ==
+version 
+-------
+57
+(1 row)
+

@@ -11,18 +11,19 @@ final class AlertNotificationPersistenceMapper {
 
     static AlertNotification toDomain(AlertNotificationJpaEntity entity) {
         return AlertNotification.rehydrate(entity.getId(), entity.getVersion(), entity.getOwnerId(),
-                entity.getAlertRuleId(), AlertRuleType.valueOf(entity.getTriggerType()), entity.getThreshold(),
-                entity.getTradingDate(), AlertNotificationStatus.valueOf(entity.getStatus()),
-                entity.getRecipientEmail(), entity.getFundCount(), entity.getTriggerSummary(),
-                entity.getFailureReason(), entity.getSentAt());
+                entity.getAlertRuleId(), type(entity.getTriggerType()), entity.getThreshold(),
+                entity.getConditionsSnapshot(), entity.getTradingDate(),
+                AlertNotificationStatus.valueOf(entity.getStatus()), entity.getRecipientEmail(),
+                entity.getFundCount(), entity.getTriggerSummary(), entity.getFailureReason(), entity.getSentAt());
     }
 
     static AlertNotificationJpaEntity toEntity(AlertNotification notification) {
         AlertNotificationJpaEntity entity = new AlertNotificationJpaEntity();
         entity.setOwnerId(notification.ownerId());
         entity.setAlertRuleId(notification.alertRuleId());
-        entity.setTriggerType(notification.triggerType().name());
+        entity.setTriggerType(notification.triggerType() == null ? null : notification.triggerType().name());
         entity.setThreshold(notification.threshold());
+        entity.setConditionsSnapshot(notification.conditionsSnapshot());
         entity.setTradingDate(notification.tradingDate());
         entity.setStatus(notification.status().name());
         entity.setRecipientEmail(notification.recipientEmail());
@@ -31,5 +32,10 @@ final class AlertNotificationPersistenceMapper {
         entity.setFailureReason(notification.failureReason());
         entity.setSentAt(notification.sentAt());
         return entity;
+    }
+
+    /** 存量兼容：仅固定三阈值模型时期的历史行有值。 */
+    private static AlertRuleType type(String value) {
+        return value == null || value.isBlank() ? null : AlertRuleType.valueOf(value);
     }
 }

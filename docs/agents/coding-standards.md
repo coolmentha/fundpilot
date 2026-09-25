@@ -72,7 +72,7 @@ View 只含业务字段,关联对象只取 id,不含 `version`/`deletedDate` 等
 
 除日志外的魔法值,该用枚举用枚举,该用常量用常量:
 
-- 状态/类型码使用所属领域的枚举，例如 `PositionStatus`、`TransactionStatus` 和 `AdviceResponseStatus`。
-- 数值常量放 `HardConstraintConfig`(`TIER_COUNT`/`MIN_HOLD_DAYS`)或 `BacktestWindow`(`BACKTEST_WINDOW_DAYS`)。
-- 信号 reason 用 `SignalReason` 枚举,持久化用 `@Enumerated(EnumType.STRING)`(name 与历史字符串一致,存量数据兼容)。
-- 信号 warning 用 `SignalWarning` 枚举 + `SignalWarningValue` record(支持 `TIER_CLEARED:1,2,3` 动态 detail)。
+- 状态/类型码使用所属领域的枚举，例如 `PositionStatus`、`TransactionStatus` 和 `AlertNotificationStatus`。
+- 数值常量放在所属领域就近的常量位置，例如 `TakeProfitPolicy.MIN_HOLD_TRADING_DAYS`、`TakeProfitParams.MAX_COOLDOWN_DAYS`、`ShareScale.SCALE`。
+- 提醒的指标、关系与规则种类使用 `IndicatorCode`、`ConditionRelation`、`AlertRuleKind` 枚举，持久化枚举用 `@Enumerated(EnumType.STRING)`（name 稳定，存量数据兼容）。
+- 数值域的合法性在对应值对象构造器集中校验（如 `TakeProfitParams` 的比例范围），不在调用方重复判断。

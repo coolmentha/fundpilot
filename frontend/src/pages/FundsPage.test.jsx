@@ -154,7 +154,7 @@ describe('FundsPage', () => {
             .map((row) => row.getAttribute('data-row-key'))).toEqual(['11', '12']);
     });
 
-    it('编辑基金只读展示纪律分类及其来源', async () => {
+    it('编辑基金只读展示默认分类及其来源', async () => {
         container = document.createElement('div');
         document.body.appendChild(container);
         root = createRoot(container);
@@ -163,7 +163,7 @@ describe('FundsPage', () => {
         ));
         await act(async () => new Promise((resolve) => window.setTimeout(resolve, 0)));
 
-        expect(document.body.textContent).toContain('来自纪律配置');
+        expect(document.body.textContent).toContain('来自产品目录的默认分类');
         expect(document.querySelector('#fundCategory')).toBeNull();
         await click(document.querySelector('.ant-modal-footer .ant-btn-primary'));
 
@@ -274,7 +274,7 @@ describe('FundsPage', () => {
         await setInputValue(modal.querySelector('[role="combobox"]'), '000023');
         await click([...document.body.querySelectorAll('.ant-select-item-option')]
             .find((option) => option.textContent.includes('目录基金')));
-        expect(modal.textContent).toContain('来自产品目录的默认建议');
+        expect(modal.textContent).toContain('来自产品目录的默认分类');
         expect(document.querySelector('#fundCategory')).toBeNull();
         await click(modal.querySelector('.ant-modal-footer .ant-btn-primary'));
         await act(async () => Promise.resolve());

@@ -41,7 +41,7 @@ describe('MarketVolumePrice', () => {
         expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
     });
 
-    it('数据不可用时不显示方向性纪律提醒', async () => {
+    it('数据不可用时不显示方向性量价提示', async () => {
         useMarketVolumePrice.mockReturnValue({
             data: {state: 'UNAVAILABLE', phase: 'CLOSED', quoteTime: null},
             isLoading: false,
@@ -51,7 +51,7 @@ describe('MarketVolumePrice', () => {
         await render();
 
         expect(container.textContent).toContain('量能观察中');
-        expect(container.textContent).toContain('暂不生成纪律提醒');
+        expect(container.textContent).toContain('暂不生成量价提示');
         expect(container.textContent).not.toContain('避免急涨追高');
         expect(container.textContent).toContain('行情时间待刷新');
     });

@@ -53,12 +53,6 @@ public interface TransactionRepository {
     List<InvestmentAmountByStatus> sumInvestedAmountByStatus(long ownerId, Instant startInclusive,
                                                               Instant endExclusive);
 
-    /** 建议回应幂等：同一 Discipline 建议存在未取消账目（CANCELLED 不视为已回应，可重新接受）。 */
-    boolean existsByDisciplineAdviceIdAndStatusNot(long disciplineAdviceId, TransactionStatus status);
-
-    /** 由 Discipline 建议生成的账目（回应该建议后按创建时间取最新）。 */
-    List<LedgerTransaction> findByDisciplineAdviceId(long disciplineAdviceId);
-
     record HoldingShares(long portfolioFundId, java.math.BigDecimal holdingShares) {
     }
     record InvestmentPlanOccurrence(long investmentPlanId, Instant tradeDate, java.math.BigDecimal amount,

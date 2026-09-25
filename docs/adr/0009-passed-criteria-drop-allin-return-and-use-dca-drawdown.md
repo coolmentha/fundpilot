@@ -2,6 +2,10 @@
 
 > **Status: superseded by [ADR-0010](./0010-passed-criteria-calmar-vs-dca.md)** —— 本 ADR 的回撤标尺（策略回撤 ≤ dca 回撤）
 > 在实战数据（基金 1958）上暴露问题：绝对回撤约束惩罚用合理风险换合理收益的策略，故回撤维度改为 Calmar 比较。本 ADR 保留作为决策演进留痕。
+>
+> **后续（v0.14.0 留痕）**：本 ADR 及其后继 [ADR-0010](./0010-passed-criteria-calmar-vs-dca.md) 所约束的
+> `BenchmarkCalculator.judgePassed` 已随回测/寻优能力在 [ADR-0015](./0015-pyramid-retire-trailing-stop-decouple.md) 的退场中整体删除，
+> v0.14.0 又删除了 discipline 模块，仓库内已无该判定口径的实现。两条 ADR 此后仅作历史留痕。
 
 `BenchmarkCalculator.judgePassed` 原要求策略收益**严格大于三条基准**（hs300 / all-in / dca）**且**回撤 ≤ all-in 回撤。
 本次变更：**收益门槛去掉 all-in**（只比 hs300 / dca），**回撤标尺从 all-in 换成 dca**。all-in 指标仍计算并落库展示基金自然回撤，

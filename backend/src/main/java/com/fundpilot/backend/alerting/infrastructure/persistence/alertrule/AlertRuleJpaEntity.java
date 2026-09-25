@@ -8,7 +8,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
@@ -55,11 +54,17 @@ class AlertRuleJpaEntity {
     @Column(name = "portfolio_fund_id")
     private Long portfolioFundId;
 
-    @Column(name = "rule_type", nullable = false)
-    private String ruleType;
+    /** 规则种类：通用条件规则或建议型规则。 */
+    @Column(name = "kind", nullable = false)
+    private String kind;
 
-    @Column(name = "threshold", nullable = false)
-    private BigDecimal threshold;
+    /** 条件数组 JSON（结构化条件，非表达式语言）；回撤止盈为空。 */
+    @Column(name = "conditions", columnDefinition = "TEXT")
+    private String conditions;
+
+    /** 建议型规则参数 JSON；仅回撤止盈使用。 */
+    @Column(name = "parameters", columnDefinition = "TEXT")
+    private String parameters;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled;

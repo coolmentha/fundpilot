@@ -3,6 +3,10 @@ package com.fundpilot.backend.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fundpilot.backend.alerting.application.condition.AlertConditionJsonCodec;
+import com.fundpilot.backend.alerting.domain.condition.AlertConditionMatch;
+import com.fundpilot.backend.alerting.domain.condition.ConditionRelation;
+import com.fundpilot.backend.alerting.domain.condition.IndicatorCode;
 import com.fundpilot.backend.support.AbstractIntegrationTest;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -33,28 +37,28 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
             assertThat(count("alert_notification")).isZero();
             insertOwnerAndPortfolioFund();
 
-            long globalRule = insertRule("GLOBAL", null, new java.math.BigDecimal("0.05"));
-            insertRule("FUND", 21L, new java.math.BigDecimal("0.10"));
+            long globalRule = insertRule("GLOBAL", null, dailyChangeAbove("0.05"));
+            insertRule("FUND", 21L, dailyChangeAbove("0.10"));
 
             assertThatThrownBy(() -> execute("""
-                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, rule_type, threshold, enabled)
-                    VALUES (1, 'GLOBAL', 21, 'RISE', 0.05, true);
-                    """.formatted(SCHEMA)))
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, conditions, enabled)
+                    VALUES (1, 'GLOBAL', 21, '%2$s', true);
+                    """.formatted(SCHEMA, dailyChangeAbove("0.05"))))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("ck_alert_rule_scope_target");
             assertThatThrownBy(() -> execute("""
-                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, rule_type, threshold, enabled)
-                    VALUES (1, 'FUND', NULL, 'RISE', 0.05, true);
-                    """.formatted(SCHEMA)))
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, conditions, enabled)
+                    VALUES (1, 'FUND', NULL, '%2$s', true);
+                    """.formatted(SCHEMA, dailyChangeAbove("0.05"))))
                     .isInstanceOf(SQLException.class)
                     .hasMessageContaining("ck_alert_rule_scope_target");
-            assertThatThrownBy(() -> insertRule("GLOBAL", null, java.math.BigDecimal.ZERO))
+            // 条件数组是唯一触发口径，必填。
+            assertThatThrownBy(() -> execute("""
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, enabled)
+                    VALUES (1, 'GLOBAL', NULL, true);
+                    """.formatted(SCHEMA)))
                     .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("ck_alert_rule_threshold");
-            assertThatThrownBy(() -> insertRule("GLOBAL", null, new java.math.BigDecimal("1.5")))
-                    .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("ck_alert_rule_threshold");
-            assertThat(insertRule("GLOBAL", null, java.math.BigDecimal.ONE)).isPositive();
+                    .hasMessageContaining("conditions");
 
             long sent = insertNotification(globalRule, "2026-09-21T06:30:00Z", "SENT");
             assertThat(sent).isPositive();
@@ -69,7 +73,7 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
             // 换一个交易日则允许再次成功发送。
             assertThat(insertNotification(globalRule, "2026-09-22T06:30:00Z", "SENT")).isPositive();
 
-            assertThat(count("alert_rule")).isEqualTo(3);
+            assertThat(count("alert_rule")).isEqualTo(2);
             assertThat(count("alert_notification")).isEqualTo(4);
         } finally {
             execute("DROP SCHEMA IF EXISTS " + SCHEMA + " CASCADE");
@@ -90,26 +94,80 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
                 """.formatted(SCHEMA));
     }
 
-    private long insertRule(String scope, Long portfolioFundId, java.math.BigDecimal threshold)
+    /** 存量三阈值规则迁移后仍表达同一口径：上涨→涨跌幅高于阈值，下跌→涨跌幅低于负阈值。 */
+    @Test
+    void backfillsLegacyThreeThresholdRulesIntoEquivalentConditions() throws Exception {
+        recreateSchema();
+        try {
+            migrateTo("57");
+            insertOwnerAndPortfolioFund();
+            execute("""
+                    INSERT INTO %1$s.alert_rule (owner_id, scope, portfolio_fund_id, rule_type, threshold, enabled)
+                    VALUES (1, 'GLOBAL', NULL, 'RISE', 0.05, true),
+                           (1, 'GLOBAL', NULL, 'DROP', 0.03, true),
+                           (1, 'GLOBAL', NULL, 'PROFIT', 0.15, true);
+                    """.formatted(SCHEMA));
+
+            migrateTo(null);
+
+            assertThat(conditionThreshold("RISE")).isEqualByComparingTo("0.05");
+            assertThat(relationOf("RISE")).isEqualTo(ConditionRelation.ABOVE);
+            assertThat(conditionThreshold("DROP")).isEqualByComparingTo("-0.03");
+            assertThat(relationOf("DROP")).isEqualTo(ConditionRelation.BELOW);
+            assertThat(indicatorOf("PROFIT")).isEqualTo(IndicatorCode.HOLDING_RETURN);
+            assertThat(conditionThreshold("PROFIT")).isEqualByComparingTo("0.15");
+        } finally {
+            execute("DROP SCHEMA IF EXISTS " + SCHEMA + " CASCADE");
+        }
+    }
+
+    private ConditionRelation relationOf(String ruleType) throws SQLException {
+        return condition(ruleType).relation();
+    }
+
+    private IndicatorCode indicatorOf(String ruleType) throws SQLException {
+        return condition(ruleType).indicator();
+    }
+
+    private java.math.BigDecimal conditionThreshold(String ruleType) throws SQLException {
+        return condition(ruleType).effectiveThreshold();
+    }
+
+    private com.fundpilot.backend.alerting.domain.condition.AlertCondition condition(String ruleType)
             throws SQLException {
+        String conditions = queryString(
+                "SELECT conditions FROM " + SCHEMA + ".alert_rule WHERE rule_type = '" + ruleType + "'");
+        var group = AlertConditionJsonCodec.read(conditions);
+        assertThat(group.match()).isEqualTo(AlertConditionMatch.ALL);
+        return group.conditions().getFirst();
+    }
+
+    private long insertRule(String scope, Long portfolioFundId, String conditions) throws SQLException {
         String sql = """
                 INSERT INTO %s.alert_rule
-                    (owner_id, scope, portfolio_fund_id, rule_type, threshold, enabled)
-                VALUES (1, '%s', %s, 'RISE', %s, true)
+                    (owner_id, scope, portfolio_fund_id, conditions, enabled)
+                VALUES (1, '%s', %s, '%s', true)
                 RETURNING id
-                """.formatted(SCHEMA, scope, portfolioFundId == null ? "NULL" : portfolioFundId, threshold);
+                """.formatted(SCHEMA, scope, portfolioFundId == null ? "NULL" : portfolioFundId, conditions);
         return queryLong(sql);
     }
 
+    /** 新口径的提醒记录只带条件快照，存量触发行情列一律为空。 */
     private long insertNotification(long ruleId, String tradingDate, String status) throws SQLException {
         String sql = """
                 INSERT INTO %s.alert_notification
-                    (owner_id, alert_rule_id, trigger_type, threshold, trading_date, status,
+                    (owner_id, alert_rule_id, conditions_snapshot, trading_date, status,
                      fund_count, trigger_summary)
-                VALUES (1, %d, 'RISE', 0.05, '%s', '%s', 1, '招商中证白酒(161725) 上涨5.32%%')
+                VALUES (1, %d, '%s', '%s', '%s', 1, '招商中证白酒(161725) 命中：当日涨跌幅 高于 0.05，现值 0.06')
                 RETURNING id
-                """.formatted(SCHEMA, ruleId, tradingDate, status);
+                """.formatted(SCHEMA, ruleId, dailyChangeAbove("0.05"), tradingDate, status);
         return queryLong(sql);
+    }
+
+    private static String dailyChangeAbove(String threshold) {
+        return """
+                {"match":"ALL","conditions":[{"indicator":"DAILY_CHANGE","params":{},"relation":"ABOVE",\
+                "value":%s}]}""".formatted(threshold);
     }
 
     private long queryLong(String sql) throws SQLException {
@@ -119,6 +177,24 @@ class AlertSchemaMigrationTest extends AbstractIntegrationTest {
             assertThat(result.next()).isTrue();
             return result.getLong(1);
         }
+    }
+
+    private String queryString(String sql) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(sql)) {
+            assertThat(result.next()).isTrue();
+            return result.getString(1);
+        }
+    }
+
+    /** 迁移到指定版本，version 为 null 表示最新版本。 */
+    private void migrateTo(String version) {
+        var configuration = flyway();
+        if (version != null) {
+            configuration = configuration.target(version);
+        }
+        assertThat(configuration.load().migrate().success).isTrue();
     }
 
     private int count(String table) throws SQLException {

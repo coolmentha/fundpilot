@@ -18,7 +18,7 @@ class PortfolioReturnSnapshotTransactionListenerTest {
         listener.onConfirmed(new TransactionConfirmed(1L, 12L, 7L, "INCREASE",
                 BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO,
                 Instant.parse("2026-07-28T20:00:00Z"), Instant.parse("2026-07-30T00:00:00Z"),
-                null, null, null, null, 1L, Instant.parse("2026-07-30T00:00:00Z")));
+                null, null, 1L, Instant.parse("2026-07-30T00:00:00Z")));
 
         verify(snapshots).recaptureExistingFrom(7L, Instant.parse("2026-07-29T00:00:00Z"));
     }

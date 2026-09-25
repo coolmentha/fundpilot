@@ -2,7 +2,6 @@ import {Badge, Button, Drawer, Layout, Menu, Tooltip} from 'antd';
 import {
     FundOutlined,
     SettingOutlined,
-    BarChartOutlined,
     ToolOutlined,
     ThunderboltOutlined,
     LineChartOutlined,
@@ -30,7 +29,6 @@ const PAGE_META = {
     '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
     '/dca': {title: '定投管理', subtitle: '计划配置与本月剩余预计'},
     '/returns': {title: '累计收益', subtitle: '已实现、未实现与历史趋势'},
-    '/advice': {title: '纪律建议', subtitle: '查看今日与历史建议'},
     '/confirm': {title: '操作确认', subtitle: '处理所有待确认交易'},
     '/settings': {title: '用户配置', subtitle: '定投预算与行情偏好'},
     '/alerts': {title: '价格提醒', subtitle: '阈值规则与提醒记录'},
@@ -47,7 +45,6 @@ const NAV_GROUPS = [
     },
     {
         key: 'strategy', label: '策略', children: [
-            {key: '/advice', icon: <BarChartOutlined/>, label: '纪律建议'},
             {key: '/confirm', icon: <ThunderboltOutlined/>, label: '操作确认', badge: true},
             {key: '/funds', icon: <FundOutlined/>, label: '我的基金'},
             {key: '/dca', icon: <CalendarOutlined/>, label: '定投管理'},
@@ -64,12 +61,11 @@ const NAV_GROUPS = [
     },
 ];
 
-// 移动端底部导航:4 个高频入口 + 更多(抽屉展开剩余)。
-// 行情转向后:行情(首页) / 基金 / 建议 / 确认 为四个主入口。
+// 移动端底部导航:高频入口 + 更多(抽屉展开剩余)。
+// 行情转向后:行情(首页) / 基金 / 确认 为主要入口。
 const BOTTOM_NAV = [
     {key: '/', icon: <LineChartOutlined/>, label: '行情'},
     {key: '/funds', icon: <FundOutlined/>, label: '基金'},
-    {key: '/advice', icon: <BarChartOutlined/>, label: '建议'},
     {key: '/confirm', icon: <ThunderboltOutlined/>, label: '确认', badge: true},
 ];
 const BOTTOM_MORE = [

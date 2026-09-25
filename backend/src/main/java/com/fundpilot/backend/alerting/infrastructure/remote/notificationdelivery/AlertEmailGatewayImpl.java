@@ -2,7 +2,6 @@ package com.fundpilot.backend.alerting.infrastructure.remote.notificationdeliver
 
 import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.AlertEmailGateway;
 import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.AlertEmailGateway.AlertEmailMessage.FundRow;
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleType;
 import com.fundpilot.backend.alerting.infrastructure.configuration.AlertingProperties;
 import com.fundpilot.backend.sharedkernel.BusinessDay;
 import jakarta.mail.MessagingException;
@@ -12,6 +11,7 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -30,8 +30,13 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
 
     private static final String MISSING_MAIL_SERVICE = "邮件服务未配置";
     private static final int FAILURE_REASON_MAX_LENGTH = 255;
+    private static final String ACCENT_COLOR = "#1677ff";
     private static final String RISE_COLOR = "#d4380d";
     private static final String DROP_COLOR = "#389e0d";
+    private static final String SUGGESTION_NOTICE =
+            "以上卖出建议仅为纪律提示，请在确认页手工录入卖出，系统不会自动下单。";
+    private static final List<String> BASE_HEADERS = List.of("基金名称", "代码", "命中条件", "当前净值(估值)",
+            "当日涨跌幅", "持仓盈亏", "持仓收益率", "操作");
     private static final DateTimeFormatter SENT_AT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(BusinessDay.ZONE);
 
@@ -60,30 +65,28 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
     }
 
     private static String subject(AlertEmailMessage message) {
-        String condition = phrase(message.ruleType(), percent(message.threshold()));
+        String condition = message.conditionSummary();
         if (message.funds().size() == 1) {
             FundRow fund = message.funds().getFirst();
-            return "【FundPilot 提醒】" + fund.fundName() + "(" + fund.fundCode() + ") " + condition;
+            return "【FundPilot 提醒】" + fund.fundName() + "(" + fund.fundCode() + ") 触发：" + condition;
         }
-        return "【FundPilot 提醒】" + message.funds().size() + " 只基金触发" + condition;
+        return "【FundPilot 提醒】" + message.funds().size() + " 只基金触发：" + condition;
     }
 
-    private String html(AlertEmailMessage message) {
-        String accent = color(message.ruleType());
-        String condition = phrase(message.ruleType(), percent(message.threshold()));
+    String html(AlertEmailMessage message) {
+        boolean suggest = message.funds().stream().anyMatch(fund -> fund.suggestion() != null);
         StringBuilder builder = new StringBuilder(2048);
         builder.append("<div style=\"font-family:-apple-system,'PingFang SC','Microsoft YaHei',Arial,sans-serif;")
                 .append("color:#262626;font-size:14px;line-height:1.6\">")
-                .append("<h2 style=\"margin:0 0 4px;font-size:20px;color:").append(accent).append("\">")
-                .append(escape(condition)).append("</h2>")
-                .append("<p style=\"margin:0 0 16px;color:#8c8c8c\">规则阈值 ")
-                .append(escape(percent(message.threshold())))
-                .append("% · 命中 ").append(message.funds().size()).append(" 只基金</p>")
+                .append("<h2 style=\"margin:0 0 4px;font-size:20px;color:").append(ACCENT_COLOR).append("\">")
+                .append(escape(message.conditionSummary())).append("</h2>")
+                .append("<p style=\"margin:0 0 16px;color:#8c8c8c\">")
+                .append(suggest ? "按纪律给出建议 · 命中 " : "全部条件同时满足 · 命中 ")
+                .append(message.funds().size()).append(" 只基金</p>")
                 .append("<table cellpadding=\"0\" cellspacing=\"0\" ")
                 .append("style=\"border-collapse:collapse;width:100%;font-size:13px\"><thead><tr ")
                 .append("style=\"background:#fafafa;text-align:left\">");
-        for (String header : new String[] {"基金名称", "代码", "触发条件", "当前净值(估值)", "当日涨跌幅",
-                "持仓盈亏", "持仓收益率", "操作"}) {
+        for (String header : headers(suggest)) {
             builder.append(cell("th", header, "#595959"));
         }
         builder.append("</tr></thead><tbody>");
@@ -91,9 +94,11 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
             builder.append("<tr>")
                     .append(cell("td", fund.fundName(), null))
                     .append(cell("td", fund.fundCode(), null))
-                    .append(cell("td", shortPhrase(message.ruleType()) + " " + percent(fund.observedValue()),
-                            accent))
-                    .append(cell("td", nav(fund.valuationNav()), null))
+                    .append(cell("td", fund.conditionDetail(), ACCENT_COLOR));
+            if (suggest) {
+                builder.append(cell("td", fund.suggestion(), ACCENT_COLOR));
+            }
+            builder.append(cell("td", nav(fund.valuationNav()), null))
                     .append(cell("td", signedPercent(fund.dailyChangePct()), changeColor(fund.dailyChangePct())))
                     .append(cell("td", signedMoney(fund.unrealizedPnl()),
                             changeColor(fund.unrealizedPnl())))
@@ -103,29 +108,48 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
                     .append(detailLink(fund.portfolioFundId())).append("</td>")
                     .append("</tr>");
         }
-        builder.append("</tbody></table>")
-                .append("<p style=\"margin:16px 0 0;color:#8c8c8c;font-size:12px\">发送时间：")
+        builder.append("</tbody></table>");
+        if (suggest) {
+            builder.append("<p style=\"margin:16px 0 0;color:#d4380d;font-size:12px\">")
+                    .append(SUGGESTION_NOTICE).append("</p>");
+        }
+        builder.append("<p style=\"margin:16px 0 0;color:#8c8c8c;font-size:12px\">发送时间：")
                 .append(SENT_AT.format(clock.instant())).append("（北京时间）<br/>")
                 .append("本邮件由 FundPilot 自动发送；同一规则每个交易日最多提醒一次。</p></div>");
         return builder.toString();
     }
 
+    /** 表头：只有建议型规则才多一列「建议操作」，让条件型邮件保持原有列数。 */
+    private static List<String> headers(boolean suggest) {
+        if (!suggest) {
+            return BASE_HEADERS;
+        }
+        return List.of("基金名称", "代码", "命中条件", "建议操作", "当前净值(估值)", "当日涨跌幅",
+                "持仓盈亏", "持仓收益率", "操作");
+    }
+
     private String plainText(AlertEmailMessage message) {
-        String condition = phrase(message.ruleType(), percent(message.threshold()));
         StringBuilder builder = new StringBuilder(512);
-        builder.append(condition).append("（阈值 ").append(percent(message.threshold())).append("%）\n");
+        builder.append(message.conditionSummary()).append("（命中 ").append(message.funds().size())
+                .append(" 只基金，全部条件同时满足）\n");
         for (FundRow fund : message.funds()) {
-            builder.append("- ").append(fund.fundName()).append("(").append(fund.fundCode()).append(") ")
-                    .append(shortPhrase(message.ruleType())).append(" ")
-                    .append(percent(fund.observedValue())).append("%")
-                    .append("，估值净值 ").append(nav(fund.valuationNav()))
+            builder.append("- ").append(fund.fundName()).append("(").append(fund.fundCode()).append(") 命中：")
+                    .append(fund.conditionDetail());
+            if (fund.suggestion() != null) {
+                builder.append("，").append(fund.suggestion());
+            }
+            builder.append("，估值净值 ").append(nav(fund.valuationNav()))
                     .append("，当日涨跌 ").append(signedPercent(fund.dailyChangePct()))
                     .append("，持仓盈亏 ").append(signedMoney(fund.unrealizedPnl()))
                     .append("，持仓收益率 ").append(signedPercent(fund.holdingReturnRate()))
                     .append('\n');
             builder.append("  详情：").append(detailUrl(fund.portfolioFundId())).append('\n');
         }
-        builder.append("\n发送时间：").append(SENT_AT.format(clock.instant())).append("（北京时间）\n")
+        builder.append('\n');
+        if (message.funds().stream().anyMatch(fund -> fund.suggestion() != null)) {
+            builder.append(SUGGESTION_NOTICE).append('\n');
+        }
+        builder.append("发送时间：").append(SENT_AT.format(clock.instant())).append("（北京时间）\n")
                 .append("本邮件由 FundPilot 自动发送。");
         return builder.toString();
     }
@@ -150,34 +174,11 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
     }
 
     /** A 股习惯：涨用红、跌用绿。 */
-    private static String color(AlertRuleType type) {
-        return type == AlertRuleType.DROP ? DROP_COLOR : RISE_COLOR;
-    }
-
     private static String changeColor(BigDecimal value) {
         if (value == null || value.signum() == 0) {
             return "#595959";
         }
         return value.signum() > 0 ? RISE_COLOR : DROP_COLOR;
-    }
-
-    private static String phrase(AlertRuleType type, String thresholdPercent) {
-        return shortPhrase(type) + "已达 " + thresholdPercent + "%";
-    }
-
-    private static String shortPhrase(AlertRuleType type) {
-        return switch (type) {
-            case RISE -> "上涨";
-            case DROP -> "下跌";
-            case PROFIT -> "盈利";
-        };
-    }
-
-    private static String percent(BigDecimal value) {
-        if (value == null) {
-            return "-";
-        }
-        return value.multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String signedPercent(BigDecimal value) {

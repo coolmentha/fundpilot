@@ -1,8 +1,10 @@
 package com.fundpilot.backend.alerting.infrastructure.persistence.alertrule;
 
+import com.fundpilot.backend.alerting.application.condition.AlertConditionJsonCodec;
+import com.fundpilot.backend.alerting.application.suggestion.TakeProfitParamsJsonCodec;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
+import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleKind;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleScope;
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleType;
 
 final class AlertRulePersistenceMapper {
 
@@ -12,7 +14,8 @@ final class AlertRulePersistenceMapper {
     static AlertRule toDomain(AlertRuleJpaEntity entity) {
         return AlertRule.rehydrate(entity.getId(), entity.getVersion(), entity.getOwnerId(),
                 AlertRuleScope.valueOf(entity.getScope()), entity.getPortfolioFundId(),
-                AlertRuleType.valueOf(entity.getRuleType()), entity.getThreshold(), entity.isEnabled());
+                AlertRuleKind.valueOf(entity.getKind()), AlertConditionJsonCodec.readOrNull(entity.getConditions()),
+                TakeProfitParamsJsonCodec.read(entity.getParameters()), entity.isEnabled());
     }
 
     /** 把领域状态写入目标实体；新建传空实体，更新传已加载实体以保留乐观锁版本。 */
@@ -20,8 +23,9 @@ final class AlertRulePersistenceMapper {
         entity.setOwnerId(rule.ownerId());
         entity.setScope(rule.scope().name());
         entity.setPortfolioFundId(rule.portfolioFundId());
-        entity.setRuleType(rule.type().name());
-        entity.setThreshold(rule.threshold());
+        entity.setKind(rule.kind().name());
+        entity.setConditions(rule.conditions() == null ? null : AlertConditionJsonCodec.write(rule.conditions()));
+        entity.setParameters(TakeProfitParamsJsonCodec.write(rule.takeProfit()));
         entity.setEnabled(rule.enabled());
         return entity;
     }

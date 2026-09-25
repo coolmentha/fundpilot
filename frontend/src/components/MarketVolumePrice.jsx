@@ -75,7 +75,7 @@ export default function MarketVolumePrice() {
                 <span>量比 <strong>{available ? formatRatio(data.volumeRatio) : '-'}</strong></span>
             </div>
             <div className="volume-price-advice">
-                <strong>{meta.advice || '实时量价数据暂不可用，暂不生成纪律提醒。'}</strong>
+                <strong>{meta.advice || '实时量价数据暂不可用，暂不生成量价提示。'}</strong>
                 <span>{quoteTime === '-' ? '行情时间待刷新' : `行情截至 ${quoteTime}`}</span>
             </div>
         </div>

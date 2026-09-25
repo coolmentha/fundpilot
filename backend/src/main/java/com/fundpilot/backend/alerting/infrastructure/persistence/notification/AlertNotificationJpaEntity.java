@@ -50,11 +50,17 @@ class AlertNotificationJpaEntity {
     @Column(name = "alert_rule_id", nullable = false)
     private Long alertRuleId;
 
-    @Column(name = "trigger_type", nullable = false)
+    /** 存量审计列：固定三阈值模型时期写入，新记录为空。 */
+    @Column(name = "trigger_type")
     private String triggerType;
 
-    @Column(name = "threshold", nullable = false)
+    /** 存量审计列：固定三阈值模型时期写入，新记录为空。 */
+    @Column(name = "threshold")
     private BigDecimal threshold;
+
+    /** 当次命中时的条件数组快照，规则后续被改动也能回溯当时口径。 */
+    @Column(name = "conditions_snapshot", columnDefinition = "TEXT")
+    private String conditionsSnapshot;
 
     @Column(name = "trading_date", nullable = false)
     private Instant tradingDate;

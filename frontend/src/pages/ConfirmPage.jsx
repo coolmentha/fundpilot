@@ -8,7 +8,7 @@ import {
     useFunds,
     usePendingTransactions,
 } from '../api/hooks.js';
-import {datetime, labels, money} from '../constants.js';
+import {datetime, money} from '../constants.js';
 import StatusTag from '../components/StatusTag.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import QueryErrorState from '../components/QueryErrorState.jsx';
@@ -25,7 +25,6 @@ export default function ConfirmPage() {
     const cancelTx = useCancelTransaction();
     const [editing, setEditing] = useState(null);
     const [params, setParams] = useSearchParams();
-    const targetSignalId = Number(params.get('signalId'));
     const targetTransactionId = Number(params.get('transactionId'));
     const portfolioFundIdParam = params.get('portfolioFundId');
     const portfolioFundId = portfolioFundIdParam ? Number(portfolioFundIdParam) : null;
@@ -64,10 +63,6 @@ export default function ConfirmPage() {
                 {row.expectedNav != null && <Text type="secondary">交易日净值 {Number(row.expectedNav).toFixed(4)}</Text>}
                 {isQdii(row) && <Text type="secondary">QDII 净值公布可能晚于普通基金</Text>}
                 {row.relatedTransactionId && <Tag>关联交易 #{row.relatedTransactionId}</Tag>}
-                {row.signalLogId && <Link to={`/advice?portfolioFundId=${row.portfolioFundId}`}>来源建议 #{row.signalLogId}</Link>}
-                {row.signalReason && labels[row.signalReason] && <Text type="secondary">
-                    {labels[row.signalReason]}
-                </Text>}
             </Space>
         )},
         {title: '状态', dataIndex: 'status', width: 100, align: 'right',
@@ -102,8 +97,7 @@ export default function ConfirmPage() {
             {isError ? <QueryErrorState onRetry={refetch} description="待处理交易加载失败"/> : (
                 <Table rowKey="id" size="small" loading={isLoading} dataSource={visibleTransactions}
                        columns={columns} pagination={false} scroll={{x: 1240}}
-                       rowClassName={(row) => row.id === targetTransactionId || row.signalLogId === targetSignalId
-                           ? 'row-target' : ''}
+                       rowClassName={(row) => row.id === targetTransactionId ? 'row-target' : ''}
                        locale={{emptyText: <EmptyState description="暂无待处理交易"/>}}/>
             )}
             {editing && (

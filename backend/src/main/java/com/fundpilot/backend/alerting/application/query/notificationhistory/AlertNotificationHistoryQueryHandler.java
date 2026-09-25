@@ -28,13 +28,14 @@ public class AlertNotificationHistoryQueryHandler {
     }
 
     public record NotificationViewResult(long id, long alertRuleId, String ruleType, BigDecimal threshold,
-                                         String triggerSummary, int fundCount, String status,
-                                         String failureReason, Instant tradingDate, Instant sentAt,
+                                         String conditionsSnapshot, String triggerSummary, int fundCount,
+                                         String status, String failureReason, Instant tradingDate, Instant sentAt,
                                          String recipientEmail) {
 
         static NotificationViewResult from(AlertNotification notification) {
             return new NotificationViewResult(notification.id(), notification.alertRuleId(),
-                    notification.triggerType().name(), notification.threshold(), notification.triggerSummary(),
+                    notification.triggerType() == null ? null : notification.triggerType().name(),
+                    notification.threshold(), notification.conditionsSnapshot(), notification.triggerSummary(),
                     notification.fundCount(), notification.status().name(), notification.failureReason(),
                     notification.tradingDate(), notification.sentAt(), notification.recipientEmail());
         }

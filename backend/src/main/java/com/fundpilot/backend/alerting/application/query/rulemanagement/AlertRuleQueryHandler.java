@@ -1,6 +1,7 @@
 package com.fundpilot.backend.alerting.application.query.rulemanagement;
 
 import com.fundpilot.backend.alerting.application.gateway.ruleevaluation.AlertFundFactsGateway;
+import com.fundpilot.backend.alerting.application.ruletext.AlertRuleText;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleRepository;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotificationRepository;
@@ -58,9 +59,25 @@ public class AlertRuleQueryHandler {
         return new RuleViewResult(rule.id(), rule.scope().name(), rule.portfolioFundId(),
                 fund == null ? null : fund.fundCode(),
                 fund == null ? null : fund.fundName(),
-                rule.type().name(), rule.threshold(), rule.enabled(),
+                rule.kind().name(), rule.kind().label(),
+                rule.conditions() == null ? null : rule.conditions().match().name(),
+                AlertRuleText.summarize(rule),
+                conditions(rule), takeProfit(rule), rule.enabled(),
                 status != null && status.sentCount() > 0,
                 status == null ? null : status.lastSentAt());
+    }
+
+    private static List<ConditionView> conditions(AlertRule rule) {
+        return rule.conditions() == null ? List.of() : rule.conditions().conditions().stream()
+                .map(condition -> new ConditionView(condition.indicator().code(), condition.params(),
+                        condition.relation().name(), condition.effectiveThreshold()))
+                .toList();
+    }
+
+    private static TakeProfitView takeProfit(AlertRule rule) {
+        var params = rule.takeProfit();
+        return params == null ? null : new TakeProfitView(params.activation(), params.pullback(), params.harvest(),
+                params.minimumHolding(), params.maxSingleSell(), params.cooldownDays());
     }
 
     private record OwnerContext(Map<Long, AlertFundFactsGateway.AlertFundFact> fundsById,
@@ -68,7 +85,17 @@ public class AlertRuleQueryHandler {
     }
 
     public record RuleViewResult(long id, String scope, Long portfolioFundId, String fundCode, String fundName,
-                                 String ruleType, BigDecimal threshold, boolean enabled, boolean todaySent,
-                                 Instant lastTriggeredAt) {
+                                 String kind, String kindLabel, String match, String conditionSummary,
+                                 List<ConditionView> conditions, TakeProfitView takeProfit, boolean enabled,
+                                 boolean todaySent, Instant lastTriggeredAt) {
+    }
+
+    /** 单条条件视图：阈值仅在与阈值比较的关系下存在。 */
+    public record ConditionView(String indicator, Map<String, Integer> params, String relation, BigDecimal value) {
+    }
+
+    /** 回撤止盈的六个参数视图；非回撤止盈规则为空。 */
+    public record TakeProfitView(BigDecimal activation, BigDecimal pullback, BigDecimal harvest,
+                                 BigDecimal minimumHolding, BigDecimal maxSingleSell, int cooldownDays) {
     }
 }

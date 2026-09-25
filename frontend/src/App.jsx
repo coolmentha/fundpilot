@@ -7,7 +7,6 @@ const MarketDashboardPage = React.lazy(() => import('./pages/MarketDashboardPage
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage.jsx'));
 const FundsPage = React.lazy(() => import('./pages/FundsPage.jsx'));
 const FundDetailPage = React.lazy(() => import('./pages/FundDetailPage.jsx'));
-const SignalsPage = React.lazy(() => import('./pages/SignalsPage.jsx'));
 const ConfirmPage = React.lazy(() => import('./pages/ConfirmPage.jsx'));
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage.jsx'));
 const AlertRulesPage = React.lazy(() => import('./pages/AlertRulesPage.jsx'));
@@ -32,7 +31,6 @@ export default function App() {
                     <Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/>
                     <Route path="/dca" element={<DcaManagementPage/>}/>
                     <Route path="/returns" element={<PortfolioReturns/>}/>
-                    <Route path="/advice" element={<SignalsPage/>}/>
                     <Route path="/confirm" element={<ConfirmPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>
                     <Route path="/alerts" element={<AlertRulesPage/>}/>

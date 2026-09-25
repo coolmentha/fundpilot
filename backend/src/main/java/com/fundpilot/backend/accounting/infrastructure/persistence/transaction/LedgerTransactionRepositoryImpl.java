@@ -140,16 +140,6 @@ class LedgerTransactionRepositoryImpl implements TransactionRepository {
                 .toList();
     }
 
-    @Override
-    public boolean existsByDisciplineAdviceIdAndStatusNot(long disciplineAdviceId, TransactionStatus status) {
-        return transactions.existsByDisciplineAdviceIdAndStatusNot(disciplineAdviceId, status.name());
-    }
-
-    @Override
-    public List<LedgerTransaction> findByDisciplineAdviceId(long disciplineAdviceId) {
-        return toDomain(transactions.findByDisciplineAdviceId(disciplineAdviceId));
-    }
-
     private LedgerTransaction toDomain(LedgerTransactionJpaEntity entity) {
         return LedgerTransactionPersistenceMapper.toDomain(entity, ownerId(entity.getPortfolioFundId()));
     }

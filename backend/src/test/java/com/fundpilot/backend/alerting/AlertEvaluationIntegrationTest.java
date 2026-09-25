@@ -12,7 +12,6 @@ import com.fundpilot.backend.alerting.application.command.rulemanagement.AlertRu
 import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.AlertEmailGateway;
 import com.fundpilot.backend.alerting.application.query.notificationhistory.AlertNotificationHistoryQueryHandler;
 import com.fundpilot.backend.alerting.application.query.ruleevaluation.AlertRuleEvaluationQueryHandler;
-import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleType;
 import com.fundpilot.backend.identityaccess.adapter.web.authentication.AuthenticationFilter;
 import com.fundpilot.backend.identityaccess.application.gateway.authentication.SessionTokenGateway;
 import com.fundpilot.backend.identityaccess.domain.user.UserRole;
@@ -29,6 +28,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -93,7 +93,10 @@ class AlertEvaluationIntegrationTest extends AbstractIntegrationTest {
         long portfolioFundId = onboardOpenPosition();
 
         var rule = rules.create(ownerId, new AlertRuleCommandHandler.RuleInput(
-                "FUND", portfolioFundId, "RISE", new BigDecimal("0.05"), true));
+                "FUND", portfolioFundId, null, "ALL",
+                List.of(new AlertRuleCommandHandler.RuleInput.ConditionInput("DAILY_CHANGE", Map.of(),
+                        "ABOVE", new BigDecimal("0.05"))),
+                null, true));
 
         var first = evaluation.evaluate();
         assertThat(first.evaluatedRules()).isEqualTo(1);
@@ -105,7 +108,7 @@ class AlertEvaluationIntegrationTest extends AbstractIntegrationTest {
                 ArgumentCaptor.forClass(AlertEmailGateway.AlertEmailMessage.class);
         verify(deliveries).send(message.capture());
         assertThat(message.getValue().recipient()).isEqualTo(recipient);
-        assertThat(message.getValue().ruleType()).isEqualTo(AlertRuleType.RISE);
+        assertThat(message.getValue().conditionSummary()).isEqualTo("当日涨跌幅 高于 0.05");
         assertThat(message.getValue().fundCount()).isEqualTo(1);
 
         assertThat(sentCount(rule.id())).isEqualTo(1L);
@@ -114,7 +117,7 @@ class AlertEvaluationIntegrationTest extends AbstractIntegrationTest {
                 String.class, rule.id())).isEqualTo(recipient);
         assertThat(jdbc.queryForObject(
                 "SELECT trigger_summary FROM alert_notification WHERE alert_rule_id = ? AND status = 'SENT'",
-                String.class, rule.id())).contains("上涨");
+                String.class, rule.id())).contains("命中").contains("当日涨跌幅");
 
         var second = evaluation.evaluate();
         assertThat(second.evaluatedRules()).isEqualTo(1);
@@ -126,7 +129,8 @@ class AlertEvaluationIntegrationTest extends AbstractIntegrationTest {
                 .filter(row -> row.alertRuleId() == rule.id())
                 .findFirst().orElseThrow();
         assertThat(recorded.status()).isEqualTo("SENT");
-        assertThat(recorded.ruleType()).isEqualTo("RISE");
+        assertThat(recorded.ruleType()).isNull();
+        assertThat(recorded.conditionsSnapshot()).contains("DAILY_CHANGE");
         assertThat(recorded.recipientEmail()).isEqualTo(recipient);
         assertThat(recorded.fundCount()).isEqualTo(1);
         assertThat(recorded.tradingDate()).isEqualTo(tradingDate);

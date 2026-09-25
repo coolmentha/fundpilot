@@ -108,7 +108,7 @@ class LedgerReplayTest {
         return LedgerTransaction.rehydrate(id, 11L, 3L, TransactionSource.INCREASE,
                 TransactionStatus.CONFIRMED, new BigDecimal(amount), new BigDecimal(shares),
                 BigDecimal.ONE, null, null, Instant.parse(date), Instant.parse(date), null,
-                Instant.parse(date), null, null, null, null, null);
+                Instant.parse(date), null, null, null);
     }
 
     private static LedgerTransaction reset(long id, String date, String shares, String cost) {
@@ -116,13 +116,13 @@ class LedgerReplayTest {
         return LedgerTransaction.rehydrate(id, 11L, 3L, TransactionSource.COST_BASIS_RESET,
                 TransactionStatus.CONFIRMED, normalizedShares.multiply(new BigDecimal(cost)),
                 normalizedShares, null, null, null, Instant.parse(date), Instant.parse(date), null,
-                Instant.parse(date), null, null, null, null, null);
+                Instant.parse(date), null, null, null);
     }
 
     private static LedgerTransaction adjustment(long id, String date, String shares) {
         return LedgerTransaction.rehydrate(id, 11L, 3L, TransactionSource.ADJUST_IN,
                 TransactionStatus.CONFIRMED, null, new BigDecimal(shares), null, null, null,
                 Instant.parse(date), Instant.parse(date), null, Instant.parse(date),
-                null, null, null, null, null);
+                null, null, null);
     }
 }

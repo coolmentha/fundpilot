@@ -1,5 +1,11 @@
 # 金字塔加仓退场,移动止盈解耦为独立卖出纪律
 
+> **Status: partially superseded by [v0.14.0 版本计划](../versions/v0.14.0-plan.md)** —— 「金字塔加仓退场」的结论仍然有效；
+> 但本 ADR 把移动止盈解耦成的那个「独立卖出纪律」（discipline 模块）已被 v0.14.0 整体删除：
+> 判定迁移为 alerting 的建议型提醒（`AlertRuleKind.LOGIC_BROKEN` / `AlertRuleKind.TRAILING_STOP`），
+> 采纳链路降级为纯通知（删除 accept/ignore，卖出改由用户在确认页手工录入）。
+> 下方「存量兼容」中依赖 SignalLog / `SignalReason` 的表述已失效，一并留痕。
+
 平台已转向"实时行情工作台,定投止盈为辅"定位。金字塔择时加仓机制(建仓/四档加仓/计划总仓位)不再符合产品方向。
 本 ADR 记录移除金字塔加仓、将移动止盈从金字塔档位状态解耦为独立"按回落分档减仓"规则的决策。
 

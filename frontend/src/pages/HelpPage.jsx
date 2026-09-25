@@ -1,6 +1,6 @@
 import {Alert, Button, Space, Tag, Typography} from 'antd';
 import {
-    BarChartOutlined,
+    BellOutlined,
     CalendarOutlined,
     CheckCircleOutlined,
     FundOutlined,
@@ -17,7 +17,7 @@ const destinations = [
     {icon: <LineChartOutlined/>, title: '行情工作台', description: '查看指数、基金涨跌、持仓市值和仓位构成。', path: '/'},
     {icon: <FundOutlined/>, title: '我的基金', description: '添加基金、维护分组、查看成本和仓位提醒。', path: '/funds'},
     {icon: <CalendarOutlined/>, title: '定投管理', description: '创建、暂停和检查自动定投计划。', path: '/dca'},
-    {icon: <BarChartOutlined/>, title: '纪律建议', description: '查看止盈或逻辑破坏止损建议。', path: '/advice'},
+    {icon: <BellOutlined/>, title: '价格提醒', description: '按指标条件配置提醒，触发后发送邮件通知。', path: '/alerts'},
     {icon: <ThunderboltOutlined/>, title: '操作确认', description: '核对净值和预计份额后确认或撤销交易。', path: '/confirm'},
     {icon: <SettingOutlined/>, title: '用户配置', description: '管理关注指数和每月定投预算提醒。', path: '/settings'},
 ];
@@ -31,15 +31,15 @@ const workflows = [
     },
     {
         key: 'dca', number: '02', icon: <CalendarOutlined/>, title: '设置自动定投',
-        goal: '让系统按交易日生成纪律化的定投记录，同时保留最终确认权。',
+        goal: '让系统按交易日生成定投记录，同时保留最终确认权。',
         steps: ['创建计划并选择基金、金额、频率和执行日。', '启用计划；休市日会按规则顺延到下一个交易日。', '生成交易后，到「操作确认」核对净值和预计份额。'],
         done: '计划状态为生效，下一执行日和本月剩余预计金额可见。', path: '/dca', action: '前往定投管理', tone: 'blue',
     },
     {
-        key: 'advice', number: '03', icon: <BarChartOutlined/>, title: '阅读和回应纪律建议',
-        goal: '理解止盈或逻辑破坏止损的触发原因，再决定是否执行建议。',
-        steps: ['打开待回应建议，查看触发原因、建议份额和风险提示。', '在基金平台完成真实申赎后，再在系统内回应。', '不采纳时选择忽略，避免留下长期待办。'],
-        done: '建议显示已回应或已忽略；采纳建议后已生成关联交易。', path: '/advice', action: '前往纪律建议', tone: 'violet',
+        key: 'alerts', number: '03', icon: <BellOutlined/>, title: '配置价格提醒',
+        goal: '用指标条件描述关注的行情变化，触发后由系统发送邮件通知。',
+        steps: ['在「价格提醒」选择规则种类：条件提醒、逻辑破坏止损或回撤止盈。', '按模板或手动组合指标条件并保存，可先试算验证当前是否命中。', '收到邮件后，在基金平台自行判断并完成真实申赎；卖出不再由系统生成建议。'],
+        done: '规则显示为已启用，触发记录可在提醒记录中查看。', path: '/alerts', action: '前往价格提醒', tone: 'violet',
     },
     {
         key: 'confirm', number: '04', icon: <ThunderboltOutlined/>, title: '处理待确认交易',

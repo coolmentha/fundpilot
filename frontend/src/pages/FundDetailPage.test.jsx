@@ -58,11 +58,8 @@ vi.mock('../api/hooks.js', () => ({
         },
     }),
     usePendingTransactions: () => ({data: [{id: 1, fundId: 1, portfolioFundId: 11}, {id: 2, fundId: 1, portfolioFundId: 11}, {id: 3, fundId: 2, portfolioFundId: 12}]}),
-    usePendingSignals: () => ({data: [{id: 1, fundId: 1, portfolioFundId: 11}, {id: 2, fundId: 2, portfolioFundId: 12}]}),
 }));
 vi.mock('./FundTransactionTab.jsx', () => ({default: () => <div>交易流水内容</div>}));
-vi.mock('./FundStrategyTab.jsx', () => ({default: () => <div>策略参数内容</div>}));
-vi.mock('./FundSignalTab.jsx', () => ({default: ({portfolioFundId}) => <div>纪律建议内容 {portfolioFundId}</div>}));
 vi.mock('./FundMarketTab.jsx', () => ({default: () => <div>行情指标内容</div>}));
 vi.mock('./FundDcaTab.jsx', () => ({default: () => <div>定投计划内容</div>}));
 
@@ -122,11 +119,10 @@ describe('FundDetailPage', () => {
         optional.failed = false;
     });
 
-    it('基金信息常显,交易与策略详情默认展开,研究/赎回费估算默认收起', async () => {
+    it('基金信息常显,行情与交易详情默认展开,研究/赎回费估算默认收起', async () => {
         ({container, root} = await renderDetailPage());
 
         expect(container.textContent).toContain('待确认交易 2 笔');
-        expect(container.textContent).toContain('待回应建议 1 条');
         // 基金信息常显
         expect(container.textContent).toContain('申购原费率');
         expect(container.textContent).toContain('管理费（年化）0.00%');
@@ -142,16 +138,16 @@ describe('FundDetailPage', () => {
         expect(container.textContent).not.toContain('今日涨跌');
         // 跟踪指数回退到研究资料采集的真实跟踪标的(本地档案无 benchmarkIndexCode)
         expect(container.textContent).toContain('000300');
-        // 交易与策略详情第二位且默认展开
+        // 行情与交易详情首位且默认展开
         expect([...container.querySelectorAll('.ant-tabs-tab-btn')].map((tab) => tab.textContent)).toEqual([
-            '行情指标', '交易流水', '证券持仓', '策略参数', '纪律建议', '定投计划',
+            '行情指标', '交易流水', '证券持仓', '定投计划',
         ]);
         expect(container.textContent).toContain('行情指标内容');
         // 其余两个折叠分块默认收起
         expect(container.textContent).not.toContain('C 类');
         expect(container.textContent).not.toContain('38 天');
         expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(expect.arrayContaining([
-            '/confirm?portfolioFundId=11', '/advice?portfolioFundId=11', '/funds?editPortfolioFundId=11',
+            '/confirm?portfolioFundId=11', '/funds?editPortfolioFundId=11',
         ]));
 
         await expandSection(container, '基金研究资料');
@@ -173,9 +169,6 @@ describe('FundDetailPage', () => {
         expect(container.textContent).toContain('85.95%');
         expect(container.textContent).toContain('穿透覆盖率0.00%');
         expect(container.textContent).toContain('目标 ETF 穿透');
-
-        await openTab(container, '纪律建议');
-        expect(container.textContent).toContain('纪律建议内容 11');
     });
 
     it('研究、费率和 lot 全部失败时核心详情与业务页签仍可使用', async () => {

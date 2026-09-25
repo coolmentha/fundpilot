@@ -2,7 +2,6 @@ package com.fundpilot.backend.insights.infrastructure.gateway.portfolioreturn;
 
 import com.fundpilot.backend.accounting.adapter.api.position.PositionApi;
 import com.fundpilot.backend.accounting.adapter.api.returnfacts.AccountingReturnApi;
-import com.fundpilot.backend.discipline.adapter.api.classification.DisciplineClassificationApi;
 import com.fundpilot.backend.insights.application.gateway.portfolioreturn.ReturnCompositionGateway;
 import com.fundpilot.backend.marketdata.adapter.api.publishednav.PublishedNavApi;
 import com.fundpilot.backend.marketdata.adapter.api.realtimevaluation.RealtimeValuationApi;
@@ -24,7 +23,6 @@ public class ReturnCompositionGatewayImpl implements ReturnCompositionGateway {
     private final FundProductApi products;
     private final PublishedNavApi navs;
     private final RealtimeValuationApi valuations;
-    private final DisciplineClassificationApi classifications;
 
     @Override
     public List<PortfolioFund> findPortfolioFunds(long ownerId) {
@@ -96,11 +94,5 @@ public class ReturnCompositionGatewayImpl implements ReturnCompositionGateway {
         return groups.memberships(ownerId).stream()
                 .map(value -> new GroupMembership(value.portfolioFundId(), value.groupId(), value.groupName()))
                 .toList();
-    }
-
-    @Override
-    public List<DisciplineClassification> findDisciplineClassifications(long ownerId, Set<Long> portfolioFundIds) {
-        return classifications.findByPortfolioFundIds(ownerId, portfolioFundIds).stream()
-                .map(value -> new DisciplineClassification(value.portfolioFundId(), value.category())).toList();
     }
 }

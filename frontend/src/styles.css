@@ -1702,27 +1702,28 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     min-width: 0;
 }
 
-.alert-rule-target,
-.alert-notification-funds {
+.alert-rule-target {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
 }
 
-.alert-rule-target span,
-.alert-notification-funds span {
+.alert-rule-target span {
     overflow-wrap: anywhere;
 }
 
-.alert-rule-target .ant-typography,
-.alert-notification-funds .ant-typography {
+.alert-rule-target .ant-typography {
     font-size: 12px;
 }
 
 .alert-rule-target .ant-tag {
     align-self: flex-start;
     margin-inline-end: 0;
+}
+
+.alert-rule-conditions {
+    overflow-wrap: anywhere;
 }
 
 .alert-notification-summary {
@@ -1733,12 +1734,32 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     margin-bottom: 20px;
 }
 
-.alert-rule-type-group .ant-radio-wrapper {
-    align-items: flex-start;
+.alert-rule-templates {
+    margin-bottom: 12px;
 }
 
-.alert-rule-type-hint {
+.alert-rule-condition {
+    margin-bottom: 12px;
+}
+
+.alert-rule-condition-hint {
     display: block;
+    margin-bottom: 12px;
+    font-size: 12px;
+}
+
+.alert-rule-preview-fund {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.alert-rule-preview-condition {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
 }
 

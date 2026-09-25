@@ -17,7 +17,6 @@ public interface ReturnCompositionGateway {
     List<Nav> findLatestTwoNavsAt(Set<Long> productIds, Instant endExclusive);
     List<RealtimeValuation> findRealtimeValuations(Set<String> fundCodes);
     List<GroupMembership> findGroupMemberships(long ownerId);
-    List<DisciplineClassification> findDisciplineClassifications(long ownerId, Set<Long> portfolioFundIds);
 
     record PortfolioFund(long id, Long legacyFundId, long fundProductId, boolean tracked,
                          boolean positionWarningEnabled, BigDecimal positionWarningRatio) {}
@@ -33,5 +32,4 @@ public interface ReturnCompositionGateway {
     record RealtimeValuation(String fundCode, BigDecimal estimatedChangePct, String estimateTime,
                              String baseNavDate, String status) {}
     record GroupMembership(long portfolioFundId, long groupId, String groupName) {}
-    record DisciplineClassification(long portfolioFundId, String category) {}
 }

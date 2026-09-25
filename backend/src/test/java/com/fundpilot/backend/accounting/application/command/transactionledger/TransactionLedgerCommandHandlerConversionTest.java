@@ -60,10 +60,10 @@ class TransactionLedgerCommandHandlerConversionTest {
     void revisePending_修改转出腿不因转入腿无金额而失败并同步交易日() {
         LedgerTransaction outLeg = LedgerTransaction.rehydrate(1L, 11L, 7L, TransactionSource.TRANSFER_OUT,
                 TransactionStatus.PENDING, null, new BigDecimal("100"), null, null, null, NOW, null, null,
-                NOW, 2L, null, null, null, null);
+                NOW, 2L, null, null);
         LedgerTransaction inLeg = LedgerTransaction.rehydrate(2L, 12L, 7L, TransactionSource.TRANSFER_IN,
                 TransactionStatus.PENDING, null, null, null, null, null, NOW, null, null, NOW,
-                1L, null, null, null, null);
+                1L, null, null);
         TransactionRepository transactions = mock(TransactionRepository.class);
         when(transactions.findByIdForUpdate(1L)).thenReturn(Optional.of(outLeg));
         when(transactions.findById(2L)).thenReturn(Optional.of(inLeg));
@@ -86,8 +86,8 @@ class TransactionLedgerCommandHandlerConversionTest {
                 transaction.ownerId(), transaction.source(), transaction.status(), transaction.amount(),
                 transaction.shares(), transaction.nav(), transaction.fee(), transaction.feeRate(),
                 transaction.tradeDate(), transaction.confirmTime(), transaction.cancelTime(),
-                transaction.createdDate(), transaction.relatedTransactionId(), transaction.signalLogId(),
-                transaction.dcaPlanId(), transaction.disciplineAdviceId(), transaction.investmentPlanId());
+                transaction.createdDate(), transaction.relatedTransactionId(),
+                transaction.dcaPlanId(), transaction.investmentPlanId());
     }
 
     private static TransactionLedgerCommandHandler handler(TransactionRepository transactions,

@@ -10,6 +10,6 @@ import java.time.Instant;
 public record TransactionConfirmed(long transactionId, long portfolioFundId, long ownerId,
                                    String source, BigDecimal amount, BigDecimal shares,
                                    BigDecimal nav, BigDecimal fee, Instant tradeDate,
-                                   Instant confirmedAt, Long signalLogId, Long dcaPlanId,
-                                   Long disciplineAdviceId, Long investmentPlanId, long version, Instant occurredAt) {
+                                   Instant confirmedAt, Long dcaPlanId,
+                                   Long investmentPlanId, long version, Instant occurredAt) {
 }

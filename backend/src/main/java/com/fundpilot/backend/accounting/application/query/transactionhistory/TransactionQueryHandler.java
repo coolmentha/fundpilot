@@ -102,21 +102,6 @@ public class TransactionQueryHandler {
                 amounts.getOrDefault(TransactionStatus.PENDING, BigDecimal.ZERO));
     }
 
-    @Transactional(readOnly = true)
-    public boolean hasTransactionForAdvice(long adviceId) {
-        return transactions.existsByDisciplineAdviceIdAndStatusNot(adviceId, TransactionStatus.CANCELLED);
-    }
-
-    /** 由 Discipline 建议生成的账目；回应建议后取最新一条。 */
-    @Transactional(readOnly = true)
-    public java.util.Optional<AdviceRelatedTransaction> findByAdvice(long adviceId) {
-        return transactions.findByDisciplineAdviceId(adviceId).stream()
-                .findFirst()
-                .map(transaction -> new AdviceRelatedTransaction(transaction.id(), transaction.status().name()));
-    }
-
-    public record AdviceRelatedTransaction(long transactionId, String status) {}
-
     public record InvestmentPlanOccurrence(long investmentPlanId, java.time.Instant tradeDate,
                                             java.math.BigDecimal amount, String status) {}
 
@@ -142,7 +127,7 @@ public class TransactionQueryHandler {
                 : null;
         return new PendingResult(TransactionLedgerCommandHandler.LedgerResult.from(transaction),
                 portfolioFund.legacyFundId(), expectedNav,
-                expectedShares, state.name(), state.reason, transaction.signalReason());
+                expectedShares, state.name(), state.reason);
     }
 
     private ConfirmationState confirmationState(LedgerTransaction transaction, BigDecimal expectedNav) {
@@ -164,8 +149,7 @@ public class TransactionQueryHandler {
 
     public record PendingResult(TransactionLedgerCommandHandler.LedgerResult transaction, Long legacyFundId,
                                 BigDecimal expectedNav,
-                                BigDecimal expectedShares, String confirmationState, String confirmationReason,
-                                String signalReason) {
+                                BigDecimal expectedShares, String confirmationState, String confirmationReason) {
     }
 
     private enum ConfirmationState {

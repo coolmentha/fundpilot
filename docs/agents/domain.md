@@ -37,7 +37,7 @@
 │   │   ├── fund-and-position.md
 │   │   ├── transactions-and-accounting.md
 │   │   ├── dca.md
-│   │   ├── sell-discipline-and-signals.md
+│   │   ├── alerts-and-suggestions.md
 │   │   ├── market-and-pnl.md
 │   │   └── capital-and-position-limit.md
 │   └── adr/
@@ -46,18 +46,19 @@
     └── docs/
 ```
 
-`backend/基金纪律策略框架.md`、`backend/docs/` 和部分旧 PRD 是历史资料，正文中可能包含金字塔加仓、计划总仓位、回测寻优、BUILD/ADD 新信号或旧净值口径。它们只用于理解演进过程。
+`backend/基金纪律策略框架.md`、`backend/docs/` 和部分旧 PRD 是历史资料，正文中可能包含金字塔加仓、计划总仓位、回测寻优、BUILD/ADD 新信号、旧净值口径或已在 v0.14.0 删除的卖出纪律（SignalLog / 建议采纳链路）。它们只用于理解演进过程。
 
 ## 术语规则
 
-- `SignalType` 表达策略建议，当前新信号只使用 `NONE/SELL`。
+- `AlertRuleKind` 表达提醒规则种类：`CONDITION`（条件提醒）、`LOGIC_BROKEN`（逻辑破坏止损）、`TRAILING_STOP`（回撤止盈）；后两者是**建议型提醒**。
+- **指标（indicator）**是由 MarketData 按需计算的标量序列，**关系（relation）**描述该标量与阈值或前一期取值的关系（高于/低于/上穿/下穿/放大/缩小），**条件** = 指标 + 关系 + 参数；一组条件按「全部满足」（AND）合取。
+- **建议卖出份额**是建议型提醒在邮件里给出的份额建议（取四项最小值）；**采纳链路已降级为纯通知**，卖出由用户在确认页手工录入，不生成在途交易。
+- **周期峰值**与**冷静期**是回撤止盈的运行期状态：峰值是周期内累计净值高点，冷静期是触发后按交易日计的静默窗口。
 - `FundTransactionSource` 表达交易或账务修正来源；`INCREASE/DECREASE/TRANSFER_IN/TRANSFER_OUT/INVEST/ADJUST_IN/ADJUST_OUT` 改变份额，`COST_BASIS_RESET` 只重置当前成本基准。
-- 不要把 `SELL` 信号与 `DECREASE` 交易来源当成同一个概念。
-- `BUILD/ADD` 和 `CALIBRATED/CALIBRATION_FAILED` 是兼容遗留，不是当前主流程。
 - 事实持仓只由 CONFIRMED 交易份额聚合，PENDING 不进入持仓。
 - 单位净值用于记账和市值，累计净值用于复权分析和回撤。
 - 北京时间决定业务日，日期标签存为 UTC 00:00 `Instant`。
-- 常说的场外基金“7 天保护”在系统内按 5 个交易日计算；要明确是逐 lot 止盈保护、逻辑止损豁免，还是手动卖出绕过信号门控。
+- 常说的场外基金“7 天保护”在系统内按 5 个交易日计算；要明确是逐 lot 止盈保护（成熟可赎回份额），还是手动卖出。
 
 ## 引用与更新
 

@@ -188,7 +188,7 @@ public class AccountingRebuildService {
         jdbcTemplate.query("with evidence as (" +
                         "select l.acquire_tx_id,l.fund_id,l.remaining_shares,l.acquire_cost_per_share," +
                         "f.cost_per_share, " +
-                        "(t.source='INCREASE' and t.signal_log_id is null and t.dca_plan_id is null " +
+                        "(t.source='INCREASE' and t.dca_plan_id is null " +
                         "and l.acquire_date <> coalesce(t.trade_date,t.created_date,t.confirm_time)) onboarding " +
                         "from fund_lot l join fund_transaction t on t.id=l.acquire_tx_id " +
                         "join fund f on f.id=l.fund_id where l.deleted_date is null), totals as (" +
@@ -223,14 +223,14 @@ public class AccountingRebuildService {
 
     private List<TransactionRow> loadConfirmedTransactions() {
         return jdbcTemplate.query("select id,fund_id,source,amount,shares,nav,fee,fee_rate," +
-                        "coalesce(trade_date,created_date,confirm_time),related_fund_transaction_id,signal_log_id,dca_plan_id " +
+                        "coalesce(trade_date,created_date,confirm_time),related_fund_transaction_id,dca_plan_id " +
                         "from fund_transaction where status='CONFIRMED' and deleted_date is null " +
                         "order by coalesce(trade_date,created_date,confirm_time),id",
                 (rs, rowNum) -> new TransactionRow(rs.getLong("id"), rs.getLong("fund_id"),
                         rs.getString("source"), rs.getBigDecimal("amount"), rs.getBigDecimal("shares"),
                         rs.getBigDecimal("nav"), rs.getBigDecimal("fee"), rs.getBigDecimal("fee_rate"),
                         rs.getTimestamp(9).toInstant(), (Long) rs.getObject(10),
-                        (Long) rs.getObject(11), (Long) rs.getObject(12)));
+                        (Long) rs.getObject(11)));
     }
 
     private BigDecimal requireUnitNav(Map<Long, NavigableMap<LocalDate, BigDecimal>> navs, TransactionRow tx) {
@@ -279,7 +279,7 @@ public class AccountingRebuildService {
     private record OldLotEvidence(Instant acquireTime, BigDecimal costPerShare) {}
     private record TransactionRow(Long id, Long fundId, String source, BigDecimal amount, BigDecimal shares,
                                   BigDecimal nav, BigDecimal fee, BigDecimal feeRate, Instant tradeTime,
-                                  Long relatedTxId, Long signalLogId, Long dcaPlanId) {}
+                                  Long relatedTxId, Long dcaPlanId) {}
     private static final class ReplayLot {
         private final long id;
         private final Instant acquireTime;
