@@ -135,14 +135,6 @@ export const date = (value) => {
     return parts ? `${parts.year}-${parts.month}-${parts.day}` : '-';
 };
 
-// FundCategory 下拉选项
-export const fundCategoryOptions = [
-    {value: 'BROAD_BASE', label: '宽基'},
-    {value: 'SECTOR', label: '行业'},
-    {value: 'ACTIVE', label: '主动'},
-    {value: 'MIXED', label: '混合'},
-];
-
 // 大数缩写(成交额/资金流向用):亿/万。null/0/负 → 原样返回。
 export const compactMoney = (value) => {
     if (value === null || value === undefined) return '-';
@@ -176,7 +168,7 @@ export const fundSourceOptions = [
 
 // 后端 ErrorCode → 友好标题映射(报错弹窗用)。枚举值需与后端 ErrorCode.name() 一致。
 // 设计原则(ui-ux-pro-max):错误需可被读屏 announced、提供 recovery 线索、信息清晰可看清。
-export const errorTitles = {
+const errorTitles = {
     // 资源未找到
     FUND_NOT_FOUND: '基金不存在',
     STRATEGY_NOT_FOUND: '策略不存在',

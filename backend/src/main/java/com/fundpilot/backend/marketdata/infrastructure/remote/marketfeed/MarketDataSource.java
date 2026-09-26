@@ -9,7 +9,6 @@ import java.util.List;
  *
  * @see MarketDataSourceChain
  */
-@Deprecated(forRemoval = false)
 public interface MarketDataSource extends FundNavHistorySource, FundCatalogSource, IndexKlineSource {
 
     /** 基金净值历史(用于算回撤/年线/60 日新高)。 */

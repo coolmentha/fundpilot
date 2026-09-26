@@ -510,12 +510,6 @@ body {
 }
 
 /* ===== KPI 概览卡片 ===== */
-.kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-}
-
 .kpi-card {
     position: relative;
     overflow: hidden;
@@ -529,10 +523,8 @@ body {
     background: var(--kpi-accent, var(--color-primary));
 }
 
-.kpi-card.kpi-amber { --kpi-accent: var(--color-warning); }
-.kpi-card.kpi-violet { --kpi-accent: var(--color-accent); }
 .kpi-card.kpi-green { --kpi-accent: var(--color-success); }
-.kpi-card.kpi-blue { --kpi-accent: var(--color-info); }
+.kpi-card.kpi-red { --kpi-accent: var(--color-danger); }
 
 .kpi-card .ant-statistic-content {
     font-family: var(--font-ui);
@@ -621,10 +613,6 @@ body {
     padding: 4px 0;
     color: var(--color-muted);
     font-size: 12px;
-}
-
-.dca-budget-future-plans.ant-collapse > .ant-collapse-item > .ant-collapse-panel > .ant-collapse-body {
-    padding: 0;
 }
 
 .dca-budget-stats div {
@@ -800,7 +788,6 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 
 @media (max-width: 520px) {
     .app-content { padding: 12px 12px 80px; }
-    .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi-card .ant-statistic-content { font-size: 20px; }
     .funds-page .ant-card-head {
         align-items: flex-start;
@@ -915,10 +902,6 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     font-size: 16px;
     font-weight: 600;
     color: var(--color-text);
-}
-
-.section-hint {
-    font-size: 12px;
 }
 
 .market-status {
@@ -1407,12 +1390,6 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     flex-wrap: wrap;
 }
 
-.kline-toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
 .kline-ma-group {
     display: flex;
     align-items: center;
@@ -1536,12 +1513,6 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
 .empty-cta {
     margin-left: 8px;
     font-size: 13px;
-}
-
-.strategy-form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 16px;
 }
 
 /* ===== 定投管理 ===== */
@@ -1668,11 +1639,6 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     }
 }
 
-@media (max-width: 640px) {
-    .strategy-form-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
 .ant-table-tbody > tr.row-target > td {
     background: #fff7e6 !important;
 }

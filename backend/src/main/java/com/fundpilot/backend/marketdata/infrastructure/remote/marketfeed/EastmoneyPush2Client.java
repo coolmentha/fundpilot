@@ -7,11 +7,10 @@ import feign.RequestLine;
  * 东方财富 push2.eastmoney.com 实时行情 Feign 客户端(独立接口,实时行情接口在 push2 域名,
  * 与历史 K 线的 push2his.eastmoney.com 不同,故单独配置 target)。
  *
- * <p>三条数据线:
+ * <p>两条数据线:
  * <ul>
  *   <li>{@link #fetchIndexRealtimeRaw(String)} 批量指数实时行情(ulist.np/get)</li>
  *   <li>{@link #fetchSectorListRaw(int, String)} 行业板块涨跌 + 资金流向(clist/get,fs=m:90 t:2)</li>
- *   <li>{@link #fetchNorthboundRaw()} 北向资金实时净流入(kamt.rtmin/get)</li>
  * </ul>
  * 请求头/限流复用 {@link EastmoneyClientConfig} 的共享拦截器与令牌桶。
  * fields 中的逗号用 {@code %2C} 编码(同 {@link EastmoneyKlineClient},Feign URI template 会截断字面逗号)。
@@ -39,10 +38,4 @@ public interface EastmoneyPush2Client {
      */
     @RequestLine("GET /api/qt/clist/get?pn={page}&pz=100&po=1&np=1&fields=f3%2Cf6%2Cf12%2Cf14%2Cf62&fs=m:90+t:2&fid={sort}")
     String fetchSectorListRaw(@Param("page") int page, @Param("sort") String sort);
-
-    /**
-     * 北向资金实时净流入(沪深股通合计)。s2n 数组每分钟一条 CSV。
-     */
-    @RequestLine("GET /api/qt/kamt.rtmin/get?fields1=f1%2Cf2%2Cf3%2Cf4&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56")
-    String fetchNorthboundRaw();
 }

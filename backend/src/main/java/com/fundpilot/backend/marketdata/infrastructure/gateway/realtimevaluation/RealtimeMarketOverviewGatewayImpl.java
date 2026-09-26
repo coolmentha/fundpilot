@@ -53,12 +53,6 @@ class RealtimeMarketOverviewGatewayImpl implements RealtimeMarketOverviewGateway
     }
 
     @Override
-    public MoneyFlow findMoneyFlow() {
-        var value = cache.getMoneyFlow();
-        return value == null ? null : new MoneyFlow(value.northboundNet(), value.snapshotTime());
-    }
-
-    @Override
     public java.time.Instant findUpdatedAt() {
         return cache.getMarketUpdatedAt();
     }

@@ -50,8 +50,9 @@ class MarketRealtimeCacheTest {
         FundEstimateSnapshot estimate = new FundEstimateSnapshot(
                 new BigDecimal("0.0123"), "2026-07-10 13:30", "2026-07-09");
         when(redisStore.load()).thenReturn(Optional.of(new MarketRealtimeRedisStore.Snapshot(
-                List.of(index), new MarketBreadthSnapshot(3000, 2000, 100, 42, 25), List.of(), null,
-                Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE))));
+                List.of(index), new MarketBreadthSnapshot(3000, 2000, 100, 42, 25), List.of(),
+                Map.of("510300", estimate), Map.of("510300", EstimateStatus.AVAILABLE),
+                Map.of(), null, null, null, null)));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
                 mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore, mock(ThsIndexFlashClient.class), false);
@@ -66,8 +67,8 @@ class MarketRealtimeCacheTest {
     void restoreFromRedis_旧快照缺平盘数时不恢复市场宽度() {
         MarketRealtimeRedisStore redisStore = mock(MarketRealtimeRedisStore.class);
         when(redisStore.load()).thenReturn(Optional.of(new MarketRealtimeRedisStore.Snapshot(
-                List.of(), new MarketBreadthSnapshot(3000, 2000, null, 42, 25), List.of(), null,
-                Map.of(), Map.of())));
+                List.of(), new MarketBreadthSnapshot(3000, 2000, null, 42, 25), List.of(),
+                Map.of(), Map.of(), Map.of(), null, null, null, null)));
         MarketRealtimeCache cache = new MarketRealtimeCache(
                 mock(EastmoneyPush2Client.class), mock(FundEstimateService.class), mock(WatchedIndicesApi.class),
                 mock(TrackedNavProductGateway.class), mock(MarketDataMetrics.class), CLOCK, redisStore,
@@ -279,7 +280,6 @@ class MarketRealtimeCacheTest {
         verify(estimateService).fetchEstimateResult(org.mockito.ArgumentMatchers.eq("270042"), any(Instant.class), anySet());
         verify(push2Client, never()).fetchIndexRealtimeRaw(org.mockito.ArgumentMatchers.anyString());
         verify(push2Client, never()).fetchSectorListRaw(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString());
-        verify(push2Client, never()).fetchNorthboundRaw();
     }
 
     @Test
@@ -297,9 +297,9 @@ class MarketRealtimeCacheTest {
                         new FundIntradayChart.Point("13:30", new BigDecimal("1.0123"))));
         when(products.findAll()).thenReturn(List.of(domestic, qdii));
         when(redisStore.load()).thenReturn(java.util.Optional.of(new MarketRealtimeRedisStore.Snapshot(
-                List.of(), null, List.of(), null,
+                List.of(), null, List.of(),
                 Map.of("968012", oldEstimate), Map.of("968012", EstimateStatus.AVAILABLE),
-                Map.of("968012", oldChart))));
+                Map.of("968012", oldChart), null, null, null, null)));
         when(estimateService.fetchEstimateResult(org.mockito.ArgumentMatchers.eq("510300"), any(Instant.class), anySet()))
                 .thenReturn(FundEstimateResult.unavailable());
         MarketRealtimeCache cache = new MarketRealtimeCache(

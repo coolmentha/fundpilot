@@ -5,7 +5,6 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundInt
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -51,7 +50,6 @@ public class MarketRealtimeRedisStore {
             List<IndexRealtimeSnapshot> indices,
             MarketBreadthSnapshot breadth,
             List<SectorSnapshot> sectors,
-            MoneyFlowSnapshot moneyFlow,
             Map<String, FundEstimateSnapshot> estimates,
             Map<String, EstimateStatus> estimateStatuses,
             Map<String, FundIntradayChart> intradayCharts,
@@ -59,18 +57,5 @@ public class MarketRealtimeRedisStore {
             Instant breadthUpdatedAt,
             Instant sectorsUpdatedAt,
             MarketVolumePriceSnapshot marketVolumePrice) {
-
-        public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
-                        MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
-                        Map<String, EstimateStatus> estimateStatuses) {
-            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, Map.of(), null, null, null, null);
-        }
-
-        public Snapshot(List<IndexRealtimeSnapshot> indices, MarketBreadthSnapshot breadth, List<SectorSnapshot> sectors,
-                        MoneyFlowSnapshot moneyFlow, Map<String, FundEstimateSnapshot> estimates,
-                        Map<String, EstimateStatus> estimateStatuses, Map<String, FundIntradayChart> intradayCharts) {
-            this(indices, breadth, sectors, moneyFlow, estimates, estimateStatuses, intradayCharts,
-                    null, null, null, null);
-        }
     }
 }

@@ -391,15 +391,6 @@ export function useRunYangjibaoImport() {
     });
 }
 
-// ===== 行情 =====
-export function useMarketIndicatorsToday(portfolioFundId) {
-    return useQuery({
-        queryKey: ['market-today', portfolioFundId],
-        queryFn: () => get(`/api/portfolio-funds/${portfolioFundId}/market-indicators/today`),
-        enabled: !!portfolioFundId,
-    });
-}
-
 // ===== 管理 =====
 const ADMIN_ACTION_PATHS = {
     'confirm-nav': '/api/admin/transactions/confirm-nav',
@@ -503,16 +494,6 @@ export function useSectorPerformance() {
     return useQuery({
         queryKey: ['market', 'sectors'],
         queryFn: () => get('/api/market/sectors'),
-        refetchInterval: 30_000,
-        refetchIntervalInBackground: false,
-    });
-}
-
-/** 北向资金净流入,30 秒轮询。 */
-export function useMoneyFlow() {
-    return useQuery({
-        queryKey: ['market', 'money-flow'],
-        queryFn: () => get('/api/market/money-flow'),
         refetchInterval: 30_000,
         refetchIntervalInBackground: false,
     });

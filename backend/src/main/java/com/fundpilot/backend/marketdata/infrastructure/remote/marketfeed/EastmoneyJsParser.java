@@ -402,49 +402,6 @@ public final class EastmoneyJsParser {
         }
     }
 
-    /**
-     * 解析 push2 kamt.rtmin 北向资金实时净流入 JSON。
-     * <p>响应结构 {@code data.s2n[]} 字符串数组,每条 CSV 格式
-     * {@code HH:MM,沪股通净流入,沪股通余额,深股通净流入,深股通余额,北向合计净流入}。
-     * 取最后一条作为最新值,北向合计 = CSV 第 5 列(索引 5)。时间为当日 + "HH:MM"。
-     *
-     * @param rawJson kamt.rtmin 响应文本
-     * @return 北向资金快照;s2n 为空或解析失败返 null(降级)
-     */
-    public static MoneyFlowSnapshot parseNorthbound(String rawJson) {
-        if (rawJson == null || rawJson.isBlank()) {
-            return null;
-        }
-        try {
-            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(rawJson);
-            com.fasterxml.jackson.databind.JsonNode s2n = root.path("data").path("s2n");
-            if (!s2n.isArray() || s2n.isEmpty()) {
-                return null;
-            }
-            String last = s2n.get(s2n.size() - 1).asText();
-            String[] parts = last.split(",");
-            if (parts.length < 6) {
-                return null;
-            }
-            BigDecimal northboundNet = decimalFromText(parts[5]);
-            if (northboundNet == null || northboundNet.compareTo(BigDecimal.ZERO) == 0) {
-                // 0 视为无效:非交易时段(周末/盘前/盘后)东方财富 kamt.rtmin 返 0 占位,
-                // 显示「北向净流入 0」会误导用户以为当日无资金动向。返 null 让前端显示
-                // 「暂无资金流向数据」。交易时段真实北向恰好 0 极罕见,当无数据优于显示 0。
-                return null;
-            }
-            // 时间:当日 UTC 日期 + "HH:MM"(北向资金是 A 股盘中数据,用 UTC 当日即可,前端按本地时区展示)
-            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
-            String[] hm = parts[0].split(":");
-            Instant snapshotTime = today.atTime(
-                    Integer.parseInt(hm[0]), Integer.parseInt(hm[1]))
-                    .atZone(java.time.ZoneOffset.UTC).toInstant();
-            return new MoneyFlowSnapshot(northboundNet, snapshotTime);
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("北向资金 JSON 解析失败", e);
-        }
-    }
-
     /** 取 JSON 节点的字符串值,缺失返 null。 */
     private static String textOrNull(com.fasterxml.jackson.databind.JsonNode node, String field) {
         com.fasterxml.jackson.databind.JsonNode child = node.path(field);

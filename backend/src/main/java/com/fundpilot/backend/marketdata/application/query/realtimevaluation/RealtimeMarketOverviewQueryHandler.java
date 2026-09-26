@@ -59,10 +59,6 @@ public class RealtimeMarketOverviewQueryHandler {
         return cache.findSectors();
     }
 
-    public RealtimeMarketOverviewGateway.MoneyFlow findMoneyFlow() {
-        return cache.findMoneyFlow();
-    }
-
     public MarketStatus findStatus() {
         Instant now = clock.instant();
         return new MarketStatus(marketState(now), cache.findUpdatedAt());

@@ -28,7 +28,7 @@
 | portfolio_fund | portfolio | 在用 | `com.fundpilot.backend.portfolio.infrastructure.persistence.portfoliofund.PortfolioFundJpaEntity` |
 | fund_group | portfolio | 在用 | `com.fundpilot.backend.portfolio.infrastructure.persistence.fundgroup.FundGroupRepositoryImpl` |
 | portfolio_fund_group_member | portfolio | 在用 | `com.fundpilot.backend.portfolio.infrastructure.persistence.fundgroup.FundGroupRepositoryImpl` |
-| fund_transaction | accounting | 在用 | `com.fundpilot.backend.accounting.infrastructure.persistence.transaction.LedgerTransactionJpaEntity` |
+| fund_transaction | accounting | 在用 | `com.fundpilot.backend.accounting.infrastructure.persistence.transaction.LedgerTransactionJpaEntity`（`dca_plan_id` 为存量语义列：新交易不再写入（恒 NULL），重建逻辑依赖历史值区分定投/手工买入，见 `AccountingRebuildService.inferOnboardingCosts`） |
 | accounting_position | accounting | 在用 | `com.fundpilot.backend.accounting.infrastructure.persistence.position.PositionJpaEntity` |
 | fund_lot | accounting | 在用 | `com.fundpilot.backend.accounting.infrastructure.persistence.lot.LotJpaEntity` |
 | fund_lot_redemption | accounting | 在用 | `com.fundpilot.backend.accounting.infrastructure.persistence.lot.LotRedemptionJpaEntity` |
@@ -49,18 +49,18 @@
 | alert_suggestion_state | alerting | 在用 | `com.fundpilot.backend.alerting.infrastructure.persistence.suggestion.SuggestionStateRepositoryImpl`（v0.14.0 新建：建议型规则的阶段、周期峰值与冷静期） |
 | event_publication | platform | 在用 | `com.fundpilot.backend.platform.observability.EventPublicationMetrics` |
 | scheduled_job_status | platform | 在用 | `com.fundpilot.backend.platform.observability.JobExecutionStatusStore` |
-| fund | — | 遗留 | 残留引用：`com.fundpilot.backend.portfolio.infrastructure.persistence.portfoliofund.PortfolioFundRepositoryImpl`（legacy bridge，建/停用 fund 行）、`com.fundpilot.backend.accounting.infrastructure.migration.unitnavrebuild.AccountingRebuildService`（一次性重建回写 `cost_per_share`） |
+| fund | — | 遗留 | 残留引用：`com.fundpilot.backend.portfolio.infrastructure.persistence.portfoliofund.PortfolioFundRepositoryImpl`（legacy bridge，建/停用 fund 行）、`com.fundpilot.backend.accounting.infrastructure.migration.unitnavrebuild.AccountingRebuildService`（一次性重建回写 `cost_per_share`）；死列 `operation_mode`、`investment_philosophy` 已由 V62 删除 |
 | fund_strategy | — | 已删除 | 本次 `V61` drop（原「遗留」，唯一残留引用 AccountingRebuildService 的止盈状态重置已改为清空 `alert_suggestion_state`） |
 | fund_group_member | — | 遗留 | 残留引用：`com.fundpilot.backend.portfolio.infrastructure.persistence.fundgroup.FundGroupRepositoryImpl`（bridge 双写） |
 | fund_strategy_activation | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」） |
 | signal_log | — | 已删除 | v0.14.0 `V60` drop（原「遗留·无代码引用」，本版本连同入向外键 `fk_ft_signal_log` 一并删除） |
 | strategy_backtest | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」） |
-| user_config | — | 遗留 | 无代码引用 |
+| user_config | — | 已删除 | 本次 `V62` drop（原「遗留·无代码引用」：关注指数由 `market_watched_index` 取代、月度预算由 `investment_plan_budget` 取代） |
 | fund_dict | — | 遗留 | 无代码引用 |
 | fund_dca_plan | — | 已删除 | 本次 `V61` drop（原「遗留·无代码引用」，由 `investment_plan` 取代） |
-| fund_product_migration_conflict | — | 遗留 | 无代码引用 |
+| fund_product_migration_conflict | — | 已删除 | 本次 `V62` drop（原「遗留·无代码引用」，V36 一次性迁移对账台账，对账已完成） |
 
-合计 43 张：在用 30 张，遗留 5 张，已删除 8 张（`discipline_strategy`、`discipline_advice`、`discipline_classification`、`signal_log`、`fund_strategy`、`fund_strategy_activation`、`strategy_backtest`、`fund_dca_plan`）。
+合计 43 张：在用 30 张，遗留 3 张，已删除 10 张（`discipline_strategy`、`discipline_advice`、`discipline_classification`、`signal_log`、`fund_strategy`、`fund_strategy_activation`、`strategy_backtest`、`fund_dca_plan`、`user_config`、`fund_product_migration_conflict`）。
 
 ## v0.14.0 已删除表
 
@@ -81,8 +81,6 @@ v0.14.0 整体删除 `discipline` 模块，`V60__drop_discipline_module_and_sign
 | fund_strategy | V1 按基金的纪律策略参数与运行时状态（原 `user_fund_strategy`） | 由 `discipline_strategy` 取代（前身 id 经 `legacy_strategy_id` 承接，V41）；`discipline_strategy` 已于 v0.14.0 删除（见上节） |
 | fund_strategy_activation | V1 基金策略激活/退役谱系 | 未能判定（V41 仅迁移 `fund_strategy` 与 `signal_log`，未迁移激活谱系） |
 | strategy_backtest | V1 策略回测结果 | 未能判定（仓库内无对应新表） |
-| user_config | V3 单用户账户配置（后续仅剩 `watched_indices`，再后来含 `monthly_dca_budget`） | 关注指数由 `market_watched_index`（marketdata，V39）取代；月度定投预算由 `investment_plan_budget`（investmentplan，V42）取代 |
 | fund_dict | V4 东方财富基金字典本地镜像 + 识别缓存 | 由 `fund_product`（productcatalog）取代（V36 将 `fund_dict` 回填为 `fund_product`） |
 | fund_dca_plan | V11 自动定投计划 | 由 `investment_plan`（investmentplan）取代，前身 id 经 `legacy_dca_plan_id` 承接（V42） |
 | fund_group_member | V25 分组-基金成员关系（`fund_id` 维度） | 由 `portfolio_fund_group_member`（portfolio，`portfolio_fund_id` 维度）取代（V37 回填） |
-| fund_product_migration_conflict | V36 一次性迁移冲突台账，记录全局字典与逐用户 legacy 基金行的差异待人工对账 | 未能判定（迁移期对账台账，无后继表） |

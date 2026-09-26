@@ -110,10 +110,11 @@ public class AccountingRebuildService {
                         "updated_date=now() where id=?",
                 amount, shares, unitNav, fee, rate.signum() > 0 ? rate : null, tx.id());
         long lotId = jdbcTemplate.queryForObject(
-                "insert into fund_lot(fund_id, acquire_tx_id, acquire_date, acquire_shares, remaining_shares, " +
-                        "acquire_cost_per_share, version, created_date, updated_date) " +
-                        "values(?,?,?,?,?,?,0,now(),now()) returning id", Long.class,
-                tx.fundId(), tx.id(), Timestamp.from(acquireTime), shares, shares, costPerShare);
+                "insert into fund_lot(fund_id, portfolio_fund_id, acquire_tx_id, acquire_date, acquire_shares, " +
+                        "remaining_shares, acquire_cost_per_share, version, created_date, updated_date) " +
+                        "values(?,?,?,?,?,?,?,0,now(),now()) returning id", Long.class,
+                tx.fundId(), tx.portfolioFundId(), tx.id(), Timestamp.from(acquireTime), shares, shares,
+                costPerShare);
         lotsByFund.computeIfAbsent(tx.fundId(), ignored -> new ArrayDeque<>())
                 .add(new ReplayLot(lotId, acquireTime, shares));
     }
@@ -221,14 +222,15 @@ public class AccountingRebuildService {
 
     private List<TransactionRow> loadConfirmedTransactions() {
         return jdbcTemplate.query("select id,fund_id,source,amount,shares,nav,fee,fee_rate," +
-                        "coalesce(trade_date,created_date,confirm_time),related_fund_transaction_id,dca_plan_id " +
+                        "coalesce(trade_date,created_date,confirm_time),related_fund_transaction_id,dca_plan_id," +
+                        "portfolio_fund_id " +
                         "from fund_transaction where status='CONFIRMED' and deleted_date is null " +
                         "order by coalesce(trade_date,created_date,confirm_time),id",
                 (rs, rowNum) -> new TransactionRow(rs.getLong("id"), rs.getLong("fund_id"),
                         rs.getString("source"), rs.getBigDecimal("amount"), rs.getBigDecimal("shares"),
                         rs.getBigDecimal("nav"), rs.getBigDecimal("fee"), rs.getBigDecimal("fee_rate"),
                         rs.getTimestamp(9).toInstant(), (Long) rs.getObject(10),
-                        (Long) rs.getObject(11)));
+                        (Long) rs.getObject(11), (Long) rs.getObject("portfolio_fund_id")));
     }
 
     private BigDecimal requireUnitNav(Map<Long, NavigableMap<LocalDate, BigDecimal>> navs, TransactionRow tx) {
@@ -277,7 +279,7 @@ public class AccountingRebuildService {
     private record OldLotEvidence(Instant acquireTime, BigDecimal costPerShare) {}
     private record TransactionRow(Long id, Long fundId, String source, BigDecimal amount, BigDecimal shares,
                                   BigDecimal nav, BigDecimal fee, BigDecimal feeRate, Instant tradeTime,
-                                  Long relatedTxId, Long dcaPlanId) {}
+                                  Long relatedTxId, Long dcaPlanId, Long portfolioFundId) {}
     private static final class ReplayLot {
         private final long id;
         private final Instant acquireTime;

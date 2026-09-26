@@ -11,7 +11,6 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRe
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketLimitCounts;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsIndexFlashClient;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.ThsJsParser;
@@ -49,16 +48,15 @@ import java.util.stream.Collectors;
  * <p>解决「前端 5-10s 高频轮询 vs 东方财富共享限流」的矛盾:本服务以 30s 周期
  * 从东方财富拉数据填入内存并写穿 Redis,前端轮询只读内存不触外部请求。
  *
- * <p>五类缓存:
+ * <p>四类缓存:
  * <ul>
  *   <li>{@link #indexCache} 指数实时行情(用户关注列表,30s 刷新)</li>
  *   <li>{@link #breadthCache} 沪深京股票涨跌家数(30s 刷新)</li>
  *   <li>{@link #sectorCache} 行业板块涨跌 + 主力资金(30s 刷新)</li>
- *   <li>{@link #moneyFlowCache} 北向资金(30s 刷新)</li>
  *   <li>{@link #estimateCache} 非 QDII 基金当日估值(A 股交易时段 30s 刷新 + 启动异步预热,N 只基金逐个拉)</li>
  * </ul>
  *
- * <p>降级策略:指数/市场宽度/板块/资金刷新失败保留旧缓存。基金估值不同:它是当天短时态数据,
+ * <p>降级策略:指数/市场宽度/板块刷新失败保留旧缓存。基金估值不同:它是当天短时态数据,
  * 单只拉取失败、空响应或日期过期时必须立即删除旧估值并标记失败,禁止把旧估值继续作为今日数据。
  */
 @Service
@@ -119,7 +117,6 @@ public class MarketRealtimeCache {
     private volatile MarketBreadthSnapshot breadthCache = null;
     private volatile MarketVolumePriceSnapshot marketVolumePriceCache = null;
     private volatile List<SectorSnapshot> sectorCache = List.of();
-    private volatile MoneyFlowSnapshot moneyFlowCache = null;
     private volatile Instant indicesUpdatedAt;
     private volatile Instant breadthUpdatedAt;
     private volatile Instant sectorsUpdatedAt;
@@ -138,7 +135,6 @@ public class MarketRealtimeCache {
             breadthCache = restoredBreadth != null && restoredBreadth.isComplete() ? restoredBreadth : null;
             marketVolumePriceCache = snapshot.marketVolumePrice();
             sectorCache = snapshot.sectors() == null ? List.of() : List.copyOf(snapshot.sectors());
-            moneyFlowCache = snapshot.moneyFlow();
             indicesUpdatedAt = snapshot.indicesUpdatedAt();
             breadthUpdatedAt = breadthCache == null ? null : snapshot.breadthUpdatedAt();
             sectorsUpdatedAt = snapshot.sectorsUpdatedAt();
@@ -192,11 +188,6 @@ public class MarketRealtimeCache {
         return sectorCache;
     }
 
-    /** 读北向资金缓存。 */
-    public MoneyFlowSnapshot getMoneyFlow() {
-        return moneyFlowCache;
-    }
-
     /** 工作台核心行情中最旧的成功刷新时间；任一数据族未成功刷新时返回 null。 */
     public Instant getMarketUpdatedAt() {
         if (indicesUpdatedAt == null || breadthUpdatedAt == null || sectorsUpdatedAt == null) {
@@ -243,27 +234,25 @@ public class MarketRealtimeCache {
     }
 
     /**
-     * 全量刷新五类缓存——由 MarketData 的实时估值调度在交易时段调用。
+     * 全量刷新四类缓存(指数/市场宽度/板块/基金估值)——由 MarketData 的实时估值调度在交易时段调用。
      * 任一类失败不影响其他类(独立 try-catch)。外部请求不由数据库事务包裹。
      */
     public void refreshAll() {
         refreshIndices();
         refreshSectors();
-        refreshMoneyFlow();
         refreshFundEstimates();
     }
 
     /**
-     * 仅刷新指数、市场宽度、板块、资金四类(不含基金估值)。
+     * 仅刷新指数、市场宽度、板块三类(不含基金估值)。
      */
     public void refreshRealtimeWithoutEstimates() {
         refreshIndices();
         refreshSectors();
-        refreshMoneyFlow();
     }
 
     /**
-     * 应用启动时预热指数/板块/资金缓存,不在启动线程逐只刷新基金估值。
+     * 应用启动时预热指数/板块缓存,不在启动线程逐只刷新基金估值。
      *
      * <p>修复 bug:定时任务仅在交易时段运行，
      * 仅交易时段(MON-FRI 9:30-15:00)跑,部署发生在非交易时段(周末/盘后/盘前)时
@@ -280,7 +269,7 @@ public class MarketRealtimeCache {
         if (deploymentValidationMode) return;
         try {
             refreshRealtimeWithoutEstimates();
-            log.info("行情缓存启动刷新完成(指数/市场宽度/板块/资金),基金估值由后台异步预热");
+            log.info("行情缓存启动刷新完成(指数/市场宽度/板块),基金估值由后台异步预热");
         } catch (RuntimeException e) {
             log.warn("行情缓存启动刷新失败,前端将显示空态直到下次定时刷新", e);
         }
@@ -502,26 +491,6 @@ public class MarketRealtimeCache {
         }
     }
 
-    private void refreshMoneyFlow() {
-        long startedAt = System.nanoTime();
-        String result = "success";
-        try {
-            String raw = push2Client.fetchNorthboundRaw();
-            MoneyFlowSnapshot snapshot = EastmoneyJsParser.parseNorthbound(raw);
-            if (snapshot != null) {
-                moneyFlowCache = snapshot;
-                persist();
-            } else {
-                result = "empty";
-            }
-        } catch (RuntimeException e) {
-            result = metricResult(e);
-            log.warn("北向资金刷新失败,保留旧缓存", e);
-        } finally {
-            marketDataMetrics.record("EastmoneyPush2Client", "fetchMoneyFlow", result, startedAt);
-        }
-    }
-
     private static String metricResult(RuntimeException exception) {
         if (exception instanceof feign.RetryableException) {
             return "timeout";
@@ -699,7 +668,7 @@ public class MarketRealtimeCache {
 
     private void persist() {
         redisStore.save(new MarketRealtimeRedisStore.Snapshot(
-                indexCache, breadthCache, sectorCache, moneyFlowCache,
+                indexCache, breadthCache, sectorCache,
                 Map.copyOf(estimateCache), Map.copyOf(estimateStatuses), Map.copyOf(intradayCache),
                 indicesUpdatedAt, breadthUpdatedAt, sectorsUpdatedAt, marketVolumePriceCache));
     }

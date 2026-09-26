@@ -12,7 +12,6 @@ public interface RealtimeMarketOverviewGateway {
     MarketVolumePrice findMarketVolumePrice();
     Map<String, Estimate> findEstimates(List<String> fundCodes);
     List<Sector> findSectors();
-    MoneyFlow findMoneyFlow();
     Instant findUpdatedAt();
 
     record IndexQuote(String secid, String name, BigDecimal currentPrice, BigDecimal changeAmount,
@@ -22,5 +21,4 @@ public interface RealtimeMarketOverviewGateway {
     record MarketVolumePrice(BigDecimal changePct, BigDecimal volumeRatio, Instant quoteTime) {}
     record Estimate(BigDecimal estimatedChangePct, String estimateTime, String baseNavDate) {}
     record Sector(String sectorName, BigDecimal changePct, BigDecimal turnover, BigDecimal mainforceNet) {}
-    record MoneyFlow(BigDecimal northboundNet, Instant snapshotTime) {}
 }

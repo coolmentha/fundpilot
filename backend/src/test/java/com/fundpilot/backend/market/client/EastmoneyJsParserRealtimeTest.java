@@ -206,40 +206,4 @@ class EastmoneyJsParserRealtimeTest {
         assertThat(EastmoneyJsParser.parseSectorTotal("{\"data\":{\"total\":0}}")).isEqualTo(-1);
     }
 
-    @Test
-    void parseNorthbound_正常响应_取最后一条的北向合计() {
-        String raw = """
-                {"rc":0,"data":{"s2n":[
-                  "9:30,0.00,5200000.00,0.00,5200000.00,0.00",
-                  "9:31,100000.00,5100000.00,200000.00,5000000.00,300000.00",
-                  "15:00,500000.00,4700000.00,300000.00,4900000.00,800000.00"
-                ]}}
-                """;
-
-        MoneyFlowSnapshot snapshot = EastmoneyJsParser.parseNorthbound(raw);
-
-        assertThat(snapshot).isNotNull();
-        // 最后一条 CSV 第 5 列(索引 5)= 800000.00
-        assertThat(snapshot.northboundNet()).isEqualByComparingTo(new BigDecimal("800000.00"));
-        assertThat(snapshot.snapshotTime()).isNotNull();
-    }
-
-    @Test
-    void parseNorthbound_空响应_返回null() {
-        assertThat(EastmoneyJsParser.parseNorthbound("")).isNull();
-        assertThat(EastmoneyJsParser.parseNorthbound(null)).isNull();
-        assertThat(EastmoneyJsParser.parseNorthbound("{\"data\":{\"s2n\":[]}}")).isNull();
-    }
-
-    @Test
-    void parseNorthbound_净流入为0_视为非交易时段占位_返回null() {
-        // 周末/盘后东方财富 kamt.rtmin 返 0 占位,显示 0 误导,应返 null
-        String raw = """
-                {"rc":0,"data":{"s2n":[
-                  "9:30,0.00,5200000.00,0.00,5200000.00,0.00",
-                  "15:00,0.00,5200000.00,0.00,5200000.00,0.00"
-                ]}}
-                """;
-        assertThat(EastmoneyJsParser.parseNorthbound(raw)).isNull();
-    }
 }

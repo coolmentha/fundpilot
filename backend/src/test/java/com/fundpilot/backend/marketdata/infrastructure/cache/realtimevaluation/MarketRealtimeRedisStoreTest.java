@@ -5,7 +5,6 @@ import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.FundInt
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.IndexRealtimeSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketBreadthSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MarketVolumePriceSnapshot;
-import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.MoneyFlowSnapshot;
 import com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed.SectorSnapshot;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -38,7 +37,6 @@ class MarketRealtimeRedisStoreTest {
                 new MarketBreadthSnapshot(3000, 2000, 100, 42, 25),
                 List.of(new SectorSnapshot("BK0420", "航空机场", new BigDecimal("0.01"),
                         new BigDecimal("1000"), new BigDecimal("200"))),
-                new MoneyFlowSnapshot(new BigDecimal("300"), Instant.parse("2026-07-20T06:00:00Z")),
                 Map.of("510300", new FundEstimateSnapshot(new BigDecimal("0.0123"),
                         "2026-07-20 14:00", "2026-07-19")),
                 Map.of("510300", EstimateStatus.AVAILABLE),
@@ -67,7 +65,7 @@ class MarketRealtimeRedisStoreTest {
         when(redisTemplate.opsForValue()).thenReturn(values);
         when(values.get(anyString())).thenReturn("""
                 {"indices":[],"breadth":{"risingCount":3000,"fallingCount":2000,
-                 "limitUpCount":42,"limitDownCount":25},"sectors":[],"moneyFlow":null,
+                 "limitUpCount":42,"limitDownCount":25},"sectors":[],
                  "estimates":{},"estimateStatuses":{},"intradayCharts":{}}
                 """);
 
