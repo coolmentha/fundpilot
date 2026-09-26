@@ -1,12 +1,16 @@
 package com.fundpilot.backend.marketdata.infrastructure.remote.marketfeed;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * 腾讯指数行情数据源。
@@ -24,6 +28,10 @@ public class TencentIndexMarketDataSource implements MarketDataSource {
     private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final int HISTORY_YEARS = 5;
     private static final int DEFAULT_LIMIT = 400;
+    /** 腾讯 newfqkline 接口单次响应上限(end 往回数 640 根,startDate 不生效)。 */
+    private static final int PAGE_SIZE = 640;
+    /** 翻页上限:8 页 ≈ 5120 根,足够 5 年日 K 窗口,防止源异常时无限翻页。 */
+    private static final int MAX_PAGES = 8;
 
     private final TencentIndexClient tencentIndexClient;
 
@@ -35,12 +43,36 @@ public class TencentIndexMarketDataSource implements MarketDataSource {
     @Override
     public IndexKline fetchIndexKlineWithPeriod(String indexCode, String klt, String lmt) {
         String symbol = toTencentSymbol(indexCode);
+        int limit = parseLimit(lmt);
         LocalDate end = LocalDate.now(ZoneOffset.UTC);
         LocalDate start = end.minusYears(HISTORY_YEARS);
-        String raw = tencentIndexClient.fetchKlineRaw(symbol, start.format(YYYYMMDD), end.format(YYYYMMDD));
-        IndexKline daily = TencentJsParser.parseIndexKline(raw, symbol);
+        IndexKline daily = new IndexKline(fetchPagedDaily(symbol, start, end, limit));
         IndexKline aggregated = CsindexJsParser.aggregate(daily, periodFromKlt(klt));
-        return tail(aggregated, parseLimit(lmt));
+        return tail(aggregated, limit);
+    }
+
+    /**
+     * 腾讯接口单次只回最近 640 根(startDate 参数不生效);lmt 超过单页上限时,
+     * 以当前最早日期前一天为新 endDate 向前翻页,直到凑够 limit 或窗口内拉尽。
+     */
+    private List<IndexKline.Bar> fetchPagedDaily(String symbol, LocalDate start, LocalDate end, int limit) {
+        Map<Instant, IndexKline.Bar> merged = new TreeMap<>();
+        LocalDate cursorEnd = end;
+        for (int page = 0; page < MAX_PAGES && merged.size() < limit; page++) {
+            String raw = tencentIndexClient.fetchKlineRaw(symbol, start.format(YYYYMMDD), cursorEnd.format(YYYYMMDD));
+            List<IndexKline.Bar> bars = TencentJsParser.parseIndexKline(raw, symbol).bars();
+            if (bars.isEmpty()) {
+                break;
+            }
+            bars.forEach(bar -> merged.put(bar.date(), bar));
+            LocalDate earliest = bars.getFirst().date().atZone(ZoneOffset.UTC).toLocalDate();
+            boolean exhausted = bars.size() < PAGE_SIZE || !earliest.isAfter(start);
+            if (exhausted) {
+                break;
+            }
+            cursorEnd = earliest.minusDays(1);
+        }
+        return List.copyOf(merged.values());
     }
 
     @Override
