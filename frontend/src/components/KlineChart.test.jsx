@@ -78,6 +78,23 @@ describe('KlineChart', () => {
         expect(chart.setOption.mock.lastCall[0].series.some((series) => series.name === 'MA2')).toBe(true);
     });
 
+    it('K线根数不足 34 根时 MACD 副图显示提示而非空白', async () => {
+        useFundKline.mockReturnValue({data: makeKline('kline', 21), isLoading: false, isError: false, refetch: vi.fn()});
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        root = createRoot(container);
+
+        await act(async () => root.render(<KlineChart portfolioFundId={1} fundSubType="ETF"/>));
+        const macd = [...container.querySelectorAll('.ant-segmented-item')]
+            .find((item) => item.textContent.includes('MACD'));
+        await act(async () => macd.click());
+        const option = chart.setOption.mock.lastCall[0];
+        expect(option.series.some((series) => series.name === 'DIF')).toBe(false);
+        expect(option.series.some((series) => series.name === 'DEA')).toBe(false);
+        expect(option.series.some((series) => series.name === 'MACD')).toBe(false);
+        expect(option.graphic[0].style.text).toContain('K线不足 34 根');
+    });
+
     it('NAV 类型使用面积图并在卸载时销毁实例', async () => {
         useFundKline.mockReturnValue({data: makeKline('nav'), isLoading: false, isError: false, refetch: vi.fn()});
         container = document.createElement('div');

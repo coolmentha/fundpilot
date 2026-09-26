@@ -5,7 +5,7 @@ import {useFundKline} from '../api/hooks.js';
 import {ThemeModeContext} from '../themeMode.js';
 import QueryErrorState from './QueryErrorState.jsx';
 import {disposeChart, initChart, observeChartResize} from './chartUtils.js';
-import {calculateMacd, getChartColors, LINE_COLORS, MA_PERIODS, movingAverage} from './chartMath.js';
+import {calculateMacd, getChartColors, LINE_COLORS, MA_PERIODS, MACD_MIN_BARS, movingAverage} from './chartMath.js';
 
 const KLINE_MAX_BARS = {daily: 120, weekly: 104, monthly: 60};
 
@@ -123,6 +123,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
     const closes = bars.map((bar) => bar.close);
     const periods = [...maSelected].sort((a, b) => a - b);
     const showSub = sub !== 'NONE';
+    const macdInsufficient = sub === 'MACD' && bars.length < MACD_MIN_BARS;
     const macd = calculateMacd(closes);
     const grids = showSub
         ? [
@@ -174,7 +175,7 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
             })),
         });
     }
-    if (sub === 'MACD') {
+    if (sub === 'MACD' && !macdInsufficient) {
         series.push(
             {
                 name: 'MACD',
@@ -193,6 +194,12 @@ function buildKlineOption(bars, period, maSelected, sub, colors) {
     return {
         animation: false,
         grid: grids,
+        graphic: macdInsufficient ? [{
+            type: 'text',
+            left: 'center',
+            top: '82%',
+            style: {text: `K线不足 ${MACD_MIN_BARS} 根，无法计算 MACD`, fill: colors.text, fontSize: 12},
+        }] : [],
         tooltip: {
             trigger: 'axis',
             axisPointer: {type: 'cross'},

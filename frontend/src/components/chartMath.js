@@ -1,5 +1,8 @@
 export const MA_PERIODS = [2, 5, 10, 20, 30, 60, 120, 250];
 
+/** MACD(12,26,9) 产出首个非空值需要 34 根K线（26 根慢线 EMA 预热 + 8 根 DEA 预热），不足时副图整体为空。 */
+export const MACD_MIN_BARS = 34;
+
 export const LINE_COLORS = ['#F59E0B', '#3B82F6', '#A855F7', '#EC4899', '#14B8A6', '#F97316', '#84CC16', '#6366F1'];
 
 export function getChartColors(themeMode) {
