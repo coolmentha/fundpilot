@@ -23,11 +23,6 @@ public class RealtimeValuationQueryHandler {
                         value.estimateTime(), value.baseNavDate(), value.status())).toList();
     }
 
-    public Optional<IntradayResult> findIntraday(long legacyFundId) {
-        return products.findOwned(legacyFundId).flatMap(product -> cache.findIntraday(product.fundCode()))
-                .map(RealtimeValuationQueryHandler::toIntradayResult);
-    }
-
     public Optional<IntradayResult> findIntradayForPortfolioFund(long portfolioFundId) {
         var product = products.findOwnedByPortfolioFundId(portfolioFundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "组合基金不存在或已作废"));

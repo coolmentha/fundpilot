@@ -2,9 +2,7 @@ package com.fundpilot.backend.marketdata.application.command.indicatorrefresh;
 
 import com.fundpilot.backend.marketdata.application.command.indexkline.IndexKlineCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.indexvaluation.IndexValuationCommandHandler;
-import com.fundpilot.backend.marketdata.application.command.indicator.MarketIndicatorCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.navpublishing.NavPublishingCommandHandler;
-import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.MarketIndicatorRefreshEventGateway;
 import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexKlineSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.PublishedIndexValuationSourceGateway;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.PublishedNavSourceGateway;
@@ -36,11 +34,9 @@ class ClosingKlineRefreshTest {
     @Mock TrackedNavProductGateway products;
     @Mock PublishedNavSourceGateway navSource;
     @Mock PublishedIndexKlineSourceGateway source;
-    @Mock MarketIndicatorRefreshEventGateway events;
     @Mock NavPublishingCommandHandler navPublisher;
     @Mock IndexKlineCommandHandler writer;
     @Mock IndexKlineQueryHandler queries;
-    @Mock MarketIndicatorCommandHandler indicators;
     @Mock Clock clock;
     @Mock PublishedIndexValuationSourceGateway valuationSource;
     @Mock IndexValuationCommandHandler valuations;
@@ -79,7 +75,7 @@ class ClosingKlineRefreshTest {
         verify(writer).upsert(CODE, List.of(new IndexKlineCommandHandler.Bar(DATE,
                 today.open(), today.high(), today.low(), today.close(), today.volume())));
         verifyNoMoreInteractions(writer);
-        verifyNoInteractions(navSource, navPublisher, events, indicators, valuationSource, valuations, valuationQueries);
+        verifyNoInteractions(navSource, navPublisher, valuationSource, valuations, valuationQueries);
     }
 
     @Test

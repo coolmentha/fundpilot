@@ -32,9 +32,7 @@ public class MarketIndicatorRefreshJob {
 
     @JobName("市场指标刷新·第3批")
     @Scheduled(cron = "0 50 14 * * MON-FRI", zone = "Asia/Shanghai")
-    public void refreshBatch2() {
-        if (isTradingDay()) commands.refreshBatchAndPublishCompletion(2);
-    }
+    public void refreshBatch2() { refresh(2); }
 
     private void refresh(int batchNumber) {
         if (isTradingDay()) commands.refreshBatch(batchNumber);

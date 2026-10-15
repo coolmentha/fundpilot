@@ -37,12 +37,6 @@ public class PortfolioReturnController {
         return ApiResponse.ok(queries.currentFunds(ownerId).stream().map(FundReturnView::from).toList());
     }
 
-    @GetMapping("/funds/history")
-    public ApiResponse<List<FundReturnView>> clearedFunds(
-            @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId) {
-        return ApiResponse.ok(queries.clearedFunds(ownerId).stream().map(FundReturnView::from).toList());
-    }
-
     @GetMapping("/funds/{portfolioFundId}")
     public ApiResponse<FundReturnView> fund(
             @RequestAttribute(RequestActorAttributes.USER_ID) Long ownerId,

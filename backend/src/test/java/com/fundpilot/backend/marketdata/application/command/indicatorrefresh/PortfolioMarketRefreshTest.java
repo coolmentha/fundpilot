@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.fundpilot.backend.marketdata.application.command.indexkline.IndexKlineCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.indexvaluation.IndexValuationCommandHandler;
-import com.fundpilot.backend.marketdata.application.command.indicator.MarketIndicatorCommandHandler;
 import com.fundpilot.backend.marketdata.application.command.navpublishing.NavPublishingCommandHandler;
 import com.fundpilot.backend.marketdata.application.gateway.indicatorrefresh.*;
 import com.fundpilot.backend.marketdata.application.gateway.navpublishing.*;
@@ -22,9 +21,9 @@ class PortfolioMarketRefreshTest {
     private final PublishedNavSourceGateway source = mock(PublishedNavSourceGateway.class);
     private final PublishedIndexKlineSourceGateway klines = mock(PublishedIndexKlineSourceGateway.class);
     private final MarketIndicatorRefreshCommandHandler handler = new MarketIndicatorRefreshCommandHandler(
-            products, source, klines, mock(MarketIndicatorRefreshEventGateway.class),
+            products, source, klines,
             mock(NavPublishingCommandHandler.class), mock(IndexKlineCommandHandler.class),
-            mock(IndexKlineQueryHandler.class), mock(MarketIndicatorCommandHandler.class), Clock.systemUTC(),
+            mock(IndexKlineQueryHandler.class), Clock.systemUTC(),
             mock(PublishedIndexValuationSourceGateway.class), mock(IndexValuationCommandHandler.class),
             mock(IndexValuationQueryHandler.class));
 

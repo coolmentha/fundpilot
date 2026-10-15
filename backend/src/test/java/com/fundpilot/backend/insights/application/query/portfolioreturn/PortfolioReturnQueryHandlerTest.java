@@ -83,8 +83,6 @@ class PortfolioReturnQueryHandlerTest {
 
         assertThat(handler.currentFunds(7L)).extracting(PortfolioReturnQueryHandler.FundReturnResult::fundCode)
                 .containsExactly("000001");
-        assertThat(handler.clearedFunds(7L)).extracting(PortfolioReturnQueryHandler.FundReturnResult::fundCode)
-                .containsExactly("000002");
         assertThat(handler.findByOwner(7L).totalReturn()).isEqualByComparingTo("20");
     }
 

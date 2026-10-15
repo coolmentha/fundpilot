@@ -25,7 +25,6 @@ const {Header, Content, Sider} = Layout;
 // 路由 → 页面标题/副标题。Shell 层显示通用标题，详情页标题由页面自身渲染。
 const PAGE_META = {
     '/': {title: '行情工作台', subtitle: '实时行情与市场动态'},
-    '/dashboard': {title: '策略概览', subtitle: '账户全局与今日待办(旧)'},
     '/funds': {title: '我的基金', subtitle: '定投预算与仓位提醒'},
     '/dca': {title: '定投管理', subtitle: '计划配置与本月剩余预计'},
     '/returns': {title: '累计收益', subtitle: '已实现、未实现与历史趋势'},

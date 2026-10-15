@@ -42,12 +42,6 @@ public class KlineQueryHandler {
     private final IndexKlineCommandHandler klineCommands;
     private final Map<String, Instant> backfillAttemptedAt = new ConcurrentHashMap<>();
 
-    public Kline getKline(long legacyFundId, String period) {
-        OwnedFundProductGateway.Product product = products.findOwned(legacyFundId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + legacyFundId));
-        return getKline(product, period, legacyFundId);
-    }
-
     public Kline getKlineForPortfolioFund(long portfolioFundId, String period) {
         OwnedFundProductGateway.Product product = products.findOwnedByPortfolioFundId(portfolioFundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FUND_NOT_FOUND, "基金不存在: " + portfolioFundId));

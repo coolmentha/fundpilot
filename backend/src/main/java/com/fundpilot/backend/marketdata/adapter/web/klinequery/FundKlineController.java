@@ -20,13 +20,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class FundKlineController {
     private final KlineQueryHandler queries;
 
-    @Operation(summary = "查询基金K线")
-    @GetMapping("/api/funds/{fundId}/kline")
-    public ApiResponse<KlineView> kline(@PathVariable long fundId,
-                                        @RequestParam(name = "period", defaultValue = "daily") String period) {
-        return ApiResponse.ok(KlineView.from(queries.getKline(fundId, period)));
-    }
-
     @Operation(summary = "查询组合基金K线")
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/kline")
     public ApiResponse<KlineView> portfolioFundKline(@PathVariable long portfolioFundId,

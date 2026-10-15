@@ -55,13 +55,11 @@ class MultiUserIsolationIntegrationTest extends AbstractIntegrationTest {
                 null, product.id(), product.fundCode(), navDate,
                 new BigDecimal("1.23"), new BigDecimal("2.34"), navDate))).getFirst();
 
-        mockMvc.perform(get("/api/portfolio-funds").cookie(cookie(alice)))
+        mockMvc.perform(get("/api/insights/portfolio/funds/current").cookie(cookie(alice)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].portfolioFundId").value(aliceFund.id()));
-        mockMvc.perform(get("/api/portfolio-funds/{portfolioFundId}", aliceFund.id()).cookie(cookie(bob)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PORTFOLIO_FUND_NOT_FOUND"));
+        assertThat(portfolioFundApi.findOwned(bob.id(), aliceFund.id())).isEmpty();
 
         assertThat(navRepository.findLatestByProductId(bobFund.fundProductId())).get().satisfies(sharedNav -> {
             assertThat(sharedNav.fundProductId()).isEqualTo(nav.fundProductId());

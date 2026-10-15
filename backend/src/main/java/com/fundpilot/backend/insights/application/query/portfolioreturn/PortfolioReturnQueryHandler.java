@@ -98,13 +98,6 @@ public class PortfolioReturnQueryHandler {
     }
 
     @Transactional(readOnly = true)
-    public List<FundReturnResult> clearedFunds(long ownerId) {
-        return findByOwner(ownerId).funds().stream()
-                .filter(fund -> "CLEARED".equals(fund.positionStatus()))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
     public FundReturnResult fund(long ownerId, long portfolioFundId) {
         return findByOwner(ownerId).funds().stream()
                 .filter(fund -> fund.portfolioFundId() == portfolioFundId)

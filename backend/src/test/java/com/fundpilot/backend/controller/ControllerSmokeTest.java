@@ -23,8 +23,6 @@ class ControllerSmokeTest extends AbstractIntegrationTest {
                 com.fundpilot.backend.productcatalog.adapter.web.productsearch.ProductSearchController.class))
                 .isNotNull();
         assertThat(applicationContext.getBean(
-                com.fundpilot.backend.portfolio.adapter.web.fundtracking.PortfolioFundController.class)).isNotNull();
-        assertThat(applicationContext.getBean(
                 com.fundpilot.backend.accounting.adapter.web.fundonboarding.PortfolioFundOnboardingController.class))
                 .isNotNull();
         assertThat(applicationContext.getBean(
@@ -32,9 +30,6 @@ class ControllerSmokeTest extends AbstractIntegrationTest {
                 .isNotNull();
         assertThat(applicationContext.getBean(
                 com.fundpilot.backend.marketdata.adapter.web.klinequery.FundKlineController.class)).isNotNull();
-        assertThat(applicationContext.getBean(
-                com.fundpilot.backend.marketdata.adapter.web.indicatorquery.FundMarketIndicatorController.class))
-                .isNotNull();
         assertThat(applicationContext.getBean(
                 com.fundpilot.backend.marketdata.adapter.web.realtimevaluation.FundIntradayController.class))
                 .isNotNull();

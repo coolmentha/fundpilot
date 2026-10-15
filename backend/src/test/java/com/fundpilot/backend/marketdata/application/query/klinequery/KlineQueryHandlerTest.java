@@ -44,14 +44,14 @@ class KlineQueryHandlerTest {
         var cached = mock(IndexKlineQueryHandler.class);
         var handler = new KlineQueryHandler(products, cached, mock(IndexKlineSourceGateway.class),
                 mock(NavHistoryQueryHandler.class), mock(IndexKlineCommandHandler.class));
-        when(products.findOwned(1L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "510300", "000300.SH",
+        when(products.findOwnedByPortfolioFundId(9L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "510300", "000300.SH",
                 OwnedFundProductGateway.ProductType.INDEX)));
         when(cached.findAll("000300.SH")).thenReturn(List.of(
                 bar("2026-06-22", "100", "105", "99", "103", 1000L),
                 bar("2026-06-23", "103", "106", "102", "104", 1200L),
                 bar("2026-06-24", "104", "107", "103", "106", 900L)));
 
-        var result = handler.getKline(1L, "weekly");
+        var result = handler.getKlineForPortfolioFund(9L, "weekly");
 
         assertThat(result.chartType()).isEqualTo("kline");
         assertThat(result.bars()).singleElement().satisfies(value -> {
@@ -71,7 +71,7 @@ class KlineQueryHandlerTest {
         var klineCommands = mock(IndexKlineCommandHandler.class);
         var handler = new KlineQueryHandler(products, cached, source,
                 mock(NavHistoryQueryHandler.class), klineCommands);
-        when(products.findOwned(1L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "008888",
+        when(products.findOwnedByPortfolioFundId(9L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "008888",
                 "980017.SZ", OwnedFundProductGateway.ProductType.ETF)));
         when(cached.findAll("980017.SZ")).thenReturn(
                 List.of(bar("2025-01-22", "100", "105", "99", "103", 1000L)),
@@ -83,7 +83,7 @@ class KlineQueryHandlerTest {
                 new IndexKlineSourceGateway.Bar(Instant.parse("2025-01-22T00:00:00Z"), new BigDecimal("100"),
                         new BigDecimal("105"), new BigDecimal("99"), new BigDecimal("103"), 1000L)));
 
-        var result = handler.getKline(1L, "monthly");
+        var result = handler.getKlineForPortfolioFund(9L, "monthly");
 
         verify(klineCommands).upsert(eq("980017.SZ"), anyList());
         assertThat(result.bars()).hasSize(2);
@@ -97,7 +97,7 @@ class KlineQueryHandlerTest {
         var klineCommands = mock(IndexKlineCommandHandler.class);
         var handler = new KlineQueryHandler(products, cached, source,
                 mock(NavHistoryQueryHandler.class), klineCommands);
-        when(products.findOwned(1L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "008888",
+        when(products.findOwnedByPortfolioFundId(9L)).thenReturn(Optional.of(new OwnedFundProductGateway.Product(11L, "008888",
                 "980017.SZ", OwnedFundProductGateway.ProductType.ETF)));
         when(cached.findAll("980017.SZ")).thenReturn(
                 List.of(bar("2025-01-22", "100", "105", "99", "103", 1000L)),
@@ -105,7 +105,7 @@ class KlineQueryHandlerTest {
         // 回补拉取失败：不写库、不抛出，降级沿用现有缓存
         when(source.fetch(eq("0.980017"), eq("101"), eq("1200"))).thenThrow(new RuntimeException("remote down"));
 
-        var result = handler.getKline(1L, "monthly");
+        var result = handler.getKlineForPortfolioFund(9L, "monthly");
 
         verify(klineCommands, never()).upsert(anyString(), anyList());
         assertThat(result.bars()).hasSize(1);

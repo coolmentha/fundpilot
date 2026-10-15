@@ -64,6 +64,7 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
     @Autowired PortfolioFundOnboardingCommandHandler onboarding;
+    @Autowired com.fundpilot.backend.portfolio.adapter.api.fundtracking.PortfolioFundApi portfolioFundApi;
     @Autowired PlatformTransactionManager transactionManager;
 
     /** 本次用例经 {@link #insertRawNav} 写入裸净值行的 product，用例结束按 product 清理。 */
@@ -103,11 +104,10 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
         assertThat(count("accounting_position", "portfolio_fund_id", portfolioFundId)).isEqualTo(1);
         assertThat(count("portfolio_fund_group_member", "portfolio_fund_id", portfolioFundId)).isEqualTo(1);
 
-        mockMvc.perform(get("/api/portfolio-funds/{id}", portfolioFundId).cookie(ownerCookie()))
+        mockMvc.perform(get("/api/insights/portfolio/funds/{portfolioFundId}", portfolioFundId).cookie(ownerCookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.portfolioFundId").value(portfolioFundId))
                 .andExpect(jsonPath("$.data.fundCode").value(product.fundCode()))
-                .andExpect(jsonPath("$.data.validity").value("TRACKED"))
                 .andExpect(jsonPath("$.data.groups[0].name").value("核心"));
 
         var other = users.create(new Actor(testActorId(), ActorRole.ADMIN, true),
@@ -115,11 +115,9 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
                         "integration-test-password", UserAdministrationApi.Role.USER));
         Cookie otherCookie = new Cookie(AuthenticationFilter.COOKIE_NAME,
                 sessions.issue(other.id(), UserRole.USER, 0L));
-        mockMvc.perform(get("/api/portfolio-funds").cookie(otherCookie))
+        mockMvc.perform(get("/api/insights/portfolio/funds/current").cookie(otherCookie))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(0));
-        mockMvc.perform(get("/api/portfolio-funds/{id}", portfolioFundId).cookie(otherCookie))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PORTFOLIO_FUND_NOT_FOUND"));
+        assertThat(portfolioFundApi.findOwned(other.id(), portfolioFundId)).isEmpty();
 
         mockMvc.perform(post("/api/portfolio-funds").cookie(ownerCookie())
                         .contentType("application/json")
@@ -226,21 +224,18 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
         assertThat(data.path("initialTransactionId").isNull()).isTrue();
         long portfolioFundId = data.path("portfolioFundId").asLong();
 
-        String listResponse = mockMvc.perform(get("/api/portfolio-funds").cookie(ownerCookie()))
+        String listResponse = mockMvc.perform(get("/api/insights/portfolio/funds/current").cookie(ownerCookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andReturn().getResponse().getContentAsString();
         var listed = java.util.stream.StreamSupport.stream(
                         objectMapper.readTree(listResponse).path("data").spliterator(), false)
-                .filter(item -> item.path("portfolioFundId").asLong() == portfolioFundId)
+                .filter(item -> item.path("fundCode").asText().equals(noInitialHolding.fundCode()))
                 .findFirst().orElseThrow();
-        assertThat(listed.path("fundProductId").asLong()).isEqualTo(noInitialHolding.id());
-        assertThat(listed.path("fundCode").asText()).isEqualTo(noInitialHolding.fundCode());
         assertThat(listed.path("fundName").asText()).isEqualTo("沪深300 ETF");
-        assertThat(listed.path("productType").asText()).isEqualTo("ETF");
+        assertThat(listed.path("fundSubType").asText()).isEqualTo("ETF");
         assertThat(listed.path("investmentTarget").asText()).isEqualTo("STOCK");
         assertThat(listed.path("benchmarkIndexCode").asText()).isEqualTo("000300.SH");
-        assertThat(listed.path("validity").asText()).isEqualTo("TRACKED");
         assertThat(listed.path("positionWarningEnabled").asBoolean()).isTrue();
         assertThat(listed.path("positionWarningRatio").decimalValue()).isEqualByComparingTo("0.30");
         assertThat(listed.path("groups").size()).isEqualTo(1);

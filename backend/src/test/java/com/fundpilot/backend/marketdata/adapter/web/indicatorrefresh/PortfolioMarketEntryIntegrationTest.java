@@ -66,11 +66,6 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
                 Instant.parse("2026-09-04T00:00:00Z"), new BigDecimal("1.20"), new BigDecimal("2.40"))));
         mvc.perform(post("/api/portfolio-funds/{id}/market-data/refresh", id).cookie(cookie()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.portfolioFundId").value(id));
-        mvc.perform(get("/api/portfolio-funds/{id}/market-indicators/today", id).cookie(cookie()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.portfolioFundId").value(id))
-                .andExpect(jsonPath("$.data.fundId").doesNotExist())
-                .andExpect(jsonPath("$.data.currentNav").value(2.40));
         mvc.perform(get("/api/portfolio-funds/{id}/kline", id).cookie(cookie()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.chartType").value("nav"));
         mvc.perform(get("/api/portfolio-funds/{id}/intraday", id).cookie(cookie()))
@@ -95,7 +90,7 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
                         "integration-test-password", UserAdministrationApi.Role.USER));
         var foreignCookie = new Cookie(AuthenticationFilter.COOKIE_NAME,
                 sessions.issue(other.id(), UserRole.USER, 0L));
-        for (String suffix : List.of("intraday", "kline", "market-indicators/today")) {
+        for (String suffix : List.of("intraday", "kline")) {
             mvc.perform(get("/api/portfolio-funds/{id}/" + suffix, id).cookie(foreignCookie))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         }
@@ -115,7 +110,7 @@ class PortfolioMarketEntryIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void assertRejected(long id) throws Exception {
-        for (String suffix : List.of("intraday", "kline", "market-indicators/today")) {
+        for (String suffix : List.of("intraday", "kline")) {
             mvc.perform(get("/api/portfolio-funds/{id}/" + suffix, id).cookie(cookie()))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.success").value(false));
         }

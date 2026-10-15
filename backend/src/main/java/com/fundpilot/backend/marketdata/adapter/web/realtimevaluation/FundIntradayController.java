@@ -18,12 +18,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class FundIntradayController {
     private final RealtimeValuationQueryHandler queries;
 
-    @Operation(summary = "查询基金分时估值")
-    @GetMapping("/api/funds/{fundId}/intraday")
-    public ApiResponse<FundIntradayView> intraday(@PathVariable long fundId) {
-        return ApiResponse.ok(queries.findIntraday(fundId).map(FundIntradayView::from).orElse(null));
-    }
-
     @Operation(summary = "查询组合基金分时估值")
     @GetMapping("/api/portfolio-funds/{portfolioFundId}/intraday")
     public ApiResponse<FundIntradayView> portfolioFundIntraday(@PathVariable long portfolioFundId) {

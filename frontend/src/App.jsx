@@ -4,7 +4,6 @@ import Shell from './components/Shell.jsx';
 import {useSiteAuth} from './auth/SiteAuthContext.js';
 
 const MarketDashboardPage = React.lazy(() => import('./pages/MarketDashboardPage.jsx'));
-const DashboardPage = React.lazy(() => import('./pages/DashboardPage.jsx'));
 const FundsPage = React.lazy(() => import('./pages/FundsPage.jsx'));
 const FundDetailPage = React.lazy(() => import('./pages/FundDetailPage.jsx'));
 const ConfirmPage = React.lazy(() => import('./pages/ConfirmPage.jsx'));
@@ -26,7 +25,6 @@ export default function App() {
             <Routes>
                 <Route element={<Shell/>}>
                     <Route index element={<MarketDashboardPage/>}/>
-                    <Route path="/dashboard" element={<DashboardPage/>}/>
                     <Route path="/funds" element={<FundsPage/>}/>
                     <Route path="/funds/:portfolioFundId" element={<FundDetailPage/>}/>
                     <Route path="/dca" element={<DcaManagementPage/>}/>

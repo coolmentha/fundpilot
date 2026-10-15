@@ -31,7 +31,7 @@ class MarketIndicatorRefreshJobTest {
 
         verify(commands).refreshBatch(0);
         verify(commands).refreshBatch(1);
-        verify(commands).refreshBatchAndPublishCompletion(2);
+        verify(commands).refreshBatch(2);
     }
 
     @Test
