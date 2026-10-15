@@ -66,6 +66,14 @@ const rules = [
         conditions: [], takeProfit: null, grid: {upRatio: 0.08, downRatio: 0.03},
         enabled: true, todaySent: false, lastTriggeredAt: null,
     },
+    {
+        // 已停用 + 今日已提醒：用于验证启用状态与今日提醒状态两个维度。
+        id: 8, scope: 'FUND', portfolioFundId: 45, fundCode: '888888', fundName: '已停用的基金',
+        kind: 'CONDITION', kindLabel: '条件提醒', match: 'ALL', conditionSummary: '当日涨跌幅 低于 -0.03',
+        conditions: [{indicator: 'DAILY_CHANGE', params: {}, relation: 'BELOW', value: -0.03}],
+        takeProfit: null, grid: null,
+        enabled: false, todaySent: true, lastTriggeredAt: '2026-09-18T06:30:00Z',
+    },
 ];
 
 const notifications = [
@@ -96,6 +104,7 @@ const funds = [
     {portfolioFundId: 41, fundCode: '161725', fundName: '招商中证白酒'},
     {portfolioFundId: 42, fundCode: '000300', fundName: '沪深300指数'},
     {portfolioFundId: 43, fundCode: '110022', fundName: '易方达消费行业'},
+    {portfolioFundId: 45, fundCode: '888888', fundName: '已停用的基金'},
     // 没有任何规则关联的基金：用于验证筛选无命中时的空状态。
     {portfolioFundId: 44, fundCode: '999999', fundName: '未配置规则的基金'},
 ];
@@ -244,13 +253,22 @@ describe('AlertRulesPage', () => {
         expect(document.querySelector('.ant-modal-footer')).not.toBeNull();
     });
 
-    // 规则行文本（去掉空白）+ 是否含「所有关注基金」，用于筛选断言。
+    // 规则行文本（去掉空白）。排除空状态占位行，否则它会混进行数断言。
     const ruleRowLabels = () => [...container.querySelectorAll('.alert-rules-card tbody tr')]
+        .filter((row) => !row.classList.contains('ant-table-placeholder'))
         .map((row) => row.textContent.replace(/\s/g, ''));
 
-    /** 打开基金筛选下拉并勾选指定基金（多选，逐一点击选项）。antd Select 在根节点用 mousedown 展开。 */
-    const selectFunds = async (...labels) => {
-        const select = container.querySelector('.alert-rule-fund-filter');
+    // 规则表格内的文本。整个容器的 textContent 会带上「提醒记录」与下拉选项，断言必须限定范围。
+    const rulesTableText = () => [...container.querySelectorAll('.alert-rules-card tbody tr')]
+        .filter((row) => !row.classList.contains('ant-table-placeholder'))
+        .map((row) => row.textContent).join(' ');
+
+    /**
+     * 打开某个多选筛选下拉并勾选选项（antd Select 在根节点用 mousedown 展开）。
+     * index 对应筛选栏中 Select 的顺序：0=基金，1=提醒类型。
+     */
+    const selectFilterOptions = async (index, ...labels) => {
+        const select = container.querySelectorAll('.alert-rule-filter')[index];
         await act(async () => {
             select.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
             await Promise.resolve();
@@ -263,6 +281,19 @@ describe('AlertRulesPage', () => {
                 await Promise.resolve();
             });
         }
+    };
+
+    const selectFunds = (...labels) => selectFilterOptions(0, ...labels);
+
+    /** 点击 Segmented 三态筛选（按 aria-label 定位，再按文案点选）。 */
+    const selectSegmented = async (ariaLabel, label) => {
+        const group = container.querySelector(`[aria-label="${ariaLabel}"]`);
+        const item = [...group.querySelectorAll('label, .ant-segmented-item')]
+            .find((node) => node.textContent.replace(/\s/g, '') === label);
+        await act(async () => {
+            item.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            await Promise.resolve();
+        });
     };
 
     it('未选择基金时展示全部规则', async () => {
@@ -313,5 +344,79 @@ describe('AlertRulesPage', () => {
 
         expect(container.textContent).not.toContain('没有符合筛选条件的提醒规则');
         expect(ruleRowLabels().every((text) => text.includes('所有关注基金'))).toBe(true);
+    });
+
+    it('按提醒类型筛选，类型选项由后端 kindLabel 派生', async () => {
+        await render();
+
+        await selectFilterOptions(1, '网格交易提醒');
+
+        // 只剩 3 条网格规则（id=5/6/7），条件提醒全部被筛掉。
+        expect(ruleRowLabels()).toHaveLength(3);
+        expect(ruleRowLabels().every((text) => text.includes('网格交易提醒'))).toBe(true);
+        expect(rulesTableText()).toContain('上浮 5% 提醒卖出');
+        expect(rulesTableText()).not.toContain('当日涨跌幅 高于 0.05');
+    });
+
+    it('提醒类型可多选，按并集显示', async () => {
+        await render();
+
+        await selectFilterOptions(1, '网格交易提醒', '回撤止盈');
+
+        expect(ruleRowLabels()).toHaveLength(4); // 3 条网格 + 1 条回撤止盈
+        expect(rulesTableText()).toContain('回撤止盈');
+        expect(rulesTableText()).not.toContain('逻辑破坏止损');
+    });
+
+    it('按启用状态筛选', async () => {
+        await render();
+
+        await selectSegmented('按启用状态筛选', '已停用');
+
+        expect(ruleRowLabels()).toHaveLength(1);
+        expect(rulesTableText()).toContain('已停用的基金');
+    });
+
+    it('按今日提醒状态筛选', async () => {
+        await render();
+
+        await selectSegmented('按今日提醒状态筛选', '已提醒');
+
+        // id=1（全局条件提醒）与 id=8（已停用基金）今日均已提醒。
+        expect(ruleRowLabels()).toHaveLength(2);
+        expect(rulesTableText()).toContain('已停用的基金');
+        expect(rulesTableText()).toContain('所有关注基金');
+        expect(rulesTableText()).not.toContain('沪深300指数');
+    });
+
+    it('多个维度之间是「且」的关系', async () => {
+        await render();
+
+        // 网格 + 已停用：没有任何网格规则被停用，结果为空。
+        await selectFilterOptions(1, '网格交易提醒');
+        await selectSegmented('按启用状态筛选', '已停用');
+
+        expect(ruleRowLabels()).toHaveLength(0);
+        expect(container.textContent).toContain('没有符合筛选条件的提醒规则');
+    });
+
+    it('重置筛选清空所有维度', async () => {
+        await render();
+
+        await selectFilterOptions(1, '网格交易提醒');
+        expect(ruleRowLabels()).toHaveLength(3);
+
+        await act(async () => [...container.querySelectorAll('button')]
+            .find((button) => button.textContent === '重置筛选').click());
+
+        expect(ruleRowLabels()).toHaveLength(rules.length);
+    });
+
+    it('没有筛选条件时重置按钮不可用', async () => {
+        await render();
+
+        const reset = [...container.querySelectorAll('button')]
+            .find((button) => button.textContent === '重置筛选');
+        expect(reset.disabled).toBe(true);
     });
 });

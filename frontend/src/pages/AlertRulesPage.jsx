@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import {App, Button, Card, Select, Space, Switch, Table, Tag, Tooltip, Typography} from 'antd';
+import {App, Button, Card, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography} from 'antd';
 import {DeleteOutlined, EditOutlined, PlusOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
 import {
@@ -54,17 +54,44 @@ const ruleSignature = (rule) => {
 };
 
 /**
- * 按所选基金过滤规则。
+ * 列表筛选：各维度之间是「且」，同一维度内多选取并集。维度为空表示不限制。
  *
- * <p>未选基金时不过滤；选中后取并集：只要规则关联的基金里有一只被选中就显示。
- * 全局规则作用于所有关注基金，因此选中任意基金时都保留——它们确实会管这些基金，
+ * <p>基金维度：全局规则作用于所有关注基金，因此选中任意基金时都保留——它们确实会管这些基金，
  * 隐藏掉会让人以为某只基金没有任何规则在管。
+ * <p>提醒类型按 `kind` 匹配（后端 kindLabel 只用于展示，不参与筛选，避免依赖展示文案）。
  */
-const filterByFunds = (rules, selectedFundIds) => {
-    if (selectedFundIds.length === 0) return rules;
-    const selected = new Set(selectedFundIds);
-    return rules.filter((rule) => rule.scope !== 'FUND' || selected.has(rule.portfolioFundId));
+const filterRules = (rules, {fundIds, kinds, enabled, todaySent}) => {
+    const funds = new Set(fundIds);
+    return rules.filter((rule) => {
+        if (funds.size > 0 && rule.scope === 'FUND' && !funds.has(rule.portfolioFundId)) return false;
+        if (kinds.length > 0 && !kinds.includes(rule.kind ?? 'CONDITION')) return false;
+        if (enabled !== 'ALL' && rule.enabled !== (enabled === 'ENABLED')) return false;
+        if (todaySent !== 'ALL' && Boolean(rule.todaySent) !== (todaySent === 'SENT')) return false;
+        return true;
+    });
 };
+
+/** 提醒类型筛选项由后端 kindLabel 派生，前端不再维护第二份种类映射。 */
+const kindOptions = (rules) => {
+    const seen = new Map();
+    for (const rule of rules) {
+        const kind = rule.kind ?? 'CONDITION';
+        if (!seen.has(kind)) seen.set(kind, rule.kindLabel ?? kind);
+    }
+    return [...seen].map(([value, label]) => ({value, label}));
+};
+
+const ENABLED_OPTIONS = [
+    {value: 'ALL', label: '全部'},
+    {value: 'ENABLED', label: '已启用'},
+    {value: 'DISABLED', label: '已停用'},
+];
+
+const TODAY_SENT_OPTIONS = [
+    {value: 'ALL', label: '全部'},
+    {value: 'SENT', label: '已提醒'},
+    {value: 'UNSENT', label: '未提醒'},
+];
 
 export default function AlertRulesPage() {
     const {message, modal} = App.useApp();
@@ -81,8 +108,13 @@ export default function AlertRulesPage() {
     // 每次打开向导换 key 重挂载，重置步骤与表单，避免上次的填写残留。
     const [formKey, setFormKey] = useState(0);
     const [editing, setEditing] = useState(null);
-    // 列表按基金筛选：选项来自关注基金，多选，空数组表示不筛选。
-    const [fundFilter, setFundFilter] = useState([]);
+    // 列表筛选：基金与提醒类型多选，启用/今日提醒状态为三态（全部/是/否）。
+    const [filters, setFilters] = useState({
+        fundIds: [], kinds: [], enabled: 'ALL', todaySent: 'ALL',
+    });
+    const resetFilters = () => setFilters({fundIds: [], kinds: [], enabled: 'ALL', todaySent: 'ALL'});
+    const activeFilterCount = filters.fundIds.length + filters.kinds.length
+        + (filters.enabled === 'ALL' ? 0 : 1) + (filters.todaySent === 'ALL' ? 0 : 1);
 
     const rules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
     // 口径相同的已启用单基金规则会覆盖全局规则：全局规则对这些基金不再生效。
@@ -99,7 +131,7 @@ export default function AlertRulesPage() {
         value: fund.portfolioFundId,
         label: `${fund.fundName} ${fund.fundCode}`,
     }));
-    const visibleRules = useMemo(() => filterByFunds(rules, fundFilter), [rules, fundFilter]);
+    const visibleRules = useMemo(() => filterRules(rules, filters), [rules, filters]);
 
     const openCreate = () => {
         setEditing(null);
@@ -241,23 +273,36 @@ export default function AlertRulesPage() {
     return (
         <div className="alert-rules-page">
             <Card title="提醒规则" className="alert-rules-card"
-                  extra={
-                      <Space wrap className="alert-rule-toolbar">
-                          <Select mode="multiple" allowClear showSearch optionFilterProp="label"
-                                  className="alert-rule-fund-filter" placeholder="按基金筛选"
-                                  aria-label="按基金筛选" maxTagCount="responsive"
-                                  value={fundFilter} options={fundOptions}
-                                  onChange={(value) => setFundFilter(value)}/>
-                          <Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建提醒规则</Button>
-                      </Space>
-                  }>
+                  extra={<Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建提醒规则</Button>}>
                 {rulesQuery.isError ? (
                     <QueryErrorState onRetry={rulesQuery.refetch} description="提醒规则加载失败"/>
                 ) : (
-                    <Table rowKey="id" size="small" loading={rulesQuery.isLoading}
-                           dataSource={rulesReady ? visibleRules : []} columns={ruleColumns}
-                           pagination={{pageSize: 20, hideOnSinglePage: true}}
-                           locale={{emptyText: <EmptyState description={fundFilter.length > 0 ? '没有符合筛选条件的提醒规则' : '暂无提醒规则'}/>}}/>
+                    <>
+                        <div className="alert-rule-filters">
+                            <Select mode="multiple" allowClear showSearch optionFilterProp="label"
+                                    className="alert-rule-filter" placeholder="按基金筛选"
+                                    aria-label="按基金筛选" maxTagCount="responsive"
+                                    value={filters.fundIds} options={fundOptions}
+                                    onChange={(value) => setFilters((current) => ({...current, fundIds: value}))}/>
+                            <Select mode="multiple" allowClear
+                                    className="alert-rule-filter" placeholder="按提醒类型筛选"
+                                    aria-label="按提醒类型筛选" maxTagCount="responsive"
+                                    value={filters.kinds} options={kindOptions(rules)}
+                                    onChange={(value) => setFilters((current) => ({...current, kinds: value}))}/>
+                            <Segmented size="small" aria-label="按启用状态筛选" options={ENABLED_OPTIONS}
+                                       value={filters.enabled}
+                                       onChange={(value) => setFilters((current) => ({...current, enabled: value}))}/>
+                            <Segmented size="small" aria-label="按今日提醒状态筛选" options={TODAY_SENT_OPTIONS}
+                                       value={filters.todaySent}
+                                       onChange={(value) => setFilters((current) => ({...current, todaySent: value}))}/>
+                            <Button type="link" size="small" disabled={activeFilterCount === 0}
+                                    onClick={resetFilters}>重置筛选</Button>
+                        </div>
+                        <Table rowKey="id" size="small" loading={rulesQuery.isLoading}
+                               dataSource={rulesReady ? visibleRules : []} columns={ruleColumns}
+                               pagination={{pageSize: 20, hideOnSinglePage: true}}
+                               locale={{emptyText: <EmptyState description={activeFilterCount > 0 ? '没有符合筛选条件的提醒规则' : '暂无提醒规则'}/>}}/>
+                    </>
                 )}
             </Card>
             <Card title="提醒记录" className="alert-notifications-card"
