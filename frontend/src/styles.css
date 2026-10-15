@@ -1668,6 +1668,15 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
     min-width: 0;
 }
 
+/* 列表头部的筛选与新建：窄屏换行，筛选框有下限宽度避免被压成一条线。 */
+.alert-rule-toolbar {
+    justify-content: flex-end;
+}
+
+.alert-rule-fund-filter {
+    min-width: 200px;
+}
+
 .alert-rule-target {
     display: flex;
     flex-direction: column;

@@ -92,11 +92,22 @@ const indicators = [
     },
 ];
 
+const funds = [
+    {portfolioFundId: 41, fundCode: '161725', fundName: '招商中证白酒'},
+    {portfolioFundId: 42, fundCode: '000300', fundName: '沪深300指数'},
+    {portfolioFundId: 43, fundCode: '110022', fundName: '易方达消费行业'},
+    // 没有任何规则关联的基金：用于验证筛选无命中时的空状态。
+    {portfolioFundId: 44, fundCode: '999999', fundName: '未配置规则的基金'},
+];
+
+// 可变数据源：个别用例需要换成「只有单基金规则」的集合来触发筛选空状态。
+let currentRules = rules;
+
 vi.mock('../api/hooks.js', () => ({
-    useAlertRules: () => ({data: rules, isLoading: false, isError: false, refetch: vi.fn()}),
+    useAlertRules: () => ({data: currentRules, isLoading: false, isError: false, refetch: vi.fn()}),
     useAlertNotifications: () => ({data: notifications, isLoading: false, isError: false, refetch: vi.fn()}),
     useAlertIndicatorMetadata: () => ({data: indicators, isLoading: false, isError: false, refetch: vi.fn()}),
-    useFunds: () => ({data: [], isLoading: false, isError: false, refetch: vi.fn()}),
+    useFunds: () => ({data: funds, isLoading: false, isError: false, refetch: vi.fn()}),
     useCreateAlertRule: () => ({mutateAsync: createRule, isPending: false}),
     useUpdateAlertRule: () => ({mutateAsync: vi.fn(), isPending: false}),
     useSetAlertRuleEnabled: () => ({mutateAsync: setEnabled, isPending: false}),
@@ -133,6 +144,7 @@ describe('AlertRulesPage', () => {
         setEnabled.mockReset().mockResolvedValue(undefined);
         deleteRule.mockReset().mockResolvedValue(undefined);
         createRule.mockReset().mockResolvedValue(undefined);
+        currentRules = rules;
     });
 
     afterEach(async () => {
@@ -230,5 +242,76 @@ describe('AlertRulesPage', () => {
 
         expect(document.querySelector('.ant-modal input[type="radio"][value="GLOBAL"]').checked).toBe(true);
         expect(document.querySelector('.ant-modal-footer')).not.toBeNull();
+    });
+
+    // 规则行文本（去掉空白）+ 是否含「所有关注基金」，用于筛选断言。
+    const ruleRowLabels = () => [...container.querySelectorAll('.alert-rules-card tbody tr')]
+        .map((row) => row.textContent.replace(/\s/g, ''));
+
+    /** 打开基金筛选下拉并勾选指定基金（多选，逐一点击选项）。antd Select 在根节点用 mousedown 展开。 */
+    const selectFunds = async (...labels) => {
+        const select = container.querySelector('.alert-rule-fund-filter');
+        await act(async () => {
+            select.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            await Promise.resolve();
+        });
+        for (const label of labels) {
+            const option = [...document.querySelectorAll('.ant-select-item-option')]
+                .find((item) => item.textContent.replace(/\s/g, '') === label.replace(/\s/g, ''));
+            await act(async () => {
+                option.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                await Promise.resolve();
+            });
+        }
+    };
+
+    it('未选择基金时展示全部规则', async () => {
+        await render();
+
+        expect(ruleRowLabels()).toHaveLength(rules.length);
+    });
+
+    it('按基金筛选时保留全局规则并只显示所选基金的单基金规则', async () => {
+        await render();
+        const globalRows = () => ruleRowLabels().filter((text) => text.includes('所有关注基金')).length;
+
+        await selectFunds('招商中证白酒161725');
+
+        // 只剩 id=2（招商中证白酒）与 4 条全局规则。
+        expect(ruleRowLabels()).toHaveLength(1 + globalRows());
+        expect(container.textContent).toContain('招商中证白酒');
+        expect(container.textContent).not.toContain('沪深300指数');
+        expect(container.textContent).not.toContain('易方达消费行业');
+    });
+
+    it('多选基金时按并集显示各基金的单基金规则', async () => {
+        await render();
+
+        await selectFunds('招商中证白酒161725', '沪深300指数000300');
+
+        expect(container.textContent).toContain('招商中证白酒');
+        expect(container.textContent).toContain('沪深300指数');
+        // 未选中的基金规则仍被过滤掉。
+        expect(container.textContent).not.toContain('易方达消费行业');
+    });
+
+    it('筛选到没有关联规则的基金时给出筛选专属空状态', async () => {
+        // 全局规则会被一直保留，因此只有「没有全局规则 + 该基金没有单基金规则」才会空。
+        currentRules = rules.filter((rule) => rule.scope === 'FUND');
+        await render();
+
+        await selectFunds('未配置规则的基金999999');
+
+        expect(container.textContent).toContain('没有符合筛选条件的提醒规则');
+    });
+
+    it('没有单基金规则时选中基金不会误报空状态，全局规则仍显示', async () => {
+        currentRules = rules.filter((rule) => rule.scope === 'GLOBAL');
+        await render();
+
+        await selectFunds('招商中证白酒161725');
+
+        expect(container.textContent).not.toContain('没有符合筛选条件的提醒规则');
+        expect(ruleRowLabels().every((text) => text.includes('所有关注基金'))).toBe(true);
     });
 });

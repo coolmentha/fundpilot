@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import {App, Button, Card, Space, Switch, Table, Tag, Tooltip, Typography} from 'antd';
+import {App, Button, Card, Select, Space, Switch, Table, Tag, Tooltip, Typography} from 'antd';
 import {DeleteOutlined, EditOutlined, PlusOutlined} from '@ant-design/icons';
 import {Link} from 'react-router-dom';
 import {
@@ -53,6 +53,19 @@ const ruleSignature = (rule) => {
     return `${kind}|${(rule.conditions ?? []).map(conditionKey).join(',')}`;
 };
 
+/**
+ * 按所选基金过滤规则。
+ *
+ * <p>未选基金时不过滤；选中后取并集：只要规则关联的基金里有一只被选中就显示。
+ * 全局规则作用于所有关注基金，因此选中任意基金时都保留——它们确实会管这些基金，
+ * 隐藏掉会让人以为某只基金没有任何规则在管。
+ */
+const filterByFunds = (rules, selectedFundIds) => {
+    if (selectedFundIds.length === 0) return rules;
+    const selected = new Set(selectedFundIds);
+    return rules.filter((rule) => rule.scope !== 'FUND' || selected.has(rule.portfolioFundId));
+};
+
 export default function AlertRulesPage() {
     const {message, modal} = App.useApp();
     const rulesQuery = useAlertRules();
@@ -68,6 +81,8 @@ export default function AlertRulesPage() {
     // 每次打开向导换 key 重挂载，重置步骤与表单，避免上次的填写残留。
     const [formKey, setFormKey] = useState(0);
     const [editing, setEditing] = useState(null);
+    // 列表按基金筛选：选项来自关注基金，多选，空数组表示不筛选。
+    const [fundFilter, setFundFilter] = useState([]);
 
     const rules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
     // 口径相同的已启用单基金规则会覆盖全局规则：全局规则对这些基金不再生效。
@@ -79,6 +94,12 @@ export default function AlertRulesPage() {
     const notificationsReady = isQueryDataReady(notificationsQuery);
     const fundsReady = isQueryDataReady(fundsQuery);
     const indicatorsReady = isQueryDataReady(indicatorsQuery);
+
+    const fundOptions = (fundsReady ? fundsQuery.data ?? [] : []).map((fund) => ({
+        value: fund.portfolioFundId,
+        label: `${fund.fundName} ${fund.fundCode}`,
+    }));
+    const visibleRules = useMemo(() => filterByFunds(rules, fundFilter), [rules, fundFilter]);
 
     const openCreate = () => {
         setEditing(null);
@@ -220,14 +241,23 @@ export default function AlertRulesPage() {
     return (
         <div className="alert-rules-page">
             <Card title="提醒规则" className="alert-rules-card"
-                  extra={<Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建提醒规则</Button>}>
+                  extra={
+                      <Space wrap className="alert-rule-toolbar">
+                          <Select mode="multiple" allowClear showSearch optionFilterProp="label"
+                                  className="alert-rule-fund-filter" placeholder="按基金筛选"
+                                  aria-label="按基金筛选" maxTagCount="responsive"
+                                  value={fundFilter} options={fundOptions}
+                                  onChange={(value) => setFundFilter(value)}/>
+                          <Button type="primary" icon={<PlusOutlined/>} onClick={openCreate}>新建提醒规则</Button>
+                      </Space>
+                  }>
                 {rulesQuery.isError ? (
                     <QueryErrorState onRetry={rulesQuery.refetch} description="提醒规则加载失败"/>
                 ) : (
                     <Table rowKey="id" size="small" loading={rulesQuery.isLoading}
-                           dataSource={rulesReady ? rules : []} columns={ruleColumns}
+                           dataSource={rulesReady ? visibleRules : []} columns={ruleColumns}
                            pagination={{pageSize: 20, hideOnSinglePage: true}}
-                           locale={{emptyText: <EmptyState description="暂无提醒规则"/>}}/>
+                           locale={{emptyText: <EmptyState description={fundFilter.length > 0 ? '没有符合筛选条件的提醒规则' : '暂无提醒规则'}/>}}/>
                 )}
             </Card>
             <Card title="提醒记录" className="alert-notifications-card"
