@@ -15,8 +15,15 @@ const KIND_OPTIONS = [
     {value: 'CONDITION', label: '条件提醒'},
     {value: 'LOGIC_BROKEN', label: '逻辑破坏止损'},
     {value: 'TRAILING_STOP', label: '回撤止盈'},
+    {value: 'GRID', label: '网格交易提醒'},
 ];
 const kindLabel = (kind) => KIND_OPTIONS.find((option) => option.value === kind)?.label || kind;
+
+// 各规则种类对应的评估时点说明：网格必须在收盘前用盘中估值判定，因此单独一个窗口。
+const EVALUATION_HINT = {
+    GRID: '每个交易日 14:50–14:59 评估一次，同一规则当天最多提醒一次',
+};
+const DEFAULT_EVALUATION_HINT = '每个交易日 14:30 评估一次，同一规则当天最多提醒一次';
 
 // 组合逻辑先只做「全部满足」，不做嵌套、不做 OR。
 const MATCH_ALL = 'ALL';
@@ -129,7 +136,8 @@ export default function AlertRuleFormModal(
     const scope = values.scope ?? 'GLOBAL';
     const kind = values.kind ?? 'CONDITION';
     const conditions = values.conditions ?? [];
-    const needsConditions = kind !== 'TRAILING_STOP';
+    // 第二步的表单形态：条件数组、回撤止盈参数、或网格的两个比例。
+    const parameterStep = kind === 'TRAILING_STOP' ? 'takeProfit' : kind === 'GRID' ? 'grid' : 'conditions';
 
     // 每次打开由父组件换 key 重挂载，这里只负责把已有规则回显到表单。
     useEffect(() => {
@@ -157,6 +165,10 @@ export default function AlertRuleFormModal(
                     maxSingleSell: Number(editing.takeProfit.maxSingleSell),
                     cooldownDays: editing.takeProfit.cooldownDays,
                 } : undefined,
+                grid: editing.grid ? {
+                    upRatio: Number(editing.grid.upRatio),
+                    downRatio: Number(editing.grid.downRatio),
+                } : undefined,
             });
             return;
         }
@@ -172,8 +184,8 @@ export default function AlertRuleFormModal(
             match: MATCH_ALL,
             enabled: editing ? editing.enabled : true,
         };
-        // 回撤止盈不带条件；其余种类带条件且不带止盈参数（与后端 AlertRuleDraft 的语义一致）。
-        if (rawKind !== 'TRAILING_STOP') {
+        // 带条件的种类才提交 conditions；回撤止盈与网格各自只带自己的参数（与后端 AlertRuleDraft 的语义一致）。
+        if (rawKind !== 'TRAILING_STOP' && rawKind !== 'GRID') {
             payload.conditions = (raw.conditions ?? []).map((condition) => {
                 const indicator = indicatorOf(indicators, condition.indicator);
                 const relation = relationOf(indicator, condition.relation);
@@ -193,6 +205,13 @@ export default function AlertRuleFormModal(
         if (rawKind === 'TRAILING_STOP') {
             const takeProfit = raw.takeProfit ?? {};
             payload.takeProfit = Object.fromEntries(TAKE_PROFIT_NAMES.map((name) => [name, takeProfit[name] ?? null]));
+        }
+        if (rawKind === 'GRID') {
+            const grid = raw.grid ?? {};
+            payload.grid = {
+                upRatio: grid.upRatio ?? null,
+                downRatio: grid.downRatio ?? null,
+            };
         }
         return payload;
     };
@@ -269,7 +288,9 @@ export default function AlertRuleFormModal(
         <Modal className="alert-rule-form-modal" title={editing ? '编辑提醒规则' : '新建提醒规则'} open={open}
                onCancel={onCancel} footer={footer} destroyOnHidden width={620}>
             <Steps className="alert-rule-wizard-steps" current={step} size="small" responsive={false}
-                   items={[{title: '选择范围'}, {title: kind === 'TRAILING_STOP' ? '配置止盈参数' : '配置条件'},
+                   items={[{title: '选择范围'},
+                       {title: parameterStep === 'takeProfit' ? '配置止盈参数'
+                           : parameterStep === 'grid' ? '配置网格参数' : '配置条件'},
                        {title: '预览确认'}]}/>
             <Form form={form} layout="vertical" initialValues={{scope: 'GLOBAL', kind: 'CONDITION', match: MATCH_ALL}}>
                 <div className="alert-rule-step" style={{display: step === 0 ? 'block' : 'none'}}>
@@ -283,6 +304,10 @@ export default function AlertRuleFormModal(
                     {kind === 'TRAILING_STOP' && (
                         <Alert type="info" showIcon message="回撤止盈"
                                description="收益率达到启动门槛后，从周期峰值回撤到设定比例即提醒卖出浮盈的一部分；参数可按下方预设一键填写。"/>
+                    )}
+                    {kind === 'GRID' && (
+                        <Alert type="info" showIcon message="网格交易提醒"
+                               description="以该基金最近一笔成交流水的成交净值为基准线：当日盘中估值上浮到设定比例即提醒卖出，下降到设定比例即提醒买入。基准线随每笔新成交自动重画；若当日估值不可用（如 QDII 基金），当日不提醒。"/>
                     )}
                     <Form.Item label="提醒范围" name="scope" rules={[{required: true, message: '请选择提醒范围'}]}>
                         <Radio.Group options={SCOPE_OPTIONS}/>
@@ -300,7 +325,7 @@ export default function AlertRuleFormModal(
                         <Alert type="info" showIcon message="若某只基金已配置口径相同的单基金规则，该基金将按单基金规则提醒"/>
                     )}
                 </div>
-                {needsConditions ? (
+                {parameterStep === 'conditions' ? (
                     <div className="alert-rule-step" style={{display: step === 1 ? 'block' : 'none'}}>
                         <Space wrap className="alert-rule-templates">
                             {kind === 'LOGIC_BROKEN' && (
@@ -392,6 +417,20 @@ export default function AlertRuleFormModal(
                             多条条件之间为「且」关系：全部满足才会提醒。
                         </Typography.Text>
                     </div>
+                ) : parameterStep === 'grid' ? (
+                    <div className="alert-rule-step" style={{display: step === 1 ? 'block' : 'none'}}>
+                        <Form.Item label="上浮比例" name={['grid', 'upRatio']} extra="0.05 表示上浮 5% 即提醒卖出"
+                                   rules={ratioRules('上浮比例', {zeroAllowed: false, oneAllowed: false})}>
+                            <InputNumber min={0} max={1} step={0.01} className="full-width"/>
+                        </Form.Item>
+                        <Form.Item label="下降比例" name={['grid', 'downRatio']} extra="0.03 表示下降 3% 即提醒买入"
+                                   rules={ratioRules('下降比例', {zeroAllowed: false, oneAllowed: false})}>
+                            <InputNumber min={0} max={1} step={0.01} className="full-width"/>
+                        </Form.Item>
+                        <Typography.Text type="secondary">
+                            比例一律填小数且必须落在 0 与 1 之间：0.05 表示 5%。上浮与下降各自独立，可以取不同值。
+                        </Typography.Text>
+                    </div>
                 ) : (
                     <div className="alert-rule-step" style={{display: step === 1 ? 'block' : 'none'}}>
                         <Space wrap className="alert-rule-templates">
@@ -439,14 +478,20 @@ export default function AlertRuleFormModal(
                             {scope === 'FUND' && selectedFund ? ` · ${selectedFund.fundName}` : ''}
                         </Descriptions.Item>
                         <Descriptions.Item label="判定">
-                            {needsConditions
+                            {parameterStep === 'conditions'
                                 ? `共 ${conditions.length} 条条件，全部满足才提醒`
-                                : '按回撤止盈参数与周期峰值回撤判定'}
+                                : parameterStep === 'grid'
+                                    ? '按基准线上浮/下降比例判定，盘中估值越线即提醒'
+                                    : '按回撤止盈参数与周期峰值回撤判定'}
                         </Descriptions.Item>
                     </Descriptions>
                     {kind === 'TRAILING_STOP' && (
                         <Alert type="info" showIcon message="试算口径说明"
                                description="回撤止盈的试算只判断「当前收益率是否已达止盈启动门槛」；完整的高点回撤判定需要逐日累积周期峰值状态，以实际评估时的结果为准。"/>
+                    )}
+                    {kind === 'GRID' && (
+                        <Alert type="info" showIcon message="试算口径说明"
+                               description="网格试算按「最近一笔成交净值」为基准线，与当日盘中估值比较；估值不可用或该基金没有可用成交流水时，试算与运行期都不会命中。"/>
                     )}
                     {kind === 'LOGIC_BROKEN' && (
                         <Alert type="info" showIcon message="试算口径说明"
@@ -489,7 +534,9 @@ export default function AlertRuleFormModal(
                     <div>
                         <Button onClick={runPreview} loading={previewing}>重新试算</Button>
                     </div>
-                    <Typography.Text type="secondary">每个交易日 14:30 评估一次，同一规则当天最多提醒一次</Typography.Text>
+                    <Typography.Text type="secondary">
+                        {EVALUATION_HINT[kind] || DEFAULT_EVALUATION_HINT}
+                    </Typography.Text>
                 </div>
             </Form>
         </Modal>

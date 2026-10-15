@@ -94,17 +94,32 @@ public class AlertRuleController {
     public record Request(
             @Schema(description = "作用范围，枚举（GLOBAL 全部关注基金 / FUND 指定基金）", example = "GLOBAL") String scope,
             @Schema(description = "指定基金 ID，scope=FUND 时必填、GLOBAL 时须为空", example = "12") Long portfolioFundId,
-            @Schema(description = "规则种类，枚举（CONDITION 条件提醒 / LOGIC_BROKEN 逻辑破坏止损 / TRAILING_STOP 回撤止盈），"
-                    + "缺省为 CONDITION", example = "CONDITION") String kind,
+            @Schema(description = "规则种类，枚举（CONDITION 条件提醒 / LOGIC_BROKEN 逻辑破坏止损 / "
+                    + "TRAILING_STOP 回撤止盈 / GRID 网格交易提醒），缺省为 CONDITION", example = "CONDITION")
+            String kind,
             @Schema(description = "条件组合方式，当前仅支持 ALL（全部满足）", example = "ALL") String match,
             @Schema(description = "条件数组，至少一条；kind 需要条件时必填") List<ConditionRequest> conditions,
             @Schema(description = "回撤止盈的六个参数；仅 kind=TRAILING_STOP 时必填") TakeProfitRequest takeProfit,
+            @Schema(description = "网格的两个比例参数；仅 kind=GRID 时必填") GridRequest grid,
             @Schema(description = "是否启用，缺省为 true", example = "true") Boolean enabled) {
 
         AlertRuleCommandHandler.RuleInput toInput() {
             return new AlertRuleCommandHandler.RuleInput(scope, portfolioFundId, kind, match,
                     conditions == null ? null : conditions.stream().map(ConditionRequest::toInput).toList(),
-                    takeProfit == null ? null : takeProfit.toInput(), enabled);
+                    takeProfit == null ? null : takeProfit.toInput(),
+                    grid == null ? null : grid.toInput(), enabled);
+        }
+    }
+
+    @Schema(description = "网格参数；比例一律用小数表示（0.05 即 5%），两个比例都必须严格落在 (0, 1)")
+    public record GridRequest(
+            @Schema(description = "上浮比例，(0, 1)：估值达到基准 × (1 + 上浮) 时提醒卖出", example = "0.05")
+            BigDecimal upRatio,
+            @Schema(description = "下降比例，(0, 1)：估值跌到基准 × (1 - 下降) 时提醒买入", example = "0.03")
+            BigDecimal downRatio) {
+
+        AlertRuleCommandHandler.RuleInput.GridInput toInput() {
+            return new AlertRuleCommandHandler.RuleInput.GridInput(upRatio, downRatio);
         }
     }
 
@@ -153,6 +168,7 @@ public class AlertRuleController {
             String conditionSummary,
             @Schema(description = "条件数组，供编辑回显；回撤止盈为空数组") List<ConditionView> conditions,
             @Schema(description = "回撤止盈参数，供编辑回显；其它种类为空") TakeProfitView takeProfit,
+            @Schema(description = "网格参数，供编辑回显；其它种类为空") GridView grid,
             @Schema(description = "是否启用", example = "true") boolean enabled,
             @Schema(description = "今日是否已提醒", example = "false") boolean todaySent,
             @Schema(description = "上次触发时间") Instant lastTriggeredAt) {
@@ -161,7 +177,7 @@ public class AlertRuleController {
             return new AlertRuleView(result.id(), result.scope(), result.portfolioFundId(), result.fundCode(),
                     result.fundName(), result.kind(), result.kindLabel(), result.match(), result.conditionSummary(),
                     result.conditions().stream().map(ConditionView::from).toList(),
-                    TakeProfitView.from(result.takeProfit()), result.enabled(),
+                    TakeProfitView.from(result.takeProfit()), GridView.from(result.grid()), result.enabled(),
                     result.todaySent(), result.lastTriggeredAt());
         }
     }
@@ -190,6 +206,16 @@ public class AlertRuleController {
         static TakeProfitView from(AlertRuleQueryHandler.TakeProfitView result) {
             return result == null ? null : new TakeProfitView(result.activation(), result.pullback(),
                     result.harvest(), result.minimumHolding(), result.maxSingleSell(), result.cooldownDays());
+        }
+    }
+
+    @Schema(description = "网格参数视图")
+    public record GridView(
+            @Schema(description = "上浮比例", example = "0.05") BigDecimal upRatio,
+            @Schema(description = "下降比例", example = "0.03") BigDecimal downRatio) {
+
+        static GridView from(AlertRuleQueryHandler.GridView result) {
+            return result == null ? null : new GridView(result.upRatio(), result.downRatio());
         }
     }
 

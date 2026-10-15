@@ -234,7 +234,7 @@ class AlertRuleControllerTest {
                 "CONDITION", "条件提醒", "ALL", "当日涨跌幅 高于 0.05",
                 List.of(new AlertRuleQueryHandler.ConditionView("DAILY_CHANGE", Map.of(), "ABOVE",
                         new BigDecimal("0.05"))),
-                null, true, false, null);
+                null, null, true, false, null);
     }
 
     private static AlertRuleQueryHandler.RuleViewResult trailingStopView() {
@@ -244,7 +244,7 @@ class AlertRuleControllerTest {
                 List.of(),
                 new AlertRuleQueryHandler.TakeProfitView(new BigDecimal("0.15"), new BigDecimal("0.06"),
                         new BigDecimal("0.5"), new BigDecimal("0.5"), new BigDecimal("0.2"), 10),
-                true, false, null);
+                null, true, false, null);
     }
 
     private static IndicatorMetadataQueryHandler.IndicatorMetadata metadata() {

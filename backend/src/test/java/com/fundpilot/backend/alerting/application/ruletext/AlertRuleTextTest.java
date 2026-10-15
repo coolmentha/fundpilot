@@ -9,6 +9,7 @@ import com.fundpilot.backend.alerting.domain.condition.AlertCondition;
 import com.fundpilot.backend.alerting.domain.condition.ConditionGroup;
 import com.fundpilot.backend.alerting.domain.condition.ConditionRelation;
 import com.fundpilot.backend.alerting.domain.condition.IndicatorCode;
+import com.fundpilot.backend.alerting.domain.grid.GridParams;
 import com.fundpilot.backend.alerting.domain.suggestion.TakeProfitParams;
 import java.math.BigDecimal;
 import java.util.List;
@@ -51,6 +52,23 @@ class AlertRuleTextTest {
 
         assertThat(AlertRuleText.summarize(rule)).isEqualTo(
                 "回撤止盈：盈利达 15% 后回撤 6% 即提醒，收割浮盈的 50%，最低保留 50%，单次最多卖 20%，冷静期 10 个交易日");
+    }
+
+    @Test
+    void 网格摘要描述两个越线比例与基准线来源() {
+        AlertRule rule = AlertRule.create(1L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null,
+                new GridParams(new BigDecimal("0.05"), new BigDecimal("0.03")), true);
+
+        assertThat(AlertRuleText.summarize(rule)).isEqualTo(
+                "网格交易：以最近一笔成交净值为基准，上浮 5% 提醒卖出，下降 3% 提醒买入");
+    }
+
+    @Test
+    void 带符号比例展示正负号() {
+        assertThat(AlertRuleText.signedPercent(new BigDecimal("0.0523"))).isEqualTo("+5.23%");
+        assertThat(AlertRuleText.signedPercent(new BigDecimal("-0.03"))).isEqualTo("-3%");
+        assertThat(AlertRuleText.signedPercent(BigDecimal.ZERO)).isEqualTo("0%");
+        assertThat(AlertRuleText.signedPercent(null)).isEqualTo("-");
     }
 
     @Test

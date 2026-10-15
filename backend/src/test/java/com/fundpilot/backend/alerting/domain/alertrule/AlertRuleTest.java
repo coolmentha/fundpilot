@@ -7,6 +7,7 @@ import com.fundpilot.backend.alerting.domain.condition.AlertCondition;
 import com.fundpilot.backend.alerting.domain.condition.ConditionGroup;
 import com.fundpilot.backend.alerting.domain.condition.ConditionRelation;
 import com.fundpilot.backend.alerting.domain.condition.IndicatorCode;
+import com.fundpilot.backend.alerting.domain.grid.GridParams;
 import com.fundpilot.backend.alerting.domain.suggestion.TakeProfitParams;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,60 @@ class AlertRuleTest {
         assertThat(first.signature()).isEqualTo(same.signature());
         assertThat(first.signature()).isNotEqualTo(different.signature());
         assertThat(first.signature()).isNotEqualTo(takeProfit.signature());
+    }
+
+    @Test
+    void 网格规则必须配置两个比例且不得携带条件或止盈参数() {
+        GridParams params = grid("0.05", "0.03");
+        AlertRule rule = AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null, params,
+                true);
+        assertThat(rule.grid()).isEqualTo(params);
+        assertThat(rule.takeProfit()).isNull();
+        assertThat(rule.conditions()).isNull();
+
+        // 缺参数
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null, null, true));
+        // 网格不接受条件
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, rise("0.05"), null, params,
+                        true));
+        // 网格不接受止盈参数
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, params(), params, true));
+    }
+
+    @Test
+    void 非网格规则不接受网格参数() {
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.CONDITION, rise("0.05"), null,
+                        grid("0.05", "0.03"), true));
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.TRAILING_STOP, null, params(),
+                        grid("0.05", "0.03"), true));
+    }
+
+    @Test
+    void 网格规则是建议型且不需要条件() {
+        assertThat(AlertRuleKind.GRID.suggestion()).isTrue();
+        assertThat(AlertRuleKind.GRID.needsConditions()).isFalse();
+    }
+
+    @Test
+    void 网格口径签名随比例变化且区别于同种类的其它参数() {
+        AlertRule first = AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null,
+                grid("0.05", "0.03"), true);
+        AlertRule same = AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null,
+                grid("0.05", "0.03"), true);
+        AlertRule different = AlertRule.create(3L, AlertRuleScope.GLOBAL, null, AlertRuleKind.GRID, null, null,
+                grid("0.05", "0.04"), true);
+
+        assertThat(first.signature()).isEqualTo(same.signature());
+        assertThat(first.signature()).isNotEqualTo(different.signature());
+    }
+
+    private static GridParams grid(String upRatio, String downRatio) {
+        return new GridParams(new BigDecimal(upRatio), new BigDecimal(downRatio));
     }
 
     private static ConditionGroup rise(String threshold) {

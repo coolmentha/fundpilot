@@ -10,6 +10,7 @@ import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.A
 import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.AlertRecipientGateway;
 import com.fundpilot.backend.alerting.application.gateway.ruleevaluation.AlertFundFactsGateway;
 import com.fundpilot.backend.alerting.application.gateway.ruleevaluation.AlertIndicatorGateway;
+import com.fundpilot.backend.alerting.application.grid.AlertGridService;
 import com.fundpilot.backend.alerting.application.suggestion.AlertSuggestionService;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleKind;
@@ -19,6 +20,7 @@ import com.fundpilot.backend.alerting.domain.condition.AlertCondition;
 import com.fundpilot.backend.alerting.domain.condition.ConditionGroup;
 import com.fundpilot.backend.alerting.domain.condition.ConditionRelation;
 import com.fundpilot.backend.alerting.domain.condition.IndicatorCode;
+import com.fundpilot.backend.alerting.domain.grid.GridParams;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotification;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotificationRepository;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotificationStatus;
@@ -480,7 +482,7 @@ class AlertRuleEvaluationQueryHandlerTest {
         var result = handler().preview(OWNER, new AlertRuleCommandHandler.RuleInput("GLOBAL", null,
                 "TRAILING_STOP", "ALL", null, new AlertRuleCommandHandler.RuleInput.TakeProfitInput(
                         new BigDecimal("0.10"), new BigDecimal("0.05"), new BigDecimal("0.5"),
-                        new BigDecimal("0.5"), new BigDecimal("0.2"), 10), true));
+                        new BigDecimal("0.5"), new BigDecimal("0.2"), 10), null, true));
 
         assertThat(result.hit()).isTrue();
         assertThat(result.funds()).singleElement().satisfies(fund -> {
@@ -492,18 +494,239 @@ class AlertRuleEvaluationQueryHandlerTest {
         });
     }
 
+    @Test
+    void 网格上浮越线提醒卖出并只发一封() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        // 基准 1.0000，上线路 1.0500；估值 1.0600 已越上轨
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        var result = handler().evaluateGrid();
+
+        assertThat(result.evaluatedRules()).isEqualTo(1);
+        assertThat(result.matchedRules()).isEqualTo(1);
+        assertThat(result.sentRules()).isEqualTo(1);
+        assertThat(mail.messages).singleElement().satisfies(message -> {
+            assertThat(message.funds()).singleElement().satisfies(row -> {
+                assertThat(row.suggestion()).isEqualTo("建议卖出");
+                assertThat(row.conditionDetail()).contains("基准净值 1").contains("偏离").contains("+6%");
+            });
+        });
+    }
+
+    @Test
+    void 网格下降越线提醒买入() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        // 下线路 0.9700；估值 0.9600 已越下轨
+        facts.funds(OWNER, gridFund(11L, "1.0000", "0.9600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        var result = handler().evaluateGrid();
+
+        assertThat(result.sentRules()).isEqualTo(1);
+        assertThat(mail.messages).singleElement()
+                .satisfies(message -> assertThat(message.funds()).singleElement()
+                        .satisfies(row -> {
+                            assertThat(row.suggestion()).isEqualTo("建议买入");
+                            assertThat(row.conditionDetail()).contains("-4%");
+                        }));
+    }
+
+    @Test
+    void 网格估值在带内不提醒() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0200", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        var result = handler().evaluateGrid();
+
+        assertThat(result.evaluatedRules()).isEqualTo(1);
+        assertThat(result.matchedRules()).isZero();
+        assertThat(mail.messages).isEmpty();
+    }
+
+    @Test
+    void 网格估值不可用时越线也不提醒() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        // 估值已越过上轨，但状态不可用（如 QDII 无盘中估值），按决策 2 跳过
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "UNAVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        var result = handler().evaluateGrid();
+
+        assertThat(result.matchedRules()).isZero();
+        assertThat(mail.messages).isEmpty();
+        assertThat(notifications.store).isEmpty();
+    }
+
+    @Test
+    void 网格缺基准流水时跳过不提醒() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER, gridFund(11L, null, "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        assertThat(handler().evaluateGrid().matchedRules()).isZero();
+        assertThat(mail.messages).isEmpty();
+    }
+
+    @Test
+    void 网格同日重复越线只发一封() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        assertThat(handler().evaluateGrid().sentRules()).isEqualTo(1);
+        // 窗口内每分钟重跑：第二条起被当日唯一索引拦下
+        assertThat(handler().evaluateGrid().sentRules()).isZero();
+        assertThat(mail.messages).hasSize(1);
+    }
+
+    @Test
+    void 网格次日可再次越线提醒() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        assertThat(handler().evaluateGrid().sentRules()).isEqualTo(1);
+
+        advance(1);
+        facts.funds(OWNER, gridFund(11L, "1.5000", "1.6000", "AVAILABLE"));
+        assertThat(handler().evaluateGrid().sentRules()).isEqualTo(1);
+        assertThat(mail.messages).hasSize(2);
+    }
+
+    @Test
+    void 网格不参与常规评估而常规规则不参与网格评估() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        // 门槛取得足够高，确保常规规则本身不命中，从而只检验「种类分流」
+        rules.add(OWNER, AlertRuleScope.GLOBAL, null, rise("0.9"), true);
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        // 14:30 的常规评估只数到条件规则，看不到已越线的网格规则
+        assertThat(handler().evaluate().evaluatedRules()).isEqualTo(1);
+        assertThat(mail.messages).isEmpty();
+
+        // 14:50 的网格评估只看网格规则
+        assertThat(handler().evaluateGrid().evaluatedRules()).isEqualTo(1);
+        assertThat(mail.messages).hasSize(1);
+    }
+
+    @Test
+    void 试算网格给出基准线与偏离并可命中() {
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+
+        var result = handler().preview(OWNER, new AlertRuleCommandHandler.RuleInput("GLOBAL", null,
+                "GRID", "ALL", null, null,
+                new AlertRuleCommandHandler.RuleInput.GridInput(new BigDecimal("0.05"), new BigDecimal("0.03")),
+                true));
+
+        assertThat(result.hit()).isTrue();
+        assertThat(result.funds()).singleElement().satisfies(fund -> {
+            assertThat(fund.hit()).isTrue();
+            assertThat(fund.conditions()).hasSize(3);
+            assertThat(fund.conditions().getFirst().text()).contains("基准净值 1");
+            assertThat(fund.conditions().getLast().currentValue()).isEqualByComparingTo("0.06");
+            assertThat(fund.conditions().getLast().satisfied()).isTrue();
+        });
+    }
+
+    @Test
+    void 试算网格估值不可用时未命中() {
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "UNAVAILABLE"));
+
+        var result = handler().preview(OWNER, new AlertRuleCommandHandler.RuleInput("GLOBAL", null,
+                "GRID", "ALL", null, null,
+                new AlertRuleCommandHandler.RuleInput.GridInput(new BigDecimal("0.05"), new BigDecimal("0.03")),
+                true));
+
+        assertThat(result.hit()).isFalse();
+        assertThat(result.funds()).singleElement().satisfies(fund -> assertThat(fund.hit()).isFalse());
+    }
+
+    @Test
+    void 网格窗口内发送失败后下一分钟重跑仍能补发() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        long ruleId = rules.store.keySet().iterator().next();
+        facts.funds(OWNER, gridFund(11L, "1.0000", "1.0600", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        // 14:50 那次 SMTP 故障：整条规则评估失败，当日额度未被占用
+        mail.exploding.add("owner@example.com");
+        var failedRun = handler().evaluateGrid();
+        assertThat(failedRun.failedRules()).isEqualTo(1);
+        assertThat(failedRun.sentRules()).isZero();
+        assertThat(notifications.countSentByRuleAndTradingDate(ruleId, BusinessDay.toDateLabel(NOW))).isZero();
+
+        // 14:53 恢复：同一窗口内重跑即可补发，无需额外记录「今天跑过没有」
+        mail.exploding.clear();
+        var recovered = handler().evaluateGrid();
+        assertThat(recovered.sentRules()).isEqualTo(1);
+        assertThat(mail.messages).hasSize(1);
+        assertThat(notifications.countSentByRuleAndTradingDate(ruleId, BusinessDay.toDateLabel(NOW))).isEqualTo(1);
+    }
+
+    @Test
+    void 全局网格规则下每只基金各用自己的基准线独立判定() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER,
+                // 基准 1.0000、估值 1.0600：越过自己的上轨 → 建议卖出
+                gridFund(11L, "1.0000", "1.0600", "AVAILABLE"),
+                // 基准 2.0000、估值 2.0200：相对自己的基准只在带内 → 不命中
+                gridFund(12L, "2.0000", "2.0200", "AVAILABLE"),
+                // 基准 1.0000、估值 0.9500：越过自己的下轨 → 建议买入
+                gridFund(13L, "1.0000", "0.9500", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        var result = handler().evaluateGrid();
+
+        // 三条判定共用一封邮件，但方向与依据逐只独立
+        assertThat(result.matchedRules()).isEqualTo(1);
+        assertThat(mail.messages).singleElement().satisfies(message -> {
+            assertThat(message.funds()).hasSize(2);
+            assertThat(message.funds()).extracting(AlertEmailGateway.AlertEmailMessage.FundRow::portfolioFundId)
+                    .containsExactly(11L, 13L);
+            assertThat(message.funds()).extracting(AlertEmailGateway.AlertEmailMessage.FundRow::suggestion)
+                    .containsExactly("建议卖出", "建议买入");
+        });
+    }
+
+    @Test
+    void 网格命中时把估值不可用的基金一并写进邮件() {
+        rules.addGrid(OWNER, AlertRuleScope.GLOBAL, null, grid("0.05", "0.03"), true);
+        facts.funds(OWNER,
+                gridFund(11L, "1.0000", "1.0600", "AVAILABLE"),
+                // 估值不可用：不该静默消失，要在邮件里说明原因
+                gridFund(12L, "1.0000", "1.0600", "UNAVAILABLE"),
+                // 没有基准流水：同样要说明
+                gridFund(13L, null, "1.0000", "AVAILABLE"));
+        recipients.emails.put(OWNER, "owner@example.com");
+
+        assertThat(handler().evaluateGrid().sentRules()).isEqualTo(1);
+
+        assertThat(mail.messages).singleElement().satisfies(message -> {
+            assertThat(message.funds()).hasSize(1);
+            assertThat(message.skipped()).hasSize(2);
+            assertThat(message.skipped()).extracting(
+                            AlertEmailGateway.AlertEmailMessage.SkippedFund::reason)
+                    .anySatisfy(reason -> assertThat(reason).contains("估值不可用"))
+                    .anySatisfy(reason -> assertThat(reason).contains("无历史成交净值"));
+        });
+    }
+
     private static AlertRuleCommandHandler.RuleInput input(String scope, Long portfolioFundId, String indicator,
                                                            String relation, String value) {
         return new AlertRuleCommandHandler.RuleInput(scope, portfolioFundId, null, "ALL",
                 List.of(new AlertRuleCommandHandler.RuleInput.ConditionInput(indicator, Map.of(), relation,
-                        new BigDecimal(value))), null, true);
+                        new BigDecimal(value))), null, null, true);
     }
 
     private AlertRuleEvaluationQueryHandler handler() {
         ConditionEvaluationService conditions = new ConditionEvaluationService(indicators);
         AlertSuggestionService suggestions = new AlertSuggestionService(facts, indicators, conditions, states);
-        return new AlertRuleEvaluationQueryHandler(rules, notifications, facts, conditions, suggestions, recipients,
-                new AlertNotificationDispatchCommandHandler(notifications, mail, clock), clock);
+        AlertGridService grids = new AlertGridService();
+        return new AlertRuleEvaluationQueryHandler(rules, notifications, facts, conditions, suggestions, grids,
+                recipients, new AlertNotificationDispatchCommandHandler(notifications, mail, clock), clock);
     }
 
     private static ConditionGroup rise(String threshold) {
@@ -525,7 +748,7 @@ class AlertRuleEvaluationQueryHandlerTest {
                 new BigDecimal("10000"), new BigDecimal(dailyChangePct), new BigDecimal("10000"),
                 new BigDecimal("500"), new BigDecimal(holdingReturnRate), new BigDecimal("1.2345"),
                 new BigDecimal("1.2345"), new BigDecimal("2.4690"), NOW.minusSeconds(86400 * 10),
-                NOW, "REALTIME");
+                NOW, "REALTIME", null, null);
     }
 
     /** 主动型基金的持仓事实：productType 为 ACTIVE，量能条件不适用。 */
@@ -536,7 +759,7 @@ class AlertRuleEvaluationQueryHandlerTest {
                 new BigDecimal("1.0"), new BigDecimal("10000"), new BigDecimal("10000"),
                 new BigDecimal(dailyChangePct), new BigDecimal("10000"), new BigDecimal("500"),
                 new BigDecimal(holdingReturnRate), new BigDecimal("1.2345"), new BigDecimal("1.2345"),
-                new BigDecimal("2.4690"), NOW.minusSeconds(86400 * 30), NOW, "REALTIME");
+                new BigDecimal("2.4690"), NOW.minusSeconds(86400 * 30), NOW, "REALTIME", null, null);
     }
 
     /** 回撤止盈的持仓事实：成本 1.0、份额 10000、单位净值 1.5（收益率 50%），累计净值由参数给定。 */
@@ -546,12 +769,33 @@ class AlertRuleEvaluationQueryHandlerTest {
                 new BigDecimal("10000"), new BigDecimal("0.01"), new BigDecimal("15000"),
                 new BigDecimal("5000"), new BigDecimal("0.5"), new BigDecimal("1.5"),
                 new BigDecimal("1.5"), new BigDecimal(accumulatedNav), NOW.minusSeconds(86400 * 30),
-                NOW, "REALTIME");
+                NOW, "REALTIME", null, null);
     }
 
     private static TakeProfitParams takeProfit() {
         return new TakeProfitParams(new BigDecimal("0.10"), new BigDecimal("0.05"), new BigDecimal("0.5"),
                 new BigDecimal("0.5"), new BigDecimal("0.2"), 10);
+    }
+
+    private static GridParams grid(String upRatio, String downRatio) {
+        return new GridParams(new BigDecimal(upRatio), new BigDecimal(downRatio));
+    }
+
+    /**
+     * 网格事实：基准净值与当日盘中估值分开给定。
+     *
+     * <p>估值可用性由 estimateStatus 决定，因此可以构造「越线但估值不可用」的场景。
+     */
+    private static AlertFundFactsGateway.AlertFundFact gridFund(long portfolioFundId, String baselineNav,
+                                                                String valuationNav, String estimateStatus) {
+        return new AlertFundFactsGateway.AlertFundFact(portfolioFundId, portfolioFundId + 100L, "161725",
+                "基金161725", "OPEN", true, "INDEX", NOW.minusSeconds(86400 * 30),
+                new BigDecimal("1.0"), new BigDecimal("10000"), new BigDecimal("10000"),
+                new BigDecimal("0.01"), new BigDecimal("10000"), new BigDecimal("500"),
+                new BigDecimal("0.05"), valuationNav == null ? null : new BigDecimal(valuationNav),
+                valuationNav == null ? null : new BigDecimal(valuationNav), new BigDecimal("2.4690"),
+                NOW.minusSeconds(86400 * 30), NOW.minusSeconds(600), estimateStatus,
+                baselineNav == null ? null : new BigDecimal(baselineNav), NOW.minusSeconds(86400 * 5));
     }
 
     private static final class InMemoryRules implements AlertRuleRepository {
@@ -567,6 +811,15 @@ class AlertRuleEvaluationQueryHandlerTest {
                       ConditionGroup conditions, TakeProfitParams takeProfit, boolean enabled) {
             AlertRule rule = AlertRule.rehydrate(++sequence, ownerId, scope, portfolioFundId, kind, conditions,
                     takeProfit, enabled);
+            store.put(rule.id(), rule);
+            return rule;
+        }
+
+        /** 网格规则：无止损参数，只带两个越线比例。 */
+        AlertRule addGrid(long ownerId, AlertRuleScope scope, Long portfolioFundId, GridParams grid,
+                          boolean enabled) {
+            AlertRule rule = AlertRule.rehydrate(++sequence, null, ownerId, scope, portfolioFundId,
+                    AlertRuleKind.GRID, null, null, grid, enabled);
             store.put(rule.id(), rule);
             return rule;
         }

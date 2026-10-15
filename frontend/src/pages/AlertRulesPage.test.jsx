@@ -39,7 +39,31 @@ const rules = [
         kind: 'LOGIC_BROKEN', kindLabel: '逻辑破坏止损', match: 'ALL',
         conditionSummary: '逻辑破坏止损：当日涨跌幅 高于 0.05',
         conditions: [{indicator: 'DAILY_CHANGE', params: {}, relation: 'ABOVE', value: 0.05}],
-        takeProfit: null,
+        takeProfit: null, grid: null,
+        enabled: true, todaySent: false, lastTriggeredAt: null,
+    },
+    {
+        // 网格的覆盖口径用两个比例：单基金网格规则应与同比例的全局网格规则同口径。
+        id: 5, scope: 'FUND', portfolioFundId: 43, fundCode: '110022', fundName: '易方达消费行业',
+        kind: 'GRID', kindLabel: '网格交易提醒', match: 'ALL',
+        conditionSummary: '网格交易：以最近一笔成交净值为基准，上浮 5% 提醒卖出，下降 3% 提醒买入',
+        conditions: [], takeProfit: null, grid: {upRatio: 0.05, downRatio: 0.03},
+        enabled: true, todaySent: false, lastTriggeredAt: null,
+    },
+    {
+        // 与 id=5 两个比例都相同，应被标记为已覆盖。
+        id: 6, scope: 'GLOBAL', portfolioFundId: null, fundCode: null, fundName: null,
+        kind: 'GRID', kindLabel: '网格交易提醒', match: 'ALL',
+        conditionSummary: '网格交易：以最近一笔成交净值为基准，上浮 5% 提醒卖出，下降 3% 提醒买入',
+        conditions: [], takeProfit: null, grid: {upRatio: 0.05, downRatio: 0.03},
+        enabled: true, todaySent: false, lastTriggeredAt: null,
+    },
+    {
+        // 上浮比例与 id=5 不同，口径不同，不应被标记为已覆盖。
+        id: 7, scope: 'GLOBAL', portfolioFundId: null, fundCode: null, fundName: null,
+        kind: 'GRID', kindLabel: '网格交易提醒', match: 'ALL',
+        conditionSummary: '网格交易：以最近一笔成交净值为基准，上浮 8% 提醒卖出，下降 3% 提醒买入',
+        conditions: [], takeProfit: null, grid: {upRatio: 0.08, downRatio: 0.03},
         enabled: true, todaySent: false, lastTriggeredAt: null,
     },
 ];
@@ -146,7 +170,27 @@ describe('AlertRulesPage', () => {
         expect(fundLink.getAttribute('href')).toBe('/funds/41');
 
         // 覆盖口径签名含规则种类：同为全局规则、条件相同但种类不同不会被误标为已覆盖。
-        expect(container.textContent.split('已被单基金规则覆盖')).toHaveLength(2);
+        // 命中的是 id=1（条件口径）与 id=6（网格口径，与单基金网格规则两个比例都相同）。
+        expect(container.textContent.split('已被单基金规则覆盖')).toHaveLength(3);
+    });
+
+    it('网格规则按两个比例的覆盖口径分别判定，比例不同不算同口径', async () => {
+        await render();
+
+        expect(container.textContent).toContain('网格交易提醒');
+        expect(container.textContent).toContain('上浮 5% 提醒卖出');
+
+        // 只看全局规则行（含「所有关注基金」），单基金规则行不参与覆盖判定。
+        const globalRows = [...container.querySelectorAll('tbody tr')]
+            .filter((row) => row.textContent.includes('所有关注基金'));
+        const covered = (text) => globalRows
+            .filter((row) => row.textContent.includes(text))
+            .map((row) => row.textContent.includes('已被单基金规则覆盖'));
+
+        // id=6 上浮 5%/下降 3% 与 id=5 完全同口径 → 已覆盖
+        expect(covered('上浮 5% 提醒卖出')).toEqual([true]);
+        // id=7 上浮 8% → 口径不同，不被覆盖
+        expect(covered('上浮 8% 提醒卖出')).toEqual([false]);
     });
 
     it('列表展示规则种类与回撤止盈规则的参数摘要', async () => {

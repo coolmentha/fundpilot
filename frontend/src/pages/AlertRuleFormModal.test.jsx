@@ -340,6 +340,98 @@ describe('AlertRuleFormModal', () => {
         });
     });
 
+    it('切换网格交易提醒后只填两个比例并只提交网格参数', async () => {
+        const onOk = vi.fn();
+        await render({onOk});
+
+        await selectKind('GRID');
+        await clickButton('下一步');
+
+        expect(document.body.textContent).toContain('配置网格参数');
+        expect(document.body.textContent).toContain('上浮比例');
+        expect(document.body.textContent).toContain('下降比例');
+        // 网格不走条件列表
+        expect(document.body.textContent).not.toContain('添加条件');
+
+        await setNumber(numberInputs()[0], 0.05);
+        await setNumber(numberInputs()[1], 0.03);
+
+        await clickButton('下一步');
+        await clickButton('创建');
+
+        const payload = onOk.mock.calls[0][0];
+        expect(payload).toEqual({
+            scope: 'GLOBAL',
+            portfolioFundId: null,
+            kind: 'GRID',
+            match: 'ALL',
+            grid: {upRatio: 0.05, downRatio: 0.03},
+            enabled: true,
+        });
+        // 网格既不带条件也不带止盈参数。
+        expect(payload).not.toHaveProperty('conditions');
+        expect(payload).not.toHaveProperty('takeProfit');
+    });
+
+    it('网格比例必须严格落在 0 与 1 之间', async () => {
+        await render({onOk: vi.fn()});
+
+        await selectKind('GRID');
+        await clickButton('下一步');
+
+        await setNumber(numberInputs()[0], 1);
+        await setNumber(numberInputs()[1], 0);
+        await clickButton('下一步');
+        await flush();
+
+        expect(document.body.textContent).toContain('上浮比例必须小于 1');
+        expect(document.body.textContent).toContain('下降比例必须大于 0');
+        // 校验不通过时留在第二步：底部按钮仍是「下一步」，没有「创建」
+        const buttons = [...document.querySelectorAll('.ant-modal button')]
+            .map((item) => item.textContent.replace(/\s/g, ''));
+        expect(buttons).toContain('下一步');
+        expect(buttons).not.toContain('创建');
+    });
+
+    it('编辑已有网格规则时回显两个比例', async () => {
+        const onOk = vi.fn();
+        const editing = {
+            id: 7,
+            scope: 'FUND',
+            portfolioFundId: 41,
+            kind: 'GRID',
+            grid: {upRatio: 0.05, downRatio: 0.03},
+            enabled: true,
+        };
+        await render({editing, onOk});
+
+        await clickButton('下一步');
+
+        expect(numberInputs().map((input) => Number(input.value))).toEqual([0.05, 0.03]);
+
+        await clickButton('下一步');
+        await clickButton('保存');
+
+        expect(onOk).toHaveBeenCalledWith({
+            scope: 'FUND',
+            portfolioFundId: 41,
+            kind: 'GRID',
+            match: 'ALL',
+            grid: {upRatio: 0.05, downRatio: 0.03},
+            enabled: true,
+        });
+    });
+
+    it('网格展示 14:50 的评估时点而不是 14:30', async () => {
+        await render({onOk: vi.fn()});
+
+        await selectKind('GRID');
+        await clickButton('下一步');
+        await clickButton('下一步');
+
+        expect(document.body.textContent).toContain('14:50–14:59');
+    });
+
     it('预览步骤用最近交易日试算并展示逐条条件的现值', async () => {
         const onPreview = vi.fn().mockResolvedValue(PREVIEW);
         await render({onOk: vi.fn(), onPreview});

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -33,8 +34,14 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
     private static final String ACCENT_COLOR = "#1677ff";
     private static final String RISE_COLOR = "#d4380d";
     private static final String DROP_COLOR = "#389e0d";
+    /**
+     * 建议型邮件的免责提示。
+     *
+     * <p>措辞不写死方向：回撤止盈与逻辑破坏止损只会建议卖出，网格还会建议买入，统一说「买入或卖出」
+     * 才不会让网格的买入建议跟着一句「手工录入卖出」。
+     */
     private static final String SUGGESTION_NOTICE =
-            "以上卖出建议仅为纪律提示，请在确认页手工录入卖出，系统不会自动下单。";
+            "以上买入/卖出建议仅为纪律提示，请在确认页手工录入交易，系统不会自动下单。";
     private static final List<String> BASE_HEADERS = List.of("基金名称", "代码", "命中条件", "当前净值(估值)",
             "当日涨跌幅", "持仓盈亏", "持仓收益率", "操作");
     private static final DateTimeFormatter SENT_AT =
@@ -109,6 +116,10 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
                     .append("</tr>");
         }
         builder.append("</tbody></table>");
+        if (!message.skipped().isEmpty()) {
+            builder.append("<p style=\"margin:16px 0 0;color:#8c8c8c;font-size:12px\">以下基金本次未能判定：")
+                    .append(escape(skippedSummary(message))).append("</p>");
+        }
         if (suggest) {
             builder.append("<p style=\"margin:16px 0 0;color:#d4380d;font-size:12px\">")
                     .append(SUGGESTION_NOTICE).append("</p>");
@@ -126,6 +137,13 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
         }
         return List.of("基金名称", "代码", "命中条件", "建议操作", "当前净值(估值)", "当日涨跌幅",
                 "持仓盈亏", "持仓收益率", "操作");
+    }
+
+    /** 被跳过基金的一句话说明：基金名(代码) + 原因，用中文分号连接。 */
+    private static String skippedSummary(AlertEmailMessage message) {
+        return message.skipped().stream()
+                .map(fund -> fund.fundName() + "(" + fund.fundCode() + ")" + fund.reason())
+                .collect(Collectors.joining("；"));
     }
 
     private String plainText(AlertEmailMessage message) {
@@ -146,6 +164,9 @@ public class AlertEmailGatewayImpl implements AlertEmailGateway {
             builder.append("  详情：").append(detailUrl(fund.portfolioFundId())).append('\n');
         }
         builder.append('\n');
+        if (!message.skipped().isEmpty()) {
+            builder.append("以下基金本次未能判定：").append(skippedSummary(message)).append('\n');
+        }
         if (message.funds().stream().anyMatch(fund -> fund.suggestion() != null)) {
             builder.append(SUGGESTION_NOTICE).append('\n');
         }

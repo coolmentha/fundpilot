@@ -62,7 +62,7 @@ public class AlertRuleQueryHandler {
                 rule.kind().name(), rule.kind().label(),
                 rule.conditions() == null ? null : rule.conditions().match().name(),
                 AlertRuleText.summarize(rule),
-                conditions(rule), takeProfit(rule), rule.enabled(),
+                conditions(rule), takeProfit(rule), grid(rule), rule.enabled(),
                 status != null && status.sentCount() > 0,
                 status == null ? null : status.lastSentAt());
     }
@@ -80,14 +80,19 @@ public class AlertRuleQueryHandler {
                 params.minimumHolding(), params.maxSingleSell(), params.cooldownDays());
     }
 
+    private static GridView grid(AlertRule rule) {
+        var params = rule.grid();
+        return params == null ? null : new GridView(params.upRatio(), params.downRatio());
+    }
+
     private record OwnerContext(Map<Long, AlertFundFactsGateway.AlertFundFact> fundsById,
                                 Map<Long, AlertNotificationRepository.RuleDailyStatus> statuses) {
     }
 
     public record RuleViewResult(long id, String scope, Long portfolioFundId, String fundCode, String fundName,
                                  String kind, String kindLabel, String match, String conditionSummary,
-                                 List<ConditionView> conditions, TakeProfitView takeProfit, boolean enabled,
-                                 boolean todaySent, Instant lastTriggeredAt) {
+                                 List<ConditionView> conditions, TakeProfitView takeProfit, GridView grid,
+                                 boolean enabled, boolean todaySent, Instant lastTriggeredAt) {
     }
 
     /** 单条条件视图：阈值仅在与阈值比较的关系下存在。 */
@@ -97,5 +102,9 @@ public class AlertRuleQueryHandler {
     /** 回撤止盈的六个参数视图；非回撤止盈规则为空。 */
     public record TakeProfitView(BigDecimal activation, BigDecimal pullback, BigDecimal harvest,
                                  BigDecimal minimumHolding, BigDecimal maxSingleSell, int cooldownDays) {
+    }
+
+    /** 网格的两个比例参数视图；非网格规则为空。 */
+    public record GridView(BigDecimal upRatio, BigDecimal downRatio) {
     }
 }

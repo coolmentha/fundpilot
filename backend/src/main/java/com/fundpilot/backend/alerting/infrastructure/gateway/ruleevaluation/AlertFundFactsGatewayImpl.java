@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,16 @@ import org.springframework.stereotype.Component;
 public class AlertFundFactsGatewayImpl implements AlertFundFactsGateway {
 
     private static final int MIN_HOLD_TRADING_DAYS = 5;
+
+    /**
+     * 有成交净值的流水来源：真实买卖才会写入 {@code nav}。
+     *
+     * <p>ADJUST_IN / ADJUST_OUT 与 COST_BASIS_RESET 录入即确认、不计净值，因此不能充当网格基准线。
+     */
+    private static final Set<TransactionApi.Source> TRADED_SOURCES = Set.of(
+            TransactionApi.Source.INCREASE, TransactionApi.Source.DECREASE,
+            TransactionApi.Source.INVEST, TransactionApi.Source.TRANSFER_IN,
+            TransactionApi.Source.TRANSFER_OUT);
 
     private final FundReturnApi fundReturns;
     private final TradingCalendarApi tradingCalendar;
@@ -61,6 +72,9 @@ public class AlertFundFactsGatewayImpl implements AlertFundFactsGateway {
         PositionApi.Position position = positions.findOwned(ownerId, portfolioFundId).orElse(null);
         BigDecimal holdingShares = position == null ? null : position.confirmedShares();
         PublishedNavApi.PublishedNav nav = navs.latest(snapshot.fundProductId()).orElse(null);
+        // 同一只基金的流水只取一次，lastBuyTime 与网格基准线都从这一遍里算出来
+        List<TransactionApi.Transaction> history = transactions.findByPortfolioFund(ownerId, portfolioFundId);
+        TransactionApi.Transaction baseline = baselineTransaction(history);
         return new AlertFundFact(portfolioFundId, snapshot.fundProductId(), snapshot.fundCode(),
                 snapshot.fundName(), snapshot.positionStatus(), snapshot.open(), productType(snapshot),
                 position == null ? null : position.openedAt(), position == null ? null : position.costPerShare(),
@@ -68,7 +82,9 @@ public class AlertFundFactsGatewayImpl implements AlertFundFactsGateway {
                 snapshot.dailyChangePct(), snapshot.holdingAmount(), snapshot.unrealizedPnl(),
                 snapshot.holdingReturnRate(), snapshot.valuationNav(),
                 nav == null ? null : nav.unitNav(), nav == null ? null : nav.accumulatedNav(),
-                lastBuyTime(ownerId, portfolioFundId), snapshot.valuationDate(), snapshot.estimateStatus());
+                lastBuyTime(history), snapshot.valuationDate(), snapshot.estimateStatus(),
+                baseline == null ? null : baseline.nav(),
+                baseline == null ? null : tradedDate(baseline));
     }
 
     private String productType(FundReturnApi.FundReturnSnapshot snapshot) {
@@ -96,16 +112,41 @@ public class AlertFundFactsGatewayImpl implements AlertFundFactsGateway {
     }
 
     /** 最近一次加仓时间：已确认的加仓/转入/申购里最晚的交易日。 */
-    private Instant lastBuyTime(long ownerId, long portfolioFundId) {
-        return transactions.findByPortfolioFund(ownerId, portfolioFundId).stream()
-                .filter(value -> value.status() == TransactionApi.Status.CONFIRMED)
+    private static Instant lastBuyTime(List<TransactionApi.Transaction> history) {
+        return history.stream()
+                .filter(AlertFundFactsGatewayImpl::confirmed)
                 .filter(value -> value.source() == TransactionApi.Source.INCREASE
                         || value.source() == TransactionApi.Source.TRANSFER_IN
                         || value.source() == TransactionApi.Source.INVEST)
-                .map(value -> value.tradeDate() != null ? value.tradeDate() : value.confirmTime())
+                .map(AlertFundFactsGatewayImpl::tradedDate)
                 .filter(Objects::nonNull)
                 .max(Comparator.naturalOrder())
-                .map(ChinaTradingDate::toUtcDate)
                 .orElse(null);
+    }
+
+    /**
+     * 网格基准线：最近一条有成交净值的已确认流水。
+     *
+     * <p>买卖都算（每次真实成交都会重画基准线）；调整流水与成本修正没有成交净值，直接跳过。
+     * 没有任何可用成交历史的基金返回 null，由规则按「无基准线」跳过，不回退到持仓成本单价。
+     */
+    private static TransactionApi.Transaction baselineTransaction(List<TransactionApi.Transaction> history) {
+        return history.stream()
+                .filter(AlertFundFactsGatewayImpl::confirmed)
+                .filter(value -> TRADED_SOURCES.contains(value.source()))
+                .filter(value -> value.nav() != null && value.nav().signum() > 0)
+                .filter(value -> tradedDate(value) != null)
+                .max(Comparator.comparing(AlertFundFactsGatewayImpl::tradedDate))
+                .orElse(null);
+    }
+
+    private static boolean confirmed(TransactionApi.Transaction transaction) {
+        return transaction.status() == TransactionApi.Status.CONFIRMED;
+    }
+
+    /** 流水的成交业务日：优先交易日，缺失时回退确认时间，统一折算为北京时间自然日。 */
+    private static Instant tradedDate(TransactionApi.Transaction transaction) {
+        Instant at = transaction.tradeDate() != null ? transaction.tradeDate() : transaction.confirmTime();
+        return at == null ? null : ChinaTradingDate.toUtcDate(at);
     }
 }

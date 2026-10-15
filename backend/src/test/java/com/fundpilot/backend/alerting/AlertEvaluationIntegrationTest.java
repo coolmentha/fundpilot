@@ -96,7 +96,7 @@ class AlertEvaluationIntegrationTest extends AbstractIntegrationTest {
                 "FUND", portfolioFundId, null, "ALL",
                 List.of(new AlertRuleCommandHandler.RuleInput.ConditionInput("DAILY_CHANGE", Map.of(),
                         "ABOVE", new BigDecimal("0.05"))),
-                null, true));
+                null, null, true));
 
         var first = evaluation.evaluate();
         assertThat(first.evaluatedRules()).isEqualTo(1);

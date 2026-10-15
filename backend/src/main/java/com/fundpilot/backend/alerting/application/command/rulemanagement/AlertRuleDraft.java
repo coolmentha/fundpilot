@@ -8,6 +8,7 @@ import com.fundpilot.backend.alerting.domain.condition.AlertConditionMatch;
 import com.fundpilot.backend.alerting.domain.condition.ConditionGroup;
 import com.fundpilot.backend.alerting.domain.condition.ConditionRelation;
 import com.fundpilot.backend.alerting.domain.condition.IndicatorCode;
+import com.fundpilot.backend.alerting.domain.grid.GridParams;
 import com.fundpilot.backend.alerting.domain.suggestion.TakeProfitParams;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
@@ -18,10 +19,11 @@ import java.util.Locale;
  * 校验通过的规则输入：作用范围、目标基金、规则种类与种类对应的判定配置。
  *
  * <p>规则写入与「保存前试算」共用这一套校验，保证预览看到的口径与保存后的口径完全一致。
- * 条件型规则（含逻辑破坏止损）必须给条件组、不给止盈参数；回撤止盈必须给六个止盈参数、不给条件组。
+ * 条件型规则（含逻辑破坏止损）必须给条件组、不给参数；回撤止盈必须给六个止盈参数；
+ * 网格必须给两个比例参数；两类参数规则都不接受条件组。
  */
 public record AlertRuleDraft(AlertRuleScope scope, Long portfolioFundId, AlertRuleKind kind,
-                             ConditionGroup conditions, TakeProfitParams takeProfit) {
+                             ConditionGroup conditions, TakeProfitParams takeProfit, GridParams grid) {
 
     /** 校验并翻译请求；{@code trackedFundIds} 是该用户当前关注的组合基金 ID。 */
     public static AlertRuleDraft validate(RuleInput input, Collection<Long> trackedFundIds) {
@@ -29,7 +31,8 @@ public record AlertRuleDraft(AlertRuleScope scope, Long portfolioFundId, AlertRu
         AlertRuleKind kind = kind(input);
         return new AlertRuleDraft(scope, targetFundId(input, scope, trackedFundIds), kind,
                 kind.needsConditions() ? conditions(input) : null,
-                kind == AlertRuleKind.TRAILING_STOP ? takeProfit(input.takeProfit()) : null);
+                kind == AlertRuleKind.TRAILING_STOP ? takeProfit(input.takeProfit()) : null,
+                kind == AlertRuleKind.GRID ? grid(input.grid()) : null);
     }
 
     private static Long targetFundId(RuleInput input, AlertRuleScope scope, Collection<Long> trackedFundIds) {
@@ -93,6 +96,18 @@ public record AlertRuleDraft(AlertRuleScope scope, Long portfolioFundId, AlertRu
             return new TakeProfitParams(input.activation(), input.pullback(), input.harvest(),
                     input.minimumHolding(), input.maxSingleSell(),
                     input.cooldownDays() == null ? 0 : input.cooldownDays());
+        } catch (NullPointerException | IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.ALERT_RULE_PARAMETER_INVALID, exception.getMessage());
+        }
+    }
+
+    /** 网格的两个比例参数；缺少任一项或取值越界都按参数非法处理。 */
+    private static GridParams grid(RuleInput.GridInput input) {
+        if (input == null) {
+            throw new BusinessException(ErrorCode.ALERT_RULE_PARAMETER_INVALID, "网格交易提醒必须配置网格参数");
+        }
+        try {
+            return new GridParams(input.upRatio(), input.downRatio());
         } catch (NullPointerException | IllegalArgumentException exception) {
             throw new BusinessException(ErrorCode.ALERT_RULE_PARAMETER_INVALID, exception.getMessage());
         }

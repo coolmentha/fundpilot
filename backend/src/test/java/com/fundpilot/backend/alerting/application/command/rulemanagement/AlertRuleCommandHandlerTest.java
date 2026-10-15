@@ -114,7 +114,7 @@ class AlertRuleCommandHandlerTest {
         var handler = new AlertRuleCommandHandler(rules, mock(AlertFundFactsGateway.class),
                 mock(AlertRuleQueryHandler.class), mock(SuggestionStateRepository.class));
 
-        handler.create(OWNER, new RuleInput("GLOBAL", null, "TRAILING_STOP", "ALL", null, takeProfit(), true));
+        handler.create(OWNER, new RuleInput("GLOBAL", null, "TRAILING_STOP", "ALL", null, takeProfit(), null, true));
 
         var captor = ArgumentCaptor.forClass(AlertRule.class);
         verify(rules).save(captor.capture());
@@ -132,7 +132,7 @@ class AlertRuleCommandHandlerTest {
                 mock(SuggestionStateRepository.class));
 
         assertThatThrownBy(() -> handler.create(OWNER,
-                new RuleInput("GLOBAL", null, "MOON", "ALL", List.of(rise("0.05")), null, true)))
+                new RuleInput("GLOBAL", null, "MOON", "ALL", List.of(rise("0.05")), null, null, true)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo("ALERT_RULE_KIND_INVALID"));
     }
@@ -144,12 +144,12 @@ class AlertRuleCommandHandlerTest {
                 mock(SuggestionStateRepository.class));
 
         assertThatThrownBy(() -> handler.create(OWNER,
-                new RuleInput("GLOBAL", null, "TRAILING_STOP", "ALL", null, null, true)))
+                new RuleInput("GLOBAL", null, "TRAILING_STOP", "ALL", null, null, null, true)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo("ALERT_RULE_PARAMETER_INVALID"));
         assertThatThrownBy(() -> handler.create(OWNER, new RuleInput("GLOBAL", null, "TRAILING_STOP", "ALL", null,
                 new TakeProfitInput(new BigDecimal("1.5"), new BigDecimal("0.06"), new BigDecimal("0.50"),
-                        new BigDecimal("0.50"), new BigDecimal("0.20"), 10), true)))
+                        new BigDecimal("0.50"), new BigDecimal("0.20"), 10), null, true)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo("ALERT_RULE_PARAMETER_INVALID"));
     }
@@ -290,7 +290,7 @@ class AlertRuleCommandHandlerTest {
     /** 条件型规则的入参；不传种类时由服务端按条件提醒处理。 */
     private static RuleInput input(String scope, Long portfolioFundId, String match,
                                    List<ConditionInput> conditions) {
-        return new RuleInput(scope, portfolioFundId, null, match, conditions, null, true);
+        return new RuleInput(scope, portfolioFundId, null, match, conditions, null, null, true);
     }
 
     private static TakeProfitInput takeProfit() {
@@ -323,6 +323,7 @@ class AlertRuleCommandHandlerTest {
                 new BigDecimal("1.1"), new BigDecimal("1000"), BigDecimal.ZERO,
                 new BigDecimal("0.05"), new BigDecimal("1000"), new BigDecimal("50"),
                 new BigDecimal("0.05"), new BigDecimal("1.2"), new BigDecimal("1.2"), new BigDecimal("2.4"),
-                Instant.parse("2026-09-19T00:00:00Z"), Instant.parse("2026-09-19T00:00:00Z"), "READY");
+                Instant.parse("2026-09-19T00:00:00Z"), Instant.parse("2026-09-19T00:00:00Z"), "READY",
+                null, null);
     }
 }

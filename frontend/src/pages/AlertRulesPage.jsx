@@ -33,16 +33,22 @@ const conditionKey = (condition) => {
 };
 
 const TAKE_PROFIT_KEYS = ['activation', 'pullback', 'harvest', 'minimumHolding', 'maxSingleSell', 'cooldownDays'];
+const GRID_KEYS = ['upRatio', 'downRatio'];
 
 /**
  * 单条规则的覆盖口径签名：与后端 AlertRule.signature() 一致，种类参与签名；
- * 有条件的种类用条件形状，回撤止盈没有条件、改用止盈参数。阈值不参与，基金级只改阈值仍算同一口径。
+ * 有条件的种类用条件形状，回撤止盈与网格没有条件、改用各自的参数。
+ * 阈值不参与，基金级只改阈值仍算同一口径。
  */
 const ruleSignature = (rule) => {
     const kind = rule.kind ?? 'CONDITION';
     if (kind === 'TRAILING_STOP') {
         const takeProfit = rule.takeProfit ?? {};
         return `${kind}|${TAKE_PROFIT_KEYS.map((key) => takeProfit[key]).join('|')}`;
+    }
+    if (kind === 'GRID') {
+        const grid = rule.grid ?? {};
+        return `${kind}|${GRID_KEYS.map((key) => grid[key]).join('|')}`;
     }
     return `${kind}|${(rule.conditions ?? []).map(conditionKey).join(',')}`;
 };

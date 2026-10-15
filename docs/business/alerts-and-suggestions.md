@@ -4,15 +4,16 @@
 
 提醒规则命中后由后台在固定时间评估并发邮件，系统**不会自动下单**：提醒只是通知，任何买卖仍由用户在基金平台完成。
 
-规则分三类（`AlertRuleKind`）：
+规则分四类（`AlertRuleKind`）：
 
 | 种类 | 中文名 | 判定 |
 | --- | --- | --- |
 | `CONDITION` | 条件提醒 | 一组指标条件全部满足即提醒（无状态） |
 | `LOGIC_BROKEN` | 逻辑破坏止损 | 条件全部满足时建议全仓卖出 |
 | `TRAILING_STOP` | 回撤止盈 | 收益率达标后按周期峰值回撤，建议卖出浮盈的一部分 |
+| `GRID` | 网格交易提醒 | 盘中估值相对「最近一笔成交净值」上浮或下降到设定比例，建议卖出或买入 |
 
-后两类是**建议型规则**：判定自带状态机，结果是「建议卖出多少份额」，只写进邮件正文，不生成交易。
+后三类是**建议型规则**：判定结果带方向或份额建议，只写进邮件正文，不生成交易。其中逻辑破坏止损与回撤止盈自带状态机（`alert_suggestion_state`），网格**没有状态**——它每次都用当天的估值与同一条基准线比较，重复发送由「每规则每日一条」的幂等键抑制。
 
 `discipline`（卖出纪律）模块已在 v0.14.0 整体删除。它有价值的两处判定（逻辑破坏止损、回撤止盈）迁移为上表后两类建议型提醒；原先「点一条建议自动生成一笔在途交易」的采纳链路已降级为纯通知，卖出由用户在确认页手工录入。
 
@@ -102,12 +103,33 @@ stateDiagram-v2
 3. `当前份额 × (1 − 最低保留)`
 4. 已持有至少 5 个交易日的成熟可赎回份额
 
+### 网格交易提醒（`GRID`）
+
+以**基准线**为中心做双向提醒：
+
+```
+基准线 = 该基金最近一笔「已确认且带成交净值」流水的成交净值
+上线路 = 基准线 × (1 + 上浮比例)   → 当日盘中估值 ≥ 上线路：建议卖出
+下线路 = 基准线 × (1 − 下降比例)   → 当日盘中估值 ≤ 下线路：建议买入
+```
+
+两个比例各自独立、都必须严格落在 `(0, 1)`，不要求对称。
+
+- **基准线随成交重画**：每次真实买卖（买入/卖出/申购/转入/转出）都会成为新的基准线，因此网格会跟随实际持仓成本上移或下移。
+- **不参与基准线的流水**：`ADJUST_IN` / `ADJUST_OUT` / `COST_BASIS_RESET` 录入即确认、不计净值，不能充当基准线；未确认（`PENDING`）流水与净值缺失或非正的流水同样跳过。
+- **没有可用成交历史时跳过该基金**，不回退到持仓成本单价，也不会因此发邮件。
+- **只用当日盘中估值判定**：`estimateStatus` 必须是 `AVAILABLE`；估值过期、超时、解析失败或该基金不提供盘中估值（QDII）时当日不提醒。被跳过的基金会连同原因写进邮件正文（「以下基金本次未能判定：…」）并记日志，避免把「数据缺口」误读成「没越线」。这意味着 QDII 基金不会触达网格提醒。
+- **评估时点在收盘前**：`GridAlertEvaluationJob` 在 14:50–14:59（北京时间）**每分钟**评估一次启用中的网格规则。窗口内重跑是安全的——同一规则的重复发送由幂等键挡下，因此某分钟失败或进程在窗口中途恢复都能自愈，无需额外的「今日是否补跑」记录。
+- 邮件只给方向建议（「建议卖出」/「建议买入」），不计算份额与金额。
+
+已知限制：持仓已清仓（`CLEARED`）的基金不在关注列表中，因此「跌回下轨再买回」这一腿在完全清仓后不会触发。
+
 ## 通知与幂等
 
-- 每个交易日 14:30（北京时间）由 `AlertEvaluationJob` 评估全部启用规则，逐规则独立事务落库，单条失败不影响其他规则。
-- 邮件正文（`AlertEmailGatewayImpl`）含基金名、代码、命中条件、当前净值(估值)、当日涨跌幅、持仓盈亏、持仓收益率与详情链接；建议型规则多一列「建议操作」，写明建议卖出份额，并附提示「以上卖出建议仅为纪律提示，请在确认页手工录入卖出，系统不会自动下单」。
-- 幂等键 `uq_alert_notification_rule_day_sent`：同一规则每个交易日最多一条成功通知。
-- 建议型规则的运行期状态按「规则 × 组合基金」一行落 `alert_suggestion_state`（阶段、周期起始、周期峰值、冷静期起始），保证同一信号不逐日重复发送。
+- 每个交易日由两个任务分别评估：`AlertEvaluationJob` 在 14:30（北京时间）评估**除网格以外**的启用规则；`GridAlertEvaluationJob` 在 14:50–14:59 评估网格规则（网格必须在收盘前用盘中估值判定）。两者都逐规则独立事务落库，单条失败不影响其他规则。
+- 邮件正文（`AlertEmailGatewayImpl`）含基金名、代码、命中条件、当前净值(估值)、当日涨跌幅、持仓盈亏、持仓收益率与详情链接；建议型规则多一列「建议操作」，写明建议卖出份额（网格则写方向建议），并附方向中立的提示「以上买入/卖出建议仅为纪律提示，请在确认页手工录入交易，系统不会自动下单」。
+- 幂等键 `uq_alert_notification_rule_day_sent`：同一规则每个交易日最多一条成功通知（对网格同样生效，是窗口重跑的安全网）。
+- 逻辑破坏止损与回撤止盈的运行期状态按「规则 × 组合基金」一行落 `alert_suggestion_state`（阶段、周期起始、周期峰值、冷静期起始），保证同一信号不逐日重复发送；网格不使用该表。
 
 ## 收益分类来源
 
@@ -121,8 +143,9 @@ v0.14.0 之前，卖出纪律由独立 `discipline` 模块承担：`DisciplineSt
 
 - 规则与条件：[AlertRuleController](../../backend/src/main/java/com/fundpilot/backend/alerting/adapter/web/rulemanagement/AlertRuleController.java)、[AlertRuleCommandHandler](../../backend/src/main/java/com/fundpilot/backend/alerting/application/command/rulemanagement/AlertRuleCommandHandler.java)、[IndicatorCode](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/condition/IndicatorCode.java)、[ConditionEvaluator](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/condition/ConditionEvaluator.java)、[ConditionEvaluationService](../../backend/src/main/java/com/fundpilot/backend/alerting/application/condition/ConditionEvaluationService.java)
 - 建议型规则：[AlertSuggestionService](../../backend/src/main/java/com/fundpilot/backend/alerting/application/suggestion/AlertSuggestionService.java)、[TakeProfitPolicy](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitPolicy.java)、[TakeProfitParams](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitParams.java)、[SuggestionState](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/suggestion/SuggestionState.java)
-- 调度与通知：[AlertEvaluationJob](../../backend/src/main/java/com/fundpilot/backend/alerting/adapter/scheduler/ruleevaluation/AlertEvaluationJob.java)、[AlertNotificationDispatchCommandHandler](../../backend/src/main/java/com/fundpilot/backend/alerting/application/command/notificationdelivery/AlertNotificationDispatchCommandHandler.java)、[AlertEmailGatewayImpl](../../backend/src/main/java/com/fundpilot/backend/alerting/infrastructure/remote/notificationdelivery/AlertEmailGatewayImpl.java)
+- 调度与通知：[AlertEvaluationJob](../../backend/src/main/java/com/fundpilot/backend/alerting/adapter/scheduler/ruleevaluation/AlertEvaluationJob.java)、[GridAlertEvaluationJob](../../backend/src/main/java/com/fundpilot/backend/alerting/adapter/scheduler/ruleevaluation/GridAlertEvaluationJob.java)、[AlertNotificationDispatchCommandHandler](../../backend/src/main/java/com/fundpilot/backend/alerting/application/command/notificationdelivery/AlertNotificationDispatchCommandHandler.java)、[AlertEmailGatewayImpl](../../backend/src/main/java/com/fundpilot/backend/alerting/infrastructure/remote/notificationdelivery/AlertEmailGatewayImpl.java)
+- 网格交易提醒：[GridPolicy](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/grid/GridPolicy.java)、[GridParams](../../backend/src/main/java/com/fundpilot/backend/alerting/domain/grid/GridParams.java)、[AlertGridService](../../backend/src/main/java/com/fundpilot/backend/alerting/application/grid/AlertGridService.java)、基准线取数在 [AlertFundFactsGatewayImpl](../../backend/src/main/java/com/fundpilot/backend/alerting/infrastructure/gateway/ruleevaluation/AlertFundFactsGatewayImpl.java)
 - 指标按需计算：[MarketIndicatorComputeApi](../../backend/src/main/java/com/fundpilot/backend/marketdata/adapter/api/indicatorcompute/MarketIndicatorComputeApi.java)、[IndicatorComputeQueryHandler](../../backend/src/main/java/com/fundpilot/backend/marketdata/application/query/indicatorcompute/IndicatorComputeQueryHandler.java)
-- 测试：[ConditionEvaluatorTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/condition/ConditionEvaluatorTest.java)、[TakeProfitPolicyTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitPolicyTest.java)、[TakeProfitParamsTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitParamsTest.java)、[SuggestionStateTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/SuggestionStateTest.java)、[AlertEvaluationIntegrationTest](../../backend/src/test/java/com/fundpilot/backend/alerting/AlertEvaluationIntegrationTest.java)
+- 测试：[ConditionEvaluatorTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/condition/ConditionEvaluatorTest.java)、[TakeProfitPolicyTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitPolicyTest.java)、[TakeProfitParamsTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/TakeProfitParamsTest.java)、[SuggestionStateTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/suggestion/SuggestionStateTest.java)、[GridPolicyTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/grid/GridPolicyTest.java)、[GridParamsTest](../../backend/src/test/java/com/fundpilot/backend/alerting/domain/grid/GridParamsTest.java)、[AlertFundFactsGatewayImplTest](../../backend/src/test/java/com/fundpilot/backend/alerting/infrastructure/gateway/ruleevaluation/AlertFundFactsGatewayImplTest.java)、[AlertEvaluationIntegrationTest](../../backend/src/test/java/com/fundpilot/backend/alerting/AlertEvaluationIntegrationTest.java)
 - 迁移验证：`docs/operations/discipline-migration-verification/`（离线等价性回放与差异报告）
 - 相关决策：[ADR-0015](../adr/0015-pyramid-retire-trailing-stop-decouple.md)、[ADR-0016](../adr/0016-dca-config-auto-invest-not-signal.md)、[ADR-0018](../adr/0018-dca-take-profit-presets-and-cycle.md)、[ADR-0019](../adr/0019-unit-nav-for-accounting.md)

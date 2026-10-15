@@ -116,6 +116,6 @@ class AlertIndicatorGatewayImplTest {
                 dailyChangePct == null ? null : new BigDecimal(dailyChangePct), new BigDecimal("1000"),
                 new BigDecimal("50"), holdingReturnRate == null ? null : new BigDecimal(holdingReturnRate),
                 new BigDecimal("1.2"), new BigDecimal("1.2"), new BigDecimal("2.4"), END.minusSeconds(86400 * 10),
-                END, "READY");
+                END, "READY", null, null);
     }
 }

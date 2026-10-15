@@ -2,9 +2,11 @@ package com.fundpilot.backend.alerting.application.command.notificationdelivery;
 
 import com.fundpilot.backend.alerting.application.condition.AlertConditionJsonCodec;
 import com.fundpilot.backend.alerting.application.gateway.notificationdelivery.AlertEmailGateway;
+import com.fundpilot.backend.alerting.application.grid.GridParamsJsonCodec;
 import com.fundpilot.backend.alerting.application.ruletext.AlertRuleText;
 import com.fundpilot.backend.alerting.application.suggestion.TakeProfitParamsJsonCodec;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
+import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleKind;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotification;
 import com.fundpilot.backend.alerting.domain.notification.AlertNotificationRepository;
 import java.time.Clock;
@@ -32,11 +34,13 @@ public class AlertNotificationDispatchCommandHandler {
      *
      * <p>独立事务：发送失败或唯一索引冲突只回滚本条记录，不影响其余规则的评估。
      *
-     * @param rows 命中的基金及其逐条条件的现值说明，由评估侧算好以避免重复求值
+     * @param rows    命中的基金及其逐条条件的现值说明，由评估侧算好以避免重复求值
+     * @param skipped 因数据不可用而跳过的基金及原因，随邮件正文一并列出
      */
     @Transactional
     public DispatchResult dispatch(long ownerId, AlertRule rule, Instant tradingDate, String recipient,
-                                   List<AlertEmailGateway.AlertEmailMessage.FundRow> rows) {
+                                   List<AlertEmailGateway.AlertEmailMessage.FundRow> rows,
+                                   List<AlertEmailGateway.AlertEmailMessage.SkippedFund> skipped) {
         String snapshot = snapshot(rule);
         String triggerSummary = summarize(rows);
         if (recipient == null || recipient.isBlank()) {
@@ -45,7 +49,7 @@ public class AlertNotificationDispatchCommandHandler {
             return new DispatchResult(false, MISSING_RECIPIENT);
         }
         AlertEmailGateway.DeliveryResult result = deliveries.send(new AlertEmailGateway.AlertEmailMessage(
-                recipient, AlertRuleText.summarize(rule), rows.size(), rows));
+                recipient, AlertRuleText.summarize(rule), rows.size(), rows, skipped));
         if (result.sent()) {
             notifications.save(AlertNotification.recordSent(ownerId, rule.id(), snapshot, tradingDate, recipient,
                     rows.size(), triggerSummary, clock.instant()));
@@ -56,10 +60,19 @@ public class AlertNotificationDispatchCommandHandler {
         return new DispatchResult(result.sent(), result.failureReason());
     }
 
-    /** 条件快照：条件型规则存条件数组，回撤止盈存六个参数。 */
+    /** 无跳过基金的投递：条件型与建议型规则的通用路径。 */
+    public DispatchResult dispatch(long ownerId, AlertRule rule, Instant tradingDate, String recipient,
+                                   List<AlertEmailGateway.AlertEmailMessage.FundRow> rows) {
+        return dispatch(ownerId, rule, tradingDate, recipient, rows, List.of());
+    }
+
+    /** 条件快照：条件型规则存条件数组，无条件的种类按种类存各自的参数。 */
     private static String snapshot(AlertRule rule) {
-        return rule.conditions() != null
-                ? AlertConditionJsonCodec.write(rule.conditions())
+        if (rule.conditions() != null) {
+            return AlertConditionJsonCodec.write(rule.conditions());
+        }
+        return rule.kind() == AlertRuleKind.GRID
+                ? GridParamsJsonCodec.write(rule.grid())
                 : TakeProfitParamsJsonCodec.write(rule.takeProfit());
     }
 

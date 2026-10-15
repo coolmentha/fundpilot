@@ -4,6 +4,7 @@ import com.fundpilot.backend.alerting.application.gateway.ruleevaluation.AlertFu
 import com.fundpilot.backend.alerting.application.query.rulemanagement.AlertRuleQueryHandler;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRule;
 import com.fundpilot.backend.alerting.domain.alertrule.AlertRuleRepository;
+import com.fundpilot.backend.alerting.domain.grid.GridParams;
 import com.fundpilot.backend.alerting.domain.suggestion.SuggestionStateRepository;
 import com.fundpilot.backend.platform.web.error.BusinessException;
 import com.fundpilot.backend.platform.web.error.ErrorCode;
@@ -28,7 +29,7 @@ public class AlertRuleCommandHandler {
     public AlertRuleQueryHandler.RuleViewResult create(long ownerId, RuleInput input) {
         AlertRuleDraft draft = draft(ownerId, input);
         AlertRule rule = AlertRule.create(ownerId, draft.scope(), draft.portfolioFundId(), draft.kind(),
-                draft.conditions(), draft.takeProfit(), input.enabled() == null || input.enabled());
+                draft.conditions(), draft.takeProfit(), draft.grid(), input.enabled() == null || input.enabled());
         return views.viewOf(ownerId, rules.save(rule));
     }
 
@@ -36,7 +37,8 @@ public class AlertRuleCommandHandler {
     public AlertRuleQueryHandler.RuleViewResult update(long ownerId, long ruleId, RuleInput input) {
         AlertRule rule = owned(ownerId, ruleId);
         AlertRuleDraft draft = draft(ownerId, input);
-        rule.update(draft.scope(), draft.portfolioFundId(), draft.kind(), draft.conditions(), draft.takeProfit());
+        rule.update(draft.scope(), draft.portfolioFundId(), draft.kind(), draft.conditions(), draft.takeProfit(),
+                draft.grid());
         setEnabled(rule, input.enabled());
         AlertRule saved = rules.save(rule);
         // 判定配置变了，旧状态不再有效（周期峰值与阶段都按旧配置累积）
@@ -82,7 +84,8 @@ public class AlertRuleCommandHandler {
     }
 
     public record RuleInput(String scope, Long portfolioFundId, String kind, String match,
-                            List<ConditionInput> conditions, TakeProfitInput takeProfit, Boolean enabled) {
+                            List<ConditionInput> conditions, TakeProfitInput takeProfit, GridInput grid,
+                            Boolean enabled) {
 
         /** 条件入参：指标码 + 参数 + 关系 + 阈值（可为空，取指标默认值）。 */
         public record ConditionInput(String indicator, Map<String, Integer> params, String relation,
@@ -92,6 +95,10 @@ public class AlertRuleCommandHandler {
         /** 回撤止盈的六个参数（小数表示，如 0.15 即 15%）。 */
         public record TakeProfitInput(BigDecimal activation, BigDecimal pullback, BigDecimal harvest,
                                      BigDecimal minimumHolding, BigDecimal maxSingleSell, Integer cooldownDays) {
+        }
+
+        /** 网格的两个比例参数（小数表示，如 0.05 即 5%），都必须严格落在 (0, 1)。 */
+        public record GridInput(BigDecimal upRatio, BigDecimal downRatio) {
         }
     }
 }

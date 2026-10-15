@@ -71,7 +71,8 @@ public class AlertSuggestionService {
             Suggestion suggestion = switch (rule.kind()) {
                 case LOGIC_BROKEN -> logicBroken(rule, fund, tradingDate, endExclusive, state);
                 case TRAILING_STOP -> trailingStop(rule, fund, tradingDate, state);
-                case CONDITION -> null;
+                // 网格由 AlertGridService 判定，不经本服务的状态机
+                case CONDITION, GRID -> null;
             };
             if (suggestion != null) {
                 hits.add(suggestion);
