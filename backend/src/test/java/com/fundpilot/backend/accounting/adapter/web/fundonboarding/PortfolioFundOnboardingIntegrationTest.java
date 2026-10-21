@@ -194,7 +194,11 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
                 SELECT status FROM accounting_position WHERE portfolio_fund_id = ?
                 """, String.class, portfolioFundId)).isEqualTo("OPEN");
         assertThat(jdbc.queryForObject("""
-                SELECT COALESCE(SUM(shares), 0) FROM fund_transaction
+                SELECT COALESCE(SUM(CASE
+                    WHEN source = 'COST_BASIS_RESET' THEN 0
+                    WHEN source IN ('DECREASE', 'TRANSFER_OUT', 'ADJUST_OUT') THEN -shares
+                    ELSE shares
+                END), 0) FROM fund_transaction
                 WHERE portfolio_fund_id = ? AND status = 'CONFIRMED'
                 """, BigDecimal.class, portfolioFundId)).isEqualByComparingTo("20");
         mockMvc.perform(get("/api/insights/portfolio/funds/{id}", portfolioFundId).cookie(ownerCookie()))
