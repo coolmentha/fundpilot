@@ -8,11 +8,14 @@ import java.math.BigDecimal;
  */
 public interface OnboardedPortfolioFundGateway {
 
-    /** 在调用方同一本地事务内建立组合关系；失败抛 {@link Rejected}，由 Handler 转为账目错误语义。 */
+    /** 在调用方同一本地事务内建立组合关系；已存在时返回并锁定原关系。 */
     OnboardedPortfolioFund track(Long legacyFundId, long ownerId, long fundProductId, boolean positionWarningEnabled,
                                  BigDecimal positionWarningRatio);
 
-    record OnboardedPortfolioFund(long portfolioFundId, long ownerId, long fundProductId) {
+    record OnboardedPortfolioFund(long portfolioFundId, long ownerId, long fundProductId, boolean reused) {
+        public OnboardedPortfolioFund(long portfolioFundId, long ownerId, long fundProductId) {
+            this(portfolioFundId, ownerId, fundProductId, false);
+        }
     }
 
     /** 组合侧可预期的失败原因，已由 GatewayImpl 转换为账目语言。 */

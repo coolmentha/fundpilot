@@ -79,6 +79,9 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
                 result = new ItemResult(ItemStatus.SKIPPED, "以本系统份额为准", existing.get().portfolioFundId());
             } else {
                 long portfolioFundId = existing.get().portfolioFundId();
+                portfolioFunds.findForUpdate(portfolioFundId).orElseThrow(() ->
+                        new YangjibaoImportFailure(YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_CONFLICT,
+                                "本地基金状态已变化，请重试"));
                 transactions.adjustToHoldingShares(new TransactionApi.AdjustToHoldingShares(
                         request.ownerId(), portfolioFundId, request.shares()));
                 syncCostPerShare(request, portfolioFundId);
@@ -144,7 +147,8 @@ class ImportedHoldingGatewayImpl implements ImportedHoldingGateway {
     private YangjibaoImportFailure classify(PortfolioFundOnboardingApi.Failure failure) {
         var code = switch (failure.code()) {
             case POSITION_WARNING_INVALID, INITIAL_HOLDING_SHARES_INVALID, COST_PER_SHARE_INVALID,
-                    OPENED_AT_IN_FUTURE, FUND_GROUP_NAME_INVALID, FUND_GROUP_NAME_DUPLICATE ->
+                    OPENED_AT_IN_FUTURE, OPENED_AT_BEFORE_LAST_TRANSACTION, FUND_GROUP_NAME_INVALID,
+                    FUND_GROUP_NAME_DUPLICATE ->
                     YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_VALIDATION_FAILED;
             case PORTFOLIO_FUND_ALREADY_TRACKED -> YangjibaoImportFailure.Code.YANGJIBAO_IMPORT_CONFLICT;
             case PRODUCT_NOT_FOUND, NAV_UNAVAILABLE ->

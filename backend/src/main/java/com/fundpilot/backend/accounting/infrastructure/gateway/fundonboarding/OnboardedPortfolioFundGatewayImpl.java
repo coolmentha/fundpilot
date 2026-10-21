@@ -16,10 +16,11 @@ public class OnboardedPortfolioFundGatewayImpl implements OnboardedPortfolioFund
     public OnboardedPortfolioFund track(Long legacyFundId, long ownerId, long fundProductId,
                                         boolean positionWarningEnabled, BigDecimal positionWarningRatio) {
         try {
-            var portfolioFund = portfolioFunds.track(new PortfolioFundApi.TrackPortfolioFund(
+            var tracked = portfolioFunds.trackOrGet(new PortfolioFundApi.TrackPortfolioFund(
                     legacyFundId, ownerId, fundProductId, positionWarningEnabled, positionWarningRatio));
-            return new OnboardedPortfolioFund(portfolioFund.id(), portfolioFund.ownerId(),
-                    portfolioFund.fundProductId());
+            return new OnboardedPortfolioFund(tracked.portfolioFund().id(),
+                    tracked.portfolioFund().ownerId(), tracked.portfolioFund().fundProductId(),
+                    tracked.reused());
         } catch (PortfolioFundApi.Failure failure) {
             throw new Rejected(switch (failure.code()) {
                 case PRODUCT_NOT_FOUND -> Rejected.Reason.PRODUCT_NOT_FOUND;

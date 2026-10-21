@@ -86,9 +86,11 @@ class ImportedHoldingGatewayImplTest {
         when(prefetch.fetch("017093")).thenReturn(List.of());
         when(products.findByCode("017093")).thenReturn(Optional.of(
                 new FundProductApi.Product(3L, "017093", "示例基金", null, null, null, null)));
-        when(portfolioFunds.findByOwner(1L)).thenReturn(List.of(new PortfolioFundApi.PortfolioFund(
+        var existingFund = new PortfolioFundApi.PortfolioFund(
                 9L, 19L, 1L, 3L, PortfolioFundApi.Validity.TRACKED, true,
-                new BigDecimal("0.30"), null, null, null)));
+                new BigDecimal("0.30"), null, null, null);
+        when(portfolioFunds.findByOwner(1L)).thenReturn(List.of(existingFund));
+        when(portfolioFunds.findForUpdate(9L)).thenReturn(Optional.of(existingFund));
         when(positions.findOwned(1L, 9L)).thenReturn(Optional.of(new PositionApi.Position(9L, 1L,
                 PositionApi.Status.OPEN, Instant.parse("2026-01-01T00:00:00Z"),
                 new BigDecimal("1.00"), new BigDecimal("10"))));
@@ -101,9 +103,11 @@ class ImportedHoldingGatewayImplTest {
         var result = gateway.importItem(request);
 
         assertThat(result.status()).isEqualTo(ImportedHoldingGateway.ItemStatus.ADJUSTED);
-        verify(transactions).adjustToHoldingShares(
+        InOrder order = inOrder(portfolioFunds, transactions, corrections);
+        order.verify(portfolioFunds).findForUpdate(9L);
+        order.verify(transactions).adjustToHoldingShares(
                 new TransactionApi.AdjustToHoldingShares(1L, 9L, new BigDecimal("15")));
-        verify(corrections).correct(new PortfolioCostCorrectionApi.CorrectCostPerShare(
+        order.verify(corrections).correct(new PortfolioCostCorrectionApi.CorrectCostPerShare(
                 1L, 9L, new BigDecimal("1.25")));
     }
 

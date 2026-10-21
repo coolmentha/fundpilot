@@ -9,6 +9,7 @@ public interface PortfolioFundRepository {
     /** 悲观锁定组合基金行，串行化跨模块账目确认与基金生命周期变更。 */
     Optional<PortfolioFund> findByIdForUpdate(long id);
 
+    /** 悲观锁定已跟踪关系，串行化清仓基金的再次开户。 */
     Optional<PortfolioFund> findTrackedByOwnerIdAndFundProductId(long ownerId, long fundProductId);
 
     Optional<PortfolioFund> saveTrackedIfAbsent(PortfolioFund portfolioFund);

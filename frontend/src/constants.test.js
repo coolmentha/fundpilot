@@ -26,6 +26,8 @@ describe('API error titles', () => {
 
     it('covers transaction and onboarding business errors', () => {
         expect(errorTitle('OPENED_AT_IN_FUTURE')).toBe('建仓时间晚于当前时间');
+        expect(errorTitle('PORTFOLIO_FUND_ALREADY_TRACKED')).toBe('基金已在组合中');
+        expect(errorTitle('OPENED_AT_BEFORE_LAST_TRANSACTION')).toBe('回购时间早于上一笔交易');
         expect(errorTitle('INSUFFICIENT_LOTS')).toBe('可用持仓批次不足');
         expect(errorTitle('FUND_HAS_PENDING_TRANSACTIONS')).toBe('基金存在待确认交易');
         expect(errorTitle('MONTHLY_DCA_BUDGET_INVALID')).toBe('每月定投预算不合法');

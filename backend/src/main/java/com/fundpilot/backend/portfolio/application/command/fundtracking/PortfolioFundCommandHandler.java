@@ -28,6 +28,21 @@ public class PortfolioFundCommandHandler {
     public PortfolioFundResult track(Long legacyFundId, long ownerId, long fundProductId,
                                      boolean positionWarningEnabled,
                                      BigDecimal positionWarningRatio) {
+        TrackResult result = trackOrGet(legacyFundId, ownerId, fundProductId,
+                positionWarningEnabled, positionWarningRatio);
+        if (result.reused()) {
+            throw new PortfolioFundFailure(
+                    PortfolioFundFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED,
+                    "该基金已在当前组合中");
+        }
+        return result.portfolioFund();
+    }
+
+    /** 建立或锁定已有组合关系；重复创建不是异常，供清仓回购在同一事务内复用。 */
+    @Transactional
+    public TrackResult trackOrGet(Long legacyFundId, long ownerId, long fundProductId,
+                                  boolean positionWarningEnabled,
+                                  BigDecimal positionWarningRatio) {
         if (!products.exists(fundProductId)) {
             throw new PortfolioFundFailure(PortfolioFundFailure.Code.PRODUCT_NOT_FOUND,
                     "基金产品不存在: " + fundProductId);
@@ -40,15 +55,20 @@ public class PortfolioFundCommandHandler {
             throw new PortfolioFundFailure(PortfolioFundFailure.Code.POSITION_WARNING_INVALID,
                     exception.getMessage());
         }
-        PortfolioFund saved = portfolioFunds.saveTrackedIfAbsent(portfolioFund)
-                .orElseThrow(() -> new PortfolioFundFailure(
-                        PortfolioFundFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED,
-                        "该基金已在当前组合中"));
+        var inserted = portfolioFunds.saveTrackedIfAbsent(portfolioFund);
+        if (inserted.isEmpty()) {
+            PortfolioFund existing = portfolioFunds.findTrackedByOwnerIdAndFundProductId(ownerId, fundProductId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "已跟踪组合基金无法锁定: " + fundProductId));
+            return new TrackResult(PortfolioFundResult.from(existing), true);
+        }
+        PortfolioFund saved = portfolioFunds.findByIdForUpdate(inserted.orElseThrow().id())
+                .orElseThrow(() -> new IllegalStateException("新组合基金未建立"));
         events.publishTracked(new PortfolioFundTrackedEvent(
                 saved.id(), saved.ownerId(), saved.fundProductId(), clock.instant()));
         // 费率/研究资料由夜间批量任务刷新,新基金要等到次日才有数据;跟踪成功后立即请求一次异步首采。
         publicDataFirstCollection.requestFirstCollection(fundProductId);
-        return PortfolioFundResult.from(saved);
+        return new TrackResult(PortfolioFundResult.from(saved), false);
     }
 
     @Transactional
@@ -99,6 +119,9 @@ public class PortfolioFundCommandHandler {
                 .orElseThrow(() -> new PortfolioFundFailure(
                         PortfolioFundFailure.Code.PORTFOLIO_FUND_NOT_FOUND,
                         "组合基金不存在: " + portfolioFundId));
+    }
+
+    public record TrackResult(PortfolioFundResult portfolioFund, boolean reused) {
     }
 
     public record PortfolioFundResult(long id, long ownerId, long fundProductId,

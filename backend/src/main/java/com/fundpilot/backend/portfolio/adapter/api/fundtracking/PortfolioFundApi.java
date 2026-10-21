@@ -26,6 +26,16 @@ public class PortfolioFundApi {
         }
     }
 
+    public TrackResult trackOrGet(TrackPortfolioFund request) {
+        try {
+            var result = commands.trackOrGet(request.legacyFundId(), request.ownerId(),
+                    request.fundProductId(), request.positionWarningEnabled(), request.positionWarningRatio());
+            return new TrackResult(from(result.portfolioFund()), result.reused());
+        } catch (PortfolioFundFailure failure) {
+            throw Failure.from(failure);
+        }
+    }
+
     public PortfolioFund configureWarning(ConfigurePositionWarning request) {
         try {
             return from(commands.configureWarning(request.ownerId(), request.portfolioFundId(),
@@ -84,6 +94,9 @@ public class PortfolioFundApi {
         return new PortfolioFund(result.id(), result.legacyFundId(), result.ownerId(), result.fundProductId(),
                 Validity.valueOf(result.validity()), result.positionWarningEnabled(),
                 result.positionWarningRatio(), result.voidedAt(), result.voidedBy(), result.voidReason());
+    }
+
+    public record TrackResult(PortfolioFund portfolioFund, boolean reused) {
     }
 
     public record TrackPortfolioFund(Long legacyFundId, long ownerId, long fundProductId,

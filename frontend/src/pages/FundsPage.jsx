@@ -177,7 +177,9 @@ export default function FundsPage() {
                     groupNames: requestValues.groupNames || [],
                 });
             }
-            message.success(editing ? '基金已更新' : '基金已新建');
+            message.success(editing
+                ? '基金已更新'
+                : requestValues.initialHoldingShares ? '基金与持仓已记录' : '基金已新建');
             setOpen(false);
         } catch (e) {
             // 表单校验失败:Antd 已在字段下提示,不再弹 message;后端业务异常由全局 mutation onError 弹
@@ -380,7 +382,7 @@ export default function FundsPage() {
                     )}
                     {!editing && (
                         <Form.Item label="持有份额（可选）" name="initialHoldingShares"
-                                   help="现有持仓的实际份额。不填则创建空仓基金"
+                                   help="新基金无持仓可留空；已清仓基金回购时必须填写本次份额"
                                    rules={[{type: 'number', min: 0.01, message: '持有份额必须至少为 0.01'}]}>
                             <InputNumber min={0.01} precision={2} className="full-width" placeholder="已有持仓份额,不填则空仓"
                                          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}

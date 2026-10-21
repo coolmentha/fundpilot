@@ -25,7 +25,8 @@ class PortfolioFundOnboardingExceptionHandler {
             case NAV_UNAVAILABLE -> HttpStatus.UNPROCESSABLE_ENTITY;
             case FUND_GROUP_NOT_FOUND, PORTFOLIO_FUND_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case POSITION_WARNING_INVALID, INITIAL_HOLDING_SHARES_INVALID,
-                    COST_PER_SHARE_INVALID, OPENED_AT_IN_FUTURE, FUND_GROUP_NAME_INVALID,
+                    COST_PER_SHARE_INVALID, OPENED_AT_IN_FUTURE, OPENED_AT_BEFORE_LAST_TRANSACTION,
+                    FUND_GROUP_NAME_INVALID,
                     FUND_GROUP_NAME_DUPLICATE -> HttpStatus.BAD_REQUEST;
         };
     }

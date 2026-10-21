@@ -182,6 +182,7 @@ const errorTitles = {
     MANUAL_TRANSACTION_FIELD_REQUIRED: '手动交易字段缺失',
     COST_PER_SHARE_INVALID: '成本单价不合法',
     INITIAL_HOLDING_SHARES_INVALID: '初始持仓份额不合法',
+    PORTFOLIO_FUND_ALREADY_TRACKED: '基金已在组合中',
     MONTHLY_DCA_BUDGET_INVALID: '每月定投预算不合法',
     POSITION_WARNING_RATIO_INVALID: '仓位提醒线不合法',
     FUND_GROUP_NAME_INVALID: '分组名称不合法',
@@ -193,6 +194,7 @@ const errorTitles = {
     SIGNAL_OPERATION_VALUE_INVALID: '实际操作数值不合法',
     USER_ACCOUNT_INVALID: '用户信息不合法',
     OPENED_AT_IN_FUTURE: '建仓时间晚于当前时间',
+    OPENED_AT_BEFORE_LAST_TRANSACTION: '回购时间早于上一笔交易',
     // 提醒规则种类与参数(与后端 ErrorCode 的 ALERT_RULE_KIND_INVALID / ALERT_RULE_PARAMETER_INVALID 对应)
     ALERT_RULE_KIND_INVALID: '提醒规则种类不合法',
     ALERT_RULE_PARAMETER_INVALID: '提醒规则参数不合法',

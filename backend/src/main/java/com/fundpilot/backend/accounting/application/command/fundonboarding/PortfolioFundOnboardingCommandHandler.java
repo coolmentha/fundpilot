@@ -8,14 +8,19 @@ import com.fundpilot.backend.accounting.application.gateway.fundonboarding.Onboa
 import com.fundpilot.backend.accounting.application.gateway.transactionledger.LedgerEventGateway;
 import com.fundpilot.backend.accounting.domain.lot.Lot;
 import com.fundpilot.backend.accounting.domain.lot.LotRepository;
+import com.fundpilot.backend.accounting.domain.position.Position;
+import com.fundpilot.backend.accounting.domain.position.PositionRepository;
+import com.fundpilot.backend.accounting.domain.position.PositionStatus;
 import com.fundpilot.backend.accounting.domain.transaction.LedgerTransaction;
 import com.fundpilot.backend.accounting.domain.transaction.ShareScale;
 import com.fundpilot.backend.accounting.domain.transaction.TransactionRepository;
+import com.fundpilot.backend.accounting.domain.transaction.TransactionStatus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +41,7 @@ public class PortfolioFundOnboardingCommandHandler {
     private final InitialPositionNavGateway navs;
     private final TransactionRepository transactions;
     private final LotRepository lots;
+    private final PositionRepository positionFacts;
     private final PositionCommandHandler positions;
     private final LedgerEventGateway events;
     private final Clock clock;
@@ -62,7 +68,8 @@ public class PortfolioFundOnboardingCommandHandler {
             }
             OnboardedPortfolioFundGateway.OnboardedPortfolioFund portfolioFund = track(
                     legacyFundId, ownerId, fundProductId, positionWarningEnabled, positionWarningRatio);
-            assignGroups(ownerId, portfolioFund.portfolioFundId(), groupNames);
+            requireReusableTrackedFund(portfolioFund, false);
+            assignGroups(ownerId, portfolioFund.portfolioFundId(), groupNames, portfolioFund.reused());
             return new OnboardingResult(portfolioFund.portfolioFundId(), null);
         }
 
@@ -82,6 +89,9 @@ public class PortfolioFundOnboardingCommandHandler {
         }
         OnboardedPortfolioFundGateway.OnboardedPortfolioFund portfolioFund = track(
                 legacyFundId, ownerId, fundProductId, positionWarningEnabled, positionWarningRatio);
+        requireReusableTrackedFund(portfolioFund, true);
+        Instant effectiveOpenedAt = requireChronologicalRepurchase(
+                portfolioFund, openedAt, now);
         InitialPositionNavGateway.PublishedNav nav = navs.latest(fundProductId)
                 .filter(value -> value.unitNav() != null && value.unitNav().signum() > 0)
                 .orElseThrow(() -> failure(PortfolioFundOnboardingFailure.Code.NAV_UNAVAILABLE,
@@ -92,19 +102,22 @@ public class PortfolioFundOnboardingCommandHandler {
             throw failure(PortfolioFundOnboardingFailure.Code.COST_PER_SHARE_INVALID,
                     "成本单价必须大于 0 且不超过数据库可表示范围");
         }
-        if (normalizeInitialTransactionAmount(shares.multiply(nav.unitNav())) == null) {
+        BigDecimal transactionAmount = shares.multiply(
+                portfolioFund.reused() ? effectiveCost : nav.unitNav());
+        if (normalizeInitialTransactionAmount(transactionAmount) == null) {
             throw failure(PortfolioFundOnboardingFailure.Code.INITIAL_HOLDING_SHARES_INVALID,
                     "初始持仓对应的核算金额不在数据库可表示范围");
         }
-        Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
-        LedgerTransaction transaction = transactions.save(LedgerTransaction.recordExistingPosition(
-                portfolioFund.portfolioFundId(), ownerId, shares, nav.unitNav(), effectiveOpenedAt,
-                effectiveOpenedAt));
+        LedgerTransaction transaction = transactions.save(portfolioFund.reused()
+                ? LedgerTransaction.recordRepurchase(portfolioFund.portfolioFundId(), ownerId, shares,
+                        nav.unitNav(), effectiveCost, effectiveOpenedAt, effectiveOpenedAt)
+                : LedgerTransaction.recordExistingPosition(portfolioFund.portfolioFundId(), ownerId, shares,
+                        nav.unitNav(), effectiveOpenedAt, effectiveOpenedAt));
         lots.save(Lot.open(portfolioFund.portfolioFundId(), transaction.id(), effectiveOpenedAt,
                 shares, effectiveCost));
         positions.applyExistingPosition(portfolioFund.portfolioFundId(), ownerId, effectiveCost,
                 effectiveOpenedAt);
-        assignGroups(ownerId, portfolioFund.portfolioFundId(), groupNames);
+        assignGroups(ownerId, portfolioFund.portfolioFundId(), groupNames, portfolioFund.reused());
         events.publishConfirmed(new TransactionConfirmed(transaction.id(), transaction.portfolioFundId(),
                 transaction.ownerId(), transaction.source().name(), transaction.amount(), transaction.shares(),
                 transaction.nav(), transaction.fee(), transaction.tradeDate(), transaction.confirmTime(),
@@ -113,12 +126,55 @@ public class PortfolioFundOnboardingCommandHandler {
         return new OnboardingResult(portfolioFund.portfolioFundId(), transaction.id());
     }
 
-    private void assignGroups(long ownerId, long portfolioFundId, List<String> groupNames) {
+    private void assignGroups(long ownerId, long portfolioFundId, List<String> groupNames,
+                              boolean preserveWhenEmpty) {
+        if (preserveWhenEmpty && (groupNames == null || groupNames.isEmpty())) {
+            return;
+        }
         try {
             groups.assignByNames(ownerId, portfolioFundId, groupNames == null ? List.of() : groupNames);
         } catch (FundGroupingGateway.Failure failure) {
             throw failure(PortfolioFundOnboardingFailure.Code.valueOf(failure.code().name()),
                     failure.getMessage());
+        }
+    }
+
+    private Instant requireChronologicalRepurchase(
+            OnboardedPortfolioFundGateway.OnboardedPortfolioFund portfolioFund,
+            Instant openedAt, Instant now) {
+        Instant effectiveOpenedAt = openedAt != null ? openedAt : now;
+        if (!portfolioFund.reused()) {
+            return effectiveOpenedAt;
+        }
+        Instant latestTransactionAt = transactions.findByPortfolioFundAndStatus(
+                        portfolioFund.portfolioFundId(), TransactionStatus.CONFIRMED).stream()
+                .map(transaction -> transaction.effectiveTradeDate(transaction.confirmTime()))
+                .filter(Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(null);
+        if (latestTransactionAt != null && effectiveOpenedAt.isBefore(latestTransactionAt)) {
+            throw failure(PortfolioFundOnboardingFailure.Code.OPENED_AT_BEFORE_LAST_TRANSACTION,
+                    "回购时间不能早于该基金上一笔已确认交易");
+        }
+        return effectiveOpenedAt;
+    }
+
+    private void requireReusableTrackedFund(
+            OnboardedPortfolioFundGateway.OnboardedPortfolioFund portfolioFund,
+            boolean hasInitialHoldingShares) {
+        if (!portfolioFund.reused()) {
+            return;
+        }
+        Position position = positionFacts.findByPortfolioFund(portfolioFund.portfolioFundId()).orElse(null);
+        if (!hasInitialHoldingShares) {
+            String message = position != null && position.status() == PositionStatus.CLEARED
+                    ? "该基金已清仓，回购时请填写本次份额"
+                    : "该基金已在当前组合中";
+            throw failure(PortfolioFundOnboardingFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED, message);
+        }
+        if (position != null && position.status() == PositionStatus.OPEN) {
+            throw failure(PortfolioFundOnboardingFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED,
+                    "该基金仍在当前组合中，请直接新增买入交易");
         }
     }
 

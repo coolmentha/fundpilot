@@ -24,6 +24,20 @@ class LedgerReplayTest {
     }
 
     @Test
+    void repurchaseAfterResetAndClearUsesConfirmedRepurchaseCost() {
+        LedgerTransaction originalHolding = buy(1L, "2026-08-01T00:00:00Z", "100", "100");
+        LedgerTransaction reset = reset(2L, "2026-08-02T00:00:00Z", "100", "1.10");
+        LedgerTransaction cleared = sell(3L, "2026-08-03T00:00:00Z", "100");
+        LedgerTransaction repurchase = LedgerTransaction.recordRepurchase(
+                11L, 3L, new BigDecimal("20"), BigDecimal.ONE, new BigDecimal("1.25"),
+                Instant.parse("2026-08-04T00:00:00Z"), Instant.parse("2026-08-04T00:00:00Z"));
+
+        assertThat(LedgerReplay.replayCostPerShare(
+                List.of(originalHolding, reset, cleared, repurchase)))
+                .hasValueSatisfying(value -> assertThat(value).isEqualByComparingTo("1.25"));
+    }
+
+    @Test
     void businessDateBeforeResetWinsWhenConfirmationWasLater() {
         LedgerTransaction originalHolding = buy(1L, "2026-08-01T00:00:00Z", "100", "100");
         LedgerTransaction reset = reset(2L, "2026-08-02T00:00:00Z", "100", "1.20");
@@ -108,6 +122,13 @@ class LedgerReplayTest {
         return LedgerTransaction.rehydrate(id, 11L, 3L, TransactionSource.INCREASE,
                 TransactionStatus.CONFIRMED, new BigDecimal(amount), new BigDecimal(shares),
                 BigDecimal.ONE, null, null, Instant.parse(date), Instant.parse(date), null,
+                Instant.parse(date), null, null, null);
+    }
+
+    private static LedgerTransaction sell(long id, String date, String shares) {
+        return LedgerTransaction.rehydrate(id, 11L, 3L, TransactionSource.DECREASE,
+                TransactionStatus.CONFIRMED, null, new BigDecimal(shares), BigDecimal.ONE,
+                null, null, Instant.parse(date), Instant.parse(date), null,
                 Instant.parse(date), null, null, null);
     }
 

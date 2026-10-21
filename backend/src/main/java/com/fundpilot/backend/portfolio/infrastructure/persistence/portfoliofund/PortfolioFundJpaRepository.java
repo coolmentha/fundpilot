@@ -15,6 +15,7 @@ interface PortfolioFundJpaRepository extends JpaRepository<PortfolioFundJpaEntit
     @Query("select p from PortfolioFundJpaEntity p where p.id = :id")
     Optional<PortfolioFundJpaEntity> findByIdForUpdate(@Param("id") Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PortfolioFundJpaEntity> findByOwnerIdAndFundProductIdAndValidity(
             long ownerId, long fundProductId, PortfolioFundValidity validity);
 

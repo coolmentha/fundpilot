@@ -127,6 +127,90 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void repurchasingClearedFundReusesOriginalPortfolioFundAndReopensPosition() throws Exception {
+        var product = product("repurchase");
+        Instant tradeDate = Instant.parse("2026-08-20T08:00:00Z");
+        navs.saveAll(List.of(PublishedNav.publish(null, product.id(), product.fundCode(),
+                Instant.parse("2026-08-20T00:00:00Z"), new BigDecimal("1.00"),
+                new BigDecimal("1.00"), tradeDate)));
+
+        String initialResponse = mockMvc.perform(post("/api/portfolio-funds").cookie(ownerCookie())
+                        .contentType("application/json")
+                        .content("{\"fundProductId\":" + product.id()
+                                + ",\"initialHoldingShares\":100,\"costPerShare\":1.00,"
+                                + "\"openedAt\":\"" + tradeDate + "\",\"groupNames\":[\"核心\"]}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long portfolioFundId = objectMapper.readTree(initialResponse)
+                .path("data").path("portfolioFundId").asLong();
+
+        String sellResponse = mockMvc.perform(post("/api/portfolio-funds/{id}/transactions", portfolioFundId)
+                        .cookie(ownerCookie())
+                        .contentType("application/json")
+                        .content("{\"source\":\"DECREASE\",\"shares\":100,"
+                                + "\"tradeDate\":\"" + tradeDate + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long sellTransactionId = objectMapper.readTree(sellResponse).path("data").path("id").asLong();
+        mockMvc.perform(post("/api/transactions/{id}/confirm", sellTransactionId).cookie(ownerCookie()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/insights/portfolio/funds/{id}", portfolioFundId).cookie(ownerCookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.positionStatus").value("CLEARED"));
+
+        mockMvc.perform(post("/api/portfolio-funds").cookie(ownerCookie())
+                        .contentType("application/json")
+                        .content("{\"fundProductId\":" + product.id() + "}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PORTFOLIO_FUND_ALREADY_TRACKED"))
+                .andExpect(jsonPath("$.message").value("该基金已清仓，回购时请填写本次份额"));
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<OnboardingOutcome> first = null;
+        Future<OnboardingOutcome> second = null;
+        try {
+            long ownerId = testActorId();
+            first = executor.submit(() -> onboardInTransaction(ownerId, product.id(),
+                    new BigDecimal("20"), new BigDecimal("1.25"), barrier, transaction));
+            second = executor.submit(() -> onboardInTransaction(ownerId, product.id(),
+                    new BigDecimal("20"), new BigDecimal("1.25"), barrier, transaction));
+            List<OnboardingOutcome> outcomes = List.of(first.get(10, TimeUnit.SECONDS),
+                    second.get(10, TimeUnit.SECONDS));
+            assertThat(outcomes.stream().filter(value -> value.portfolioFundId() != null))
+                    .containsExactly(new OnboardingOutcome(portfolioFundId, null));
+            assertThat(outcomes.stream().filter(value -> value.failureCode()
+                    == PortfolioFundOnboardingFailure.Code.PORTFOLIO_FUND_ALREADY_TRACKED)).hasSize(1);
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+        }
+
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM fund_transaction WHERE portfolio_fund_id = ?
+                """, Long.class, portfolioFundId)).isEqualTo(3L);
+        assertThat(jdbc.queryForObject("""
+                SELECT status FROM accounting_position WHERE portfolio_fund_id = ?
+                """, String.class, portfolioFundId)).isEqualTo("OPEN");
+        assertThat(jdbc.queryForObject("""
+                SELECT COALESCE(SUM(shares), 0) FROM fund_transaction
+                WHERE portfolio_fund_id = ? AND status = 'CONFIRMED'
+                """, BigDecimal.class, portfolioFundId)).isEqualByComparingTo("20");
+        mockMvc.perform(get("/api/insights/portfolio/funds/{id}", portfolioFundId).cookie(ownerCookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.groups[0].name").value("核心"));
+
+        mockMvc.perform(post("/api/portfolio-funds").cookie(ownerCookie())
+                        .contentType("application/json")
+                        .content("{\"fundProductId\":" + product.id()
+                                + ",\"initialHoldingShares\":5}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message")
+                        .value("该基金仍在当前组合中，请直接新增买入交易"));
+    }
+
+    @Test
     void unavailableNavAndInvalidGroupRollBackPortfolioAndLedger() throws Exception {
         var noNav = product("no-nav");
         long portfoliosBefore = jdbc.queryForObject("SELECT count(*) FROM portfolio_fund", Long.class);
@@ -491,11 +575,22 @@ class PortfolioFundOnboardingIntegrationTest extends AbstractIntegrationTest {
     private OnboardingOutcome onboardInTransaction(long ownerId, long productId,
                                                    CyclicBarrier barrier,
                                                    TransactionTemplate transaction) throws Exception {
-        barrier.await(10, TimeUnit.SECONDS);
+        return onboardInTransaction(ownerId, productId, null, null, barrier, transaction);
+    }
+
+    private OnboardingOutcome onboardInTransaction(long ownerId, long productId, BigDecimal shares,
+                                                   BigDecimal costPerShare, CyclicBarrier barrier,
+                                                   TransactionTemplate transaction) throws Exception {
         try {
-            long portfolioFundId = transaction.execute(status -> onboarding.onboard(
-                    null, ownerId, productId, true, new BigDecimal("0.30"),
-                    null, null, null, List.of()).portfolioFundId());
+            long portfolioFundId = transaction.execute(status -> {
+                try {
+                    barrier.await(10, TimeUnit.SECONDS);
+                } catch (Exception exception) {
+                    throw new IllegalStateException("并发测试屏障等待失败", exception);
+                }
+                return onboarding.onboard(null, ownerId, productId, true,
+                        new BigDecimal("0.30"), shares, costPerShare, null, List.of()).portfolioFundId();
+            });
             return new OnboardingOutcome(portfolioFundId, null);
         } catch (PortfolioFundOnboardingFailure failure) {
             return new OnboardingOutcome(null, failure.code());

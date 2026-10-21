@@ -47,6 +47,27 @@ class PortfolioFundCommandHandlerTest {
     }
 
     @Test
+    void trackOrGetReusesExistingRelationWithoutRepublishingTrackedEvent() {
+        InMemoryRepository repository = new InMemoryRepository();
+        List<Object> published = new ArrayList<>();
+        List<Long> firstCollections = new ArrayList<>();
+        PortfolioFundCommandHandler handler = new PortfolioFundCommandHandler(
+                repository, id -> true, recordingGateway(published),
+                firstCollections::add, Clock.fixed(NOW, ZoneOffset.UTC));
+        long portfolioFundId = handler.trackOrGet(
+                101L, 3L, 5L, true, new BigDecimal("0.30")).portfolioFund().id();
+        published.clear();
+        firstCollections.clear();
+
+        var reused = handler.trackOrGet(102L, 3L, 5L, true, new BigDecimal("0.30"));
+
+        assertThat(reused.reused()).isTrue();
+        assertThat(reused.portfolioFund().id()).isEqualTo(portfolioFundId);
+        assertThat(published).isEmpty();
+        assertThat(firstCollections).isEmpty();
+    }
+
+    @Test
     void hidesOtherOwnersPortfolioFundDuringUpdate() {
         InMemoryRepository repository = new InMemoryRepository();
         PortfolioFundCommandHandler handler = handler(repository);

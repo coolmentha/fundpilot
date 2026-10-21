@@ -20,6 +20,7 @@ public class PortfolioFundOnboardingFailure extends RuntimeException {
         INITIAL_HOLDING_SHARES_INVALID,
         COST_PER_SHARE_INVALID,
         OPENED_AT_IN_FUTURE,
+        OPENED_AT_BEFORE_LAST_TRANSACTION,
         NAV_UNAVAILABLE,
         FUND_GROUP_NAME_INVALID,
         FUND_GROUP_NAME_DUPLICATE,

@@ -153,6 +153,29 @@ public final class LedgerTransaction {
                 Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null);
     }
 
+    /** 回购流水按用户确认的成本单价记账，避免历史成本重置后重放为最新净值。 */
+    public static LedgerTransaction recordRepurchase(long portfolioFundId, long ownerId,
+                                                      BigDecimal shares, BigDecimal navSnapshot,
+                                                      BigDecimal costPerShare, Instant tradeDate,
+                                                      Instant confirmedAt) {
+        BigDecimal normalized = ShareScale.normalize(shares);
+        if (normalized == null || normalized.signum() <= 0) {
+            throw new IllegalArgumentException("回购需填正数份额");
+        }
+        if (navSnapshot == null || navSnapshot.signum() <= 0) {
+            throw new IllegalArgumentException("回购净值必须为正数");
+        }
+        if (costPerShare == null || costPerShare.signum() <= 0) {
+            throw new IllegalArgumentException("回购成本单价必须大于 0");
+        }
+        BigDecimal amount = normalized.multiply(costPerShare)
+                .setScale(PERSISTED_DECIMAL_SCALE, RoundingMode.HALF_UP);
+        return new LedgerTransaction(null, portfolioFundId, ownerId, TransactionSource.INCREASE,
+                TransactionStatus.CONFIRMED, amount, normalized, navSnapshot, null, null,
+                Objects.requireNonNull(tradeDate, "交易发生时间不能为空"),
+                Objects.requireNonNull(confirmedAt, "确认时间不能为空"), null, null, null, null, null);
+    }
+
     public static LedgerTransaction rehydrate(long id, long portfolioFundId, long ownerId,
                                               TransactionSource source, TransactionStatus status,
                                               BigDecimal amount, BigDecimal shares, BigDecimal nav,
