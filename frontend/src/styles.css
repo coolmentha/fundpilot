@@ -1752,3 +1752,55 @@ a:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 55%
         font-size: 13px;
     }
 }
+
+/* ===== Open API 文档与 Token 管理 ===== */
+.open-api-docs {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.open-api-hero {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    overflow: hidden;
+    padding: 28px 30px;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at 88% 18%, rgba(139, 92, 246, .22), transparent 38%),
+        linear-gradient(135deg, var(--color-surface-2), var(--color-surface));
+}
+
+.open-api-hero h2 { margin: 5px 0 8px; }
+.open-api-hero p { max-width: 720px; margin: 0; color: var(--color-muted); }
+.open-api-hero .help-hero-icon { color: var(--color-accent); opacity: .8; }
+.open-api-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+.open-api-code {
+    overflow-x: auto;
+    margin: 0;
+    padding: 13px 15px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-size: 12px;
+    line-height: 1.65;
+    white-space: pre;
+}
+.open-api-token-reveal {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.settings-page .open-api-token-reveal textarea { font-family: monospace; }
+@media (max-width: 900px) {
+    .open-api-grid { grid-template-columns: 1fr; }
+    .open-api-hero { padding: 22px; }
+}

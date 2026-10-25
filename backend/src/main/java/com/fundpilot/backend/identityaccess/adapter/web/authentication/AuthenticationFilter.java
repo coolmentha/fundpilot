@@ -39,6 +39,10 @@ public class AuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = UrlPathHelper.defaultInstance.getPathWithinApplication(request);
+        if (path.equals("/api/open") || path.startsWith("/api/open/v1/")) {
+            return true;
+        }
+
         if (path.equals("/api/auth/login") && "POST".equalsIgnoreCase(request.getMethod())) {
             return true;
         }

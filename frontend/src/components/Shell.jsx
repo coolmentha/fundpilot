@@ -12,6 +12,7 @@ import {
     MoonOutlined,
     SunOutlined,
     BellOutlined,
+    ApiOutlined,
 } from '@ant-design/icons';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary.jsx';
@@ -33,6 +34,7 @@ const PAGE_META = {
     '/alerts': {title: '价格提醒', subtitle: '阈值规则与提醒记录'},
     '/admin': {title: '管理操作', subtitle: '手动触发定时任务'},
     '/help': {title: '使用帮助', subtitle: '网站操作手册与常见问题'},
+    '/open-api': {title: 'Open API', subtitle: 'Token 鉴权与只读数据接口'},
 };
 
 // 导航重组(行情工作台转向):行情 → 策略 → 系统。首页 = 行情工作台。
@@ -56,6 +58,7 @@ const NAV_GROUPS = [
             {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
             {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
             {key: '/help', icon: <QuestionCircleOutlined/>, label: '使用帮助'},
+            {key: '/open-api', icon: <ApiOutlined/>, label: 'Open API'},
         ],
     },
 ];
@@ -74,6 +77,7 @@ const BOTTOM_MORE = [
     {key: '/settings', icon: <SettingOutlined/>, label: '用户配置'},
     {key: '/admin', icon: <ToolOutlined/>, label: '管理操作'},
     {key: '/help', icon: <QuestionCircleOutlined/>, label: '使用帮助'},
+    {key: '/open-api', icon: <ApiOutlined/>, label: 'Open API'},
 ];
 
 const useSelectedKey = () => {

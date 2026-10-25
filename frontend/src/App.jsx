@@ -12,6 +12,7 @@ const AlertRulesPage = React.lazy(() => import('./pages/AlertRulesPage.jsx'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage.jsx'));
 const DcaManagementPage = React.lazy(() => import('./pages/DcaManagementPage.jsx'));
 const HelpPage = React.lazy(() => import('./pages/HelpPage.jsx'));
+const OpenApiDocsPage = React.lazy(() => import('./pages/OpenApiDocsPage.jsx'));
 const PortfolioReturns = React.lazy(() => import('./components/PortfolioReturns.jsx'));
 
 function AdminRoute() {
@@ -32,6 +33,7 @@ export default function App() {
                     <Route path="/confirm" element={<ConfirmPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>
                     <Route path="/alerts" element={<AlertRulesPage/>}/>
+                    <Route path="/open-api" element={<OpenApiDocsPage/>}/>
                     <Route path="/admin" element={<AdminRoute/>}/>
                     <Route path="/help" element={<HelpPage/>}/>
                     <Route path="*" element={<Navigate to="/" replace/>}/>
